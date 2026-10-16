@@ -3,8 +3,11 @@ import hashlib
 import json
 import os
 import pathlib
+import subprocess
 import tempfile
 import unittest
+import io
+from contextlib import redirect_stdout
 from datetime import datetime, timezone
 from unittest.mock import patch
 
@@ -33,7 +36,7 @@ def approval(**changes):
         "environment": "gate-local",
         "instanceId": INSTANCE,
         "botAccountId": BOT,
-        "riskCategories": ["reversible_app_candidate", "backward_compatible_schema"],
+        "riskCategories": ["reversible_app_candidate", "backward_compatible_schema", "destructive_schema_warning"],
         "approvedAt": "2026-10-01T00:00:00Z",
         **changes,
     }
@@ -114,9 +117,46 @@ class GateAutopilotContracts(unittest.TestCase):
         self.assertIsNone(candidate.parse_candidate_command([
             "candidate", "--apply", "--approval-ref", "r5-gate-canary", "--database-backup", "plain",
         ]))
-        self.assertFalse(candidate.database_backup_required("reversible_app_candidate", False))
+        self.assertTrue(candidate.database_backup_required("reversible_app_candidate", False))
         self.assertTrue(candidate.database_backup_required("reversible_app_candidate", True))
         self.assertTrue(candidate.database_backup_required("backward_compatible_schema", False))
+
+    def test_full_backup_rollback_preserves_postgres_owners_and_acl_metadata(self):
+        dump = candidate.full_database_dump_shell()
+        restore = candidate.full_database_restore_shell()
+        self.assertIn("pg_dump -Fc", dump)
+        self.assertNotIn("--no-owner", dump)
+        self.assertNotIn("--no-acl", dump)
+        self.assertIn("pg_restore --single-transaction --clean --if-exists", restore)
+        self.assertNotIn("--no-owner", restore)
+        self.assertNotIn("--no-acl", restore)
+
+    def test_canary_tenant_selection_requires_one_marked_identifier(self):
+        self.assertEqual(candidate.unique_test_tenant_id("1\n", "fixture-canary-01\n"), "fixture-canary-01")
+        with self.assertRaisesRegex(candidate.CandidateError, "canary_test_tenant_not_unique"):
+            candidate.unique_test_tenant_id("2\n", "fixture-canary-01\n")
+        with self.assertRaisesRegex(candidate.CandidateError, "canary_test_tenant_unavailable"):
+            candidate.unique_test_tenant_id("1\n", "not a tenant id\n")
+
+    def test_live_canary_selector_uses_read_only_query_and_does_not_print_the_tenant_id(self):
+        output = io.StringIO()
+        with patch.object(candidate, "remote_compose", side_effect=[b"1\n", b"fixture-canary-01\n"]) as query:
+            with redirect_stdout(output):
+                tenant_id = candidate.select_existing_test_tenant("gate-ci-fixture", {}, BOT)
+        self.assertEqual(tenant_id, "fixture-canary-01")
+        self.assertEqual(output.getvalue(), "")
+        self.assertIn("SELECT COUNT(DISTINCT t.tenant_id)", query.call_args_list[0].args[-1])
+        self.assertIn("SELECT DISTINCT t.tenant_id", query.call_args_list[1].args[-1])
+
+    def test_canary_environment_writer_sends_tenant_id_only_on_stdin(self):
+        output = io.StringIO()
+        tenant_id = "fixture-canary-01"
+        with patch.object(candidate, "remote") as remote:
+            with redirect_stdout(output):
+                candidate.set_remote_intelligence_canary("gate-ci-fixture", "/safe/gateway.env", tenant_id)
+        self.assertEqual(output.getvalue(), "")
+        self.assertNotIn(tenant_id, " ".join(remote.call_args.args))
+        self.assertIn(tenant_id, remote.call_args.kwargs["input_data"].decode("utf-8"))
 
     def test_keg_only_homebrew_libpq_is_added_when_pg_restore_is_not_on_path(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -202,6 +242,33 @@ class GateAutopilotContracts(unittest.TestCase):
                          "approval_checkout_mismatch")
         self.assertEqual(preflight(approval=approval(approvedAt="2026-10-16T12:01:00Z"))["reason"],
                          "approval_issued_at_invalid")
+
+    def test_gate_approval_matches_linked_worktrees_by_git_common_directory(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = pathlib.Path(temporary)
+            primary = root / "primary"
+            linked = root / "linked"
+            primary.mkdir()
+            subprocess.run(["git", "init", "-q", str(primary)], check=True)
+            subprocess.run(["git", "-C", str(primary), "config", "user.name", "Fixture"], check=True)
+            subprocess.run(["git", "-C", str(primary), "config", "user.email", "fixture@example.invalid"], check=True)
+            (primary / "seed").write_text("fixture\n", encoding="utf-8")
+            subprocess.run(["git", "-C", str(primary), "add", "seed"], check=True)
+            subprocess.run(["git", "-C", str(primary), "commit", "-qm", "fixture"], check=True)
+            subprocess.run(["git", "-C", str(primary), "worktree", "add", "-q", "--detach", str(linked)], check=True)
+            approved = approval(repository=str(primary))
+            self.assertEqual(
+                gate.validate_approval(approved, repository=linked, instance_id=INSTANCE,
+                                       bot_account_id=BOT, risk="reversible_app_candidate", now=NOW),
+                (True, "approved"),
+            )
+            unrelated = root / "unrelated"
+            subprocess.run(["git", "init", "-q", str(unrelated)], check=True)
+            self.assertEqual(
+                gate.validate_approval(approved, repository=unrelated, instance_id=INSTANCE,
+                                       bot_account_id=BOT, risk="reversible_app_candidate", now=NOW)[1],
+                "approval_checkout_mismatch",
+            )
 
     def test_paused_m2_without_clearance_does_not_block_safe_candidate(self):
         self.assertEqual(preflight()["status"], "READY")
@@ -364,7 +431,7 @@ class GateAutopilotContracts(unittest.TestCase):
         self.assertNotIn("LIVE_VERIFIED", result["status"])
         self.assertIn("audit", calls)
 
-    def test_gate_migration_risk_never_auto_authorizes_pgvector_or_destructive_sql(self):
+    def test_gate_migration_risk_warns_for_destructive_sql_but_blocks_pgvector(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = pathlib.Path(temporary)
             migration = "apps/pubg-saas/src/infrastructure/postgres/migrations/9999_fixture.sql"
@@ -375,7 +442,7 @@ class GateAutopilotContracts(unittest.TestCase):
                              ("extension_install", "separate_extension_authorization_required"))
             file_path.write_text("DROP TABLE gate_memory_entries;", encoding="utf-8")
             self.assertEqual(gate.migration_risk([migration], root),
-                             ("destructive_schema", "destructive_database_operation"))
+                             ("destructive_schema_warning", "destructive_database_operation_warning_only"))
 
     def test_migration_classifier_allows_additive_schema_and_preserves_dollar_bodies(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -398,15 +465,13 @@ class GateAutopilotContracts(unittest.TestCase):
             )
             self.assertEqual(gate.migration_risk([migration], root), ("backward_compatible_schema", None))
 
-    def test_migrations_only_block_destructive_changes(self):
+    def test_destructive_migrations_warn_while_privilege_or_unknown_sql_stays_blocked(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = pathlib.Path(temporary)
             migration = "apps/pubg-saas/src/infrastructure/postgres/migrations/9999_fixture.sql"
             file_path = root / migration
             file_path.parent.mkdir(parents=True)
             safe = (
-                "UPDATE gate_memory_entries SET content='new' WHERE memory_id='123';",
-                "ALTER TABLE gate_memory_entries DROP CONSTRAINT old_check;",
                 "CREATE UNIQUE INDEX idx_fixture ON gate_memory_entries(memory_key);",
                 "ALTER TABLE gate_memory_entries ADD COLUMN flag TEXT DEFAULT 'x';",
                 "CREATE FUNCTION fixture() RETURNS int LANGUAGE SQL AS $$ SELECT 1 $$;",
@@ -415,11 +480,23 @@ class GateAutopilotContracts(unittest.TestCase):
                 with self.subTest(sql=sql):
                     file_path.write_text(sql)
                     self.assertEqual(gate.migration_risk([migration], root), ("backward_compatible_schema", None))
+            warned = (
+                "UPDATE gate_memory_entries SET content='new' WHERE memory_id='123';",
+                "DELETE FROM gate_memory_entries;",
+                "DROP TABLE gate_memory_entries;",
+                "DROP INDEX idx_gate_memory_entries;",
+                "TRUNCATE gate_memory_entries;",
+                "UPDATE gate_memory_entries SET content='gone';",
+                "ALTER TABLE gate_memory_entries DROP COLUMN content;",
+                "ALTER TABLE gate_memory_entries DROP CONSTRAINT old_check;",
+                "MERGE INTO gate_memory_entries USING src ON true WHEN MATCHED THEN DELETE;",
+            )
+            for sql in warned:
+                with self.subTest(sql=sql):
+                    file_path.write_text(sql)
+                    self.assertEqual(gate.migration_risk([migration], root),
+                                     ("destructive_schema_warning", "destructive_database_operation_warning_only"))
             blocked = (
-                ("DELETE FROM gate_memory_entries;", "destructive_database_operation"),
-                ("DROP TABLE gate_memory_entries;", "destructive_database_operation"),
-                ("TRUNCATE gate_memory_entries;", "destructive_database_operation"),
-                ("UPDATE gate_memory_entries SET content='gone';", "unbounded_data_update"),
                 ("CREATE EXTENSION pg_trgm;", "separate_extension_authorization_required"),
                 ("GRANT ALL ON gate_memory_entries TO public;", "migration_security_change_requires_review"),
             )
@@ -428,7 +505,22 @@ class GateAutopilotContracts(unittest.TestCase):
                     file_path.write_text(sql)
                     self.assertEqual(gate.migration_risk([migration], root)[1], reason)
 
-    def test_current_gate_memory_migrations_are_compatible(self):
+    def test_destructive_candidate_requires_scoped_authorization_and_reports_backup_warning(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = pathlib.Path(temporary)
+            migration = "apps/pubg-saas/src/infrastructure/postgres/migrations/9999_fixture.sql"
+            source = root / migration
+            source.parent.mkdir(parents=True)
+            source.write_text("DROP TABLE gate_fixture;", encoding="utf-8")
+            result = gate.preflight_candidate(
+                approval=approval(repository=str(root)), repository=root, paths=[migration],
+                instance_id=INSTANCE, bot_account_id=BOT, candidate_sha=SHA, facts=facts(), now=NOW,
+            )
+            self.assertEqual(result["status"], "READY")
+            self.assertEqual(result["risk"], "destructive_schema_warning")
+            self.assertEqual(result["reason"], "destructive_migration_warning_backup_required")
+
+    def test_current_gate_memory_migrations_have_explicit_risk_profiles(self):
         root = MODULE_PATH.parent.parent
         paths = [f"apps/pubg-saas/src/infrastructure/postgres/migrations/{n:04d}_{name}.sql"
                  for n, name in (
@@ -436,8 +528,12 @@ class GateAutopilotContracts(unittest.TestCase):
                      (24, "gate_memory_embedding_jobs"), (26, "gate_memory_retrieval_metadata"),
                      (27, "gate_memory_write_receipts"), (28, "gate_memory_consolidation"),
                      (29, "gate_memory_index_generations"))]
-        self.assertEqual(gate.migration_risk(paths, root), ("backward_compatible_schema", None))
-        self.assertEqual(len(candidate.migration_inventory(paths, root)[0]), 7)
+        self.assertEqual(gate.migration_risk(paths[:-1], root), ("backward_compatible_schema", None))
+        self.assertEqual(gate.migration_risk(paths[-1:], root),
+                         ("destructive_schema_warning", "destructive_database_operation_warning_only"))
+        applied, _ = candidate.migration_inventory(paths, root)
+        self.assertEqual(len(applied), 7)
+        self.assertEqual(applied[-1]["riskCategory"], "destructive_schema_warning")
 
     def test_candidate_authorization_blocks_include_recovery_steps(self):
         self.assertIn("not required", candidate.recovery_step("m2_pause_active"))

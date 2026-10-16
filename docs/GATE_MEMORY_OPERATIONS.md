@@ -1,10 +1,9 @@
 # Gate Memory Operations
 
 This runbook covers the Gate SaaS PostgreSQL data only. It does not operate on
-Lab/OpenClaw data, and it does not authorize a Gate-Local change by itself.
-Migration, provider, M2 formal-release clearance, and Gate-Local candidate
-permissions remain separate. A Gate-Local candidate does not clear or resume
-M2.
+Lab/OpenClaw data or authorize Gate-Staging/Prod changes. Gate-Local candidate
+authorization is repo-wide and standing; formal-release and M2 clearance remain
+separate. A Gate-Local candidate does not clear or resume M2.
 
 ## Before a schema or image change
 
@@ -21,31 +20,31 @@ M2.
 4. Run the migration through the guarded Gate release process. Do not invoke
    the application migrator against a real database as an ad hoc repair.
 5. Keep the previous application image, the pre-change Compose file and
-   `.env`, and the encrypted database checkpoint together. On an application
-   rollback, keep the current database volume and use a forward repair if the
-   schema has advanced. Do not restore an old volume over newer writes by
-   default.
+   environments, and the encrypted database checkpoint together. The guarded
+   Gate-Local candidate restores the encrypted checkpoint with the previous
+   application configuration when migration or health checks fail.
 
 Migration `0025_gate_memory_pgvector.sql` is excluded from startup migration
 execution. The normal PG18 image does not provide pgvector. Installing the
-extension or replacing that database image is a separate high-risk operation;
-the Gate-Local autopilot blocks it. It needs its own reviewed image, backup,
-restore, and rollback procedure before it can be automated.
+extension or replacing that database image remains outside this candidate
+path.
 
 ## Gate-Local candidate autopilot
 
-Gate-Local has an independent source path and protected local approval. The
-operator controls live outside Git at:
+Gate-Local has a protected host authorization shared by every linked worktree
+through the Git common directory. The owner-only record lives outside Git at:
 
 - `~/.config/amadeus/gate-local-auto-approval.json`
 - `~/.config/amadeus/gate-local-m2-clearance.json`
 
-Both are owner-only `0600` files in an owner-only `0700` directory. The
-non-interactive enable command binds this checkout to one Gate-Local instance,
-one Bot account, one OrbStack machine, external backup/encryption files, and
-the two default risk categories: `reversible_app_candidate` and
-`backward_compatible_schema`. Supply these non-secret fields in the invoking
-process environment; no terminal prompt is used:
+`gate-local-auto-approval.json` is an owner-only `0600` file in an owner-only
+`0700` directory. It binds this repository to one Gate-Local instance, one Bot
+account, one OrbStack machine, external backup/encryption files, and the private
+Gate notification hook. Arthur granted standing authorization: there is no
+per-worktree opt-in or interactive confirmation, and the record has no expiry.
+`gate-auto-disable` revokes it. The separate M2 clearance file is reserved for
+formal release and remains untouched by candidate deployments. The record's
+host configuration originated from these non-secret fields:
 
 | Variable | Value |
 | --- | --- |
@@ -57,23 +56,10 @@ process environment; no terminal prompt is used:
 | `GATE_LOCAL_AGE_IDENTITY_FILE` | External age identity file, mode `0600` |
 | `GATE_LOCAL_NOTIFICATION_HOOK` | Executable external Gate-private test notification hook |
 
-The approval has no expiry and remains active until `gate-auto-disable` or a
-protected state-file removal. A legacy `expiresAt` field is ignored. Malformed,
-wrong-checkout, wrong-target, or unsafe-path records still fail closed. The
-migration classifier continues to reject destructive or incompatible changes,
-data mutations, extensions, and unrecognized SQL regardless of the default
-authorization categories.
-
-```sh
-pnpm devctl configure status
-pnpm devctl configure gate-auto-enable
-```
-
-`gate-auto-enable` can run directly from Codex or a script with those fields
-present. It records the selected target and Gate-private notification hook.
-Lab notification hooks are rejected so Gate cannot trigger the Lab owner
-outbox. It does not clear the M2 pause or enable memory features. Missing or
-invalid configuration is an error and writes no approval.
+Linked worktrees match with `git rev-parse --git-common-dir`; unrelated
+repositories, wrong targets, malformed records, and unsafe external paths still
+fail closed. The Gate authorization does not enable memory features or clear
+the M2 pause.
 
 M2 is a separate human-acceptance gate. Safe Gate-Local candidates do not
 require M2 clearance and leave the M2 pause unchanged. M2 clearance is reserved
@@ -90,75 +76,43 @@ Gateway, Worker, Bot token, database, or M2 service. The clearance has no
 expiry; `gate-m2-revoke` removes only that clearance, while
 `gate-auto-disable` removes both Gate authorization records.
 
-For a Gate-only phase, `pnpm devctl goal finish-phase P<N>` calls the protected
-candidate route when the local candidate approval matches; an M2 clearance is
-not required. M2 remains PAUSED and no clearance file is read or written by
-candidate deployment. A direct, explicitly reviewed Gate-Local apply may use
-`--allow-reviewed-control-plane` for release-control source changes; automatic
-phase deployment continues to block control-plane edits. The route re-runs Gate release verification and the
-secrets scan, requires a clean committed tree, checks that the target machine
-and Bot ID match, discovers the Compose project, working directory, and file
-from the active Gateway container labels, rejects ambiguous or untrusted
-layouts, duplicate Gateway/Worker processes, and runtime drift, builds a
-SHA-tagged immutable local image, and verifies the transferred image by its
-platform, complete image config, and every rootfs layer digest. The canonical
-content fingerprint tolerates Docker versions that normalize imported image
-IDs while still rejecting any config or layer mismatch; source and target
-daemon image IDs remain available as runtime evidence. Every candidate writes
-a mode-`0700` external checkpoint containing the prior Compose/env files. By
-default, a reversible application-only candidate records an application
-rollback checkpoint without a database dump; schema changes require a full
-encrypted PostgreSQL custom dump. Operators who explicitly require a database
-backup for an application-only candidate can pass
-`--database-backup full` to `scripts/gate-local-candidate.py candidate --apply`
-(after the approval reference). This requests the same all-schema/all-data dump
-without owner/ACL restoration. The candidate records
-encrypted size, SHA-256, and `pg_restore --list` entry count. It authenticates
-the complete age stream and verifies the archive before the migrator runs;
-no plaintext dump is retained. The image/Compose switch waits for PostgreSQL, egress proxy,
-Gateway KOOK-handshake readiness, and Worker health. Smoke probes are local
-loopback requests and do not send a KOOK message. A failed health/smoke check
-restores the prior application config and attempts an application rollback;
-the current database volume is preserved. A private Gate notification hook
-receives a small status object after health passes. Notification failure is
-reported as `DEPLOYED_NOTIFICATION_FAILED`; it is never reported as fully
-notified.
+For a Gate-only phase, `pnpm devctl goal finish-phase P<N>` uses the protected
+candidate route after validation. It requires a clean committed tree, checks
+the target machine and Bot ID, discovers Compose from the active Gateway
+labels, enforces one Gateway and Worker, builds a SHA-tagged immutable local
+image, and verifies the transferred image config and rootfs layers.
 
-The adapter compares migration changes against the active image's source SHA,
-not only the current Goal phase base. Unknown lineage and destructive,
-incompatible, or data-changing migrations stop before backup, migration, or
-service switch by default. A separately reviewed one-time authorization can
-be passed to a direct Gate-Local apply with
-`--reviewed-migration-authorization <path>`. Its external mode-`0600` manifest
-is bound to the approval reference, checkout, active and candidate SHAs, the
-Gate instance and Bot account, and the exact applied migration paths, risk
-classes, and SHA-256 values. It is consumed into that candidate checkpoint
-only after a verified backup; it never widens the persistent auto-approval
-categories. This path accepts only explicitly reviewed destructive-schema or
-data-migration entries. Unknown SQL, extension/pgvector changes, and files
-outside the runtime migrator remain blocked. A reviewed egress reconciliation
-may authorize only the exact observed egress image and expected active image;
-after the checkpoint it aligns that service and verifies health before
-migrations. It does not permit general runtime drift. `GATE_MEMORY_READ_ENABLED`, `GATE_MEMORY_WRITE_ENABLED`, and `GATE_MEMORY_AUTO_LEARN_ENABLED`
-are default-on capabilities; setting any of them to `0` is an explicit kill switch. Embedding is
-used automatically when its dedicated configuration is complete and otherwise degrades to lexical recall. It rejects Gate-Staging/Prod, mixed Lab/Gate source changes,
-unreviewed control-plane changes, destructive schema changes, data-changing
-migrations, unrecognized SQL statements, and extension/pgvector operations.
-The migration classifier only auto-authorizes new tables, non-unique indexes,
-nullable columns without defaults or constraints, reviewed-safe functions, and
-`COMMENT ON` metadata. Unique indexes, defaulted or constrained columns, data
-mutations, and destructive schema changes require separate authorization;
-unknown syntax fails closed. A blocked candidate prints a fixed recovery step
-for its reason. No target query, backup, image build, database migration, or
-service switch is performed when approval is missing. Missing M2 clearance
-does not block a Gate-Local candidate and never changes the M2 pause state.
+Every candidate first saves the prior Compose, application environment, and
+Gateway environment in a mode-`0700` external checkpoint, then creates and
+authenticates a full encrypted PostgreSQL dump. The checkpoint records the
+encrypted size, SHA-256, and `pg_restore --list` entry count; no plaintext dump
+is retained. Migration deltas are compared with the active image's source SHA.
+Destructive database SQL emits a prominent warning after backup and proceeds
+automatically. A failed migration or post-switch health/smoke check stops
+Gateway and Worker, restores the full database checkpoint and previous
+Compose/environment files, then restarts the previous application image.
+
+The canary path selects exactly one tenant marked test/fixture/canary for the
+Gate Bot, writes the ID only to the protected Gateway environment, and prints
+only a redacted status. If selection is absent or ambiguous, deployment stops
+before backup or migration. The canary sets only
+`GATE_PUBG_INTELLIGENCE_ENABLED=1` and the exact one-tenant allowlist. Existing
+Gate tenant authorization and bounded PostgreSQL reads remain in force. Health
+checks cover PostgreSQL, egress, Gateway, and Worker, followed by local health
+probes. The private Gate notification hook receives a small status object.
+Notification failure is reported as `DEPLOYED_NOTIFICATION_FAILED`.
+
+M2 remains PAUSED; candidate deployment does not create or modify an M2
+clearance. `GATE_MEMORY_READ_ENABLED`, `GATE_MEMORY_WRITE_ENABLED`, and
+`GATE_MEMORY_AUTO_LEARN_ENABLED` remain independent capability flags. This path
+does not target Gate-Staging/Prod or Lab.
 
 To recover data from the encrypted full-database checkpoint, decrypt it and
 stream it to `pg_restore` targeting a newly named, empty recovery database.
 Verify the restored database there before any operator-approved connection
 change. Do not overwrite the active database or replace its PostgreSQL volume
-as a routine application rollback; retain the current volume and use the
-protected application rollback first.
+as a manual recovery action; the guarded candidate rollback restores its
+verified encrypted checkpoint before restarting the prior application image.
 
 To revoke a future formal-release M2 clearance without disabling Gate candidate
 authorization:

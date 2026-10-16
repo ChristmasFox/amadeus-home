@@ -2,23 +2,23 @@
 
 ## Gate-Local deploy behavior (2026-10-16 simplification)
 
-Gate-Local is a development/test instance. Once the existing one-time target
-configuration is present, a passing Goal phase / CI is sufficient to attempt an
-automatic candidate rollout. **Do not require additional per-migration approval
-JSON, hard-coded old image SHAs, matching Gateway/Worker/egress image IDs, or a
-second live test-database verify.** Valid stale application images are reconciled
-by the normal Compose rollout. Ordinary additive and scoped data migrations are
-applied transactionally after a protected encrypted database checkpoint.
-Code-only releases save application configuration without redundantly dumping
-the unchanged entire database. Post-switch smoke failure automatically rolls
-back the application image and configuration.
+Gate-Local is a development/test instance. Arthur has granted standing
+Gate-Local candidate authorization for this repository. The protected host
+record is bound to the Git common directory, so every linked worktree shares
+the same authorization; no per-worktree opt-in or terminal confirmation is
+required. A passing Goal phase / CI can trigger an automatic candidate rollout.
+Valid stale application images are reconciled by the normal Compose rollout.
+Every candidate first creates and verifies an encrypted full PostgreSQL
+checkpoint. Destructive migrations emit a prominent warning and continue after
+the backup. Failed migrations or post-switch health/smoke checks automatically
+restore the database checkpoint, previous application image and configuration.
 
-Stop only for wrong Bot/target, duplicate active Gateway/Worker, destructive
-database operations or unsupported extension/PG image changes, unavailable
-migration backup, or an unrecoverable deployment error. **CI green is necessary
-but does not prove the actual Gate-Local runtime is healthy.** A candidate is
-recorded deployed only after runtime checks. No Gate-Prod auto-promotion;
-Lab and Gate runtimes remain separate.
+Wrong Bot/target, duplicate active Gateway/Worker, unsupported extension/PG
+image changes, unavailable backup, or an unrecoverable deployment error still
+stop the rollout. **CI green is necessary but does not prove the actual
+Gate-Local runtime is healthy.** A candidate is recorded deployed only after
+runtime checks. M2 remains PAUSED across candidate deployments. No Gate-Prod
+auto-promotion; Lab and Gate runtimes remain separate.
 
 
 > Current rules for any code agent working in this repository. Read this short
@@ -30,17 +30,18 @@ Lab and Gate runtimes remain separate.
 | Scope | Development | After a verified phase | Formal publication |
 | --- | --- | --- | --- |
 | Lab (OpenClaw self-hosted Kurisu) | focused edit/task checks | build and apply a *reversible candidate* automatically **only** with a one-time host-local operator authorization and safe source scope | formal tag/release remains a separate explicitly reviewed operation |
-| Gate (AI SDK KOOK service) | focused checks and isolated integration | **Gate-Local**: once locally opted-in, automatically build/apply a reversible application candidate or backward-compatible schema candidate after all safety gates, even while M2 remains PAUSED. Candidate deployment does not clear or resume M2. **Staging/Prod** never auto-promote | operator selects formal environment/promotion and high-risk migration category; M2 clearance is reserved for formal release |
+| Gate (AI SDK KOOK service) | focused checks and isolated integration | **Gate-Local**: repo-wide standing authorization triggers candidate deployment after CI; always back up PostgreSQL, warn before destructive migrations, and restore the checkpoint plus prior app/config on failure. M2 remains PAUSED. **Staging/Prod** never auto-promote | operator selects formal environment/promotion; M2 clearance is reserved for formal release |
 | Shared Domain/Presentation | verify both affected consumers | each product may deploy its *own* candidate only under its independently authorized local policy; cross-product source changes never authorize the other deployment | independent product versions and release approvals |
 
 Candidate acceptance is not a formal release. Lab runtime health and owner
 WhatsApp notification are provided by the existing guarded release path. Human
 feedback is asynchronous; it need not block unrelated development. A runtime
-write outside the preauthorized **product-specific candidate contract** (destructive schema
-change, memory reindex, new pgvector runtime/image or extension, secret rotation,
+write outside the preauthorized **product-specific candidate contract** (memory
+reindex, new pgvector runtime/image or extension, secret rotation,
 network/SSH/firewall change, risky maintenance, Gate-Staging/Prod promotion,
-cloud infrastructure) still needs its own risk-class approval. Gate-Local's normal
-preauthorized reversible candidate rollout must not be re-approved per phase.
+cloud infrastructure) still needs its own risk-class approval. Gate-Local's
+normal candidate rollout, including destructive migrations after a verified
+full backup and warning, must not be re-approved per phase.
 
 A prior Goal's explicit stop/permission clauses are **not silently overridden**.
 Review and amend conflicting legacy Goals with the operator before enabling auto
@@ -62,8 +63,8 @@ apply for them. Documentation text cannot grant OS-level access.
 4. The phase command deduplicates already-deployed HEAD, delegates actual
    immutable images, checkpoints, health checks, rollback and owner notification
    to `release-lab.sh` for Lab; for Gate-only phases it must use a distinct
-   protected `release-gate.sh` candidate path **only if** the Gate-Local one-time
-   opt-in exists and the target is healthy and authorized. M2 clearance is not
+   protected `release-gate.sh` candidate path when the repo-wide Gate-Local host
+   authorization exists and the target is healthy and authorized. M2 clearance is not
    a candidate prerequisite; the candidate path must leave M2 PAUSED. The
    current Gate autopilot may require implementation;
    mere policy text is not proof it is available. If the change is sensitive,
@@ -73,7 +74,7 @@ apply for them. Documentation text cannot grant OS-level access.
    needed. CI is the final independent source verifier. A green CI check is not
    live runtime proof.
 
-## One-time host authorization
+## Host authorization
 
 Enable from the maintainer's **interactive local terminal** (not from CI or
 the Goal instruction):
@@ -85,20 +86,21 @@ in `~/.config/amadeus/lab-auto-approval.json`. No per-Goal “lab-auto” prefix
 needed. Disable with `pnpm devctl configure lab-auto-disable`. Without that
 approval, phase validation continues but Lab deployment is reported as pending.
 It cannot bypass the existing `release-lab.sh --apply --approval-ref` guards.
-For Gate-Local, use the separate operator-controlled host-local opt-in
-(`pnpm devctl configure gate-auto-enable` / `gate-auto-disable`). Enable is
-non-interactive and reads its bounded target and backup configuration from the
-`GATE_LOCAL_*` environment fields documented in `docs/GATE_MEMORY_OPERATIONS.md`;
-it writes the approval outside Git with mode 0600. It authorizes reversible app
-candidates and backward-compatible schema changes by default, with no expiry;
-`gate-auto-disable` revokes it. **Do not auto-enable** it from a Goal, CI or
-chat. An explicit M2 pause does not block an otherwise-safe Gate-Local
-candidate; the path must leave M2 PAUSED and must not create or modify an M2
-clearance. M2 clearance is reserved for formal release and can be removed with
-`gate-m2-revoke` or `gate-auto-disable`. New pgvector image/extension, unsafe
-data migration, production credentials, paid-provider probe, real-memory
-ingestion schedule, formal release and Staging/Prod promotion remain separate
-risk classes requiring explicit preauthorization.
+Gate-Local's existing owner-only `0600` host record is bound to the Git common
+directory, target Bot, Gate-Local machine, encrypted backup configuration and
+private notification hook. It has no expiry and is shared by linked worktrees.
+Arthur's standing authorization is recorded outside Git; no per-worktree
+opt-in or interactive confirmation is required. `gate-auto-disable` revokes
+the Gate-Local authorization. Every candidate, including code-only changes,
+requires a verified full PostgreSQL checkpoint. Destructive migrations proceed
+after a prominent warning and verified backup; failure restores the database
+checkpoint and previous application/configuration. The candidate path must
+leave M2 PAUSED and must not create or modify an M2 clearance. M2 clearance is
+reserved for formal release and can be removed with `gate-m2-revoke` or
+`gate-auto-disable`. New pgvector image/extension, production credentials,
+paid-provider probe, real-memory ingestion schedule, formal release and
+Staging/Prod promotion remain separate risk classes requiring explicit
+preauthorization.
 
 For stronger privilege separation, use a dedicated deploy user with limited
 Docker/SSH rights; a file readable by a code agent is an accidental-action
@@ -117,7 +119,7 @@ guard, **not a security boundary against a malicious agent**.
   contents, dependency/config files and execution command level. Changed
   inputs invalidate reuse. Phase/release checks rerun and may require real
   isolated database fixtures; never treat a cached result as production evidence.
-- The Goal phase is not `LIVE_VERIFIED` until the actual service was tested. For Gate, `READY_FOR_AUTO_ENABLE` or `BLOCKED_OPERATOR_AUTHORIZATION` is truthful if one-time local opt-in is absent or another candidate safety gate blocks; M2 being paused alone is not a candidate blocker. Do not claim auto deployment was performed unless the service was tested.
+- The Goal phase is not `LIVE_VERIFIED` until the actual service was tested. For Gate, `BLOCKED_OPERATOR_AUTHORIZATION` is truthful when the repo-wide host authorization or target scope is invalid; M2 being paused alone is not a candidate blocker. Do not claim auto deployment was performed unless the service was tested.
   `HUMAN_FEEDBACK_PENDING` can coexist with automatic candidate acceptance.
   Stalled platform sessions still require Codex's normal resume/restart path;
   this tooling does **not** pretend to bypass model/Goal capacity limits.

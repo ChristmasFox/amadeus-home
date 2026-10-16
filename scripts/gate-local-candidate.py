@@ -20,6 +20,7 @@ from typing import Any
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 from gate_autopilot import (  # noqa: E402
+    IDENTIFIER,
     classify_changed_scope,
     migration_risk,
     preflight_candidate,
@@ -56,6 +57,11 @@ def recovery_step(reason: str) -> str:
     if reason.startswith("m2_") or reason == "m2_pause_active":
         return "M2 clearance is not required for Gate-Local candidates; reserve gate-m2-clear for a future formal release and keep M2 state unchanged"
     return {
+        "canary_test_tenant_not_unique": "add or identify exactly one existing Gate-Local test tenant marked test, fixture, or canary; no tenant ID was emitted and no deployment write occurred",
+        "canary_test_tenant_unavailable": "verify the existing Gate-Local test tenant marker and bounded tenant identifier; no tenant ID was emitted and no deployment write occurred",
+        "gateway_environment_checkpoint_failed": "verify Gate age recipient/identity files and retry; the candidate does not proceed without encrypted Gateway configuration backup",
+        "gateway_environment_checkpoint_verify_failed": "verify the Gate age identity and encrypted Gateway checkpoint; the candidate does not proceed without a verified checkpoint",
+        "database_rollback_failed": "keep the Gate services stopped, preserve the encrypted full-database checkpoint, and restore it with the guarded recovery procedure before restarting the prior app",
         "separate_pgvector_authorization_required": "prepare a separately authorized pgvector image/extension plan and verified Gate backup; this autopilot will not apply it",
         "separate_extension_authorization_required": "review the extension change with dedicated authorization and verified backup/restore evidence",
         "migration_statement_not_allowlisted": "review the migration statement manually and use a separately approved release path",
@@ -236,7 +242,7 @@ def migration_inventory(paths: list[str], repository: pathlib.Path) -> tuple[lis
             raise CandidateError("migration_source_missing_or_untrusted")
         risk, reason = migration_risk([relative], repository)
         if filename in ids:
-            if reason:
+            if reason and risk != "destructive_schema_warning":
                 raise CandidateError(reason)
             applied.append({"path": relative, "riskCategory": risk})
         elif filename == OPTIONAL_MIGRATION:
@@ -273,16 +279,133 @@ def verify_encrypted_database_backup(artifact: pathlib.Path, identity: pathlib.P
     return len(entries)
 
 
+def save_encrypted_config_checkpoint(payload: bytes, artifact: pathlib.Path,
+                                     recipients: pathlib.Path, identity: pathlib.Path) -> None:
+    """Encrypt secret-bearing runtime config before it enters the external checkpoint."""
+    try:
+        with artifact.open("xb") as encrypted:
+            os.fchmod(encrypted.fileno(), 0o600)
+            result = subprocess.run(["age", "-R", str(recipients)], input=payload,
+                                    stdout=encrypted, stderr=subprocess.DEVNULL,
+                                    check=False, timeout=120)
+        if result.returncode != 0 or artifact.stat().st_size < 64:
+            raise CandidateError("gateway_environment_checkpoint_failed")
+        verified = subprocess.run(["age", "-d", "-i", str(identity), str(artifact)],
+                                  stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+                                  check=False, timeout=120)
+        if verified.returncode != 0 or verified.stdout != payload:
+            raise CandidateError("gateway_environment_checkpoint_verify_failed")
+    except (OSError, subprocess.SubprocessError) as error:
+        raise CandidateError("gateway_environment_checkpoint_failed") from error
+
+
+def restore_encrypted_database_backup(
+    machine: str, layout: dict[str, str], artifact: pathlib.Path, identity: pathlib.Path,
+) -> None:
+    """Restore a verified encrypted checkpoint atomically without a plaintext file."""
+    restore_shell = (
+        full_database_restore_shell()
+    )
+    target = ["orb", "-m", machine, "-u", "root", *compose_base(machine, layout),
+              "exec", "--no-TTY", "postgres", "sh", "-c", restore_shell]
+    decrypted = None
+    restored = None
+    try:
+        decrypted = subprocess.Popen(["age", "-d", "-i", str(identity), str(artifact)],
+                                     stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+        assert decrypted.stdout is not None
+        restored = subprocess.Popen(target, stdin=decrypted.stdout,
+                                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        decrypted.stdout.close()
+        restore_status = restored.wait(timeout=1800)
+        decrypt_status = decrypted.wait(timeout=60)
+    except (OSError, subprocess.SubprocessError) as error:
+        for process in (restored, decrypted):
+            if process is not None and process.poll() is None:
+                process.kill()
+                process.wait()
+        raise CandidateError("database_rollback_failed") from error
+    if restore_status != 0 or decrypt_status != 0:
+        raise CandidateError("database_rollback_failed")
+
+
+def select_existing_test_tenant(machine: str, layout: dict[str, str], bot_account_id: str) -> str:
+    """Select one marked test tenant for the canary, returning its ID only in memory."""
+    escaped_bot_id = bot_account_id.replace("'", "''")
+    predicate = "(t.tenant_id ~* '(test|fixture|canary)' OR t.guild_id ~* '(test|fixture|canary)' " \
+                "OR EXISTS (SELECT 1 FROM teams tm WHERE tm.tenant_id=t.tenant_id " \
+                "AND tm.label ~* '(test|fixture|canary)'))"
+    where = f"t.bot_account_id='{escaped_bot_id}' AND {predicate}"
+    shell = (
+        'export PGPASSWORD="$(cat /run/secrets/pubg_postgres_superuser_password)"; '
+        'exec psql -XAtq -v ON_ERROR_STOP=1 -U pubg_bootstrap -d pubg_saas -c "$1"'
+    )
+    count_sql = f"SELECT COUNT(DISTINCT t.tenant_id) FROM tenants t WHERE {where}"
+    count_output = remote_compose(machine, layout, "exec", "--no-TTY", "postgres", "sh", "-c", shell,
+                                  "gate-canary-tenant-count", count_sql).decode("utf-8", errors="strict")
+    if count_output.strip() != "1":
+        raise CandidateError("canary_test_tenant_not_unique")
+    tenant_sql = f"SELECT DISTINCT t.tenant_id FROM tenants t WHERE {where} ORDER BY t.tenant_id"
+    tenant_output = remote_compose(machine, layout, "exec", "--no-TTY", "postgres", "sh", "-c", shell,
+                                   "gate-canary-tenant-select", tenant_sql).decode("utf-8", errors="strict")
+    return unique_test_tenant_id(count_output, tenant_output)
+
+
+def set_remote_intelligence_canary(machine: str, gateway_env: str, tenant_id: str) -> None:
+    """Enable the typed feature for one tenant, without emitting its identifier."""
+    payload = json.dumps({"tenantId": tenant_id}, separators=(",", ":")).encode("utf-8")
+    code = """import json,os,pathlib,re,stat,sys,tempfile
+p=pathlib.Path(sys.argv[1])
+v=json.loads(sys.stdin.read())
+tid=v.get('tenantId','')
+if not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9._:-]{0,127}',tid): sys.exit(2)
+s=p.lstat()
+if not stat.S_ISREG(s.st_mode) or stat.S_ISLNK(s.st_mode) or stat.S_IMODE(s.st_mode)!=0o600: sys.exit(3)
+rows=p.read_text().splitlines()
+keys={'GATE_PUBG_INTELLIGENCE_ENABLED':'1','GATE_PUBG_INTELLIGENCE_CANARY_TENANT_IDS':tid}
+for k,value in keys.items():
+    ids=[i for i,x in enumerate(rows) if re.match(r'^\\s*'+re.escape(k)+r'\\s*=',x)]
+    if len(ids)>1: sys.exit(4)
+    if ids: rows[ids[0]]=k+'='+value
+    else: rows.append(k+'='+value)
+fd,t=tempfile.mkstemp(prefix='.gate-canary-',dir=p.parent)
+os.fchmod(fd,0o600)
+with os.fdopen(fd,'w') as f:
+    f.write('\\n'.join(rows)+'\\n')
+    f.flush()
+    os.fsync(f.fileno())
+os.replace(t,p)
+"""
+    remote(machine, "python3", "-c", code, gateway_env, input_data=payload)
+
+
 def full_database_dump_shell() -> str:
     return (
         'export PGPASSWORD="$(cat /run/secrets/pubg_backup_password)"; '
-        "exec pg_dump -Fc --no-owner --no-acl -U pubg_backup -d pubg_saas"
+        "exec pg_dump -Fc -U pubg_backup -d pubg_saas"
+    )
+
+
+def full_database_restore_shell() -> str:
+    return (
+        'export PGPASSWORD="$(cat /run/secrets/pubg_postgres_superuser_password)"; '
+        "exec pg_restore --single-transaction --clean --if-exists -U pubg_bootstrap -d pubg_saas"
     )
 
 
 def database_backup_required(risk: str, force_full_backup: bool) -> bool:
-    """Retain the default code-only checkpoint, but honor an explicit full PG backup."""
-    return force_full_backup or risk != "reversible_app_candidate"
+    """Every Gate-Local candidate starts with a verified full PostgreSQL backup."""
+    return True
+
+
+def unique_test_tenant_id(count_output: str, tenant_output: str) -> str:
+    """Accept only one explicitly marked Gate-Local test tenant; never log its ID."""
+    if count_output.strip() != "1":
+        raise CandidateError("canary_test_tenant_not_unique")
+    tenant_id = tenant_output.strip()
+    if not IDENTIFIER.fullmatch(tenant_id):
+        raise CandidateError("canary_test_tenant_unavailable")
+    return tenant_id
 
 
 def parse_candidate_command(args: list[str]) -> tuple[str, bool] | None:
@@ -558,7 +681,7 @@ def runtime_facts(machine: str, policy: dict[str, Any], sha: str,
                 needs_convergence = True
     migration_paths = candidate_migration_paths(image_match.group(1), sha, paths)
     risk, reason = migration_risk(migration_paths, ROOT)
-    if reason:
+    if reason and risk != "destructive_schema_warning":
         error = OperatorAuthorizationRequired if reason.startswith("separate_") else CandidateError
         raise error(reason)
     migration_inventory(migration_paths, ROOT)
@@ -580,13 +703,15 @@ def runtime_facts(machine: str, policy: dict[str, Any], sha: str,
     return facts, active_image, risk, layout
 
 
-def restore_remote_files(machine: str, layout: dict[str, str], old_compose: bytes, old_env: bytes) -> None:
+def restore_remote_files(machine: str, layout: dict[str, str], old_compose: bytes, old_env: bytes,
+                         old_gateway_env: bytes) -> None:
     write_remote_file(machine, layout["composeFile"], old_compose, "0644")
     write_remote_file(machine, layout["envFile"], old_env, "preserve")
+    write_remote_file(machine, layout["gatewayEnv"], old_gateway_env, "preserve")
 
 
 def gate_apply(approval_ref: str, *, force_full_database_backup: bool = False) -> int:
-    """Deploy Gate-Local using the existing one-time target configuration."""
+    """Deploy the repo-authorized Gate-Local canary with a full database checkpoint."""
     policy, policy_reason = validate_private_state(POLICY_PATH, ROOT)
     if policy is None:
         raise OperatorAuthorizationRequired("approval_" + policy_reason)
@@ -644,9 +769,12 @@ def gate_apply(approval_ref: str, *, force_full_database_backup: bool = False) -
             raise CandidateError("checkpoint_path_already_exists")
         old_compose: bytes | None = None
         old_env: bytes | None = None
+        old_gateway_env: bytes | None = None
+        database_artifact: pathlib.Path | None = None
+        canary_tenant_id: str | None = None
         state: dict[str, Any] = {"sourceSha": sha, "image": image, "activeImage": active_image,
                                  "approvalRef": approval_ref, "checkpoint": str(checkpoint), "risk": risk,
-                                 "databaseBackupMode": "full" if force_full_database_backup else "migration_required"}
+                                 "databaseBackupMode": "full", "canary": "single_marked_test_tenant"}
 
         def build() -> dict[str, Any]:
             build_time = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
@@ -676,10 +804,12 @@ def gate_apply(approval_ref: str, *, force_full_database_backup: bool = False) -
             return {"digest": digest, "sourceSha": sha, "image": image}
 
         def verify_target() -> None:
+            nonlocal canary_tenant_id
             remote_compose(machine, layout, "config", "--quiet")
             current_bot = read_remote_value(machine, layout["gatewayEnv"], "KOOK_BOT_ACCOUNT_ID")
             if current_bot != policy.get("botAccountId"):
                 raise CandidateError("target_bot_identity_changed")
+            canary_tenant_id = select_existing_test_tenant(machine, layout, str(policy.get("botAccountId")))
             try:
                 image_document = json.loads(remote_text(machine, "docker", "image", "inspect", "--format", "{{json .}}", image))
             except (CandidateError, json.JSONDecodeError) as error:
@@ -689,35 +819,28 @@ def gate_apply(approval_ref: str, *, force_full_database_backup: bool = False) -
                 raise CandidateError("candidate_image_digest_mismatch")
 
         def backup() -> dict[str, Any]:
-            nonlocal old_compose, old_env
+            nonlocal old_compose, old_env, old_gateway_env, database_artifact
             checkpoint.mkdir(mode=0o700)
             os.chmod(checkpoint, 0o700)
             old_compose = remote(machine, "cat", layout["composeFile"])
             old_env = remote(machine, "cat", layout["envFile"])
+            old_gateway_env = remote(machine, "cat", layout["gatewayEnv"])
             for name, value in (("compose.before" + pathlib.PurePosixPath(layout["composeFile"]).suffix, old_compose),
                                 ("compose.env.before", old_env)):
                 path = checkpoint / name
                 with path.open("xb") as output:
                     os.fchmod(output.fileno(), 0o600)
                     output.write(value)
-            if not database_backup_required(risk, force_full_database_backup):
-                # Code-only changes do not need another full database dump.
-                # Preserve Compose/env to roll back the application image.
-                metadata = {**state, "createdAt": now.isoformat(),
-                            "databaseScope": "unchanged", "checkpointStatus": "application_recoverable"}
-                with (checkpoint / "checkpoint.json").open("x", encoding="utf-8") as output:
-                    os.fchmod(output.fileno(), 0o600)
-                    json.dump(metadata, output, ensure_ascii=False, sort_keys=True)
-                    output.write("\n")
-                return {"recoverable": True, "path": str(checkpoint)}
-            artifact = checkpoint / "pubg-saas.dump.age"
+            gateway_env_checkpoint = checkpoint / "gateway.env.before.age"
+            save_encrypted_config_checkpoint(old_gateway_env, gateway_env_checkpoint, recipients, identity)
+            database_artifact = checkpoint / "pubg-saas.dump.age"
             dump_cmd = [*compose_base(machine, layout), "exec", "--no-TTY", "postgres", "sh", "-c",
                         full_database_dump_shell()]
             dump = subprocess.Popen(["orb", "-m", machine, "-u", "root", *dump_cmd],
                                     stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
             assert dump.stdout is not None
             try:
-                with artifact.open("xb") as encrypted:
+                with database_artifact.open("xb") as encrypted:
                     os.fchmod(encrypted.fileno(), 0o600)
                     age = subprocess.run(["age", "-R", str(recipients)], stdin=dump.stdout,
                                          stdout=encrypted, stderr=subprocess.DEVNULL, check=False, timeout=1800)
@@ -728,14 +851,17 @@ def gate_apply(approval_ref: str, *, force_full_database_backup: bool = False) -
                     dump.kill()
                 dump.wait()
                 raise CandidateError("encrypted_database_checkpoint_failed") from error
-            if age.returncode or dump_status != 0 or artifact.stat().st_size < 1024:
+            if age.returncode or dump_status != 0 or database_artifact.stat().st_size < 1024:
                 raise CandidateError("encrypted_database_checkpoint_failed")
-            restore_entries = verify_encrypted_database_backup(artifact, identity)
-            with artifact.open("rb") as backup_file:
+            restore_entries = verify_encrypted_database_backup(database_artifact, identity)
+            with database_artifact.open("rb") as backup_file:
                 digest = hashlib.file_digest(backup_file, "sha256").hexdigest()
-            metadata = {**state, "createdAt": now.isoformat(), "encryptedBackup": artifact.name,
-                        "databaseScope": "full_database", "encryptedBackupBytes": artifact.stat().st_size,
+            metadata = {**state, "createdAt": now.isoformat(), "encryptedBackup": database_artifact.name,
+                        "databaseScope": "full_database", "encryptedBackupBytes": database_artifact.stat().st_size,
                         "pgRestoreListEntries": restore_entries, "encryptedBackupSha256": digest,
+                        "encryptedGatewayEnvironment": gateway_env_checkpoint.name,
+                        "encryptedGatewayEnvironmentSha256": hashlib.sha256(
+                            gateway_env_checkpoint.read_bytes()).hexdigest(),
                         "checkpointStatus": "verified_recoverable"}
             with (checkpoint / "checkpoint.json").open("x", encoding="utf-8") as output:
                 os.fchmod(output.fileno(), 0o600)
@@ -744,24 +870,26 @@ def gate_apply(approval_ref: str, *, force_full_database_backup: bool = False) -
             return {"recoverable": True, "path": str(checkpoint)}
 
         def migrate() -> None:
-            nonlocal old_compose, old_env
-            assert old_compose is not None and old_env is not None
-            try:
-                write_remote_file(machine, layout["composeFile"],
-                                  (ROOT / "infra/pubg-saas/compose.yaml").read_bytes(), "0644")
-                update_code = (
-                    "import os,pathlib,re,stat,sys,tempfile; p=pathlib.Path(sys.argv[1]); rows=p.read_text().splitlines(keepends=True); "
-                    "idx=[i for i,x in enumerate(rows) if re.match(r'^\\s*PUBG_SAAS_IMAGE\\s*=',x)]; "
-                    "len(idx)==1 or sys.exit(2); i=idx[0]; nl='\\n' if rows[i].endswith('\\n') else ''; rows[i]='PUBG_SAAS_IMAGE='+sys.argv[2]+nl; "
-                    "old=p.lstat(); (stat.S_ISREG(old.st_mode) and not stat.S_ISLNK(old.st_mode)) or sys.exit(3); "
-                    "fd,t=tempfile.mkstemp(prefix='.gate-release-',dir=p.parent); os.fchmod(fd,stat.S_IMODE(old.st_mode)); "
-                    "f=os.fdopen(fd,'w'); f.writelines(rows); f.flush(); os.fsync(f.fileno()); f.close(); os.replace(t,p)"
-                )
-                remote(machine, "python3", "-c", update_code, layout["envFile"], image)
-                remote_compose(machine, layout, "run", "--rm", "migrate", timeout=1800)
-            except Exception:
-                restore_remote_files(machine, layout, old_compose, old_env)
-                raise
+            assert old_compose is not None and old_env is not None and old_gateway_env is not None
+            assert canary_tenant_id is not None
+            remote_compose(machine, layout, "stop", "gateway", "worker", timeout=300)
+            write_remote_file(machine, layout["composeFile"],
+                              (ROOT / "infra/pubg-saas/compose.yaml").read_bytes(), "0644")
+            update_code = (
+                "import os,pathlib,re,stat,sys,tempfile; p=pathlib.Path(sys.argv[1]); rows=p.read_text().splitlines(keepends=True); "
+                "idx=[i for i,x in enumerate(rows) if re.match(r'^\\s*PUBG_SAAS_IMAGE\\s*=',x)]; "
+                "len(idx)==1 or sys.exit(2); i=idx[0]; nl='\\n' if rows[i].endswith('\\n') else ''; rows[i]='PUBG_SAAS_IMAGE='+sys.argv[2]+nl; "
+                "old=p.lstat(); (stat.S_ISREG(old.st_mode) and not stat.S_ISLNK(old.st_mode)) or sys.exit(3); "
+                "fd,t=tempfile.mkstemp(prefix='.gate-release-',dir=p.parent); os.fchmod(fd,stat.S_IMODE(old.st_mode)); "
+                "f=os.fdopen(fd,'w'); f.writelines(rows); f.flush(); os.fsync(f.fileno()); f.close(); os.replace(t,p)"
+            )
+            remote(machine, "python3", "-c", update_code, layout["envFile"], image)
+            if risk == "destructive_schema_warning":
+                print("!!! WARNING: destructive Gate-Local migration detected. A verified full encrypted PostgreSQL backup exists; "
+                      "automatic apply will continue, and health failure restores the database, prior image and configuration. !!!",
+                      flush=True)
+            remote_compose(machine, layout, "run", "--rm", "migrate", timeout=1800)
+            set_remote_intelligence_canary(machine, layout["gatewayEnv"], canary_tenant_id)
 
         def switch() -> dict[str, Any]:
             remote_compose(machine, layout, "up", "-d", "--no-build", "--force-recreate", "--wait",
@@ -775,7 +903,14 @@ def gate_apply(approval_ref: str, *, force_full_database_backup: bool = False) -
                 return False
             states = {str(row.get("Service", row.get("service", ""))): str(row.get("Health", row.get("health", ""))).lower()
                       for row in current}
-            return all(states.get(service) == "healthy" for service in ("postgres", "egress-proxy", "gateway", "worker"))
+            try:
+                canary_on = read_remote_value(machine, layout["gatewayEnv"], "GATE_PUBG_INTELLIGENCE_ENABLED") == "1"
+                allowlist = read_remote_value(machine, layout["gatewayEnv"],
+                                              "GATE_PUBG_INTELLIGENCE_CANARY_TENANT_IDS")
+            except CandidateError:
+                return False
+            return (all(states.get(service) == "healthy" for service in ("postgres", "egress-proxy", "gateway", "worker"))
+                    and canary_tenant_id is not None and canary_on and allowlist == canary_tenant_id)
 
         def smoke() -> bool:
             try:
@@ -788,9 +923,11 @@ def gate_apply(approval_ref: str, *, force_full_database_backup: bool = False) -
                 return False
 
         def rollback() -> None:
-            if old_compose is None or old_env is None:
+            if old_compose is None or old_env is None or old_gateway_env is None or database_artifact is None:
                 raise CandidateError("rollback_checkpoint_missing")
-            restore_remote_files(machine, layout, old_compose, old_env)
+            remote_compose(machine, layout, "stop", "gateway", "worker", timeout=300)
+            restore_remote_files(machine, layout, old_compose, old_env, old_gateway_env)
+            restore_encrypted_database_backup(machine, layout, database_artifact, identity)
             remote_compose(machine, layout, "up", "-d", "--no-build", "--wait", "egress-proxy", "gateway", "worker", timeout=900)
 
         def notify() -> bool:
@@ -836,6 +973,8 @@ def gate_apply(approval_ref: str, *, force_full_database_backup: bool = False) -
                                          "audit": audit, "rollback": rollback})
         print("GATE_DEPLOYMENT=" + result["status"] + " source_candidate=" + sha[:12])
         print("GATE_DEPLOYMENT_REASON=" + result["reason"])
+        if result["status"] in {"DEPLOYED_AND_NOTIFIED", "DEPLOYED_NOTIFICATION_FAILED"}:
+            print("GATE_PUBG_INTELLIGENCE_CANARY=enabled allowlist_count=1 tenant_id=redacted")
         if result.get("failedStep"):
             print("GATE_DEPLOYMENT_FAILED_STEP=" + str(result["failedStep"]))
         if result["status"] not in {"DEPLOYED_AND_NOTIFIED", "ALREADY_CURRENT"}:

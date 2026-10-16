@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Fixtureable Gate-Local candidate authorization and execution guards.
 
-This module never creates authorization. Only explicit devctl commands may
-write the external 0600 Gate approval and M2-clearance records. M2 clearance
-is reserved for future formal releases; it does not gate local candidates.
+Gate-Local authorization is host-local and repo-wide: linked worktrees share a
+Git common directory. M2 clearance remains reserved for future formal release
+and does not gate local candidates.
 """
 from __future__ import annotations
 
@@ -13,6 +13,7 @@ import pathlib
 import re
 import tempfile
 import stat
+import subprocess
 from datetime import datetime, timezone
 from typing import Any, Callable
 
@@ -20,7 +21,7 @@ APPROVAL_SCHEMA = "gate-local-auto-approval/v1"
 CLEARANCE_SCHEMA = "gate-local-m2-clearance/v1"
 GATE_PREFIXES = ("apps/pubg-saas/", "infra/pubg-saas/")
 SHARED_PREFIXES = ("packages/pubg-domain/", "packages/presentation/", "packages/identity/")
-RISK_CATEGORIES = {"reversible_app_candidate", "backward_compatible_schema"}
+RISK_CATEGORIES = {"reversible_app_candidate", "backward_compatible_schema", "destructive_schema_warning"}
 IDENTIFIER = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:-]{0,127}\Z")
 
 
@@ -34,6 +35,33 @@ def parse_time(value: Any) -> datetime | None:
     if parsed.tzinfo is None:
         return None
     return parsed.astimezone(timezone.utc)
+
+
+def repository_common_dir(repository: pathlib.Path) -> pathlib.Path | None:
+    """Return the canonical Git common directory, including for linked worktrees."""
+    try:
+        result = subprocess.run(
+            ["git", "-C", str(repository.resolve(strict=False)), "rev-parse", "--path-format=absolute", "--git-common-dir"],
+            capture_output=True, text=True, check=False, timeout=5,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if result.returncode != 0 or not result.stdout.strip():
+        return None
+    return pathlib.Path(result.stdout.strip()).resolve(strict=False)
+
+
+def same_repository_worktree(saved_repository: Any, current_repository: pathlib.Path) -> bool:
+    """Match the same checkout or another linked worktree of the same repository."""
+    if not isinstance(saved_repository, str) or not saved_repository:
+        return False
+    saved_path = pathlib.Path(saved_repository).expanduser().resolve(strict=False)
+    current_path = current_repository.resolve(strict=False)
+    if saved_path == current_path:
+        return True
+    saved_common = repository_common_dir(saved_path)
+    current_common = repository_common_dir(current_path)
+    return saved_common is not None and current_common is not None and saved_common == current_common
 
 
 def validate_private_state(path: pathlib.Path, repository: pathlib.Path) -> tuple[dict | None, str]:
@@ -209,7 +237,7 @@ def split_sql_statements(sql: str) -> list[str] | None:
 
 
 def migration_risk(paths: list[str], repository: pathlib.Path) -> tuple[str, str | None]:
-    """Stop actual destructive SQL; CI plus an encrypted backup covers normal migrations.
+    """Warn but permit destructive SQL after a verified full backup.
 
     Optional pgvector DDL is not in migrate.ts and is never run by this path.
     PostgreSQL's transactional migrator validates SQL instead of a regex allowlist.
@@ -218,6 +246,7 @@ def migration_risk(paths: list[str], repository: pathlib.Path) -> tuple[str, str
                   and not path.endswith("/0025_gate_memory_pgvector.sql")]
     if not migrations:
         return "reversible_app_candidate", None
+    destructive = False
     for relative in migrations:
         path = pathlib.PurePosixPath(relative)
         if path.is_absolute() or any(part in {".", ".."} for part in path.parts):
@@ -240,14 +269,15 @@ def migration_risk(paths: list[str], repository: pathlib.Path) -> tuple[str, str
             sql = re.sub(r"\s+", " ", statement).strip()
             if re.match(r"CREATE\s+EXTENSION\b", sql, re.I):
                 return "extension_install", "separate_extension_authorization_required"
-            if re.match(r"DROP\s+(?:TABLE|SCHEMA|DATABASE|TYPE)\b|TRUNCATE\b", sql, re.I):
-                return "destructive_schema", "destructive_database_operation"
-            if re.match(r"ALTER\s+TABLE\b", sql, re.I) and re.search(r"\bDROP\s+COLUMN\b", sql, re.I):
-                return "destructive_schema", "destructive_database_operation"
-            if re.match(r"DELETE\s+FROM\b", sql, re.I):
-                return "destructive_schema", "destructive_database_operation"
-            if re.match(r"UPDATE\s+\S+\s+SET\b", sql, re.I) and not re.search(r"\bWHERE\b", sql, re.I):
-                return "destructive_schema", "unbounded_data_update"
+            if re.match(r"DROP\s+(?:TABLE|SCHEMA|DATABASE|TYPE|VIEW|INDEX|SEQUENCE|FUNCTION|PROCEDURE|TRIGGER|POLICY)\b|TRUNCATE\b", sql, re.I):
+                destructive = True
+                continue
+            if re.match(r"ALTER\s+TABLE\b", sql, re.I) and re.search(r"\bDROP\s+(?:COLUMN|CONSTRAINT)\b", sql, re.I):
+                destructive = True
+                continue
+            if re.match(r"(?:DELETE\s+FROM|UPDATE\s+\S+\s+SET|MERGE\s+INTO)\b", sql, re.I):
+                destructive = True
+                continue
             if re.match(r"GRANT\b|REVOKE\b|ALTER\s+SYSTEM\b", sql, re.I) or re.search(
                 r"\bSECURITY\s+DEFINER\b", sql, re.I
             ):
@@ -256,6 +286,8 @@ def migration_risk(paths: list[str], repository: pathlib.Path) -> tuple[str, str
                         r"CREATE|COMMENT|DO|SELECT)\b", sql, re.I):
                 continue
             return "unreviewed_migration", "migration_statement_not_allowlisted"
+    if destructive:
+        return "destructive_schema_warning", "destructive_database_operation_warning_only"
     return "backward_compatible_schema", None
 
 def validate_approval(
@@ -271,7 +303,16 @@ def validate_approval(
         return False, "approval_missing"
     if approval.get("schema") != APPROVAL_SCHEMA:
         return False, "approval_schema_invalid"
-    if approval.get("repository") != str(repository.resolve()):
+    expected_common = repository_common_dir(repository)
+    saved_common = approval.get("repositoryCommonDir")
+    if isinstance(saved_common, str) and saved_common:
+        try:
+            common_matches = expected_common is not None and pathlib.Path(saved_common).resolve(strict=False) == expected_common
+        except (OSError, ValueError):
+            common_matches = False
+    else:
+        common_matches = same_repository_worktree(approval.get("repository"), repository)
+    if not common_matches:
         return False, "approval_checkout_mismatch"
     if approval.get("environment") != "gate-local":
         return False, "approval_environment_mismatch"
@@ -334,7 +375,7 @@ def preflight_candidate(
     # direct candidate invocation must never be blocked by an arbitrary
     # changed-file category after the user explicitly selected Gate-Local.
     risk, risk_reason = migration_risk(paths, repository)
-    if risk_reason:
+    if risk_reason and risk != "destructive_schema_warning":
         status = "BLOCKED_OPERATOR_AUTHORIZATION" if risk_reason.startswith("separate_") else "BLOCKED"
         return {"status": status, "reason": risk_reason}
     allowed, reason = validate_approval(approval, repository=repository, instance_id=instance_id,
@@ -359,6 +400,9 @@ def preflight_candidate(
         return {"status": "BLOCKED_OPERATOR_AUTHORIZATION", "reason": "separate_pgvector_authorization_required"}
     if facts.get("activeSha") == candidate_sha:
         return {"status": "ALREADY_CURRENT", "reason": "candidate_sha_already_active"}
+    if risk == "destructive_schema_warning":
+        return {"status": "READY", "reason": "destructive_migration_warning_backup_required",
+                "risk": risk, "warning": risk_reason or "destructive_database_operation_warning_only"}
     return {"status": "READY", "reason": "all_preflight_gates_passed", "risk": risk}
 
 
@@ -418,9 +462,8 @@ def run_candidate_pipeline(operations: dict[str, Callable[[], Any]]) -> dict[str
         result = {"status": "DEPLOYED_AND_NOTIFIED", "reason": "candidate_healthy", "trace": trace}
         return audited(result)
     except Exception:
-        # Once a checkpoint exists, a failed migrator/switch must restore the
-        # previous application/configuration automatically. The SQL migrator is
-        # transactional; only compatible migrations are allowed here.
+        # Once a checkpoint exists, failed migration/switch/health restores the
+        # database and previous application/configuration automatically.
         if checkpoint is not None and current_step in {"migrate", "switch", "health", "smoke"}:
             try:
                 operations["rollback"]()
