@@ -180,6 +180,24 @@ def execute(command: list[str], label: str, dry_run: bool) -> None:
     subprocess.run(command, cwd=ROOT, check=True)
 
 
+PACKAGE_DIRS = (
+    ("apps/pubg-saas/", "@agent/pubg-saas"),
+    ("plugins/amadeus/", "@agent/amadeus-plugin"),
+    ("plugins/pubg/", "@agent/pubg-plugin"),
+    ("packages/pubg-domain/", "@agent/pubg-domain"),
+    ("packages/presentation/", "@agent/presentation"),
+    ("packages/identity/", "@agent/identity"),
+    ("apps/product-radar/", "@agent/product-radar"),
+)
+
+
+def affected_package(path: str) -> tuple[str, str] | None:
+    for prefix, package in PACKAGE_DIRS:
+        if path.startswith(prefix):
+            return prefix, package
+    return None
+
+
 def tests_for_task(paths: list[str]) -> list[tuple[str, list[str]]]:
     # Avoid package-wide tests while editing. A deterministic phase gate later
     # runs affected package suites, so absent sibling tests are not a pass claim.
@@ -198,7 +216,45 @@ def tests_for_task(paths: list[str]) -> list[tuple[str, list[str]]]:
         if tuple(cmd) not in seen:
             seen.add(tuple(cmd))
             result.append(("syntax:" + path, cmd))
+    # Executing one changed test file is much cheaper than a package suite.
+    for path in paths:
+        item = affected_package(path)
+        if not item or "/tests/" not in path or not path.endswith(".test.ts"):
+            continue
+        prefix, package = item
+        cmd = ["pnpm", "--filter", package, "exec", "tsx", "--test", path[len(prefix):]]
+        if tuple(cmd) not in seen:
+            seen.add(tuple(cmd))
+            result.append(("focused:" + path, cmd))
     return result
+
+
+def typechecks_for_task(paths: list[str]) -> list[tuple[str, list[str]]]:
+    packages = sorted({x[1] for path in paths if (x := affected_package(path))
+                       and "/src/" in path})
+    return [("typecheck:" + name, ["pnpm", "--filter", name, "typecheck"])
+            for name in packages]
+
+
+def live_lab_matches(source: str, paths: list[str]) -> bool:
+    # Optional safe read: failure is unknown, never silently treated as healthy.
+    services = ["openclaw"]
+    if any(p.startswith("packages/presentation/") for p in paths):
+        services.append("product-radar")
+    try:
+        p = subprocess.run(["python3", "scripts/lab-runtime-snapshot.py",
+                            *[arg for service in services for arg in ("--service", service)]],
+                           cwd=ROOT, capture_output=True, timeout=30)
+        if p.returncode:
+            return False
+        actual = json.loads(p.stdout).get("services", [])
+        return len(actual) == len(services) and all(
+            row.get("service") in services and row.get("gitSha") == source
+            and row.get("state") == "running" and row.get("health") == "healthy"
+            for row in actual
+        )
+    except (OSError, ValueError, subprocess.TimeoutExpired):
+        return False
 
 
 def check(level: str, data: dict, dry_run: bool = False) -> None:
@@ -228,8 +284,11 @@ def check(level: str, data: dict, dry_run: bool = False) -> None:
         execute(["git", "diff", "--check"], "diff", dry_run)
         for label, cmd in tests_for_task(paths):
             execute(cmd, label, dry_run)
-        if level == "task" and paths:
-            print("TASK_SCOPE=focused checks only; phase performs dependency regression")
+        if level == "task":
+            for label, cmd in typechecks_for_task(paths):
+                execute(cmd, label, dry_run)
+            if paths:
+                print("TASK_SCOPE=focused checks and affected typecheck; phase performs dependency regression")
     if not dry_run:
         data.setdefault("checks", {})[level] = key
         data["lastCheckAt"] = now()
@@ -299,12 +358,18 @@ def finish_phase(phase: str, dry_run: bool) -> None:
         die("Goal changed: review amended acceptance requirements before phase exit")
     if lab and reason == "eligible" and data.get("deployments", {}).get("lab") != source:
         if approval_active():
-            # Never mint release tags, alter Gate or bypass the existing
-            # release/backups/rollback/notification mechanism.
-            execute(["bash", "scripts/release-lab.sh", "candidate", "--apply",
-                     "--approval-ref", "devctl:" + source[:12]], "lab-candidate", False)
+            if live_lab_matches(source, paths):
+                print("LAB_CANDIDATE=ALREADY_CURRENT source=" + source[:12])
+            else:
+                # Never mint tags, alter Gate or bypass the existing
+                # release/checkpoint/health/rollback and owner notification path.
+                execute(["bash", "scripts/release-lab.sh", "candidate", "--apply",
+                         "--approval-ref", "devctl:" + source[:12]], "lab-candidate", False)
+                print("LAB_CANDIDATE=DEPLOYED_AND_NOTIFIED source=" + source[:12])
             data.setdefault("deployments", {})["lab"] = source
-            print("LAB_CANDIDATE=DEPLOYED_AND_NOTIFIED source=" + source[:12])
+            # Persist successful deployment before any later phase bookkeeping;
+            # a crash must not reapply the same known-good source.
+            protected_write(STATE, data)
         else:
             print("LAB_CANDIDATE=PENDING_ONE_TIME_LOCAL_APPROVAL; no runtime change")
     elif lab:

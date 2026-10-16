@@ -44,6 +44,18 @@ class DevctlContracts(unittest.TestCase):
         self.assertEqual(devctl.scope_kind(["apps/product-radar/src/main.ts"])[2],
                          "radar-only-requires-review")
 
+    def test_affected_typechecks_are_not_entire_suite(self):
+        commands = devctl.typechecks_for_task(["apps/pubg-saas/src/gateway.ts",
+                                               "packages/identity/src/index.ts"])
+        self.assertEqual({x[0] for x in commands},
+                         {"typecheck:@agent/pubg-saas", "typecheck:@agent/identity"})
+        self.assertFalse(any(" test" in " ".join(x[1]) for x in commands))
+
+    def test_changed_test_file_uses_one_targeted_runner(self):
+        selected = devctl.tests_for_task(["apps/pubg-saas/tests/message-adapter.test.ts"])
+        self.assertEqual(selected[0][1][:5],
+                         ["pnpm", "--filter", "@agent/pubg-saas", "exec", "tsx"])
+
     def test_unknown_scope_blocks_deploy(self):
         self.assertEqual(devctl.scope_kind(["plugins/pubg/src/index.ts", "misc/unowned.ts"])[2],
                          "mixed-or-unknown-scope")
