@@ -418,5 +418,17 @@ def run_candidate_pipeline(operations: dict[str, Callable[[], Any]]) -> dict[str
         result = {"status": "DEPLOYED_AND_NOTIFIED", "reason": "candidate_healthy", "trace": trace}
         return audited(result)
     except Exception:
-        result = {"status": "BLOCKED", "reason": "candidate_step_failed", "failedStep": current_step, "trace": trace}
-        return audited(result)
+        # Once a checkpoint exists, a failed migrator/switch must restore the
+        # previous application/configuration automatically. The SQL migrator is
+        # transactional; only compatible migrations are allowed here.
+        if checkpoint is not None and current_step in {"migrate", "switch", "health", "smoke"}:
+            try:
+                operations["rollback"]()
+                trace.append("rollback")
+                return audited({"status": "ROLLED_BACK", "reason": "candidate_step_failed",
+                                "failedStep": current_step, "trace": trace})
+            except Exception:
+                return audited({"status": "BLOCKED", "reason": "rollback_failed_manual_recovery_required",
+                                "failedStep": current_step, "trace": trace})
+        return audited({"status": "BLOCKED", "reason": "candidate_step_failed",
+                        "failedStep": current_step, "trace": trace})
