@@ -68,8 +68,10 @@ Options:
   --manifest <path>               protected external release manifest (status)
   --runtime-snapshot <path>       sanitized Gate runtime snapshot (status)
 
-Gate-Local M2 remains paused. Staging/Prod apply requires a reviewed
-environment adapter; no adapter is currently configured.
+Gate-Local candidate apply uses the protected local autopilot and requires
+the external one-time Gate approval plus separate M2 clearance. M2 remains
+paused until the operator separately clears it. Staging/Prod apply requires
+a reviewed environment adapter.
 Gate verify requires `PUBG_SAAS_TEST_DATABASE_URL` to point to a loopback
 database named `test`/`testing` or ending in `_test`/`_testing`.
 USAGE
@@ -318,9 +320,14 @@ case "$COMMAND" in
       run_lab_deploy_plan
     else
       bash "$ROOT_DIR/scripts/pubg-saas-version.sh" check
-      printf 'GATE_RELEASE=DRY_RUN\nGATE_ADAPTER=unconfigured\n'
+      printf 'GATE_RELEASE=DRY_RUN\n'
+      if [[ "$ENVIRONMENT" == gate-local ]]; then
+        printf '%s\n' 'GATE_ADAPTER=protected-local-autopilot' 'GATE_M2_CLEARANCE=separate-and-required'
+      else
+        printf 'GATE_ADAPTER=%s\n' "$([[ -x "$ROOT_DIR/infra/pubg-saas/release-adapters/$ENVIRONMENT.sh" ]] && printf configured || printf unconfigured)"
+      fi
       printf '%s\n' 'SEQUENCE=verify -> same-digest build -> backup/precheck -> migrator -> gateway/worker -> health/rollback-plan'
-      printf '%s\n' 'NO_RUNTIME_QUERY=Gate-Local M2 is paused; Gate-Staging/Prod have no configured host adapter.'
+      printf '%s\n' 'NO_RUNTIME_QUERY=planning never queries Gate-Local; apply requires the external Gate approval and independent M2 clearance.'
     fi
     ;;
   verify)
@@ -377,7 +384,10 @@ case "$COMMAND" in
         fi
       else
         if [[ "$ENVIRONMENT" == gate-local ]]; then
-          fail 'Gate-Local is the paused M2 environment; this release CLI never applies to it.'
+          [[ "$COMMAND" == candidate ]] || fail 'Gate-Local supports only an unreleased candidate; formal Gate release/tag is not available.'
+          python3 "$ROOT_DIR/scripts/gate-local-candidate.py" candidate --apply --approval-ref "$APPROVAL_REF"
+          printf 'CANDIDATE_APPLIED=1\nAPPROVAL_REF=%s\n' "$APPROVAL_REF"
+          exit 0
         fi
         adapter="$ROOT_DIR/infra/pubg-saas/release-adapters/$ENVIRONMENT.sh"
         [[ -x "$adapter" ]] || fail "No reviewed $ENVIRONMENT release adapter exists; no Gate service or database was changed."
@@ -399,7 +409,11 @@ case "$COMMAND" in
       else
         printf 'GATE_SEQUENCE=verify,build-once,precheck,protected-backup,migrator,application-switch,health\n'
         printf '%s\n' 'GATE_ROLLBACK=application rollback only when schema compatibility allows; never force-restore the entire PostgreSQL volume by default.'
-        printf 'GATE_ADAPTER=%s\n' "$([[ -x "$ROOT_DIR/infra/pubg-saas/release-adapters/$ENVIRONMENT.sh" ]] && printf configured || printf unconfigured)"
+        if [[ "$ENVIRONMENT" == gate-local ]]; then
+          printf '%s\n' 'GATE_ADAPTER=protected-local-autopilot' 'GATE_M2_CLEARANCE=separate-and-required'
+        else
+          printf 'GATE_ADAPTER=%s\n' "$([[ -x "$ROOT_DIR/infra/pubg-saas/release-adapters/$ENVIRONMENT.sh" ]] && printf configured || printf unconfigured)"
+        fi
       fi
     fi
     ;;

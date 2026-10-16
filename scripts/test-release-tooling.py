@@ -310,7 +310,7 @@ with tempfile.TemporaryDirectory(prefix="release-oci-test-") as temporary:
         raise AssertionError("wrong product version label unexpectedly passed")
 
 gate_plan = invoke("bash", str(ROOT / "scripts/release-gate.sh"), "plan")
-assert gate_plan.returncode == 0 and "GATE_ADAPTER=unconfigured" in gate_plan.stdout
+assert gate_plan.returncode == 0 and "GATE_ADAPTER=protected-local-autopilot" in gate_plan.stdout
 gate_status = invoke("bash", str(ROOT / "scripts/release-gate.sh"), "status")
 assert gate_status.returncode == 0 and "DRIFT_STATUS=UNKNOWN" in gate_status.stdout
 gate_apply = invoke("bash", str(ROOT / "scripts/release-gate.sh"), "candidate", "--apply")
@@ -362,7 +362,7 @@ gate_help = invoke("bash", str(ROOT / "scripts/release-gate.sh"), "--help").stdo
 assert "Lab build selection" in lab_help and "--memory-acceptance" in lab_help
 assert "--environment" not in lab_help and "Gate" not in lab_help
 assert "gate-local|gate-staging|gate-prod" in gate_help
-assert "M2 remains paused" in gate_help and "reviewed" in gate_help
+assert "M2 remains" in gate_help and "separately clears" in gate_help and "reviewed" in gate_help
 assert "PUBG_SAAS_TEST_DATABASE_URL" in gate_help
 assert "database named `test`/`testing`" in gate_help
 assert all(option not in gate_help for option in ("--build-auto", "--lineage-bridge", "--live", "--memory-acceptance"))

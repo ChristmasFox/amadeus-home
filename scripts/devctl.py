@@ -17,11 +17,24 @@ import stat
 import subprocess
 import sys
 import tempfile
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
+
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+from gate_autopilot import (  # noqa: E402
+    APPROVAL_SCHEMA as GATE_APPROVAL_SCHEMA,
+    CLEARANCE_SCHEMA as GATE_CLEARANCE_SCHEMA,
+    IDENTIFIER as GATE_IDENTIFIER,
+    validate_approval as validate_gate_approval,
+    validate_m2_clearance as validate_gate_m2_clearance,
+    validate_private_state as validate_gate_private_state,
+    write_private_state as write_gate_private_state,
+)
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 STATE = ROOT / ".agent" / "runtime" / "goal-state.json"
 LOCAL_POLICY = pathlib.Path.home() / ".config" / "amadeus" / "lab-auto-approval.json"
+GATE_LOCAL_POLICY = pathlib.Path.home() / ".config" / "amadeus" / "gate-local-auto-approval.json"
+GATE_M2_CLEARANCE = pathlib.Path.home() / ".config" / "amadeus" / "gate-local-m2-clearance.json"
 SENSITIVE = (
     ".github/", "infra/", "scripts/deploy-", "scripts/release-",
     "scripts/host-profile", "scripts/patch-", "scripts/migrate-",
@@ -171,6 +184,171 @@ def approval_active() -> bool:
         return doc.get("repo") == str(ROOT) and doc.get("labCandidateAuto") is True
     except (ValueError, SystemExit, OSError):
         return False
+
+
+def gate_policy() -> tuple[dict | None, str]:
+    return validate_gate_private_state(GATE_LOCAL_POLICY, ROOT)
+
+
+def gate_clearance() -> tuple[dict | None, str]:
+    return validate_gate_private_state(GATE_M2_CLEARANCE, ROOT)
+
+
+def gate_auto_status() -> tuple[str, str]:
+    policy, state_reason = gate_policy()
+    if policy is None:
+        return ("disabled" if state_reason == "state_missing" else "misconfigured", state_reason)
+    instance_id = policy.get("instanceId", "")
+    bot_account_id = policy.get("botAccountId", "")
+    active, approval_reason = validate_gate_approval(
+        policy, repository=ROOT, instance_id=instance_id,
+        bot_account_id=bot_account_id, risk="reversible_app_candidate",
+    )
+    if not active:
+        return "disabled", approval_reason
+    clearance, clearance_state = gate_clearance()
+    if clearance is None:
+        return "enabled_m2_paused", clearance_state if clearance_state != "state_missing" else "m2_pause_active"
+    cleared, clearance_reason = validate_gate_m2_clearance(
+        clearance, repository=ROOT, instance_id=instance_id, bot_account_id=bot_account_id,
+    )
+    return ("enabled_m2_cleared", "ready_for_release_preflight") if cleared else ("enabled_m2_paused", clearance_reason)
+
+
+def gate_auto_enable() -> None:
+    if not sys.stdin.isatty():
+        die("one-time Gate-Local approval requires an interactive local terminal")
+    print("Authorize reversible Gate-Local candidates for this checkout and one Bot/instance.")
+    print("This does not clear the separate M2 pause, authorize pgvector, enable memory flags, or affect Lab.")
+    if input("Type ENABLE GATE LOCAL AUTO: ") != "ENABLE GATE LOCAL AUTO":
+        die("operator declined Gate-Local auto approval")
+    instance_id = input("Gate-Local instance ID (non-secret): ").strip()
+    bot_account_id = input("Single Gate KOOK bot account ID (non-secret): ").strip()
+    machine = input("Exact OrbStack machine name: ").strip()
+    backup_root = input("Existing owner-only external Gate backup directory: ").strip()
+    age_recipients = input("External age recipients file: ").strip()
+    age_identity = input("External age private identity file (mode 0600): ").strip()
+    notification_hook = input("Executable Gate-private test notification hook: ").strip()
+    if not GATE_IDENTIFIER.fullmatch(instance_id) or not GATE_IDENTIFIER.fullmatch(bot_account_id):
+        die("Gate-Local instance and Bot IDs must use bounded non-secret identifiers")
+    if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]{0,63}", machine):
+        die("OrbStack machine name is invalid")
+    lab_machine = configured_lab_machine()
+    if machine == lab_machine:
+        die("Gate-Local must use an OrbStack machine separate from the Lab host profile")
+    try:
+        raw_backup_path = pathlib.Path(backup_root).expanduser()
+        backup_path = pathlib.Path(backup_root).expanduser().resolve(strict=True)
+        recipients_path = pathlib.Path(age_recipients).expanduser()
+        identity_path = pathlib.Path(age_identity).expanduser()
+        notify_path = pathlib.Path(notification_hook).expanduser()
+        if raw_backup_path.is_symlink() or not backup_path.is_dir() or stat.S_IMODE(backup_path.stat().st_mode) != 0o700:
+            die("Gate backup directory must exist with owner-only mode 0700")
+        for path in (backup_path, recipients_path.resolve(strict=True), identity_path.resolve(strict=True), notify_path.resolve(strict=True)):
+            if os.path.commonpath((str(ROOT.resolve()), str(path))) == str(ROOT.resolve()):
+                die("Gate backup and release helper files must be outside the Git checkout")
+        if recipients_path.is_symlink() or not recipients_path.is_file():
+            die("Gate age recipients file must be a regular external file")
+        if identity_path.is_symlink() or not identity_path.is_file() or stat.S_IMODE(identity_path.stat().st_mode) != 0o600:
+            die("Gate age identity file must be external and mode 0600")
+        if (notify_path.is_symlink() or not notify_path.is_file() or not os.access(notify_path, os.X_OK)
+            or notify_path.name in {"notify-owner.sh", "codex-notify.sh"}):
+            die("Gate-private notification hook must be an executable external file")
+    except (OSError, ValueError):
+        die("Gate-local backup or notification configuration is unavailable")
+    risks = ["reversible_app_candidate"]
+    if input("Also authorize backward-compatible schema migrations? Type ENABLE GATE COMPATIBLE SCHEMA or press Enter: ") == "ENABLE GATE COMPATIBLE SCHEMA":
+        risks.append("backward_compatible_schema")
+    current = datetime.now(timezone.utc)
+    document = {
+        "schema": GATE_APPROVAL_SCHEMA,
+        "repository": str(ROOT.resolve()),
+        "environment": "gate-local",
+        "instanceId": instance_id,
+        "botAccountId": bot_account_id,
+        "orbstackMachine": machine,
+        "backupRoot": str(backup_path),
+        "ageRecipientsFile": str(recipients_path.resolve()),
+        "ageIdentityFile": str(identity_path.resolve()),
+        "notificationHook": str(notify_path.resolve()),
+        "riskCategories": risks,
+        "approvedAt": current.isoformat(),
+        "expiresAt": (current + timedelta(days=90)).isoformat(),
+    }
+    try:
+        write_gate_private_state(GATE_LOCAL_POLICY, ROOT, document)
+    except (OSError, ValueError):
+        die("could not create protected Gate-Local authorization state")
+    print("GATE_AUTO_ENABLED=true scope=gate-local reversible-candidate; schema=" +
+          ("authorized" if "backward_compatible_schema" in risks else "not-authorized"))
+    print("GATE_AUTO_M2_CLEARANCE=separate operator action required")
+
+
+def gate_auto_disable() -> None:
+    existing = []
+    for path in (GATE_LOCAL_POLICY, GATE_M2_CLEARANCE):
+        if path.is_symlink():
+            die("refusing symlink in Gate-Local authorization state")
+        if path.exists():
+            _, state_reason = validate_gate_private_state(path, ROOT)
+            if state_reason != "ok":
+                die("Gate-Local authorization state is not protected: " + state_reason)
+            existing.append(path)
+    for path in existing:
+        path.unlink()
+    print("GATE_AUTO_ENABLED=false")
+    print("GATE_AUTO_M2_CLEARANCE=false")
+
+
+def configured_lab_machine() -> str:
+    script = 'source "$1"; amadeus_host_profile_load "$2"; printf "%s" "$ORBSTACK_MACHINE"'
+    try:
+        result = subprocess.run(
+            ["bash", "-c", script, "devctl-host-profile", str(ROOT / "scripts/host-profile.sh"), str(ROOT)],
+            capture_output=True, text=True, check=False, timeout=10,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        die("cannot resolve the Lab OrbStack machine from the host profile")
+    machine = result.stdout.strip()
+    if result.returncode or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]{0,63}", machine):
+        die("cannot resolve the Lab OrbStack machine from the host profile")
+    return machine
+
+
+def gate_m2_clear() -> None:
+    if not sys.stdin.isatty():
+        die("M2 pause clearance requires an interactive local terminal")
+    policy, reason = gate_policy()
+    if policy is None:
+        die("Gate-Local auto approval is not active: " + reason)
+    allowed, reason = validate_gate_approval(
+        policy, repository=ROOT, instance_id=policy.get("instanceId", ""),
+        bot_account_id=policy.get("botAccountId", ""), risk="reversible_app_candidate",
+    )
+    if not allowed:
+        die("Gate-Local auto approval is not active: " + reason)
+    print("This records a separate operator clearance after the M2 human acceptance gate is complete.")
+    if input("Type CLEAR GATE M2 PAUSE: ") != "CLEAR GATE M2 PAUSE":
+        die("operator did not clear the Gate M2 pause")
+    evidence = input("M2 human acceptance evidence reference (non-secret): ").strip()
+    if not GATE_IDENTIFIER.fullmatch(evidence):
+        die("M2 acceptance evidence reference is required")
+    current = datetime.now(timezone.utc)
+    document = {
+        "schema": GATE_CLEARANCE_SCHEMA,
+        "repository": str(ROOT.resolve()),
+        "environment": "gate-local",
+        "instanceId": policy["instanceId"],
+        "botAccountId": policy["botAccountId"],
+        "acceptanceEvidenceRef": evidence,
+        "clearedAt": current.isoformat(),
+        "expiresAt": (current + timedelta(days=30)).isoformat(),
+    }
+    try:
+        write_gate_private_state(GATE_M2_CLEARANCE, ROOT, document)
+    except (OSError, ValueError):
+        die("could not create protected Gate M2 clearance state")
+    print("GATE_AUTO_M2_CLEARANCE=recorded scope=gate-local ttl_days=30")
 
 
 def execute(command: list[str], label: str, dry_run: bool) -> None:
@@ -375,7 +553,23 @@ def finish_phase(phase: str, dry_run: bool) -> None:
     elif lab:
         print("LAB_CANDIDATE=SKIPPED reason=" + reason)
     if gate:
-        print("GATE_DEPLOYMENT=NOT_AUTHORIZED source_candidate=" + source[:12])
+        gate_status, gate_reason = gate_auto_status()
+        if lab:
+            print("GATE_DEPLOYMENT=BLOCKED_OPERATOR_AUTHORIZATION reason=cross_product_change_requires_separate_review source_candidate=" + source[:12])
+        elif gate_status == "disabled" and gate_reason == "state_missing":
+            print("GATE_DEPLOYMENT=READY_FOR_AUTO_ENABLE source_candidate=" + source[:12])
+            print("GATE_DEPLOYMENT_NEXT=pnpm devctl configure gate-auto-enable")
+        elif gate_status == "enabled_m2_paused":
+            print("GATE_DEPLOYMENT=BLOCKED_OPERATOR_AUTHORIZATION reason=" + gate_reason +
+                  " source_candidate=" + source[:12])
+            print("GATE_DEPLOYMENT_NEXT=complete M2 human acceptance, then run pnpm devctl configure gate-m2-clear")
+        elif gate_status == "enabled_m2_cleared":
+            execute(["bash", "scripts/release-gate.sh", "candidate", "--apply",
+                     "--approval-ref", "devctl:" + source[:12]], "gate-local-candidate", False)
+            print("GATE_DEPLOYMENT=DEPLOYED_AND_NOTIFIED source_candidate=" + source[:12])
+        else:
+            print("GATE_DEPLOYMENT=BLOCKED_OPERATOR_AUTHORIZATION reason=" + gate_reason +
+                  " source_candidate=" + source[:12])
     data["completedPhases"].append(phase)
     data["phaseBaseCommit"] = source
     data["checks"] = {}
@@ -402,7 +596,10 @@ def main() -> None:
     check_p.add_argument("--level", choices=LEVELS, required=True)
     check_p.add_argument("--dry-run", action="store_true")
     configure = sub.add_parser("configure")
-    configure.add_argument("option", choices=["lab-auto-enable", "lab-auto-disable", "status"])
+    configure.add_argument("option", choices=[
+        "lab-auto-enable", "lab-auto-disable", "gate-auto-enable", "gate-auto-disable",
+        "gate-m2-clear", "status",
+    ])
     args = p.parse_args()
     if args.command == "goal":
         if args.operation == "start":
@@ -421,6 +618,15 @@ def main() -> None:
     else:
         if args.option == "status":
             print("LAB_AUTO_ENABLED=" + str(approval_active()).lower())
+            gate_state, gate_reason = gate_auto_status()
+            print("GATE_AUTO_STATUS=" + gate_state)
+            print("GATE_AUTO_REASON=" + gate_reason)
+        elif args.option == "gate-auto-enable":
+            gate_auto_enable()
+        elif args.option == "gate-auto-disable":
+            gate_auto_disable()
+        elif args.option == "gate-m2-clear":
+            gate_m2_clear()
         elif args.option == "lab-auto-disable":
             if LOCAL_POLICY.exists():
                 LOCAL_POLICY.unlink()
