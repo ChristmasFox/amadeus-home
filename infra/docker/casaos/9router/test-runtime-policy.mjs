@@ -36,7 +36,7 @@ assert.throws(() => validatePolicy({...policy, packageVersion:'0.5.91'}), /inval
 
 
 const publicPolicy = validatePolicy({
-  packageVersion: '0.5.95',
+  packageVersion: '0.5.104',
   imageAccount: null,
   serverActions: { bodySizeLimit: '20mb' },
 });

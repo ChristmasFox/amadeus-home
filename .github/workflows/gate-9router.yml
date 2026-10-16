@@ -1,0 +1,67 @@
+name: Gate 9Router runtime
+
+on:
+  push:
+    branches: ["**"]
+    paths:
+      - "infra/docker/casaos/9router/**"
+      - "infra/9router/runtime-policy.example.json"
+      - "apps/qwen3-tts-service/kurisu_style.json"
+      - "package.json"
+      - "scripts/check-secrets.sh"
+      - ".github/workflows/gate-9router.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "infra/docker/casaos/9router/**"
+      - "infra/9router/runtime-policy.example.json"
+      - "apps/qwen3-tts-service/kurisu_style.json"
+      - "package.json"
+      - "scripts/check-secrets.sh"
+      - ".github/workflows/gate-9router.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  source-and-upstream-shape:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.19.0
+      - name: Focused bridge and patch tests
+        run: pnpm test:9router-patches
+      - name: Apply all patches to upstream 0.5.104 package
+        shell: bash
+        run: |
+          fixture="$(mktemp -d)"
+          npm pack 9router@0.5.104 --pack-destination "$fixture" >/dev/null
+          tar -xzf "$fixture/9router-0.5.104.tgz" -C "$fixture"
+          node infra/docker/casaos/9router/patch-selfhosted-tts-style.mjs --root "$fixture/package"
+          node infra/docker/casaos/9router/patch-runtime-policy.mjs --root "$fixture/package" --policy infra/9router/runtime-policy.example.json --apply
+          node infra/docker/casaos/9router/patch-image-upstream-diagnostics.mjs --root "$fixture/package" --apply
+          node infra/docker/casaos/9router/patch-image-combo-safety.mjs --root "$fixture/package" --apply
+          node infra/docker/casaos/9router/patch-combo-location-fallback.mjs --root "$fixture/package" --apply
+          node --check "$fixture/package/app/.next-cli-build/server/app/api/v1/images/generations/route.js"
+          node --check "$fixture/package/app/.next-cli-build/server/chunks/8910.js"
+      - name: Validate Gate-Local Compose shape
+        shell: bash
+        run: |
+          fixture="$(mktemp -d)"
+          cp infra/docker/casaos/9router/docker-compose.gate-local.yml "$fixture/docker-compose.yml"
+          : > "$fixture/9router.env"
+          source_sha="$(printf 'a%.0s' {1..40})"
+          NINE_ROUTER_SOURCE_SHA="$source_sha" docker compose --project-name 9router -f "$fixture/docker-compose.yml" config --quiet
+      - name: Secret scan and whitespace check
+        run: |
+          pnpm check:secrets
+          git diff --check
