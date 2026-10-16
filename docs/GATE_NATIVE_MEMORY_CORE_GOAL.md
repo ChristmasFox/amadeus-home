@@ -1,11 +1,11 @@
 # Gate Native Memory Core — 独立 AI SDK 长期记忆系统实施 Goal
 
 > 日期：2026-10-16（Asia/Shanghai）
-> 状态：**APPROVED_FOR_SOURCE_IMPLEMENTATION / RUNTIME_APPLY_NOT_AUTHORIZED**
+> 状态：**APPROVED_FOR_SOURCE_IMPLEMENTATION / AUTOMATED_GATE_LOCAL_CANDIDATE_AFTER_OPT_IN**
 > 执行入口：`/goal docs/GATE_NATIVE_MEMORY_CORE_GOAL.md`
 > 产品：仅 **Gate**（`apps/pubg-saas`，Vercel AI SDK 7 / KOOK）。
 > **绝不引入 OpenClaw 运行时、Memory Core 插件、Lab SQLite/Workspace、OpenClaw Session 或 Lab 记忆凭据。**
-> 源码/测试/隔离 fixture 可执行；Gate-Local/Staging/Prod 真实数据库、运行容器、密钥、收费接口和定时任务均须独立显式授权。
+> 源码/测试/隔离 fixture 可执行；Gate-Local 使用**一次性、主机本地显式启用的候选自动部署**，通过保护门禁后后续同类安全更新不逐次询问。现有 Gate M2 暂停门禁未解除前不得自动切换 Gateway/Worker；Gate-Staging/Prod 正式提升、破坏性迁移、未预授权的 pgvector 镜像/扩展切换、收费探针和真数据整理仍独立受控。Lab 已存在的自动候选部署与测试通知策略保持不变，两产品不互相触发部署。
 
 ## 0. 目标、事实基线与不变量
 
@@ -25,7 +25,7 @@ Gate 可以在 KOOK 中：
 3. `kook-public-query-handler.ts` 在 `naturalLanguageReply` 调用上一个加载器并把全部 `turns` 传入 `runPublicKookAgent`；后者在 `kook-conversation-agent.ts` 使用 AI SDK `ToolLoopAgent`。应在这条链路之前加入可测试的 `ContextBuilder`，而非另立 Agent 框架。
 4. `gate_memory_entries` 的 source event、CAS revision、tombstone 是正确的基础，不要重建、删表、迁移已有原始对话或者暴力清除用户历史。
 5. Gate 现用 PostgreSQL 18 镜像**未安装 pgvector**；Lab 的 SQLite/sqlite-vec、1024-D、FTS + Vector + Dreaming 已有独立已记录的 Lab 1.10.5 验收，但**不能证明 Gate 的服务端模型凭据/向量扩展已经可用**。
-6. Gate M2 的 KOOK 真人最终验收与发布门禁仍是独立待办；这个 Goal 不宣布 M2 完成、也不自动部署或替换仍在运行的 Gateway/Worker。
+6. Gate M2 的 KOOK 真人最终验收与发布门禁仍是独立待办；这个 Goal 不宣布 M2 完成。在 M2 明确暂停或未取得一次性 Gate-Local 自动候选许可时，不替换运行中的 Gateway/Worker；解除暂停且取得许可、满足安全门禁后，候选部署必须可自动完成并通知测试，而不是每阶段重复询问。
 7. 原有长期记忆边界和未解决细节见 `docs/GATE_MEMORY_ARCHITECTURE.md`；Lab 的可复用设计和已验证/未验证证据见 `docs/LAB_MEMORY_CORE_P1_REPORT.md`。借鉴思想，不依赖 OpenClaw。
 
 ### 绝对不变量
@@ -81,7 +81,7 @@ KOOK trusted ingress + current identity/binding/membership
 2. 画出当前 KOOK ingress -> `PublicQueryAuthorizer` -> `loadAgentConversation` -> `ToolLoopAgent` -> outbox/worker 的真实顺序，检查每个读路径的租约、成员、binding revision 和 quote linkage。
 3. 重点审计：`0015` 消息表只有 bot/channel、`0017` 历史永久保留；频道解绑/重新绑定时可能读出旧团队全文。建立合成跨 revision 回归测试作为 **blocking**。新的 `ContextBuilder` 不得再用宽松旧入口读取过期 scope 内容。
 4. 确定现有 `GateMemoryStore` 单字/中英混合/Emoji/Lexical 修复无回归；检查旧的 scoped LIKE 在大数据时的 `EXPLAIN` 和超时保护。
-5. 输出简明 source-only 基线，包括 DB extension 可用性探测方案、PG 镜像/迁移门禁、模型路由限制、成本/超时约束。**不连接或变更真实 Gate-Local PG**。
+5. 输出基线，包括 DB extension 可用性探测方案、PG 镜像/迁移门禁、模型路由限制、成本/超时约束。P0 对真实 Gate-Local PG 仅允许按现有安全权限做只读预检；不实施数据库写操作。
 6. 不复刻 Lab 的自定义 OpenClaw patch、Owner peer allowlist、SQLite/Workspace/Cron 接口；识别设计迁移点即可。
 
 **Exit P0**：安全边界图、确切文件清单、跨绑定风险测试（可以先 RED）、配置/迁移可行性，且无任何真实运行时写操作。
@@ -102,7 +102,7 @@ KOOK trusted ingress + current identity/binding/membership
 1. 做只支持 **Gate-owned** config 的 `EmbeddingProvider`，使用当前依赖的 AI SDK `embed`/`embedMany` 及现有受控 `@ai-sdk/openai-compatible` provider；严格复用 Gate 的 egress 规则、防 SSRF/内网直连、API key 安全注入，不假定聊天接口支持 embedding。
 2. 模型候选：Lab 已用过 `Qwen/qwen3.7-text-embedding-flash` 路由并观测到 1024 维；但 Gate **必须独立验证真实 modelId、接口、权限、维度、计费**。在未获真实 probe 授权时只写 provider fixture/mock 和诊断，保持 `semantic_unconfigured`。
 3. 明确向量契约：记录 provider/model id、dimension、normalization、indexVersion、contentHash、scope/version/revocation state。维度错误/NaN/空向量、旧版本重用和漂移一律拒绝；换模型建立新 index generation，完成安全验证才切换，不能把旧向量混排。
-4. 现有 PG18 镜像不带 pgvector。**先在完全隔离的 PG18+pgvector fixture** 证明镜像架构、迁移权限、备份/恢复、回滚和读写；制定 Gate-Local 专属受控预检查与镜像切换剧本；未批准部署前绝不对真实数据库执行 `CREATE EXTENSION`、启动迁移或重建。迁移/feature flag 不得导致当前无 pgvector 的 Gate-Local 启动失败。
+4. 现有 PG18 镜像不带 pgvector。**先在完全隔离的 PG18+pgvector fixture** 证明镜像架构、迁移权限、备份/恢复、回滚和读写。Gate-Local 常规安全候选部署可由一次性许可自动化；**第一次 pgvector 镜像/扩展切换是单独风险类别**：未通过专门的预授权、保护备份、预检和可恢复性演练不得直接执行；一旦明确允许该类迁移，后续相同已批准边界内的可逆增量更新应由守卫脚本自动执行，不要每条命令重复提问。迁移/feature flag 不得导致尚无 pgvector 的 Gate-Local 启动失败。
 5. 在 `gate_memory_entries` 基础上**追加兼容性**建表（如 `gate_memory_embeddings`、jobs/outbox、索引状态），事实表为权威；更新/纠正/forget 事务或可靠 outbox 推动索引更新，撤销先立即从召回排除，不依赖异步向量删除完成才生效。
 6. 第一版小 scope 优先**scope-filtered exact cosine 搜索**并建立 BTREE scope 索引；不要无条件在混合租户表上建立全局 HNSW。规模测试后才评估 pgvector HNSW + iterative scan / partition，并证明过滤后仍有召回质量和租户隔离。
 7. 对原 lexical `LIKE` 短中文查询的潜在全 scope scan 配置 statement_timeout、查询指标和审慎索引方案，避免通过“最近 N 条候选”掩盖旧记忆。Embedding/DB 失败应降级到**已授权** lexical，且标注运行模式。
@@ -164,25 +164,36 @@ KOOK trusted ingress + current identity/binding/membership
 
 1. 以 `apps/pubg-saas/tests/` 增加 source-only 单元测试 + **真隔离 PostgreSQL** 集成 fixture；不使用真实 Lab 或 Gate-Local DB。PG 无 vector 和有 vector 两条 CI 路线均应可启动/测试相应功能；不可把数据库用例静默 skip 当通过。
 2. 增加合成召回评测数据集（中文口语改写、旧事实冲突、新旧事件、群聊污染），输出 recall@k、false-positive、有效隔离次数、Token、延迟、Embedding 请求量、降级状态；不捏造准确率。先测 baseline，再调整 RRF、阈值和预算。
-3. 配置/运行开关建议：`GATE_MEMORY_READ_ENABLED`、`GATE_MEMORY_WRITE_ENABLED`、`GATE_MEMORY_AUTO_LEARN_ENABLED`、`GATE_MEMORY_EMBEDDING_*`，每项分别检测“缺失/配置错误/已授权”；默认不自动整理、不部署、不计费，避免未知开关导致隐式启用。
+3. 配置/运行开关建议：`GATE_MEMORY_READ_ENABLED`、`GATE_MEMORY_WRITE_ENABLED`、`GATE_MEMORY_AUTO_LEARN_ENABLED`、`GATE_MEMORY_EMBEDDING_*`，每项分别检测“缺失/配置错误/已授权”；自动学习和付费调用默认关闭。**部署自动化与记忆自动学习是两套独立开关**：Gate-Local 只有在本机一次性批准且安全门禁通过时自动候选部署，不因关闭自动学习就关闭自动部署。
 4. 输出 3 份运维文档：架构 + API/数据版本契约、合法的生产迁移/回滚/索引重建 runbook、真人 KOOK 验收脚本和隐私/同意说明。隐私说明必须明确 memory forget、raw transcript retention 和受保护备份之间的区别。
 5. 目标性能起点：初期 Recall 5–8 条、按总 Token 预算运行；为 embedding 设置请求超时、并发与每日成本阀；SQL `statement_timeout` 防长时 scan。性能数字要记录**真实测量**和 fixture 环境；不能因为慢而截断至最新 N 条丢旧事实。
 6. 验证遵循 `pnpm devctl check --level edit|task|release`、`pnpm devctl goal finish-phase P<N>`、聚焦 TS/test、`pnpm check:secrets`、`git diff --check`。每阶段提交小而独立 commit；只更新必要 Goal 进度/证据，避免大篇幅 checkpoint 污染上下文。
 7. 最终报告区分 `SOURCE_FIXED`、`ISOLATED_DB_VERIFIED`、`PROVIDER_PROBE_VERIFIED`、`GATE_LOCAL_LIVE_VERIFIED`。**未实际授权执行的步骤必须标 `BLOCKED_OPERATOR_AUTHORIZATION`；不要宣称 LIVE。**
 
-## 9. Phase 停机线、交付和运行时授权
+## 9. 自动部署、Phase 门禁与运行时授权
+
+### Gate-Local 自动候选部署（本 Goal 必须实现的交付）
+
+1. 保留 Lab 现有 `lab-auto-enable`、安全检查、候选回滚与测试通知；**Gate 另建独立的自动候选发布能力**，不能复用 Lab 的批准文件、镜像、令牌或 release target。
+2. 在 Gate 原有 `scripts/release-gate.sh` 和仓库 `devctl` 工作流上实现受保护的 Gate-Local candidate autopilot。建议命令 `pnpm devctl configure gate-auto-enable` / `gate-auto-disable`（**计划中的功能，不代表现存命令**）；许可必须在操作者的交互式本机环境创建，存放仓库外 mode 0600，绑定 checkout + Gate-Local + 单一 Bot/实例 + 允许的迁移风险类别。CI/Goal/聊天文本都不能自行产生或拓宽授权。
+3. 操作者仅需**首次决定是否开启 Gate-Local 自动候选**；开启后每个 phase `finish-phase` 对 Gate-only 变更通过 focused tests、CI/secret gate、兼容性预检、target 身份/digest 校验后自动构建不可变 candidate、制作安全 checkpoint、切换唯一实例、健康检查 + 合成/非扰动 smoke、发送测试通知（延用现有可用的私有通知桥，失败需显式报告），并落下脱敏审计和自动/计划回退路径。不得因为用户没有立即真人测试就停止后续不冲突开发。避免重复部署同一 SHA/digest；有未完成发布/危险 drift 时停机。
+4. **M2 显式暂停、真实 KOOK 真人验收未满足且会干扰 M2、双活 Bot Token、无可恢复备份、Gate-Local target 不可信或被其他 Goal 锁住时，自动部署必须阻止。**阻止时输出一条明确 BLOCKED reason 和可用恢复步骤，不是对每个普通安全变更都要求人工批准。M2 Gate 必须由操作者单独解除，不能以本 Goal 取代。
+5. 任何会改变真实 PG extension/image/无兼容窗口的 schema、真数据 backfill/reindex、密钥、付费 provider、真实自动整理、删除、Gate-Staging/Prod 提升或正式 Tag，必须使用**对应风险类别的额外一次性/明确授权**；通过保护门禁后，对批准范围内的重复可逆操作自动化完成。不可通过自动发布默认打开 `AUTO_LEARN` 或未知消费者可见新功能。
+6. 加入 Gate 自动部署 fixture：许可缺失/过期/作用域错误、已暂停 M2、双 Gateway、候选重复、健康失败、备份失败、扩展不可用、schema 不兼容、回滚失败、通知失败和 Lab/Gate 交叉触发。不得把 mock 部署称为 `LIVE_VERIFIED`；未提供本机许可时以 `READY_FOR_AUTO_ENABLE`/`BLOCKED_OPERATOR_AUTHORIZATION` 交付可用脚本。
+
+### 原有安全停机线
 
 ### 默认批准范围
 
 - 可：源码、可逆 schema 迁移脚本（不实际 apply 到真 PG）、测试/fixture、文档、CI、无副作用 dry-run、干净提交/PR。
-- 不可：读写真实 Lab/OpenClaw SQLite/Session/Workspace、修改/重启 Lab、共享 Lab Token、迁移/修改真实 Gate-Local 数据、替换 pgvector 镜像、开启云付费 embedding probe、执行真数据记忆提取、启动真实 Cron/Worker、发 KOOK 测试消息、停止 M2、创建正式 release/tag 或部署 Gate-Staging/Prod。
-- **执行到需要上述操作的阶段**：完成可交付源码、写清 preflight/backup/影响/回退命令并标记 BLOCKED，继续其他不依赖的源码任务；不要拿 Goal 本身当生产授权。
+- 不可：读写真实 Lab/OpenClaw SQLite/Session/Workspace、修改/重启 Lab、共享 Lab Token、未经相应本机预授权迁移/修改真实 Gate-Local 数据或替换 pgvector 镜像、未授权开启云付费 embedding probe、执行真数据记忆提取、启动真实 Cron/Worker、发 KOOK 真人测试消息、解除 M2 暂停、创建正式 release/tag 或部署 Gate-Staging/Prod。Gate-Local 经一次性批准的安全候选自动部署属于允许的受控路径。
+- **执行到需要额外风险许可的阶段**：先完成可交付源码、预检、备份、影响/回退自动化；未取得该类别授权时标记 BLOCKED，继续其他不依赖的任务。已有安全 Gate-Local 自动候选许可的同类常规部署应自动执行，不要反复询问。Goal 本身不构成生产许可。
 
 ### 完成定义
 
 - P0–P5 源码实现（有需要可拆成多次连续 Goal/会话，但本 Goal 的目标和 scope 不变）；P6 所有独立测试/架构门禁通过；结果可复现；全部已知阻塞事项诚实列出。
 - Gate 能在合成 KOOK end-to-end 中“记住 → 换种说法想起 → 更新 → 忘记 → 再问不返回”；能在共享频道自然对话但不会跨用户/频道/团队泄漏。
-- 真实 Gate-Local deployment / 真人聊天 / 付费 provider / Dreaming 作业均为**独立上线审批**，不是源码 Goal 自动附赠。
+- **Gate-Local 候选自动部署**是本 Goal 的必要工程交付：当已有操作者一次性许可、M2 暂停已解除、受控发布门禁通过时自动构建、部署、验收并通知；缺许可时交付 READY_FOR_AUTO_ENABLE，不谎称 live。真实 KOOK 真人验收、首次高风险 PG extension/image 变更、付费 provider 和启用真实 Light/REM 作业仍有各自明确授权边界。
 - 不修改 Lab 代码、版本、部署、记忆索引或发布流程；原 Gate M2 验收保留。若当前 HEAD 与本文所述事实变化，先做最小差异审计，再维护兼容实现，不重写已有功能。
 
 ## 10. Codex 执行指令
