@@ -88,8 +88,14 @@ test('real KOOK lease and scoped SQL guard isolate live DM and bound channel mem
     assert.equal(await memory.forget(direct, 'language'), true);
     assert.deepEqual(await memory.listRecent(direct), []);
     assert.equal(await memory.create(direct, { key: 'language', content: '旧租约不应复活' }), 'already_exists');
+    assert.equal(await memory.rememberAgain(direct, { key: 'language', content: '不能用旧事件恢复' }, 3), false);
     await queue.complete(direct, null);
     await assert.rejects(memory.listRecent(direct), /public_query_ingress_unavailable/u);
+    assert.equal(await queue.ingestGatewayEvent(dm()), 'accepted');
+    const nextDm = await queue.claimNext(); assert.ok(nextDm);
+    assert.equal(await memory.rememberAgain(nextDm, { key: 'language', content: '明确重新记住日语' }, 3), true);
+    assert.equal((await memory.listRecent(nextDm))[0]?.content, '明确重新记住日语');
+    await queue.complete(nextDm, null);
 
     assert.equal(await queue.ingestGatewayEvent(message()), 'accepted');
     const group = await queue.claimNext(); assert.ok(group);
@@ -127,7 +133,7 @@ test('real KOOK lease and scoped SQL guard isolate live DM and bound channel mem
     // A stale server-scope object cannot bypass the SQL-level live fence.
     const stale = new GateMemoryStore(pool, { resolveMemoryScope: async () => original });
     assert.deepEqual(await stale.listRecent(group), []);
-    assert.equal(await stale.create(group, { key: 'stale', content: '不应写入' }), 'already_exists');
+    await assert.rejects(stale.create(group, { key: 'stale', content: '不应写入' }), /gate_memory_scope_unavailable/u);
     assert.equal((await pool.query("SELECT COUNT(*)::INTEGER AS count FROM gate_memory_entries WHERE bot_account_id=$1 AND memory_key='stale'", [bot])).rows[0]?.count, 0);
   } finally {
     await pool.query('DELETE FROM gate_memory_entries WHERE bot_account_id=$1', [bot]).catch(() => undefined);

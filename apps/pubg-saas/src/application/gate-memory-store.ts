@@ -155,14 +155,19 @@ export class GateMemoryStore {
   async create(job: KookIngressJob, draft: GateMemoryDraft): Promise<'created' | 'already_exists'> {
     const value = validateGateMemoryDraft(draft);
     const scope = await this.trustedScope(job);
-    const sql = `INSERT INTO gate_memory_entries
-      (bot_account_id,scope_kind,actor_id,channel_id,tenant_id,team_id,binding_revision,memory_key,content,source_event_id)
-      SELECT $1,$2,$3,$4,$5,$6,$7,$8,$9,$10
-      WHERE TRUE` + liveFence(10, 11) + `
-      ON CONFLICT DO NOTHING RETURNING memory_id`;
+    const sql = `WITH allowed AS (SELECT 1 WHERE TRUE` + liveFence(10, 11) + `),
+      inserted AS (
+        INSERT INTO gate_memory_entries
+        (bot_account_id,scope_kind,actor_id,channel_id,tenant_id,team_id,binding_revision,memory_key,content,source_event_id)
+        SELECT $1,$2,$3,$4,$5,$6,$7,$8,$9,$10 FROM allowed
+        ON CONFLICT DO NOTHING RETURNING memory_id
+      )
+      SELECT EXISTS(SELECT 1 FROM allowed) AS allowed,
+             EXISTS(SELECT 1 FROM inserted) AS inserted`;
     const result = await this.pool.query(sql, [...scope, value.key, value.content,
       boundedText(job.eventId, 256), job.leaseToken]);
-    return result.rowCount ? 'created' : 'already_exists';
+    if (result.rows[0]?.allowed !== true) throw new Error('gate_memory_scope_unavailable');
+    return result.rows[0]?.inserted === true ? 'created' : 'already_exists';
   }
 
   async revise(job: KookIngressJob, draft: GateMemoryDraft, expectedRevision: number): Promise<boolean> {
@@ -171,6 +176,29 @@ export class GateMemoryStore {
     const scope = await this.trustedScope(job);
     const sql = 'UPDATE gate_memory_entries SET content=$9,source_event_id=$10,revision=revision+1,updated_at=now() WHERE '
       + FILTER + ' AND memory_key=$8 AND revision=$11 AND revoked_at IS NULL' + liveFence(10, 12);
+    const result = await this.pool.query(sql, [...scope, value.key, value.content,
+      boundedText(job.eventId, 256), expectedRevision, job.leaseToken]);
+    return !!result.rowCount;
+  }
+
+
+  /** Explicit re-remembering requires a *newly admitted* message after the
+   * tombstone, plus CAS revision. A pre-revocation lease cannot revive it.
+   * Not exposed as an unrestricted model-facing tool. */
+  async rememberAgain(job: KookIngressJob, draft: GateMemoryDraft, expectedRevision: number): Promise<boolean> {
+    if (!Number.isSafeInteger(expectedRevision) || expectedRevision < 1) throw new Error('gate_memory_revision_invalid');
+    const value = validateGateMemoryDraft(draft);
+    const scope = await this.trustedScope(job);
+    const sql = `UPDATE gate_memory_entries
+      SET content=$9,source_event_id=$10,revoked_at=NULL,revision=revision+1,updated_at=now()
+      WHERE ` + FILTER + ` AND memory_key=$8 AND revision=$11
+      AND revoked_at IS NOT NULL AND source_event_id<>$10
+      AND revoked_at < (
+        SELECT ingress.created_at FROM kook_ingress_events ingress
+        WHERE ingress.bot_account_id=$1 AND ingress.event_id=$10 AND ingress.lease_token=$12
+          AND ingress.status='processing' AND ingress.lease_until>now()
+          AND ingress.expires_at>now()
+      )` + liveFence(10, 12);
     const result = await this.pool.query(sql, [...scope, value.key, value.content,
       boundedText(job.eventId, 256), expectedRevision, job.leaseToken]);
     return !!result.rowCount;
