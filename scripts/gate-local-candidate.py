@@ -31,15 +31,7 @@ POLICY_PATH = pathlib.Path.home() / ".config" / "amadeus" / "gate-local-auto-app
 IMAGE_RE = re.compile(r"local/pubg-saas:git-([0-9a-f]{40})\Z")
 COMPOSE_NAMES = {"compose.yaml", "compose.yml", "docker-compose.yaml", "docker-compose.yml"}
 MIGRATION_PREFIX = "apps/pubg-saas/src/infrastructure/postgres/migrations/"
-REVIEWED_AUTH_SCHEMA = "gate-local-reviewed-candidate-authorization/v1"
-REVIEWED_RISK_CATEGORIES = {"destructive_schema", "data_migration"}
-KNOWN_EGRESS_DRIFT = {
-    "service": "egress-proxy",
-    "fromSourceSha": "87de87d06a4ed3c9b8df4dab26a2d1c3947efabe",
-    "toSourceSha": "0d5de29b5f61049aebaeb255312e39ad6c6a1a5b",
-}
 OPTIONAL_MIGRATION = "0025_gate_memory_pgvector.sql"
-
 
 class CandidateError(Exception):
     pass
@@ -61,8 +53,6 @@ def recovery_step(reason: str) -> str:
     return {
         "separate_pgvector_authorization_required": "prepare a separately authorized pgvector image/extension plan and verified Gate backup; this autopilot will not apply it",
         "separate_extension_authorization_required": "review the extension change with dedicated authorization and verified backup/restore evidence",
-        "separate_schema_authorization_required": "review schema compatibility, verified backup/restore, and forward or rollback steps under the schema risk gate",
-        "separate_data_migration_authorization_required": "prepare explicit data-migration authorization and a verified backup; automatic backfill remains disabled",
         "migration_statement_not_allowlisted": "review the migration statement manually and use a separately approved release path",
         "migration_sql_invalid_or_empty": "repair the migration SQL in the reviewed Git source and rerun the dry-run preflight",
         "migration_security_change_requires_review": "review the privilege change independently before selecting any release path",
@@ -72,7 +62,6 @@ def recovery_step(reason: str) -> str:
         "no_changes": "commit the intended Gate source change and rerun the candidate preflight",
         "non_runtime": "review the changed paths; this candidate path only applies Gate runtime source",
         "lab_only": "route the change through the Lab release path; Gate autopilot will not apply it",
-        "release_control_change": "review the Gate release-control changes independently; this candidate path does not auto-apply control-plane edits",
         "target_machine_scope_mismatch": "verify the Gate-Local machine in the external approval and keep it separate from the Lab machine",
         "target_machine_invalid": "select the configured Gate-Local machine from the host profile and renew the scoped Gate approval",
         "gate_target_overlaps_lab_machine": "configure a dedicated Gate-Local OrbStack machine, then renew the Gate approval",
@@ -83,11 +72,8 @@ def recovery_step(reason: str) -> str:
         "target_compose_service_identity_invalid": "restore the reviewed Gate Compose service names and image references, then rerun target verification",
         "dual_or_missing_runtime": "inspect the Gate Gateway and Worker count for the selected Bot; resolve the duplicate or missing process before retrying",
         "active_runtime_not_running": "restore the single Gate Gateway and Worker to a healthy state before retrying the candidate",
-        "egress_drift_reconciliation_failed": "the Gate checkpoint is preserved; verify the egress proxy is healthy on the recorded prior image before retrying",
-        "egress_drift_reconciliation_rollback_failed": "stop candidate work and use the Gate checkpoint to restore the egress image/configuration before any retry",
         "target_gateway_container_missing": "verify the Gate Gateway service and target machine, then rerun the read-only target preflight",
         "compose_runtime_facts_invalid": "repair the Gate Compose/runtime inspection path and verify its fixed service identities",
-        "runtime_drift_or_unknown": "compare the running Gateway, Worker, egress image, Compose file, and external deployment record; repair drift before retrying",
         "schema_incompatible_or_unknown": "review the migration against the live compatible schema window in an isolated fixture before retrying",
         "release_in_progress": "wait for or reconcile the existing Gate release lock and audit before starting another candidate",
         "recoverable_backup_missing": "verify the external age recipients/identity and restore fixture; no migration or service switch was attempted",
@@ -208,105 +194,25 @@ def migration_runner_ids(repository: pathlib.Path) -> set[str]:
 
 
 def migration_inventory(paths: list[str], repository: pathlib.Path) -> tuple[list[dict[str, str]], list[dict[str, str]]]:
-    """Describe only migrations the runtime migrator will execute.
-
-    The optional 0025 vector migration is explicitly excluded by migrate.ts;
-    treat any other changed, non-executed migration as unknown and fail closed.
-    """
+    """Describe real runtime migrations; pgvector is optional and not executed."""
     ids = migration_runner_ids(repository)
-    migration_paths = sorted({path for path in paths if path.startswith(MIGRATION_PREFIX)})
     applied: list[dict[str, str]] = []
     excluded: list[dict[str, str]] = []
-    for relative in migration_paths:
+    for relative in sorted(set(path for path in paths if path.startswith(MIGRATION_PREFIX))):
         filename = pathlib.PurePosixPath(relative).name
-        path = repository / relative
-        if path.is_symlink() or not path.is_file():
+        source = repository / relative
+        if source.is_symlink() or not source.is_file():
             raise CandidateError("migration_source_missing_or_untrusted")
         risk, reason = migration_risk([relative], repository)
-        digest = hashlib.sha256(path.read_bytes()).hexdigest()
-        row = {"path": relative, "sha256": digest, "riskCategory": risk}
         if filename in ids:
-            if risk not in REVIEWED_RISK_CATEGORIES | {"reversible_app_candidate", "backward_compatible_schema"}:
-                raise OperatorAuthorizationRequired(reason or "migration_risk_category_unreviewed")
-            applied.append(row)
+            if reason:
+                raise CandidateError(reason)
+            applied.append({"path": relative, "riskCategory": risk})
+        elif filename == OPTIONAL_MIGRATION:
+            excluded.append({"path": relative, "execution": "excluded-from-migratePublicDatabase"})
         else:
-            if filename != OPTIONAL_MIGRATION or risk != "pgvector_install":
-                raise OperatorAuthorizationRequired("migration_not_in_runtime_runner")
-            excluded.append({**row, "execution": "excluded-from-migratePublicDatabase"})
+            raise CandidateError("migration_not_in_runtime_runner")
     return applied, excluded
-
-
-def reviewed_egress_drift(manifest: dict[str, Any] | None) -> dict[str, str] | None:
-    if manifest is None:
-        return None
-    value = manifest.get("knownRuntimeDrift")
-    if value is None:
-        return None
-    if value != KNOWN_EGRESS_DRIFT:
-        raise OperatorAuthorizationRequired("reviewed_runtime_drift_scope_invalid")
-    return dict(KNOWN_EGRESS_DRIFT)
-
-
-def load_reviewed_authorization(
-    path: pathlib.Path,
-    *,
-    approval_ref: str,
-    repository: pathlib.Path,
-    candidate_sha: str,
-    active_sha: str,
-    instance_id: str,
-    bot_account_id: str,
-    migration_paths: list[str],
-) -> tuple[dict[str, Any], bool]:
-    try:
-        manifest = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, UnicodeError, json.JSONDecodeError) as error:
-        raise OperatorAuthorizationRequired("reviewed_migration_authorization_invalid") from error
-    if not isinstance(manifest, dict):
-        raise OperatorAuthorizationRequired("reviewed_migration_authorization_invalid")
-    if manifest.get("schema") != REVIEWED_AUTH_SCHEMA:
-        raise OperatorAuthorizationRequired("reviewed_migration_authorization_invalid")
-    if manifest.get("approvalRef") != approval_ref:
-        raise OperatorAuthorizationRequired("reviewed_migration_approval_ref_mismatch")
-    if manifest.get("repository") != str(repository.resolve()) or manifest.get("environment") != "gate-local":
-        raise OperatorAuthorizationRequired("reviewed_migration_scope_mismatch")
-    if manifest.get("candidateSha") != candidate_sha or manifest.get("activeSourceSha") != active_sha:
-        raise OperatorAuthorizationRequired("reviewed_migration_source_mismatch")
-    if manifest.get("instanceId") != instance_id or manifest.get("botAccountId") != bot_account_id:
-        raise OperatorAuthorizationRequired("reviewed_migration_target_mismatch")
-    categories = manifest.get("allowedRiskCategories")
-    if not isinstance(categories, list) or set(categories) != REVIEWED_RISK_CATEGORIES:
-        raise OperatorAuthorizationRequired("reviewed_migration_categories_invalid")
-    applied, excluded = migration_inventory(migration_paths, repository)
-    if manifest.get("migrations") != applied or manifest.get("excludedMigrations") != excluded:
-        raise OperatorAuthorizationRequired("reviewed_migration_set_mismatch")
-    high_risk = any(row["riskCategory"] in REVIEWED_RISK_CATEGORIES for row in applied)
-    for row in applied:
-        if row["riskCategory"] not in REVIEWED_RISK_CATEGORIES | {"reversible_app_candidate", "backward_compatible_schema"}:
-            raise OperatorAuthorizationRequired("reviewed_migration_category_unapproved")
-    drift = reviewed_egress_drift(manifest)
-    if drift is not None and drift["toSourceSha"] != active_sha:
-        raise OperatorAuthorizationRequired("reviewed_runtime_drift_source_mismatch")
-    return manifest, high_risk
-
-
-def require_unused_reviewed_approval(manifest: dict[str, Any], backup_root: pathlib.Path) -> None:
-    approval_ref = manifest.get("approvalRef")
-    for checkpoint in backup_root.glob("gate-local-*"):
-        record = checkpoint / "reviewed-candidate-authorization.json"
-        if not record.exists() and not record.is_symlink():
-            continue
-        if record.is_symlink() or not record.is_file():
-            raise CandidateError("reviewed_migration_history_untrusted")
-        info = record.stat()
-        if info.st_uid != os.getuid() or stat.S_IMODE(info.st_mode) != 0o600:
-            raise CandidateError("reviewed_migration_history_untrusted")
-        try:
-            previous = json.loads(record.read_text(encoding="utf-8"))
-        except (OSError, UnicodeError, json.JSONDecodeError) as error:
-            raise CandidateError("reviewed_migration_history_untrusted") from error
-        if isinstance(previous, dict) and previous.get("approvalRef") == approval_ref:
-            raise OperatorAuthorizationRequired("reviewed_migration_approval_ref_already_used")
 
 
 def verify_encrypted_database_backup(artifact: pathlib.Path, identity: pathlib.Path) -> int:
@@ -557,98 +463,64 @@ def portable_image_identity(document: dict[str, Any]) -> str:
 
 
 def runtime_facts(machine: str, policy: dict[str, Any], sha: str,
-                  paths: list[str], *, reviewed_migration_authorization: bool = False,
-                  known_egress_drift: dict[str, str] | None = None) -> tuple[dict[str, Any], str, str, dict[str, str]]:
+                  paths: list[str]) -> tuple[dict[str, Any], str, str, dict[str, str]]:
+    """Protect the target identity; converge stale application images during rollout."""
     if not machine or machine != policy.get("orbstackMachine"):
         raise CandidateError("target_machine_scope_mismatch")
-    try:
-        lab_machine = configured_lab_machine()
-    except CandidateError:
-        raise
-    if machine == lab_machine:
+    if machine == configured_lab_machine():
         raise CandidateError("gate_target_overlaps_lab_machine")
     remote(machine, "docker", "info", "--format", "{{.ServerVersion}}")
     layout = discover_remote_layout(machine)
     verify_remote_layout(machine, layout)
     bot_id = read_remote_value(machine, layout["gatewayEnv"], "KOOK_BOT_ACCOUNT_ID")
-    active_project = read_remote_value(machine, layout["envFile"], "PUBG_SAAS_COMPOSE_PROJECT")
+    project = read_remote_value(machine, layout["envFile"], "PUBG_SAAS_COMPOSE_PROJECT")
     active_image = read_remote_value(machine, layout["envFile"], "PUBG_SAAS_IMAGE")
     image_match = IMAGE_RE.fullmatch(active_image)
-    if bot_id != policy.get("botAccountId") or active_project != layout["project"] or not image_match:
+    if bot_id != policy.get("botAccountId") or project != layout["project"] or not image_match:
         raise CandidateError("target_bot_or_image_identity_untrusted")
     rows = parse_compose_ps(remote_compose(machine, layout, "ps", "--all", "--format", "json"))
     by_service: dict[str, list[dict[str, Any]]] = {}
     for row in rows:
-        service = str(row.get("Service", row.get("service", "")))
-        if service:
-            by_service.setdefault(service, []).append(row)
-    required = {name: by_service.get(name, []) for name in ("postgres", "egress-proxy", "gateway", "worker")}
-    if any(len(items) != 1 for items in required.values()):
-        raise CandidateError("target_compose_service_identity_invalid")
-    all_gateway_ids = remote_text(machine, "docker", "ps", "-q", "--filter", "label=com.docker.compose.service=gateway").splitlines()
-    all_worker_ids = remote_text(machine, "docker", "ps", "-q", "--filter", "label=com.docker.compose.service=worker").splitlines()
-    if len(all_gateway_ids) != 1 or len(all_worker_ids) != 1:
-        raise CandidateError("dual_or_missing_runtime")
-    gateway_state = str(required["gateway"][0].get("State", required["gateway"][0].get("state", ""))).lower()
-    worker_state = str(required["worker"][0].get("State", required["worker"][0].get("state", ""))).lower()
-    if "running" not in gateway_state or "running" not in worker_state:
-        raise CandidateError("active_runtime_not_running")
-    active_container_id = remote_text(machine, *compose_base(machine, layout), "ps", "--quiet", "gateway")
-    active_container_ids = active_container_id.splitlines()
-    if len(active_container_ids) != 1:
-        raise CandidateError("target_gateway_container_missing")
-    running_image_id = remote_text(machine, "docker", "inspect", "--format", "{{.Image}}", active_container_ids[0])
-    tagged_image_id = remote_text(machine, "docker", "image", "inspect", "--format", "{{.Id}}", active_image)
-    if running_image_id != tagged_image_id:
-        raise CandidateError("runtime_drift_or_unknown")
-    egress_needs_alignment = False
-    egress_image_id = ""
-    for service in ("worker", "egress-proxy"):
-        service_ids = remote_text(machine, *compose_base(machine, layout), "ps", "--quiet", service).splitlines()
-        if len(service_ids) != 1:
+        name = str(row.get("Service", row.get("service", "")))
+        if name:
+            by_service.setdefault(name, []).append(row)
+    for service in ("postgres", "egress-proxy", "gateway", "worker"):
+        if len(by_service.get(service, [])) != 1:
             raise CandidateError("target_compose_service_identity_invalid")
-        service_image_id = remote_text(machine, "docker", "inspect", "--format", "{{.Image}}", service_ids[0])
-        if service_image_id != tagged_image_id:
-            config_image = remote_text(machine, "docker", "inspect", "--format", "{{.Config.Image}}", service_ids[0])
-            allowed_old_image = (
-                service == "egress-proxy"
-                and known_egress_drift == KNOWN_EGRESS_DRIFT
-                and image_match.group(1) == KNOWN_EGRESS_DRIFT["toSourceSha"]
-                and config_image == f"local/pubg-saas:git-{KNOWN_EGRESS_DRIFT['fromSourceSha']}"
-            )
-            if not allowed_old_image:
-                raise CandidateError("runtime_drift_or_unknown")
-            old_image_id = remote_text(machine, "docker", "image", "inspect", "--format", "{{.Id}}", config_image)
-            if service_image_id != old_image_id:
-                raise CandidateError("runtime_drift_or_unknown")
-            egress_needs_alignment = True
-        if service == "egress-proxy":
-            egress_image_id = service_image_id
+    gateway_ids = remote_text(machine, "docker", "ps", "-q", "--filter",
+                              "label=com.docker.compose.service=gateway").splitlines()
+    worker_ids = remote_text(machine, "docker", "ps", "-q", "--filter",
+                             "label=com.docker.compose.service=worker").splitlines()
+    if len(gateway_ids) != 1 or len(worker_ids) != 1:
+        raise CandidateError("dual_or_missing_runtime")
+    needs_convergence = False
+    for service in ("gateway", "worker", "egress-proxy"):
+        ids = remote_text(machine, *compose_base(machine, layout), "ps", "--quiet", service).splitlines()
+        if len(ids) != 1:
+            raise CandidateError("target_compose_service_identity_invalid")
+        current_image = remote_text(machine, "docker", "inspect", "--format", "{{.Config.Image}}", ids[0])
+        if not IMAGE_RE.fullmatch(current_image):
+            raise CandidateError("target_bot_or_image_identity_untrusted")
+        if current_image != active_image:
+            needs_convergence = True
     migration_paths = candidate_migration_paths(image_match.group(1), sha, paths)
-    risk, risk_reason = migration_risk(migration_paths, ROOT)
-    if risk_reason and not (
-        reviewed_migration_authorization and risk in {"destructive_schema", "data_migration"}
-    ):
-        error = OperatorAuthorizationRequired if risk_reason.startswith("separate_") else CandidateError
-        raise error(risk_reason)
-    if risk not in {
-        "reversible_app_candidate", "backward_compatible_schema", "destructive_schema", "data_migration",
-    }:
-        raise OperatorAuthorizationRequired(risk_reason or "migration_risk_category_unapproved")
+    risk, reason = migration_risk(migration_paths, ROOT)
+    if reason:
+        error = OperatorAuthorizationRequired if reason.startswith("separate_") else CandidateError
+        raise error(reason)
+    migration_inventory(migration_paths, ROOT)
     facts = {
         "targetTrusted": True,
         "instanceId": policy.get("instanceId"),
         "botAccountId": bot_id,
-        "activeGatewayCount": len(all_gateway_ids),
-        "activeWorkerCount": len(all_worker_ids),
+        "activeGatewayCount": len(gateway_ids),
+        "activeWorkerCount": len(worker_ids),
         "releaseInProgress": False,
         "runtimeDrift": False,
-        "egressDriftNeedsAlignment": egress_needs_alignment,
-        "activeImageId": tagged_image_id,
-        "egressImageId": egress_image_id,
+        "needsConvergence": needs_convergence,
         "backupRecoverable": True,
-        "schemaCompatible": risk in {"reversible_app_candidate", "backward_compatible_schema"},
-        "requiresPgvector": risk == "pgvector_install",
+        "schemaCompatible": True,
+        "requiresPgvector": False,
         "pgvectorAvailable": False,
         "activeSha": image_match.group(1),
     }
@@ -660,8 +532,8 @@ def restore_remote_files(machine: str, layout: dict[str, str], old_compose: byte
     write_remote_file(machine, layout["envFile"], old_env, "preserve")
 
 
-def gate_apply(approval_ref: str, *, allow_reviewed_control_plane: bool = False,
-               reviewed_authorization_path: str | None = None) -> int:
+def gate_apply(approval_ref: str) -> int:
+    """Deploy Gate-Local using the existing one-time target configuration."""
     policy, policy_reason = validate_private_state(POLICY_PATH, ROOT)
     if policy is None:
         raise OperatorAuthorizationRequired("approval_" + policy_reason)
@@ -674,30 +546,11 @@ def gate_apply(approval_ref: str, *, allow_reviewed_control_plane: bool = False,
     recipients = safe_external_file(policy.get("ageRecipientsFile"))
     identity = safe_external_file(policy.get("ageIdentityFile"), private=True)
     notify_hook = safe_external_file(policy.get("notificationHook"), executable=True)
-    reviewed_authorization_file: pathlib.Path | None = None
-    reviewed_authorization: dict[str, Any] | None = None
-    expected_egress_drift: dict[str, str] | None = None
-    if reviewed_authorization_path:
-        reviewed_authorization_file = safe_external_file(reviewed_authorization_path, private=True)
-        if reviewed_authorization_file.parent != backup_root:
-            raise OperatorAuthorizationRequired("reviewed_migration_authorization_location_invalid")
-        try:
-            reviewed_authorization = json.loads(reviewed_authorization_file.read_text(encoding="utf-8"))
-        except (OSError, UnicodeError, json.JSONDecodeError) as error:
-            raise OperatorAuthorizationRequired("reviewed_migration_authorization_invalid") from error
-        if not isinstance(reviewed_authorization, dict):
-            raise OperatorAuthorizationRequired("reviewed_migration_authorization_invalid")
-        expected_egress_drift = reviewed_egress_drift(reviewed_authorization)
     if shutil.which("docker") is None or shutil.which("age") is None or shutil.which("pg_restore") is None:
         raise CandidateError("candidate_host_tools_unavailable")
     paths = changed_paths()
     scope, scope_reason = classify_changed_scope(paths)
-    reviewed_control_plane = (
-        allow_reviewed_control_plane
-        and scope == "gate_with_control_plane"
-        and scope_reason == "release_control_change"
-    )
-    if scope != "gate_only" and not reviewed_control_plane:
+    if scope != "gate_only":
         raise CandidateError(scope_reason or scope)
     sha = repo_sha()
     clean_tree()
@@ -718,44 +571,16 @@ def gate_apply(approval_ref: str, *, allow_reviewed_control_plane: bool = False,
             fcntl.flock(lock.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError as error:
             raise CandidateError("release_in_progress") from error
-        facts, active_image, risk, layout = runtime_facts(
-            machine, policy, sha, paths,
-            reviewed_migration_authorization=reviewed_authorization is not None,
-            known_egress_drift=expected_egress_drift,
-        )
-        one_time_migration_authorized = False
-        if reviewed_authorization_file is not None:
-            actual_migration_paths = candidate_migration_paths(str(facts["activeSha"]), sha, paths)
-            reviewed_authorization, one_time_migration_authorized = load_reviewed_authorization(
-                reviewed_authorization_file,
-                approval_ref=approval_ref,
-                repository=ROOT,
-                candidate_sha=sha,
-                active_sha=str(facts["activeSha"]),
-                instance_id=str(policy.get("instanceId")),
-                bot_account_id=str(policy.get("botAccountId")),
-                migration_paths=actual_migration_paths,
-            )
-            require_unused_reviewed_approval(reviewed_authorization, backup_root)
-        from gate_autopilot import preflight_candidate, validate_approval
-        approval_ok, approval_reason = validate_approval(
-            policy, repository=ROOT, instance_id=str(policy.get("instanceId", "")),
-            bot_account_id=str(policy.get("botAccountId", "")), risk=risk,
-            reviewed_migration_authorized=one_time_migration_authorized,
-        )
-        if not approval_ok:
-            raise OperatorAuthorizationRequired(approval_reason)
+        facts, active_image, risk, layout = runtime_facts(machine, policy, sha, paths)
         decision = preflight_candidate(
             approval=policy, repository=ROOT, paths=paths,
             instance_id=str(policy.get("instanceId")), bot_account_id=str(policy.get("botAccountId")),
             candidate_sha=sha, facts=facts,
-            allow_reviewed_control_plane=allow_reviewed_control_plane,
-            reviewed_migration_authorized=one_time_migration_authorized,
         )
-        if decision["status"] == "ALREADY_CURRENT":
+        if decision["status"] == "ALREADY_CURRENT" and not facts.get("needsConvergence"):
             print("GATE_DEPLOYMENT=ALREADY_CURRENT source_candidate=" + sha[:12])
             return 0
-        if decision["status"] != "READY":
+        if decision["status"] not in {"READY", "ALREADY_CURRENT"}:
             error = OperatorAuthorizationRequired if decision["status"] == "BLOCKED_OPERATOR_AUTHORIZATION" else CandidateError
             raise error(decision["reason"])
         now = datetime.now(timezone.utc)
@@ -769,11 +594,6 @@ def gate_apply(approval_ref: str, *, allow_reviewed_control_plane: bool = False,
         old_env: bytes | None = None
         state: dict[str, Any] = {"sourceSha": sha, "image": image, "activeImage": active_image,
                                  "approvalRef": approval_ref, "checkpoint": str(checkpoint), "risk": risk}
-        if expected_egress_drift is not None:
-            state["reviewedRuntimeDrift"] = expected_egress_drift
-        if reviewed_authorization_file is not None:
-            state["reviewedMigrationAuthorization"] = str(reviewed_authorization_file)
-        authorization_consumed = False
 
         def build() -> dict[str, Any]:
             build_time = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
@@ -860,72 +680,6 @@ def gate_apply(approval_ref: str, *, allow_reviewed_control_plane: bool = False,
                 output.write("\n")
             return {"recoverable": True, "path": str(checkpoint)}
 
-        def consume_reviewed_authorization() -> None:
-            nonlocal authorization_consumed
-            if reviewed_authorization_file is None or authorization_consumed:
-                return
-            target = checkpoint / "reviewed-candidate-authorization.json"
-            if target.exists() or target.is_symlink():
-                raise CandidateError("reviewed_migration_authorization_already_consumed")
-            os.replace(reviewed_authorization_file, target)
-            os.chmod(target, 0o600)
-            authorization_consumed = True
-            state["reviewedMigrationAuthorization"] = target.name
-            checkpoint_metadata = checkpoint / "checkpoint.json"
-            metadata = json.loads(checkpoint_metadata.read_text(encoding="utf-8"))
-            metadata["reviewedMigrationAuthorization"] = target.name
-            with checkpoint_metadata.open("w", encoding="utf-8") as output:
-                os.fchmod(output.fileno(), 0o600)
-                json.dump(metadata, output, ensure_ascii=False, sort_keys=True)
-                output.write("\n")
-                output.flush()
-                os.fsync(output.fileno())
-
-        def verify_egress_image(expected_ref: str, expected_id: str) -> None:
-            ids = remote_text(machine, *compose_base(machine, layout), "ps", "--quiet", "egress-proxy").splitlines()
-            if len(ids) != 1:
-                raise CandidateError("egress_drift_reconciliation_failed")
-            actual_ref = remote_text(machine, "docker", "inspect", "--format", "{{.Config.Image}}", ids[0])
-            actual_id = remote_text(machine, "docker", "inspect", "--format", "{{.Image}}", ids[0])
-            health_status = remote_text(machine, "docker", "inspect", "--format", "{{.State.Health.Status}}", ids[0]).lower()
-            if actual_ref != expected_ref or actual_id != expected_id or health_status != "healthy":
-                raise CandidateError("egress_drift_reconciliation_failed")
-
-        def restore_egress_after_reconcile_failure() -> None:
-            assert expected_egress_drift is not None
-            previous_ref = f"local/pubg-saas:git-{expected_egress_drift['fromSourceSha']}"
-            override = ("services:\n  egress-proxy:\n    image: " + previous_ref + "\n").encode()
-            override_path = create_remote_private_temp(machine, override, ".yaml")
-            previous_id = remote_text(machine, "docker", "image", "inspect", "--format", "{{.Id}}", previous_ref)
-            remote(machine, *compose_base(machine, layout), "--file", override_path,
-                   "up", "-d", "--no-build", "--wait", "egress-proxy", timeout=900)
-            verify_egress_image(previous_ref, previous_id)
-            try:
-                remote(machine, "rm", "-f", "--", override_path)
-            except CandidateError:
-                pass
-
-        def reconcile_egress() -> None:
-            if facts.get("egressDriftNeedsAlignment") is not True:
-                return
-            if expected_egress_drift is None:
-                raise CandidateError("runtime_drift_or_unknown")
-            try:
-                remote_compose(machine, layout, "up", "-d", "--no-build", "--wait", "egress-proxy", timeout=900)
-                verify_egress_image(active_image, str(facts["activeImageId"]))
-                state["egressAlignment"] = {
-                    "service": "egress-proxy",
-                    "fromSourceSha": expected_egress_drift["fromSourceSha"],
-                    "toSourceSha": expected_egress_drift["toSourceSha"],
-                    "status": "healthy",
-                }
-            except Exception as error:
-                try:
-                    restore_egress_after_reconcile_failure()
-                except Exception as rollback_error:
-                    raise CandidateError("egress_drift_reconciliation_rollback_failed") from rollback_error
-                raise CandidateError("egress_drift_reconciliation_failed") from error
-
         def migrate() -> None:
             nonlocal old_compose, old_env
             assert old_compose is not None and old_env is not None
@@ -941,7 +695,6 @@ def gate_apply(approval_ref: str, *, allow_reviewed_control_plane: bool = False,
                     "f=os.fdopen(fd,'w'); f.writelines(rows); f.flush(); os.fsync(f.fileno()); f.close(); os.replace(t,p)"
                 )
                 remote(machine, "python3", "-c", update_code, layout["envFile"], image)
-                consume_reviewed_authorization()
                 remote_compose(machine, layout, "run", "--rm", "migrate", timeout=1800)
             except Exception:
                 restore_remote_files(machine, layout, old_compose, old_env)
@@ -1014,8 +767,7 @@ def gate_apply(approval_ref: str, *, allow_reviewed_control_plane: bool = False,
             return value
 
         result = run_candidate_pipeline({"build": build_and_record, "verify_target": verify_target,
-                                         "backup": backup, "reconcile_egress": reconcile_egress,
-                                         "migrate": migrate, "switch": switch,
+                                         "backup": backup, "migrate": migrate, "switch": switch,
                                          "health": healthy, "smoke": smoke, "notify": notify,
                                          "audit": audit, "rollback": rollback})
         print("GATE_DEPLOYMENT=" + result["status"] + " source_candidate=" + sha[:12])
@@ -1037,28 +789,13 @@ def gate_apply(approval_ref: str, *, allow_reviewed_control_plane: bool = False,
 def main() -> int:
     args = sys.argv[1:]
     if args and args[0] in {"--help", "-h"}:
-        print("Usage: gate-local-candidate.py candidate --apply --approval-ref <id> [--allow-reviewed-control-plane] [--reviewed-migration-authorization <path>]")
+        print("Usage: gate-local-candidate.py candidate --apply --approval-ref <id>")
         return 0
-    if len(args) < 4 or args[0] != "candidate" or args[1] != "--apply" or args[2] != "--approval-ref":
-        print("GATE_DEPLOYMENT=BLOCKED reason=invalid_candidate_command", file=sys.stderr)
-        return 2
-    allow_reviewed_control_plane = False
-    reviewed_authorization_path = None
-    index = 4
-    while index < len(args):
-        if args[index] == "--allow-reviewed-control-plane" and not allow_reviewed_control_plane:
-            allow_reviewed_control_plane = True
-            index += 1
-            continue
-        if args[index] == "--reviewed-migration-authorization" and reviewed_authorization_path is None and index + 1 < len(args):
-            reviewed_authorization_path = args[index + 1]
-            index += 2
-            continue
+    if len(args) != 4 or args[:3] != ["candidate", "--apply", "--approval-ref"]:
         print("GATE_DEPLOYMENT=BLOCKED reason=invalid_candidate_command", file=sys.stderr)
         return 2
     try:
-        return gate_apply(args[3], allow_reviewed_control_plane=allow_reviewed_control_plane,
-                          reviewed_authorization_path=reviewed_authorization_path)
+        return gate_apply(args[3])
     except OperatorAuthorizationRequired as error:
         print("GATE_DEPLOYMENT=" + deployment_status(error) + " reason=" + str(error), file=sys.stderr)
         print("GATE_DEPLOYMENT_NEXT=" + recovery_step(str(error)), file=sys.stderr)
@@ -1069,7 +806,6 @@ def main() -> int:
         return 2
     except Exception:
         print("GATE_DEPLOYMENT=BLOCKED reason=candidate_adapter_failed", file=sys.stderr)
-        print("GATE_DEPLOYMENT_NEXT=" + recovery_step("candidate_adapter_failed"), file=sys.stderr)
         return 2
 
 
