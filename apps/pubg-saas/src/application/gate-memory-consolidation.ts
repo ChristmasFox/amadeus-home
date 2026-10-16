@@ -2,7 +2,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import type { Pool, PoolClient, QueryResultRow } from 'pg';
 import { z } from 'zod';
 import { generateText, tool, type LanguageModel } from 'ai';
-import type { MemoryCandidateDraft } from '@agent/memory';
+import { evaluateDeepPromotion, type MemoryCandidateDraft } from '@agent/memory';
 import type { KookIngressJob } from './kook-ingress-queue.js';
 import { canonicalizeGateMemoryKey } from './gate-memory-store.js';
 
@@ -32,6 +32,7 @@ export interface GateMemoryConsolidationPlanner {
 }
 
 const AUTO_LEARN_TOOL = 'submit_gate_memory_candidates';
+const AUTO_LEARN_SOURCE_RELIABILITY = 85;
 const AutoLearnToolSchema = z.object({
   candidates: z.array(GateMemoryConsolidationCandidateSchema).max(4),
 }).strict();
@@ -86,6 +87,7 @@ export class GateMemoryConsolidationAiPlanner implements GateMemoryConsolidation
 
 export interface GateMemoryConsolidationWorkerOptions {
   maxRemBatch?: number;
+  maxDeepCandidates?: number;
   maxInputCharacters?: number;
   maxCandidates?: number;
   leaseMs?: number;
@@ -99,6 +101,55 @@ export type GateMemoryConsolidationRun =
   | { status: 'skipped'; workflow: GateMemoryConsolidationWorkflow; reason: string; admitted: number }
   | { status: 'SKIPPED_NO_ELIGIBLE_CORPUS'; workflow: GateMemoryConsolidationWorkflow }
   | { status: 'retry' | 'dead' | 'timed_out'; workflow: GateMemoryConsolidationWorkflow; admitted: number };
+
+export type GateMemoryDeepRun =
+  | { status: 'processed'; inspected: number; promoted: number; rejected: number; deferred: number }
+  | { status: 'SKIPPED_NO_ELIGIBLE_CORPUS' };
+
+interface DeepCandidateHandle extends QueryResultRow {
+  candidate_id: string;
+  actor_id: string;
+  memory_key: string;
+  workflow: GateMemoryConsolidationWorkflow;
+  consent_version: string;
+}
+
+interface DeepCandidate extends QueryResultRow {
+  candidate_id: string;
+  workflow: GateMemoryConsolidationWorkflow;
+  consent_version: string;
+  memory_key: string;
+  content: string;
+  candidate_kind: ValidCandidate['kind'];
+  valid_until: Date | null;
+  source_event_ids: string[];
+  expected_revision: string | null;
+  status: 'pending_confirmation' | 'conflict';
+  created_at: Date;
+}
+
+interface DeepSource extends QueryResultRow {
+  candidate_id: string;
+  source_event_id: string;
+  created_at: Date;
+  content: string;
+}
+
+interface DeepSourceMetadata extends QueryResultRow {
+  candidate_id: string;
+  source_event_id: string;
+  created_at: Date;
+}
+
+interface DeepMemory extends QueryResultRow {
+  memory_id: string;
+  revision: string;
+  content: string;
+  source_event_id: string;
+  valid_until: Date | null;
+  revoked_at: Date | null;
+  superseded_at: Date | null;
+}
 
 interface Admission extends QueryResultRow {
   admission_id: string;
@@ -284,6 +335,41 @@ export class GateMemoryConsolidationConsentService {
     if (!identity || identity.botId !== this.botAccountId || !/^[0-9a-f-]{36}$/iu.test(candidateId))
       return 'unavailable';
     return transaction(this.pool, async client => {
+      const candidateScope = await client.query<{
+        workflow: GateMemoryConsolidationWorkflow; consent_version: string; memory_key: string;
+      }>(
+        `SELECT candidate.workflow,candidate.consent_version::TEXT AS consent_version,candidate.memory_key
+         FROM gate_memory_consolidation_candidates candidate
+         JOIN gate_memory_consolidation_consents consent ON consent.bot_account_id=candidate.bot_account_id
+           AND consent.actor_id=candidate.actor_id AND consent.workflow=candidate.workflow
+           AND consent.enabled AND consent.consent_version=candidate.consent_version
+         WHERE candidate.candidate_id=$5 AND candidate.bot_account_id=$1 AND candidate.actor_id=$4
+           AND candidate.expires_at>now() AND candidate.status IN ('pending_confirmation','conflict','promoted')
+           AND EXISTS (SELECT 1 FROM kook_ingress_events ingress WHERE ${activeIngressFence()})`,
+        [identity.botId, job.eventId, job.leaseToken, identity.actorId, candidateId],
+      );
+      const scope = candidateScope.rows[0];
+      if (!scope) return 'unavailable';
+      const memoryLockKey = createHash('sha256').update([
+        identity.botId, 'dm', identity.actorId, '', '', '', 0, scope.memory_key,
+      ].join('\0')).digest('hex');
+      await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))', [memoryLockKey]);
+      const memory = await client.query<{
+        memory_id: string; revision: string; revoked_at: Date | null; content: string;
+      }>(
+        `SELECT memory_id,revision::TEXT AS revision,revoked_at,content FROM gate_memory_entries
+         WHERE bot_account_id=$1 AND scope_kind='dm' AND actor_id=$2 AND channel_id=''
+           AND tenant_id='' AND team_id='' AND binding_revision=0 AND memory_key=$3 FOR UPDATE`,
+        [identity.botId, identity.actorId, scope.memory_key],
+      );
+      const current = memory.rows[0];
+      const consent = await client.query(
+        `SELECT 1 FROM gate_memory_consolidation_consents
+         WHERE bot_account_id=$1 AND actor_id=$2 AND workflow=$3 AND consent_version=$4::BIGINT
+           AND enabled FOR SHARE`,
+        [identity.botId, identity.actorId, scope.workflow, scope.consent_version],
+      );
+      if (!consent.rowCount) return 'unavailable';
       const candidate = await client.query<{
         candidate_id: string; workflow: GateMemoryConsolidationWorkflow; consent_version: string;
         memory_key: string; content: string; valid_until: Date | null; expected_revision: string | null;
@@ -300,7 +386,7 @@ export class GateMemoryConsolidationConsentService {
          WHERE candidate.candidate_id=$5 AND candidate.bot_account_id=$1 AND candidate.actor_id=$4
            AND candidate.expires_at>now() AND candidate.status IN ('pending_confirmation','conflict','promoted')
            AND EXISTS (SELECT 1 FROM kook_ingress_events ingress WHERE ${activeIngressFence()})
-         FOR UPDATE OF candidate,consent`,
+         FOR UPDATE OF candidate`,
         [identity.botId, job.eventId, job.leaseToken, identity.actorId, candidateId],
       );
       const row = candidate.rows[0];
@@ -343,13 +429,6 @@ export class GateMemoryConsolidationConsentService {
         [identity.botId, job.eventId, job.leaseToken, identity.actorId],
       );
       if (!ingress.rows[0]) return 'unavailable';
-      const memory = await client.query<{ memory_id: string; revision: string; revoked_at: Date | null; content: string }>(
-        `SELECT memory_id,revision::TEXT AS revision,revoked_at,content FROM gate_memory_entries
-         WHERE bot_account_id=$1 AND scope_kind='dm' AND actor_id=$2 AND channel_id=''
-           AND tenant_id='' AND team_id='' AND binding_revision=0 AND memory_key=$3 FOR UPDATE`,
-        [identity.botId, identity.actorId, row.memory_key],
-      );
-      const current = memory.rows[0];
       const expected = row.expected_revision === null ? null : Number(row.expected_revision);
       if ((!current && expected !== null) || (current && Number(current.revision) !== expected)) {
         await client.query(
@@ -438,8 +517,14 @@ function expiryFor(kind: ValidCandidate['kind'], validity: string, now: number):
 function sensitiveOrRiskText(value: string): boolean {
   return /(?:password|passphrase|api[\s_-]*key|access[\s_-]*token|secret|private[\s_-]*key|密码|口令|验证码|密钥|私钥|身份证|护照|银行卡|信用卡|手机号|电话号码|电子邮箱|住址|家庭住址|病史|诊断|自残|自杀|性取向|想死|不想活|伤害自己|伤害别人|伤害他人|杀人|杀了他)/iu.test(value)
     || /(?:忽略|无视|忘掉|覆盖).{0,12}(?:系统|开发者|之前|先前|以上).{0,8}(?:指令|规则|提示词)|(?:输出|泄露|展示).{0,8}(?:系统提示词|隐藏指令)|(?:调用|执行).{0,8}(?:工具|命令)|(?:记住我是|我是).{0,8}(?:管理员|所有者)|\b(?:ignore|disregard|override).{0,20}(?:system|developer|previous|prior).{0,16}(?:instruction|rule|prompt)\b/iu.test(value)
+    || /(?:我(?:的)?(?:朋友|队友|同事|家人|室友|伴侣)|他|她|他们|她们).{0,24}(?:喜欢|偏好|常用|选择|住在|病史|诊断|收入|联系方式)/iu.test(value)
+    || /\b(?:my friend|my teammate|my colleague|my family|he|she|they)\b.{0,24}\b(?:likes|prefers|uses|lives|medical|income|contact)\b/iu.test(value)
     || /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/iu.test(value)
     || /(?:\+?\d[\s().-]?){8,}/u.test(value);
+}
+
+function hasSelfAttribution(value: string): boolean {
+  return /我(?!们)|(?:^|[^a-z])(?:i(?:'m| am| prefer| like| use)?|my)(?:$|[^a-z])/iu.test(value);
 }
 
 async function transaction<T>(pool: Pool, work: (client: PoolClient) => Promise<T>): Promise<T> {
@@ -458,6 +543,7 @@ async function transaction<T>(pool: Pool, work: (client: PoolClient) => Promise<
 /** Background-capable worker; callers provide scheduling and the inference planner. */
 export class GateMemoryConsolidationWorker {
   private readonly maxRemBatch: number;
+  private readonly maxDeepCandidates: number;
   private readonly maxInputCharacters: number;
   private readonly maxCandidates: number;
   private readonly leaseMs: number;
@@ -469,6 +555,7 @@ export class GateMemoryConsolidationWorker {
     private readonly planner: GateMemoryConsolidationPlanner,
     options: GateMemoryConsolidationWorkerOptions = {}) {
     this.maxRemBatch = options.maxRemBatch ?? 8;
+    this.maxDeepCandidates = options.maxDeepCandidates ?? 64;
     this.maxInputCharacters = options.maxInputCharacters ?? 6_000;
     this.maxCandidates = options.maxCandidates ?? 4;
     this.leaseMs = options.leaseMs ?? 30_000;
@@ -476,6 +563,7 @@ export class GateMemoryConsolidationWorker {
     this.maxAttempts = options.maxAttempts ?? 5;
     this.now = options.now ?? Date.now;
     if (!Number.isSafeInteger(this.maxRemBatch) || this.maxRemBatch < 1 || this.maxRemBatch > 8
+      || !Number.isSafeInteger(this.maxDeepCandidates) || this.maxDeepCandidates < 1 || this.maxDeepCandidates > 128
       || !Number.isSafeInteger(this.maxInputCharacters) || this.maxInputCharacters < 100 || this.maxInputCharacters > 12_000
       || !Number.isSafeInteger(this.maxCandidates) || this.maxCandidates < 1 || this.maxCandidates > 8
       || !Number.isSafeInteger(this.leaseMs) || this.leaseMs < 1_000 || this.leaseMs > 60_000
@@ -665,7 +753,7 @@ export class GateMemoryConsolidationWorker {
         messages[0]!.admission_id, // a new consent version receives a new admission capability
         ...evidenceEventIds, key, content,
       ].join('\0')).digest('hex');
-      result.push({ key, content: candidate.content, kind: candidate.kind, validUntil,
+      result.push({ key, content, kind: candidate.kind, validUntil,
         evidenceEventIds, idempotencyKey });
     }
     return result;
@@ -709,6 +797,47 @@ export class GateMemoryConsolidationWorker {
         return false;
       }
       for (const candidate of candidates) {
+        const consolidated = await client.query<{ candidate_id: string }>(
+          `UPDATE gate_memory_consolidation_candidates existing SET
+             source_event_ids=ARRAY(
+               SELECT live.event_id FROM (
+                 SELECT requested.event_id,MAX(admission.admitted_at) AS admitted_at
+                 FROM unnest(existing.source_event_ids || $9::TEXT[]) AS requested(event_id)
+                 JOIN gate_memory_consolidation_admissions admission
+                   ON admission.bot_account_id=$1 AND admission.actor_id=$2 AND admission.workflow=$3
+                     AND admission.consent_version=$4::BIGINT AND admission.source_event_id=requested.event_id
+                     AND admission.status='done' AND admission.expires_at>now()
+                 JOIN kook_ingress_events ingress ON ingress.bot_account_id=admission.bot_account_id
+                   AND ingress.event_id=admission.source_event_id AND ingress.event_kind='direct'
+                   AND ingress.user_id=admission.actor_id AND ingress.target_kind='direct'
+                   AND ingress.target_id=admission.actor_id AND ingress.status='done' AND ingress.expires_at>now()
+                 JOIN kook_conversation_messages source ON source.bot_account_id=admission.bot_account_id
+                   AND source.channel_id=admission.channel_id AND source.message_id=admission.message_id
+                   AND source.source_event_id=admission.source_event_id AND source.speaker_kind='human'
+                   AND source.speaker_id=admission.actor_id AND source.context_scope_kind='direct'
+                   AND source.expires_at>now()
+                 GROUP BY requested.event_id
+                 ORDER BY MAX(admission.admitted_at) DESC,requested.event_id DESC
+                 LIMIT 8
+               ) live ORDER BY live.admitted_at,live.event_id
+             ),
+             valid_until=$8,updated_at=now()
+           FROM gate_memory_consolidation_consents consent
+           WHERE existing.bot_account_id=$1 AND existing.actor_id=$2 AND existing.workflow=$3
+             AND existing.consent_version=$4::BIGINT AND existing.memory_key=$5 AND existing.content=$6
+             AND existing.candidate_kind=$7 AND existing.status IN ('pending_confirmation','conflict')
+             AND existing.expires_at>now() AND consent.bot_account_id=existing.bot_account_id
+             AND consent.actor_id=existing.actor_id AND consent.workflow=existing.workflow
+             AND consent.enabled AND consent.consent_version=existing.consent_version
+             AND EXISTS (SELECT 1 FROM gate_memory_consolidation_admissions admission
+               WHERE admission.admission_id=ANY($10::uuid[]) AND admission.status='processing'
+                 AND admission.lease_token=$11::uuid)
+           RETURNING existing.candidate_id::TEXT AS candidate_id`,
+          [batch[0]!.bot_account_id, batch[0]!.actor_id, batch[0]!.workflow,
+            batch[0]!.consent_version, candidate.key, candidate.content, candidate.kind,
+            candidate.validUntil, candidate.evidenceEventIds, batch.map(row => row.admission_id), leaseToken],
+        );
+        if (consolidated.rows[0]) continue;
         const inserted = await client.query<{ candidate_id: string }>(
           `INSERT INTO gate_memory_consolidation_candidates(
              idempotency_key,bot_account_id,actor_id,workflow,consent_version,memory_key,content,candidate_kind,
@@ -790,6 +919,358 @@ export class GateMemoryConsolidationWorker {
         [batch.map(row => row.admission_id), leaseToken],
       );
       return true;
+    });
+  }
+
+  /** Consolidate eligible episodic candidates into long-term memory using evidence, not planner confidence. */
+  async processDeep(limit = this.maxDeepCandidates): Promise<GateMemoryDeepRun> {
+    if (!Number.isSafeInteger(limit) || limit < 1 || limit > this.maxDeepCandidates) {
+      throw new Error('gate_memory_deep_limit_invalid');
+    }
+    const result = await this.pool.query<DeepCandidateHandle>(
+      `SELECT candidate.candidate_id::TEXT AS candidate_id,candidate.actor_id,candidate.memory_key,
+         candidate.workflow,candidate.consent_version::TEXT AS consent_version
+       FROM gate_memory_consolidation_candidates candidate
+       JOIN gate_memory_consolidation_consents consent ON consent.bot_account_id=candidate.bot_account_id
+         AND consent.actor_id=candidate.actor_id AND consent.workflow=candidate.workflow
+         AND consent.enabled AND consent.consent_version=candidate.consent_version
+       WHERE candidate.bot_account_id=$1 AND candidate.status IN ('pending_confirmation','conflict')
+         AND candidate.expires_at>now()
+       ORDER BY candidate.created_at,candidate.candidate_id LIMIT $2`, [this.botAccountId, limit],
+    );
+    if (!result.rows.length) return { status: 'SKIPPED_NO_ELIGIBLE_CORPUS' };
+
+    const groups = new Map<string, DeepCandidateHandle[]>();
+    for (const row of result.rows) {
+      const key = `${row.actor_id}\0${row.memory_key}`;
+      const group = groups.get(key) ?? [];
+      group.push(row);
+      groups.set(key, group);
+    }
+    const totals = { inspected: 0, promoted: 0, rejected: 0, deferred: 0 };
+    for (const handles of groups.values()) {
+      const outcome = await this.processDeepGroup(handles[0]!.actor_id, handles[0]!.memory_key, handles);
+      totals.inspected += outcome.inspected;
+      totals.promoted += outcome.promoted;
+      totals.rejected += outcome.rejected;
+      totals.deferred += outcome.deferred;
+    }
+    return { status: 'processed', ...totals };
+  }
+
+  private async processDeepGroup(actorId: string, memoryKey: string,
+    handles: DeepCandidateHandle[]): Promise<{ inspected: number; promoted: number; rejected: number; deferred: number }> {
+    return transaction(this.pool, async client => {
+      // Coordinate missing-row tombstones, then use memory -> consent -> candidate lock order.
+      const memoryLockKey = createHash('sha256').update([
+        this.botAccountId, 'dm', actorId, '', '', '', 0, memoryKey,
+      ].join('\0')).digest('hex');
+      await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))', [memoryLockKey]);
+      const memoryResult = await client.query<DeepMemory>(
+        `SELECT memory_id::TEXT AS memory_id,revision::TEXT AS revision,content,source_event_id,valid_until,
+           revoked_at,superseded_at
+         FROM gate_memory_entries WHERE bot_account_id=$1 AND scope_kind='dm' AND actor_id=$2
+           AND channel_id='' AND tenant_id='' AND team_id='' AND binding_revision=0 AND memory_key=$3
+         FOR UPDATE`, [this.botAccountId, actorId, memoryKey],
+      );
+      const current = memoryResult.rows[0] ?? null;
+
+      await client.query(
+        `SELECT workflow,consent_version FROM gate_memory_consolidation_consents
+         WHERE bot_account_id=$1 AND actor_id=$2 FOR SHARE`, [this.botAccountId, actorId],
+      );
+      const locked = await client.query<DeepCandidate>(
+        `SELECT candidate.candidate_id::TEXT AS candidate_id,candidate.workflow,
+           candidate.consent_version::TEXT AS consent_version,candidate.memory_key,candidate.content,
+           candidate.candidate_kind,candidate.valid_until,candidate.source_event_ids,
+           candidate.expected_revision::TEXT AS expected_revision,candidate.status,candidate.created_at
+         FROM gate_memory_consolidation_candidates candidate
+         JOIN gate_memory_consolidation_consents consent ON consent.bot_account_id=candidate.bot_account_id
+           AND consent.actor_id=candidate.actor_id AND consent.workflow=candidate.workflow
+           AND consent.enabled AND consent.consent_version=candidate.consent_version
+         WHERE candidate.candidate_id=ANY($4::UUID[]) AND candidate.bot_account_id=$1
+           AND candidate.actor_id=$2 AND candidate.memory_key=$3
+           AND candidate.status IN ('pending_confirmation','conflict') AND candidate.expires_at>now()
+         ORDER BY candidate.created_at,candidate.candidate_id
+         FOR UPDATE OF candidate SKIP LOCKED`,
+        [this.botAccountId, actorId, memoryKey, handles.map(row => row.candidate_id)],
+      );
+      const candidates = locked.rows;
+      if (!candidates.length) return { inspected: 0, promoted: 0, rejected: 0, deferred: handles.length };
+
+      // Validate authority and provenance without selecting transcript text.
+      const metadata = await client.query<DeepSourceMetadata>(
+        `SELECT candidate.candidate_id::TEXT AS candidate_id,admission.source_event_id,
+           source.created_at
+         FROM gate_memory_consolidation_candidates candidate
+         CROSS JOIN LATERAL unnest(candidate.source_event_ids) requested(event_id)
+         JOIN gate_memory_consolidation_admissions admission
+           ON admission.bot_account_id=candidate.bot_account_id AND admission.actor_id=candidate.actor_id
+             AND admission.workflow=candidate.workflow AND admission.consent_version=candidate.consent_version
+             AND admission.source_event_id=requested.event_id AND admission.status='done'
+             AND admission.expires_at>now()
+         JOIN kook_ingress_events ingress ON ingress.bot_account_id=admission.bot_account_id
+           AND ingress.event_id=admission.source_event_id AND ingress.event_kind='direct'
+           AND ingress.user_id=admission.actor_id AND ingress.target_kind='direct'
+           AND ingress.target_id=admission.actor_id AND ingress.status='done' AND ingress.expires_at>now()
+         JOIN kook_conversation_messages source ON source.bot_account_id=admission.bot_account_id
+           AND source.channel_id=admission.channel_id AND source.message_id=admission.message_id
+           AND source.source_event_id=admission.source_event_id AND source.speaker_kind='human'
+           AND source.speaker_id=admission.actor_id AND source.context_scope_kind='direct'
+           AND source.expires_at>now()
+         WHERE candidate.candidate_id=ANY($1::UUID[])
+         FOR SHARE OF admission,ingress,source`, [candidates.map(row => row.candidate_id)],
+      );
+      const metadataByCandidate = new Map<string, Set<string>>();
+      for (const row of metadata.rows) {
+        const sources = metadataByCandidate.get(row.candidate_id) ?? new Set<string>();
+        sources.add(row.source_event_id);
+        metadataByCandidate.set(row.candidate_id, sources);
+      }
+      const invalidSourceIds = candidates.filter(candidate =>
+        new Set(candidate.source_event_ids).size === 0
+          || (metadataByCandidate.get(candidate.candidate_id)?.size ?? 0)
+            !== new Set(candidate.source_event_ids).size).map(candidate => candidate.candidate_id);
+      if (invalidSourceIds.length) {
+        await client.query(
+          `UPDATE gate_memory_consolidation_candidates SET status='expired',result_reason='source_expired',
+             content='[expired]',memory_key='expired',source_event_ids=ARRAY[]::TEXT[],
+             expected_revision=NULL,confirmed_by_event_id=NULL,updated_at=now()
+           WHERE candidate_id=ANY($1::UUID[]) AND status IN ('pending_confirmation','conflict')`,
+          [invalidSourceIds],
+        );
+      }
+      const validCandidates = candidates.filter(candidate => !invalidSourceIds.includes(candidate.candidate_id));
+      if (!validCandidates.length) {
+        return { inspected: candidates.length, promoted: 0, rejected: 0, deferred: 0 };
+      }
+
+      // Transcript text is read only after current consent, direct-message scope,
+      // completed ingress, admission, lease-free source provenance and expiry pass.
+      const sources = await client.query<DeepSource>(
+        `SELECT candidate.candidate_id::TEXT AS candidate_id,admission.source_event_id,
+           source.created_at,source.content
+         FROM gate_memory_consolidation_candidates candidate
+         CROSS JOIN LATERAL unnest(candidate.source_event_ids) requested(event_id)
+         JOIN gate_memory_consolidation_admissions admission
+           ON admission.bot_account_id=candidate.bot_account_id AND admission.actor_id=candidate.actor_id
+             AND admission.workflow=candidate.workflow AND admission.consent_version=candidate.consent_version
+             AND admission.source_event_id=requested.event_id AND admission.status='done'
+             AND admission.expires_at>now()
+         JOIN kook_ingress_events ingress ON ingress.bot_account_id=admission.bot_account_id
+           AND ingress.event_id=admission.source_event_id AND ingress.event_kind='direct'
+           AND ingress.user_id=admission.actor_id AND ingress.target_kind='direct'
+           AND ingress.target_id=admission.actor_id AND ingress.status='done' AND ingress.expires_at>now()
+         JOIN kook_conversation_messages source ON source.bot_account_id=admission.bot_account_id
+           AND source.channel_id=admission.channel_id AND source.message_id=admission.message_id
+           AND source.source_event_id=admission.source_event_id AND source.speaker_kind='human'
+           AND source.speaker_id=admission.actor_id AND source.context_scope_kind='direct'
+           AND source.expires_at>now()
+         WHERE candidate.candidate_id=ANY($1::UUID[])
+         ORDER BY candidate.candidate_id,source.created_at,admission.source_event_id
+         FOR SHARE OF admission,ingress,source`, [validCandidates.map(row => row.candidate_id)],
+      );
+      const sourcesByCandidate = new Map<string, DeepSource[]>();
+      for (const row of sources.rows) {
+        const values = sourcesByCandidate.get(row.candidate_id) ?? [];
+        values.push(row);
+        sourcesByCandidate.set(row.candidate_id, values);
+      }
+
+      type ValueEvidence = {
+        content: string;
+        candidates: DeepCandidate[];
+        sources: Map<string, { createdAt: Date; content: string }>;
+      };
+      const values = new Map<string, ValueEvidence>();
+      const rejectedIds: string[] = [];
+      const expiredIds: string[] = [];
+      for (const candidate of validCandidates) {
+        const normalizedContent = candidate.content.normalize('NFKC').trim();
+        const candidateSources = sourcesByCandidate.get(candidate.candidate_id) ?? [];
+        const sourceTextUnsafe = candidateSources.some(source => sensitiveOrRiskText(source.content)
+          || !hasSelfAttribution(source.content));
+        const candidateUnsafe = !normalizedContent || normalizedContent.length > 800
+          || sensitiveOrRiskText(normalizedContent);
+        const sourceMismatch = candidateSources.length !== new Set(candidate.source_event_ids).size
+          || candidateSources.some(source => !source.content.normalize('NFKC').includes(normalizedContent));
+        if (sourceTextUnsafe || candidateUnsafe || sourceMismatch) {
+          rejectedIds.push(candidate.candidate_id);
+          continue;
+        }
+        if (candidate.valid_until && candidate.valid_until.getTime() <= this.now()) {
+          expiredIds.push(candidate.candidate_id);
+          continue;
+        }
+        const value: ValueEvidence = values.get(normalizedContent) ?? {
+          content: normalizedContent, candidates: [], sources: new Map(),
+        };
+        value.candidates.push(candidate);
+        for (const source of candidateSources) {
+          value.sources.set(source.source_event_id, { createdAt: source.created_at, content: source.content });
+        }
+        values.set(normalizedContent, value);
+      }
+      if (rejectedIds.length) {
+        await client.query(
+          `UPDATE gate_memory_consolidation_candidates SET status='rejected',result_reason=NULL,
+             memory_key='rejected',content='[rejected]',source_event_ids=ARRAY[]::TEXT[],
+             expected_revision=NULL,confirmed_by_event_id=NULL,updated_at=now()
+           WHERE candidate_id=ANY($1::UUID[]) AND status IN ('pending_confirmation','conflict')`, [rejectedIds],
+        );
+      }
+      if (expiredIds.length) {
+        await client.query(
+          `UPDATE gate_memory_consolidation_candidates SET status='expired',result_reason=NULL,
+             memory_key='expired',content='[expired]',source_event_ids=ARRAY[]::TEXT[],
+             expected_revision=NULL,confirmed_by_event_id=NULL,updated_at=now()
+           WHERE candidate_id=ANY($1::UUID[]) AND status IN ('pending_confirmation','conflict')`, [expiredIds],
+        );
+      }
+      const rejected = rejectedIds.length;
+      const deferredCandidates = validCandidates.length - rejectedIds.length - expiredIds.length;
+      if (!values.size) {
+        return { inspected: candidates.length, promoted: 0, rejected,
+          deferred: Math.max(0, deferredCandidates) };
+      }
+
+      // A tombstone is an explicit boundary: Deep has no path that can restore it.
+      if (current?.revoked_at || current?.superseded_at) {
+        return { inspected: candidates.length, promoted: 0, rejected,
+          deferred: deferredCandidates };
+      }
+
+      let usage = { recallCount: 0, distinctQueries: 0, usedCount: 0 };
+      if (current && (!current.valid_until || current.valid_until.getTime() > this.now())) {
+        const result = await client.query<{ recall_count: number; distinct_queries: number; used_count: number }>(
+          `SELECT COUNT(*) FILTER (WHERE signal_kind='recalled')::INTEGER AS recall_count,
+             COUNT(DISTINCT query_fingerprint) FILTER (WHERE signal_kind='recalled')::INTEGER AS distinct_queries,
+             COUNT(*) FILTER (WHERE signal_kind='used')::INTEGER AS used_count
+           FROM gate_memory_usage_signals
+           WHERE bot_account_id=$1 AND scope_kind='dm' AND actor_id=$2 AND memory_key=$3
+             AND memory_revision=$4::BIGINT AND memory_source_event_id=$5 AND expires_at>now()`,
+          [this.botAccountId, actorId, memoryKey, current.revision, current.source_event_id],
+        );
+        usage = { recallCount: result.rows[0]?.recall_count ?? 0,
+          distinctQueries: result.rows[0]?.distinct_queries ?? 0, usedCount: result.rows[0]?.used_count ?? 0 };
+      }
+
+      const summarized = [...values.values()].map(value => {
+        const sourceRows = [...value.sources.entries()].map(([eventId, source]) => ({ eventId, ...source }));
+        const latestSource = sourceRows.reduce((latest, source) =>
+          source.createdAt > latest.createdAt || (source.createdAt.getTime() === latest.createdAt.getTime()
+            && source.eventId > latest.eventId) ? source : latest);
+        const latestCandidate = value.candidates.reduce((latest, candidate) =>
+          candidate.created_at > latest.created_at ? candidate : latest);
+        const days = new Set(sourceRows.map(source => source.createdAt.toISOString().slice(0, 10)));
+        return { ...value, sourceRows, latestSource, latestCandidate, days };
+      });
+      const evaluated = summarized.map(value => {
+        const competingValues = summarized.filter(other => other !== value
+          && other.sources.size >= value.sources.size).length;
+        const ageDays = Math.max(0, (this.now() - value.latestSource.createdAt.getTime()) / 86_400_000);
+        const decision = evaluateDeepPromotion({
+          candidateKind: value.latestCandidate.candidate_kind,
+          sourceReliability: AUTO_LEARN_SOURCE_RELIABILITY,
+          supportingObservations: value.sources.size,
+          distinctObservationDays: value.days.size,
+          recallCount: usage.recallCount,
+          distinctQueries: usage.distinctQueries,
+          usedCount: usage.usedCount,
+          ageDays,
+          conflictsWithCurrent: Boolean(current && current.content.normalize('NFKC').trim() !== value.content),
+          competingValues,
+          prohibited: false,
+        });
+        return { ...value, decision };
+      });
+      const promotable = evaluated.filter(value => value.decision.promote);
+      if (promotable.length !== 1) {
+        return { inspected: candidates.length, promoted: 0, rejected,
+          deferred: deferredCandidates };
+      }
+      const winner = promotable[0]!;
+      if (current && (!current.valid_until || current.valid_until.getTime() > this.now())
+        && current.content.normalize('NFKC').trim() === winner.content) {
+        const winnerIds = winner.candidates.map(candidate => candidate.candidate_id);
+        await client.query(
+          `UPDATE gate_memory_consolidation_candidates SET status='duplicate',result_reason='already_present',
+             expected_revision=$2::BIGINT,updated_at=now()
+           WHERE candidate_id=ANY($1::UUID[]) AND status IN ('pending_confirmation','conflict')`,
+          [winnerIds, current.revision],
+        );
+        return { inspected: candidates.length, promoted: 0, rejected,
+          deferred: Math.max(0, deferredCandidates - winnerIds.length) };
+      }
+
+      const expectedRevision = current?.revision ?? null;
+      if (winner.candidates.some(candidate => candidate.expected_revision !== expectedRevision)) {
+        await client.query(
+          `UPDATE gate_memory_consolidation_candidates SET status='conflict',result_reason='cas_conflict',updated_at=now()
+           WHERE candidate_id=ANY($1::UUID[]) AND status IN ('pending_confirmation','conflict')`,
+          [winner.candidates.map(candidate => candidate.candidate_id)],
+        );
+        return { inspected: candidates.length, promoted: 0, rejected,
+          deferred: deferredCandidates };
+      }
+
+      let written: { memory_id: string; revision: string } | undefined;
+      if (current) {
+        const result = await client.query<{ memory_id: string; revision: string }>(
+          `UPDATE gate_memory_entries SET content=$1,source_event_id=$2,source_kind='trusted_ingress',
+             source_reliability=$3,valid_until=$4,revision=revision+1,updated_at=now(),superseded_at=NULL
+           WHERE memory_id=$5::UUID AND revision=$6::BIGINT AND revoked_at IS NULL AND superseded_at IS NULL
+           RETURNING memory_id::TEXT AS memory_id,revision::TEXT AS revision`,
+          [winner.content, winner.latestSource.eventId, AUTO_LEARN_SOURCE_RELIABILITY,
+            winner.latestCandidate.valid_until, current.memory_id, current.revision],
+        );
+        written = result.rows[0];
+      } else {
+        const result = await client.query<{ memory_id: string; revision: string }>(
+          `INSERT INTO gate_memory_entries(
+             bot_account_id,scope_kind,actor_id,channel_id,tenant_id,team_id,binding_revision,
+             memory_key,content,source_event_id,source_kind,source_reliability,valid_until
+           ) VALUES ($1,'dm',$2,'','','',0,$3,$4,$5,'trusted_ingress',$6,$7)
+           ON CONFLICT DO NOTHING RETURNING memory_id::TEXT AS memory_id,revision::TEXT AS revision`,
+          [this.botAccountId, actorId, memoryKey, winner.content, winner.latestSource.eventId,
+            AUTO_LEARN_SOURCE_RELIABILITY, winner.latestCandidate.valid_until],
+        );
+        written = result.rows[0];
+      }
+      if (!written) {
+        await client.query(
+          `UPDATE gate_memory_consolidation_candidates SET status='conflict',result_reason='cas_conflict',updated_at=now()
+           WHERE candidate_id=ANY($1::UUID[]) AND status IN ('pending_confirmation','conflict')`,
+          [winner.candidates.map(candidate => candidate.candidate_id)],
+        );
+        return { inspected: candidates.length, promoted: 0, rejected,
+          deferred: deferredCandidates };
+      }
+      await client.query(
+        `INSERT INTO gate_memory_embedding_jobs(memory_id,source_revision,operation,index_version)
+         SELECT $1::UUID,$2::BIGINT,'upsert',generation.index_version
+         FROM gate_memory_index_job_versions($3) generation ON CONFLICT DO NOTHING`,
+        [written.memory_id, written.revision, this.botAccountId],
+      );
+      const winnerIds = winner.candidates.map(candidate => candidate.candidate_id);
+      await client.query(
+        `UPDATE gate_memory_consolidation_candidates SET status='promoted',confirmed_by_event_id=NULL,
+           expected_revision=$2::BIGINT,result_reason=NULL,updated_at=now()
+         WHERE candidate_id=ANY($1::UUID[]) AND status IN ('pending_confirmation','conflict')`,
+        [winnerIds, written.revision],
+      );
+      const losingIds = candidates.filter(candidate => !winnerIds.includes(candidate.candidate_id))
+        .map(candidate => candidate.candidate_id);
+      if (losingIds.length) {
+        await client.query(
+          `UPDATE gate_memory_consolidation_candidates SET status='rejected',result_reason=NULL,
+             memory_key='rejected',content='[rejected]',source_event_ids=ARRAY[]::TEXT[],
+             expected_revision=NULL,confirmed_by_event_id=NULL,updated_at=now()
+           WHERE candidate_id=ANY($1::UUID[]) AND status IN ('pending_confirmation','conflict')`, [losingIds],
+        );
+      }
+      return { inspected: candidates.length, promoted: 1, rejected: rejected + losingIds.length,
+        deferred: Math.max(0, deferredCandidates - winnerIds.length - losingIds.length) };
     });
   }
 

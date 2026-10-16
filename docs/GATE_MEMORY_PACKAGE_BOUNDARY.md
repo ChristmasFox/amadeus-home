@@ -13,6 +13,7 @@ introduced. It is a migration map, not a desired permanent layout.
 | Explicit remember/correct/forget | `application/gate-memory-writer.ts` | AI SDK intent classifier plus Gate receipts, ingress scope, PostgreSQL writes and KOOK replies |
 | Automatic learning admission and per-user controls | `application/gate-memory-consolidation.ts` consent service | KOOK DM identity, transcript/event joins, consent versions, PostgreSQL leases and admission rows |
 | Light/REM candidate planning and persistence | `application/gate-memory-consolidation.ts` worker | AI SDK planner, Gate source provenance, candidate SQL, CAS against long-term memory and vector jobs |
+| Deep promotion policy | `@agent/memory` deterministic evidence policy plus the Gate worker adapter | Gate adapter loads consent-scoped evidence, usage signals, tombstones, and revision CAS state |
 | Embedding config and provider | `infrastructure/ai/gate-memory-embedding-{config,provider}.ts` | Gate environment names and Gate public-egress policy; provider construction belongs in the adapter |
 | Embedding indexing and generations | `application/gate-memory-index-{worker,generation}.ts` | PostgreSQL migrations, Gate binding-version SQL, Gate batch admin command |
 | Runtime defaults and wiring | `application/gate-memory-feature-flags.ts`, `gateway.ts` | Gate environment flags, model, pool and lifecycle |
@@ -34,6 +35,9 @@ introduced. It is a migration map, not a desired permanent layout.
   admitted-source provenance, Light/REM batching, candidate persistence,
   revocation races and group exclusion. A regression in the same suite asserts
   ordinary replies finish while a background Dreaming planner is still blocked.
+- `gate-memory-deep.integration.test.ts` covers evidence consolidation,
+  across-day promotion, recall/use support, correction revisions, forget
+  barriers, and sensitive, third-party, and prompt-injection rejection.
 
 ## Extraction constraints and known gaps
 
@@ -48,8 +52,10 @@ wiring. The current `KookIngressJob`, Pool types, Gate SQL and environment keys
 must not cross into `@agent/memory`.
 
 At the original baseline `gateway.ts` ran Light every 30 seconds and REM every
-six hours. The P2 update below removes direct Light/REM promotion; the later
-nightly scheduler and Deep phase remain planned Goal work.
+six hours. P2 removed direct Light/REM promotion. P3 adds deterministic Deep
+evidence scoring and a Gate adapter that revalidates consent and source
+provenance before a revision-CAS write. The nightly scheduler remains planned
+Goal work.
 
 ## P2 behavior update
 
@@ -60,3 +66,16 @@ explicit remember/correct/forget remains immediate. Recall and successful
 prompt-use signals retain memory key/revision, source and request event IDs,
 and a normalized query fingerprint for 90 days; query text and memory content
 are not copied into the signal table.
+
+## P3 behavior update
+
+REM folds matching same-key, same-value candidates while retaining only live
+source events under the current consent version. Deep requires at least two
+supporting observations from a reliable self-authored DM source. They must be
+repeated across two UTC dates, or supported by distinct recall queries and an
+actual-use signal. The deterministic policy scores source reliability,
+observation count, dates, recalls, distinct queries, use, recency, and competing
+values; confidence from the planner is not sufficient. The Gate adapter filters
+sensitive, third-party, and prompt-injection source text again before writing.
+Forget tombstones cannot be restored by Deep; explicit remember/correct stays
+immediate. P4 still owns scheduling Light -> REM -> Deep at local 03:00.

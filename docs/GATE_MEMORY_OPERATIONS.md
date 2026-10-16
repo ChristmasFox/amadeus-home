@@ -168,6 +168,33 @@ both local records:
 pnpm devctl configure gate-auto-disable
 ```
 
+## Automatic memory learning and Deep promotion
+
+Light and REM persist short-lived candidates with provenance; neither stage
+writes ordinary chat directly into long-term memory. REM can merge repeated
+same-key, same-value observations while retaining only current, consent-scoped
+DM source IDs. Deep rechecks the active consent, source admissions, direct
+speaker identity, transcript expiry, candidate content against its source, and
+the sensitive/third-party/prompt-injection filters before considering a write.
+
+Deep uses a deterministic policy. A single observation is never sufficient;
+the source reliability must be at least 80, evidence must be no older than 30
+days, and at least two distinct observations are required. Promotion then
+requires either repetition on at least two UTC dates or at least two distinct
+recall queries plus a successful-use signal. Unresolved competing values,
+weak sources, stale evidence, and prohibited content fail closed. Candidate
+kind sets the score threshold; a high planner confidence alone is not part of
+the promotion decision. A correction against a current value receives a score
+penalty and must still match the captured revision with compare-and-set. A
+qualifying correction advances that revision and queues the configured
+embedding generations.
+
+An existing forget tombstone is an absolute barrier to automatic promotion.
+Explicit remember/correct remains the immediate, user-confirmed path. Recall
+and use signals remain query-text-free and expire according to their schema.
+The P3 worker is implemented independently from scheduling; the single daily
+03:00 Dreaming scheduler is a later Goal phase.
+
 ## Scoped vector index rebuild
 
 Migrations `0024`, `0028`, and `0029` provide the embedding outbox,
