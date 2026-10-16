@@ -806,7 +806,9 @@ export class GateMemoryConsolidationWorker {
                  JOIN gate_memory_consolidation_admissions admission
                    ON admission.bot_account_id=$1 AND admission.actor_id=$2 AND admission.workflow=$3
                      AND admission.consent_version=$4::BIGINT AND admission.source_event_id=requested.event_id
-                     AND admission.status='done' AND admission.expires_at>now()
+                     AND admission.expires_at>now()
+                     AND (admission.status='done' OR (admission.status='processing'
+                       AND admission.admission_id=ANY($10::uuid[]) AND admission.lease_token=$11::uuid))
                  JOIN kook_ingress_events ingress ON ingress.bot_account_id=admission.bot_account_id
                    AND ingress.event_id=admission.source_event_id AND ingress.event_kind='direct'
                    AND ingress.user_id=admission.actor_id AND ingress.target_kind='direct'
