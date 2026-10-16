@@ -1,5 +1,29 @@
 # Project State — 2026-10-16
 
+## Gate memory plugin extraction P3–P5 candidate
+
+P0–P5 of `docs/GATE_MEMORY_PLUGIN_EXTRACTION_GOAL.md` are complete. PR #12
+source SHA `3e96b573839b26897cdaa0438a48a9c0f1b39f56` passed six CI checks and
+was deployed through the protected Gate-Local candidate path. Gateway, Worker,
+and egress-proxy run
+`local/pubg-saas:git-3e96b573839b26897cdaa0438a48a9c0f1b39f56`, OCI digest
+`sha256:b7ac35a6a8cba3cd711e51c4b0af6ffac71656af205d1fd4709aa1b9f0cb6510`,
+and Docker image ID
+`sha256:98160a5e40e342586f0cd758869e5e0fbdbea8bdfe139ba9fa56e50b286d5c04`.
+All three are running healthy. PostgreSQL 18.1 remains healthy on its existing
+container and volume. The live migration ledger contains 0030 usage signals and
+0031 nightly Dreaming claims; both are additive. Runtime readiness reports
+read/write/autoLearn default-enabled and embedding unconfigured/disabled.
+
+The protected, full-database encrypted backup is
+`/Users/nyannyan/.local/share/pubg-saas-backup/gate-local-20261016T132836Z-3e96b573839b/pubg-saas.dump.age`
+(1,859,793 bytes; SHA-256
+`c71caff3e8dea9595c4e5d794be934b69a6f8f5d04516b2cd2385613fd5961d6`). The
+checkpoint is verified recoverable and includes prior Compose/environment
+copies. M2 remains PAUSED and no clearance was created or resumed. Lab and the
+separate 9router service were not changed. Detailed rollback evidence is in
+`.agent/checkpoints/2026-10-16-gate-memory-plugin-extraction-p3-candidate.md`.
+
 ## 2026-10-16T19:01+08:00 — Gate memory extraction P0 candidate
 
 P0 of `docs/GATE_MEMORY_PLUGIN_EXTRACTION_GOAL.md` completed at source SHA
