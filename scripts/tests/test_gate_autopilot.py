@@ -332,7 +332,7 @@ class GateAutopilotContracts(unittest.TestCase):
             file_path.parent.mkdir(parents=True)
             file_path.write_text("CREATE EXTENSION vector;", encoding="utf-8")
             self.assertEqual(gate.migration_risk([migration], root),
-                             ("reversible_app_candidate", None))
+                             ("extension_install", "separate_extension_authorization_required"))
             file_path.write_text("DROP TABLE gate_memory_entries;", encoding="utf-8")
             self.assertEqual(gate.migration_risk([migration], root),
                              ("destructive_schema", "destructive_database_operation"))
