@@ -15,9 +15,19 @@ process after phase/CI validation. Stop only on wrong target/duplicate Bot,
 unsafe destructive or extension changes, failed backup or failed runtime health.
 M2 formal acceptance remains separate and its paused status is unchanged.
 
+**2026-10-17 operator amendment:** Arthur replaced the one-worktree opt-in with
+standing authorization bound to this repository's Git common directory. Every
+candidate now requires a verified full encrypted PostgreSQL backup, including
+code-only changes. Destructive migrations produce a prominent warning and
+continue; a failed migration or health check restores the database checkpoint
+and prior application/configuration. These instructions supersede earlier
+local opt-in and destructive-migration stop clauses below for Gate-Local
+candidates only. M2 remains PAUSED; formal release and Gate-Staging/Prod remain
+outside this authorization.
+
 
 > 日期：2026-10-16（Asia/Shanghai）
-> 状态：**APPROVED_FOR_SOURCE_IMPLEMENTATION / AUTOMATED_GATE_LOCAL_CANDIDATE_AFTER_OPT_IN**
+> 状态：**APPROVED_FOR_SOURCE_IMPLEMENTATION / STANDING_REPO_WIDE_GATE_LOCAL_CANDIDATE**
 > 执行入口：`/goal docs/GATE_NATIVE_MEMORY_CORE_GOAL.md`
 > 产品：仅 **Gate**（`apps/pubg-saas`，Vercel AI SDK 7 / KOOK）。
 > **绝不引入 OpenClaw 运行时、Memory Core 插件、Lab SQLite/Workspace、OpenClaw Session 或 Lab 记忆凭据。**
@@ -191,7 +201,7 @@ KOOK trusted ingress + current identity/binding/membership
 ### Gate-Local 自动候选部署（本 Goal 必须实现的交付）
 
 1. 保留 Lab 现有 `lab-auto-enable`、安全检查、候选回滚与测试通知；**Gate 另建独立的自动候选发布能力**，不能复用 Lab 的批准文件、镜像、令牌或 release target。
-2. 在 Gate 原有 `scripts/release-gate.sh` 和仓库 `devctl` 工作流上实现受保护的 Gate-Local candidate autopilot。使用 `pnpm devctl configure gate-auto-enable` / `gate-auto-disable`；enable 可由 Codex 或脚本非交互执行，但必须显式调用并从 `GATE_LOCAL_*` 环境读取完整的非密钥目标/备份配置。许可存放仓库外 mode 0600，绑定 checkout + Gate-Local + 单一 Bot/实例；默认授权 `reversible_app_candidate` 与 `backward_compatible_schema`，无过期时间，直到 disable 撤销。破坏性、不兼容、数据变更、pgvector/extension 和未知 SQL 仍 fail closed。CI/Goal 不能自行产生或拓宽授权。
+2. 在 Gate 原有 `scripts/release-gate.sh` 和仓库 `devctl` 工作流上实现受保护的 Gate-Local candidate autopilot。host 授权存放仓库外 mode 0600，按 Git common dir 绑定同仓 worktree、Gate-Local、单一 Bot/实例和备份配置；Arthur 已授权长期启用，直到 `gate-auto-disable` 撤销。每个 candidate 都先备份完整 PostgreSQL；破坏性迁移显著警告后继续，迁移/健康失败自动恢复数据库、旧镜像与配置。CI/Goal 不得扩大目标、Bot 或租户范围。
 3. 操作者仅需**首次决定是否开启 Gate-Local 自动候选**；开启后每个 phase `finish-phase` 对 Gate-only 变更通过 focused tests、CI/secret gate、兼容性预检、target 身份/digest 校验后自动构建不可变 candidate、制作安全 checkpoint、切换唯一实例、健康检查 + 合成/非扰动 smoke、发送测试通知（延用现有可用的私有通知桥，失败需显式报告），并落下脱敏审计和自动/计划回退路径。不得因为用户没有立即真人测试就停止后续不冲突开发。避免重复部署同一 SHA/digest；有未完成发布/危险 drift 时停机。
 4. **M2 显式暂停本身不阻止可回滚应用候选或向后兼容迁移。**候选部署不得清除/修改暂停状态、创建 M2 clearance、启动 M2 或打开记忆开关。双活 Bot Token、无可恢复备份、Gate-Local target 不可信、被其他 Goal 锁住或任一候选安全门禁未通过时仍必须阻止，并输出明确 BLOCKED reason 和恢复步骤。M2 clearance 仅用于未来正式 Release，由操作者在 M2 真人验收完成后单独记录。
 5. 任何会改变真实 PG extension/image/无兼容窗口的 schema、真数据 backfill/reindex、密钥、付费 provider、真实自动整理、删除、Gate-Staging/Prod 提升或正式 Tag，必须使用**对应风险类别的额外一次性/明确授权**；通过保护门禁后，对批准范围内的重复可逆操作自动化完成。不可通过自动发布默认打开 `AUTO_LEARN` 或未知消费者可见新功能。
