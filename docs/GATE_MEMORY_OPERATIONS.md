@@ -192,8 +192,14 @@ embedding generations.
 An existing forget tombstone is an absolute barrier to automatic promotion.
 Explicit remember/correct remains the immediate, user-confirmed path. Recall
 and use signals remain query-text-free and expire according to their schema.
-The P3 worker is implemented independently from scheduling; the single daily
-03:00 Dreaming scheduler is a later Goal phase.
+The P4 Gateway scheduler waits for the next 03:00 in
+`GATE_MEMORY_DREAMING_TIMEZONE` (defaults to `Asia/Shanghai`) and runs Light,
+REM, then Deep once. It does not catch up a missed run at startup. A
+content-free PostgreSQL claim keyed by Bot, timezone, and local date prevents
+duplicate runs across concurrent Gateway instances. A failed run records only
+a fixed error code and is retried at the next scheduled date. The scheduler
+runs only when Gate automatic learning is enabled; it does not enable any
+memory or embedding feature flag.
 
 ## Scoped vector index rebuild
 
@@ -269,7 +275,9 @@ node apps/pubg-saas/dist/src/gate-memory-admin.js activate \
 it does not bulk-delete orphaned vectors. Do not delete old vector generations
 until a separately reviewed retention/cleanup change has a verified backup.
 The normal read path uses only the active contract and falls back to lexical
-recall if vectors are unavailable. The admin tool itself creates no scheduler. The running Gateway owns the bounded default Light/REM scheduler; index administration remains separate.
+recall if vectors are unavailable. The admin tool itself creates no scheduler.
+The running Gateway owns the bounded daily Light/REM/Deep scheduler; index
+administration remains separate.
 
 ## Limits and recovery
 

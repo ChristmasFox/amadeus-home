@@ -376,9 +376,18 @@ test('ordinary DM replies do not wait for an in-flight Dreaming pass', { skip: !
     assert.equal(await consent.admitCurrentMessage(seed), 2);
     await queue.complete(seed, null);
 
-    dreamingRun = runMemoryLearningScheduler(worker, dreamingAbort.signal, () => {
+    let schedulerNow = Date.parse('2026-10-15T18:59:00Z');
+    const dreamingStore = {
+      async claim() { return randomUUID(); },
+      async finish() {},
+    };
+    dreamingRun = runMemoryLearningScheduler(worker, dreamingStore, bot, dreamingAbort.signal, () => {
       dreamingAbort.abort();
       notifyDreamingPassReturned();
+    }, {
+      timezone: 'Asia/Shanghai',
+      now: () => schedulerNow,
+      sleepUntil: async scheduledAt => { schedulerNow = scheduledAt; },
     }).then(() => {
       dreamingSettled = true;
     });

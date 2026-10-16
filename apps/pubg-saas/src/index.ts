@@ -28,6 +28,7 @@ export * from './application/gate-memory-store.js';
 export * from './application/gate-memory-retriever.js';
 export * from './application/gate-memory-writer.js';
 export * from './application/gate-memory-consolidation.js';
+export * from './application/gate-memory-dreaming.js';
 export * from './application/gate-context-builder.js';
 export * from './application/gate-conversation-checkpoints.js';
 export * from './application/gate-memory-embedding.js';

@@ -14,11 +14,12 @@ introduced. It is a migration map, not a desired permanent layout.
 | Automatic learning admission and per-user controls | `application/gate-memory-consolidation.ts` consent service | KOOK DM identity, transcript/event joins, consent versions, PostgreSQL leases and admission rows |
 | Light/REM candidate planning and persistence | `application/gate-memory-consolidation.ts` worker | AI SDK planner, Gate source provenance, candidate SQL, CAS against long-term memory and vector jobs |
 | Deep promotion policy | `@agent/memory` deterministic evidence policy plus the Gate worker adapter | Gate adapter loads consent-scoped evidence, usage signals, tombstones, and revision CAS state |
+| Nightly Dreaming schedule and durable run claim | `application/gate-memory-dreaming.ts`, `PostgresGateMemoryDreamingRunStore`, migration `0031` | Gate Bot identity, timezone config, PostgreSQL idempotency row and Gateway lifecycle |
 | Embedding config and provider | `infrastructure/ai/gate-memory-embedding-{config,provider}.ts` | Gate environment names and Gate public-egress policy; provider construction belongs in the adapter |
 | Embedding indexing and generations | `application/gate-memory-index-{worker,generation}.ts` | PostgreSQL migrations, Gate binding-version SQL, Gate batch admin command |
 | Runtime defaults and wiring | `application/gate-memory-feature-flags.ts`, `gateway.ts` | Gate environment flags, model, pool and lifecycle |
 | User commands and privacy text | `application/kook-management-handler.ts`, `gate-memory-admin.ts` | KOOK command syntax, owner/admin process and runtime config |
-| Schema and migrations | `infrastructure/postgres/migrations/0021` through `0029` | Gate PostgreSQL migration runner and deployment lifecycle |
+| Schema and migrations | `infrastructure/postgres/migrations/0021` through `0031` (`0025` remains optional) | Gate PostgreSQL migration runner and deployment lifecycle |
 
 ## Existing behavior evidence
 
@@ -35,6 +36,10 @@ introduced. It is a migration map, not a desired permanent layout.
   admitted-source provenance, Light/REM batching, candidate persistence,
   revocation races and group exclusion. A regression in the same suite asserts
   ordinary replies finish while a background Dreaming planner is still blocked.
+- `gate-memory-dreaming.test.ts` covers local 03:00 calculation, no startup
+  catch-up, Light/REM/Deep ordering, and next-date retry after failure;
+  `gate-memory-dreaming.integration.test.ts` verifies the PostgreSQL claim is
+  unique across concurrent runs.
 - `gate-memory-deep.integration.test.ts` covers evidence consolidation,
   across-day promotion, recall/use support, correction revisions, forget
   barriers, and sensitive, third-party, and prompt-injection rejection.
@@ -54,8 +59,10 @@ must not cross into `@agent/memory`.
 At the original baseline `gateway.ts` ran Light every 30 seconds and REM every
 six hours. P2 removed direct Light/REM promotion. P3 adds deterministic Deep
 evidence scoring and a Gate adapter that revalidates consent and source
-provenance before a revision-CAS write. The nightly scheduler remains planned
-Goal work.
+provenance before a revision-CAS write. P4 replaces both timers with a single
+Gateway scheduler for the next configured local 03:00 and persists one
+content-free claim per Bot, timezone, and local date. The generic schedule
+calculation remains a package-boundary extraction task.
 
 ## P2 behavior update
 
@@ -78,4 +85,5 @@ observation count, dates, recalls, distinct queries, use, recency, and competing
 values; confidence from the planner is not sufficient. The Gate adapter filters
 sensitive, third-party, and prompt-injection source text again before writing.
 Forget tombstones cannot be restored by Deep; explicit remember/correct stays
-immediate. P4 still owns scheduling Light -> REM -> Deep at local 03:00.
+immediate. P4 schedules one Light -> REM -> Deep pass at local 03:00, records
+failure using a fixed code, and retries at the next scheduled date.
