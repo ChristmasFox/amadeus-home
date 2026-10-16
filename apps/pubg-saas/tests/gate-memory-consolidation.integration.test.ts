@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import test from 'node:test';
 import { Pool } from 'pg';
+import { MockLanguageModelV4 } from 'ai/test';
 import {
   AccountClaimService,
   GateMemoryConsolidationConsentService,
@@ -16,11 +17,16 @@ import {
 import type { GateMemoryConsolidationPlanner } from '../src/application/gate-memory-consolidation.js';
 import type { KookIngressJob } from '../src/application/kook-ingress-queue.js';
 import type { KookOnboardingServices } from '../src/application/kook-onboarding-handler.js';
+import { runMemoryLearningScheduler } from '../src/gateway.js';
 
 const databaseUrl = process.env.PUBG_SAAS_TEST_DATABASE_URL;
 if (process.env.CI === 'true' && !databaseUrl) {
   throw new Error('gate_memory_consolidation_ci_database_required');
 }
+const usage = {
+  inputTokens: { total: 8, noCache: 8, cacheRead: undefined, cacheWrite: undefined },
+  outputTokens: { total: 4, text: 4, reasoning: undefined },
+};
 
 function directEvent(bot: string, actor: string, content: string) {
   return { type: 1, channel_type: 'PERSON', target_id: bot, author_id: actor,
@@ -30,6 +36,18 @@ function directEvent(bot: string, actor: string, content: string) {
 function candidate(content: string, key = 'favorite_map') {
   return [{ confidence: 'high', subject: 'self', kind: 'stable_preference', key,
     content, evidence: content, validity: 'stable' }];
+}
+
+async function within<T>(promise: Promise<T>, code: string, timeoutMs = 2_000): Promise<T> {
+  let timer: NodeJS.Timeout | undefined;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<never>((_resolve, reject) => { timer = setTimeout(() => reject(new Error(code)), timeoutMs); }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
 }
 
 test('consent-versioned Light/REM batches read only admitted DM sources and persist pending candidates', { skip: !databaseUrl }, async () => {
@@ -291,6 +309,93 @@ test('consent-versioned Light/REM batches read only admitted DM sources and pers
       WHERE memory.memory_id=job.memory_id AND memory.bot_account_id=$1`, [bot]).catch(() => undefined);
     await pool.query('DELETE FROM gate_memory_entries WHERE bot_account_id=$1', [bot]).catch(() => undefined);
     await pool.query('DELETE FROM kook_conversation_messages WHERE bot_account_id=$1', [bot]).catch(() => undefined);
+    await pool.query('DELETE FROM message_outbox WHERE bot_account_id=$1', [bot]).catch(() => undefined);
+    await pool.query('DELETE FROM kook_ingress_events WHERE bot_account_id=$1', [bot]).catch(() => undefined);
+    await pool.end();
+  }
+});
+
+test('ordinary DM replies do not wait for an in-flight Dreaming pass', { skip: !databaseUrl }, async () => {
+  const pool = new Pool({ connectionString: databaseUrl, max: 8 });
+  const suffix = randomUUID().replaceAll('-', '');
+  const bot = `bot-dreaming-reply-${suffix}`, actor = `actor-${suffix}`;
+  const queue = new KookIngressQueue(pool, { botAccountId: bot });
+  const consent = new GateMemoryConsolidationConsentService(pool, bot);
+  let notifyPlannerStarted!: () => void;
+  const plannerStarted = new Promise<void>(resolve => { notifyPlannerStarted = resolve; });
+  let notifyDreamingPassReturned!: () => void;
+  const dreamingPassReturned = new Promise<void>(resolve => { notifyDreamingPassReturned = resolve; });
+  let releasePlanner!: () => void;
+  const plannerRelease = new Promise<void>(resolve => { releasePlanner = resolve; });
+  const planner: GateMemoryConsolidationPlanner = {
+    async plan() {
+      notifyPlannerStarted();
+      await plannerRelease;
+      return [];
+    },
+  };
+  const worker = new GateMemoryConsolidationWorker(pool, bot, planner, { timeoutMs: 10_000 });
+  const dreamingAbort = new AbortController();
+  const signal = new AbortController().signal;
+  let dreamingSettled = false;
+  let dreamingRun: Promise<void> | undefined;
+
+  try {
+    await migratePublicDatabase(pool);
+    async function startDirect(content: string): Promise<KookIngressJob> {
+      assert.equal(await queue.ingestGatewayEvent(directEvent(bot, actor, content)), 'accepted');
+      const job = await queue.claimNext();
+      assert.ok(job);
+      return job;
+    }
+
+    const seed = await startDirect('最近在聊新的跳点');
+    assert.equal(await consent.admitCurrentMessage(seed), 2);
+    await queue.complete(seed, null);
+
+    dreamingRun = runMemoryLearningScheduler(worker, dreamingAbort.signal, () => {
+      dreamingAbort.abort();
+      notifyDreamingPassReturned();
+    }).then(() => {
+      dreamingSettled = true;
+    });
+    await within(plannerStarted, 'dreaming_planner_did_not_start');
+    assert.equal(dreamingSettled, false);
+
+    const next = await startDirect('继续说说今晚的计划');
+    const assistant = new MockLanguageModelV4({ doGenerate: {
+      content: [{ type: 'text', text: '好的，我们可以继续聊今晚的计划。' }],
+      finishReason: { unified: 'stop', raw: 'stop' }, usage, warnings: [],
+    } });
+    const handler = createKookPublicQueryHandler({
+      authorizer: new PublicQueryAuthorizer(pool, {
+        isGuildMember: async () => true,
+        isTextChannelMember: async () => true,
+      }, { botAccountId: bot }),
+      claims: new AccountClaimService(pool),
+      agent: { model: assistant, provider: 'fixture', modelId: 'dreaming-reply-fixture' },
+      memoryConsolidationConsent: consent,
+    });
+    const reply = await within(handler(next, signal), 'ordinary_reply_waited_for_dreaming');
+    assert.equal(reply?.content, '好的，我们可以继续聊今晚的计划。');
+    assert.equal(dreamingSettled, false, 'the reply completes while the Light/Dreaming planner remains blocked');
+    await queue.complete(next, reply ?? null);
+
+    releasePlanner();
+    await within(dreamingPassReturned, 'dreaming_pass_did_not_return');
+    await dreamingRun;
+    assert.equal(dreamingSettled, true);
+  } finally {
+    dreamingAbort.abort();
+    releasePlanner();
+    await dreamingRun?.catch(() => undefined);
+    await pool.query('DELETE FROM gate_memory_consolidation_candidates WHERE bot_account_id=$1', [bot]).catch(() => undefined);
+    await pool.query('DELETE FROM gate_memory_consolidation_admissions WHERE bot_account_id=$1', [bot]).catch(() => undefined);
+    await pool.query('DELETE FROM gate_memory_consolidation_checkpoints WHERE bot_account_id=$1', [bot]).catch(() => undefined);
+    await pool.query('DELETE FROM gate_memory_consolidation_consents WHERE bot_account_id=$1', [bot]).catch(() => undefined);
+    await pool.query('DELETE FROM gate_memory_entries WHERE bot_account_id=$1', [bot]).catch(() => undefined);
+    await pool.query('DELETE FROM kook_conversation_messages WHERE bot_account_id=$1', [bot]).catch(() => undefined);
+    await pool.query('DELETE FROM kook_agent_runs WHERE bot_account_id=$1', [bot]).catch(() => undefined);
     await pool.query('DELETE FROM message_outbox WHERE bot_account_id=$1', [bot]).catch(() => undefined);
     await pool.query('DELETE FROM kook_ingress_events WHERE bot_account_id=$1', [bot]).catch(() => undefined);
     await pool.end();

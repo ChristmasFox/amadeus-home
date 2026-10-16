@@ -39,7 +39,7 @@ function waitFor(ms: number, signal: AbortSignal): Promise<void> {
   });
 }
 
-async function runMemoryLearningScheduler(
+export async function runMemoryLearningScheduler(
   worker: GateMemoryConsolidationWorker,
   signal: AbortSignal,
   onRun: (value: Record<string, unknown>) => void,
