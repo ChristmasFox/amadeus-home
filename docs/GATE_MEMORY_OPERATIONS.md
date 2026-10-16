@@ -2,7 +2,9 @@
 
 This runbook covers the Gate SaaS PostgreSQL data only. It does not operate on
 Lab/OpenClaw data, and it does not authorize a Gate-Local change by itself.
-Migration, provider, M2, and Gate-Local candidate permissions remain separate.
+Migration, provider, M2 formal-release clearance, and Gate-Local candidate
+permissions remain separate. A Gate-Local candidate does not clear or resume
+M2.
 
 ## Before a schema or image change
 
@@ -73,9 +75,11 @@ Lab notification hooks are rejected so Gate cannot trigger the Lab owner
 outbox. It does not clear the M2 pause or enable memory features. Missing or
 invalid configuration is an error and writes no approval.
 
-M2 is a separate human-acceptance gate. After the operator completes that
-acceptance, the operator can record an indefinite local clearance with a
-separate interactive command and evidence reference:
+M2 is a separate human-acceptance gate. Safe Gate-Local candidates do not
+require M2 clearance and leave the M2 pause unchanged. M2 clearance is reserved
+for a future formal release. After the operator completes M2 acceptance, the
+operator can record an indefinite local clearance with a separate interactive
+command and evidence reference:
 
 ```sh
 pnpm devctl configure gate-m2-clear
@@ -87,8 +91,11 @@ expiry; `gate-m2-revoke` removes only that clearance, while
 `gate-auto-disable` removes both Gate authorization records.
 
 For a Gate-only phase, `pnpm devctl goal finish-phase P<N>` calls the protected
-candidate route only when the local candidate approval and the independent
-M2 clearance both match. The route re-runs Gate release verification and the
+candidate route when the local candidate approval matches; an M2 clearance is
+not required. M2 remains PAUSED and no clearance file is read or written by
+candidate deployment. A direct, explicitly reviewed Gate-Local apply may use
+`--allow-reviewed-control-plane` for release-control source changes; automatic
+phase deployment continues to block control-plane edits. The route re-runs Gate release verification and the
 secrets scan, requires a clean committed tree, checks that the target machine
 and Bot ID match, discovers the Compose project, working directory, and file
 from the active Gateway container labels, rejects ambiguous or untrusted
@@ -106,7 +113,10 @@ receives a small status object after health passes. Notification failure is
 reported as `DEPLOYED_NOTIFICATION_FAILED`; it is never reported as fully
 notified.
 
-The adapter does not enable `GATE_MEMORY_READ_ENABLED`,
+The adapter compares migration changes against the active image's source SHA,
+not only the current Goal phase base. Unknown lineage and destructive,
+incompatible, or data-changing migrations stop before backup, migration, or
+service switch. The adapter does not enable `GATE_MEMORY_READ_ENABLED`,
 `GATE_MEMORY_WRITE_ENABLED`, `GATE_MEMORY_AUTO_LEARN_ENABLED`, or embedding
 requests. It rejects Gate-Staging/Prod, mixed Lab/Gate source changes,
 unreviewed control-plane changes, destructive schema changes, data-changing
@@ -117,15 +127,17 @@ nullable columns without defaults or constraints, reviewed-safe functions, and
 mutations, and destructive schema changes require separate authorization;
 unknown syntax fails closed. A blocked candidate prints a fixed recovery step
 for its reason. No target query, backup, image build, database migration, or
-service switch is performed when approval or M2 clearance is missing.
+service switch is performed when approval is missing. Missing M2 clearance
+does not block a Gate-Local candidate and never changes the M2 pause state.
 
-To revoke M2 clearance without disabling Gate candidate authorization:
+To revoke a future formal-release M2 clearance without disabling Gate candidate
+authorization:
 
 ```sh
 pnpm devctl configure gate-m2-revoke
 ```
 
-To revoke Gate-Local candidate automation and M2 clearance together, remove
+To revoke Gate-Local candidate automation and any M2 clearance together, remove
 both local records:
 
 ```sh

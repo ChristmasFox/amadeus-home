@@ -5,7 +5,7 @@
 > 执行入口：`/goal docs/GATE_NATIVE_MEMORY_CORE_GOAL.md`
 > 产品：仅 **Gate**（`apps/pubg-saas`，Vercel AI SDK 7 / KOOK）。
 > **绝不引入 OpenClaw 运行时、Memory Core 插件、Lab SQLite/Workspace、OpenClaw Session 或 Lab 记忆凭据。**
-> 源码/测试/隔离 fixture 可执行；Gate-Local 使用**一次性、主机本地显式启用的候选自动部署**，通过保护门禁后后续同类安全更新不逐次询问。现有 Gate M2 暂停门禁未解除前不得自动切换 Gateway/Worker；Gate-Staging/Prod 正式提升、破坏性迁移、未预授权的 pgvector 镜像/扩展切换、收费探针和真数据整理仍独立受控。Lab 已存在的自动候选部署与测试通知策略保持不变，两产品不互相触发部署。
+> 源码/测试/隔离 fixture 可执行；Gate-Local 使用**一次性、主机本地显式启用的候选自动部署**，通过保护门禁后后续同类安全更新不逐次询问。可回滚应用候选和向后兼容迁移可在 M2 保持 PAUSED 时部署；该路径不创建 M2 clearance、不 resume M2，也不更改 M2 状态。M2 clearance 留给未来正式 Release。Gate-Staging/Prod 正式提升、破坏性迁移、未预授权的 pgvector 镜像/扩展切换、收费探针和真数据整理仍独立受控。Lab 已存在的自动候选部署与测试通知策略保持不变，两产品不互相触发部署。
 
 ## 0. 目标、事实基线与不变量
 
@@ -25,7 +25,7 @@ Gate 可以在 KOOK 中：
 3. `kook-public-query-handler.ts` 在 `naturalLanguageReply` 调用上一个加载器并把全部 `turns` 传入 `runPublicKookAgent`；后者在 `kook-conversation-agent.ts` 使用 AI SDK `ToolLoopAgent`。应在这条链路之前加入可测试的 `ContextBuilder`，而非另立 Agent 框架。
 4. `gate_memory_entries` 的 source event、CAS revision、tombstone 是正确的基础，不要重建、删表、迁移已有原始对话或者暴力清除用户历史。
 5. Gate 现用 PostgreSQL 18 镜像**未安装 pgvector**；Lab 的 SQLite/sqlite-vec、1024-D、FTS + Vector + Dreaming 已有独立已记录的 Lab 1.10.5 验收，但**不能证明 Gate 的服务端模型凭据/向量扩展已经可用**。
-6. Gate M2 的 KOOK 真人最终验收与发布门禁仍是独立待办；这个 Goal 不宣布 M2 完成。在 M2 明确暂停或未取得一次性 Gate-Local 自动候选许可时，不替换运行中的 Gateway/Worker；解除暂停且取得许可、满足安全门禁后，候选部署必须可自动完成并通知测试，而不是每阶段重复询问。
+6. Gate M2 的 KOOK 真人最终验收与正式发布门禁仍是独立待办；这个 Goal 不宣布 M2 完成。M2 明确暂停时，可在独立 Gate-Local 一次性候选许可与全部候选安全门禁通过后替换 Gateway/Worker；部署必须保持 M2 PAUSED，不得创建 clearance 或 resume M2，并自动完成健康验证和测试通知，而不是每阶段重复询问。
 7. 原有长期记忆边界和未解决细节见 `docs/GATE_MEMORY_ARCHITECTURE.md`；Lab 的可复用设计和已验证/未验证证据见 `docs/LAB_MEMORY_CORE_P1_REPORT.md`。借鉴思想，不依赖 OpenClaw。
 
 ### 绝对不变量
@@ -177,9 +177,9 @@ KOOK trusted ingress + current identity/binding/membership
 1. 保留 Lab 现有 `lab-auto-enable`、安全检查、候选回滚与测试通知；**Gate 另建独立的自动候选发布能力**，不能复用 Lab 的批准文件、镜像、令牌或 release target。
 2. 在 Gate 原有 `scripts/release-gate.sh` 和仓库 `devctl` 工作流上实现受保护的 Gate-Local candidate autopilot。使用 `pnpm devctl configure gate-auto-enable` / `gate-auto-disable`；enable 可由 Codex 或脚本非交互执行，但必须显式调用并从 `GATE_LOCAL_*` 环境读取完整的非密钥目标/备份配置。许可存放仓库外 mode 0600，绑定 checkout + Gate-Local + 单一 Bot/实例；默认授权 `reversible_app_candidate` 与 `backward_compatible_schema`，无过期时间，直到 disable 撤销。破坏性、不兼容、数据变更、pgvector/extension 和未知 SQL 仍 fail closed。CI/Goal 不能自行产生或拓宽授权。
 3. 操作者仅需**首次决定是否开启 Gate-Local 自动候选**；开启后每个 phase `finish-phase` 对 Gate-only 变更通过 focused tests、CI/secret gate、兼容性预检、target 身份/digest 校验后自动构建不可变 candidate、制作安全 checkpoint、切换唯一实例、健康检查 + 合成/非扰动 smoke、发送测试通知（延用现有可用的私有通知桥，失败需显式报告），并落下脱敏审计和自动/计划回退路径。不得因为用户没有立即真人测试就停止后续不冲突开发。避免重复部署同一 SHA/digest；有未完成发布/危险 drift 时停机。
-4. **M2 显式暂停、真实 KOOK 真人验收未满足且会干扰 M2、双活 Bot Token、无可恢复备份、Gate-Local target 不可信或被其他 Goal 锁住时，自动部署必须阻止。**阻止时输出一条明确 BLOCKED reason 和可用恢复步骤，不是对每个普通安全变更都要求人工批准。M2 Gate 必须由操作者单独解除，不能以本 Goal 取代。
+4. **M2 显式暂停本身不阻止可回滚应用候选或向后兼容迁移。**候选部署不得清除/修改暂停状态、创建 M2 clearance、启动 M2 或打开记忆开关。双活 Bot Token、无可恢复备份、Gate-Local target 不可信、被其他 Goal 锁住或任一候选安全门禁未通过时仍必须阻止，并输出明确 BLOCKED reason 和恢复步骤。M2 clearance 仅用于未来正式 Release，由操作者在 M2 真人验收完成后单独记录。
 5. 任何会改变真实 PG extension/image/无兼容窗口的 schema、真数据 backfill/reindex、密钥、付费 provider、真实自动整理、删除、Gate-Staging/Prod 提升或正式 Tag，必须使用**对应风险类别的额外一次性/明确授权**；通过保护门禁后，对批准范围内的重复可逆操作自动化完成。不可通过自动发布默认打开 `AUTO_LEARN` 或未知消费者可见新功能。
-6. 加入 Gate 自动部署 fixture：许可缺失/过期/作用域错误、已暂停 M2、双 Gateway、候选重复、健康失败、备份失败、扩展不可用、schema 不兼容、回滚失败、通知失败和 Lab/Gate 交叉触发。不得把 mock 部署称为 `LIVE_VERIFIED`；未提供本机许可时以 `READY_FOR_AUTO_ENABLE`/`BLOCKED_OPERATOR_AUTHORIZATION` 交付可用脚本。
+6. 加入 Gate 自动部署 fixture：许可缺失/作用域错误、M2 保持暂停且无 clearance 时安全候选可通过、正式 Release clearance 单独校验、双 Gateway、候选重复、健康失败、备份失败、扩展不可用、schema 不兼容、回滚失败、通知失败和 Lab/Gate 交叉触发。不得把 mock 部署称为 `LIVE_VERIFIED`；未提供本机许可时以 `READY_FOR_AUTO_ENABLE`/`BLOCKED_OPERATOR_AUTHORIZATION` 交付可用脚本。
 
 ### 原有安全停机线
 
@@ -193,7 +193,7 @@ KOOK trusted ingress + current identity/binding/membership
 
 - P0–P5 源码实现（有需要可拆成多次连续 Goal/会话，但本 Goal 的目标和 scope 不变）；P6 所有独立测试/架构门禁通过；结果可复现；全部已知阻塞事项诚实列出。
 - Gate 能在合成 KOOK end-to-end 中“记住 → 换种说法想起 → 更新 → 忘记 → 再问不返回”；能在共享频道自然对话但不会跨用户/频道/团队泄漏。
-- **Gate-Local 候选自动部署**是本 Goal 的必要工程交付：当已有操作者一次性许可、M2 暂停已解除、受控发布门禁通过时自动构建、部署、验收并通知；缺许可时交付 READY_FOR_AUTO_ENABLE，不谎称 live。真实 KOOK 真人验收、首次高风险 PG extension/image 变更、付费 provider 和启用真实 Light/REM 作业仍有各自明确授权边界。
+- **Gate-Local 候选自动部署**是本 Goal 的必要工程交付：当已有操作者一次性许可、受控发布门禁通过时，即使 M2 仍暂停也可为可回滚应用候选和向后兼容迁移自动构建、部署、验收并通知；始终不清除/恢复 M2、不创建 clearance、不打开记忆开关。缺许可时交付 READY_FOR_AUTO_ENABLE，不谎称 live。真实 KOOK 真人验收、未来正式 Release 所需的 M2 clearance、首次高风险 PG extension/image 变更、付费 provider 和启用真实 Light/REM 作业仍有各自明确授权边界。
 - 不修改 Lab 代码、版本、部署、记忆索引或发布流程；原 Gate M2 验收保留。若当前 HEAD 与本文所述事实变化，先做最小差异审计，再维护兼容实现，不重写已有功能。
 
 ## 10. Codex 执行指令

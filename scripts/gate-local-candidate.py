@@ -27,9 +27,9 @@ from gate_autopilot import (  # noqa: E402
 )
 
 POLICY_PATH = pathlib.Path.home() / ".config" / "amadeus" / "gate-local-auto-approval.json"
-CLEARANCE_PATH = pathlib.Path.home() / ".config" / "amadeus" / "gate-local-m2-clearance.json"
 IMAGE_RE = re.compile(r"local/pubg-saas:git-([0-9a-f]{40})\Z")
 COMPOSE_NAMES = {"compose.yaml", "compose.yml", "docker-compose.yaml", "docker-compose.yml"}
+MIGRATION_PREFIX = "apps/pubg-saas/src/infrastructure/postgres/migrations/"
 
 
 class CandidateError(Exception):
@@ -48,7 +48,7 @@ def recovery_step(reason: str) -> str:
     if reason.startswith("approval_"):
         return "review the external Gate-Local approval; create or renew it with pnpm devctl configure gate-auto-enable"
     if reason.startswith("m2_") or reason == "m2_pause_active":
-        return "complete the separate M2 human acceptance, then record its evidence with pnpm devctl configure gate-m2-clear"
+        return "M2 clearance is not required for Gate-Local candidates; reserve gate-m2-clear for a future formal release and keep M2 state unchanged"
     return {
         "separate_pgvector_authorization_required": "prepare a separately authorized pgvector image/extension plan and verified Gate backup; this autopilot will not apply it",
         "separate_extension_authorization_required": "review the extension change with dedicated authorization and verified backup/restore evidence",
@@ -103,6 +103,7 @@ def recovery_step(reason: str) -> str:
         "source_sha_invalid": "restore a valid committed Git source state and rerun the Gate candidate preflight",
         "active_goal_state_unavailable": "restore the private devctl Goal state from the active checkout, then rerun the candidate preflight",
         "active_goal_base_invalid": "repair the active Goal base commit in devctl state using a valid Git commit, then rerun preflight",
+        "active_image_source_lineage_invalid": "verify the active immutable image SHA is an ancestor of the candidate source and restore the matching Git commit before retrying",
         "apply_requires_clean_committed_source": "commit the reviewed Gate change and clean unrelated worktree edits before candidate apply",
         "external_release_file_missing": "restore the protected Gate release adapter files outside the repository",
         "release_file_inside_repository": "move Gate release secrets and adapter state outside the Git checkout",
@@ -154,6 +155,30 @@ def changed_paths() -> list[str]:
         output = command(["git", "-C", str(ROOT), *args])
         names.update(item.decode("utf-8", errors="surrogateescape") for item in output.split(b"\0") if item)
     return sorted(names)
+
+
+def candidate_migration_paths(active_sha: str, candidate_sha: str, phase_paths: list[str]) -> list[str]:
+    """Classify every migration between the deployed image source and candidate.
+
+    Goal phase paths alone are insufficient: the active Gate image may predate
+    migrations committed in an earlier phase. Refuse unknown or non-linear
+    source lineage rather than silently treating those migrations as app-only.
+    """
+    if not re.fullmatch(r"[0-9a-f]{40}", active_sha) or not re.fullmatch(r"[0-9a-f]{40}", candidate_sha):
+        raise CandidateError("active_image_source_lineage_invalid")
+    try:
+        command(["git", "-C", str(ROOT), "cat-file", "-e", active_sha + "^{commit}"])
+        command(["git", "-C", str(ROOT), "merge-base", "--is-ancestor", active_sha, candidate_sha])
+        output = command([
+            "git", "-C", str(ROOT), "diff", "--name-only", "-z", "--diff-filter=ACMDRT",
+            active_sha + "..." + candidate_sha, "--", MIGRATION_PREFIX,
+        ])
+    except CandidateError as error:
+        raise CandidateError("active_image_source_lineage_invalid") from error
+    deployed_delta = [item.decode("utf-8", errors="surrogateescape")
+                      for item in output.split(b"\0") if item]
+    phase_migrations = [path for path in phase_paths if path.startswith(MIGRATION_PREFIX)]
+    return sorted(set(deployed_delta + phase_migrations))
 
 
 def clean_tree() -> None:
@@ -374,7 +399,8 @@ def runtime_facts(machine: str, policy: dict[str, Any], sha: str,
         service_image_id = text(remote(machine, "docker", "inspect", "--format", "{{.Image}}", service_ids[0]))
         if service_image_id != tagged_image_id:
             raise CandidateError("runtime_drift_or_unknown")
-    risk, risk_reason = migration_risk(paths, ROOT)
+    migration_paths = candidate_migration_paths(image_match.group(1), sha, paths)
+    risk, risk_reason = migration_risk(migration_paths, ROOT)
     if risk_reason:
         error = OperatorAuthorizationRequired if risk_reason.startswith("separate_") else CandidateError
         raise error(risk_reason)
@@ -400,13 +426,10 @@ def restore_remote_files(machine: str, layout: dict[str, str], old_compose: byte
     write_remote_file(machine, layout["envFile"], old_env, "preserve")
 
 
-def gate_apply(approval_ref: str) -> int:
+def gate_apply(approval_ref: str, *, allow_reviewed_control_plane: bool = False) -> int:
     policy, policy_reason = validate_private_state(POLICY_PATH, ROOT)
-    clearance, clearance_reason = validate_private_state(CLEARANCE_PATH, ROOT)
     if policy is None:
         raise OperatorAuthorizationRequired("approval_" + policy_reason)
-    if clearance is None:
-        raise OperatorAuthorizationRequired("m2_" + clearance_reason)
     if approval_ref.startswith(("token", "secret", "password", "api-key")) or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._:/-]{1,159}", approval_ref):
         raise CandidateError("approval_reference_invalid")
     machine = policy.get("orbstackMachine")
@@ -420,7 +443,12 @@ def gate_apply(approval_ref: str) -> int:
         raise CandidateError("candidate_host_tools_unavailable")
     paths = changed_paths()
     scope, scope_reason = classify_changed_scope(paths)
-    if scope != "gate_only":
+    reviewed_control_plane = (
+        allow_reviewed_control_plane
+        and scope == "gate_with_control_plane"
+        and scope_reason == "release_control_change"
+    )
+    if scope != "gate_only" and not reviewed_control_plane:
         raise CandidateError(scope_reason or scope)
     sha = repo_sha()
     clean_tree()
@@ -442,23 +470,18 @@ def gate_apply(approval_ref: str) -> int:
         except BlockingIOError as error:
             raise CandidateError("release_in_progress") from error
         facts, active_image, risk, layout = runtime_facts(machine, policy, sha, paths)
-        from gate_autopilot import preflight_candidate, validate_approval, validate_m2_clearance
+        from gate_autopilot import preflight_candidate, validate_approval
         approval_ok, approval_reason = validate_approval(
             policy, repository=ROOT, instance_id=str(policy.get("instanceId", "")),
             bot_account_id=str(policy.get("botAccountId", "")), risk=risk,
         )
         if not approval_ok:
             raise OperatorAuthorizationRequired(approval_reason)
-        clearance_ok, clearance_reason = validate_m2_clearance(
-            clearance, repository=ROOT, instance_id=str(policy.get("instanceId", "")),
-            bot_account_id=str(policy.get("botAccountId", "")),
-        )
-        if not clearance_ok:
-            raise OperatorAuthorizationRequired(clearance_reason)
         decision = preflight_candidate(
-            approval=policy, clearance=clearance, repository=ROOT, paths=paths,
+            approval=policy, repository=ROOT, paths=paths,
             instance_id=str(policy.get("instanceId")), bot_account_id=str(policy.get("botAccountId")),
             candidate_sha=sha, facts=facts,
+            allow_reviewed_control_plane=allow_reviewed_control_plane,
         )
         if decision["status"] == "ALREADY_CURRENT":
             print("GATE_DEPLOYMENT=ALREADY_CURRENT source_candidate=" + sha[:12])
@@ -654,13 +677,15 @@ def gate_apply(approval_ref: str) -> int:
 def main() -> int:
     args = sys.argv[1:]
     if args and args[0] in {"--help", "-h"}:
-        print("Usage: gate-local-candidate.py candidate --apply --approval-ref <id>")
+        print("Usage: gate-local-candidate.py candidate --apply --approval-ref <id> [--allow-reviewed-control-plane]")
         return 0
-    if len(args) != 4 or args[0] != "candidate" or args[1] != "--apply" or args[2] != "--approval-ref":
+    if (len(args) not in {4, 5} or args[0] != "candidate" or args[1] != "--apply"
+            or args[2] != "--approval-ref"
+            or (len(args) == 5 and args[4] != "--allow-reviewed-control-plane")):
         print("GATE_DEPLOYMENT=BLOCKED reason=invalid_candidate_command", file=sys.stderr)
         return 2
     try:
-        return gate_apply(args[3])
+        return gate_apply(args[3], allow_reviewed_control_plane=(len(args) == 5))
     except OperatorAuthorizationRequired as error:
         print("GATE_DEPLOYMENT=" + deployment_status(error) + " reason=" + str(error), file=sys.stderr)
         print("GATE_DEPLOYMENT_NEXT=" + recovery_step(str(error)), file=sys.stderr)

@@ -25,7 +25,6 @@ from gate_autopilot import (  # noqa: E402
     CLEARANCE_SCHEMA as GATE_CLEARANCE_SCHEMA,
     IDENTIFIER as GATE_IDENTIFIER,
     validate_approval as validate_gate_approval,
-    validate_m2_clearance as validate_gate_m2_clearance,
     validate_private_state as validate_gate_private_state,
     write_private_state as write_gate_private_state,
 )
@@ -199,10 +198,6 @@ def gate_policy() -> tuple[dict | None, str]:
     return validate_gate_private_state(GATE_LOCAL_POLICY, ROOT)
 
 
-def gate_clearance() -> tuple[dict | None, str]:
-    return validate_gate_private_state(GATE_M2_CLEARANCE, ROOT)
-
-
 def gate_auto_status() -> tuple[str, str]:
     policy, state_reason = gate_policy()
     if policy is None:
@@ -215,13 +210,7 @@ def gate_auto_status() -> tuple[str, str]:
     )
     if not active:
         return "disabled", approval_reason
-    clearance, clearance_state = gate_clearance()
-    if clearance is None:
-        return "enabled_m2_paused", clearance_state if clearance_state != "state_missing" else "m2_pause_active"
-    cleared, clearance_reason = validate_gate_m2_clearance(
-        clearance, repository=ROOT, instance_id=instance_id, bot_account_id=bot_account_id,
-    )
-    return ("enabled_m2_cleared", "ready_for_release_preflight") if cleared else ("enabled_m2_paused", clearance_reason)
+    return "enabled", "ready_for_candidate_preflight"
 
 
 def external_gate_path(value: str, label: str, *, directory: bool = False,
@@ -303,7 +292,7 @@ def gate_auto_enable() -> None:
     except (OSError, ValueError):
         die("could not create protected Gate-Local authorization state")
     print("GATE_AUTO_ENABLED=true scope=gate-local risks=reversible_app_candidate,backward_compatible_schema")
-    print("GATE_AUTO_M2_CLEARANCE=separate operator action required")
+    print("GATE_AUTO_M2_CLEARANCE=not_required_for_local_candidates; formal_release_only")
 
 
 def gate_auto_disable() -> None:
@@ -349,7 +338,7 @@ def gate_m2_clear() -> None:
     )
     if not allowed:
         die("Gate-Local auto approval is not active: " + reason)
-    print("This records a separate operator clearance after the M2 human acceptance gate is complete.")
+    print("This records M2 human acceptance for a future formal release; it does not change or resume M2.")
     if input("Type CLEAR GATE M2 PAUSE: ") != "CLEAR GATE M2 PAUSE":
         die("operator did not clear the Gate M2 pause")
     evidence = input("M2 human acceptance evidence reference (non-secret): ").strip()
@@ -360,7 +349,7 @@ def gate_m2_clear() -> None:
         write_gate_private_state(GATE_M2_CLEARANCE, ROOT, document)
     except (OSError, ValueError):
         die("could not create protected Gate M2 clearance state")
-    print("GATE_AUTO_M2_CLEARANCE=recorded scope=gate-local; revoke with gate-m2-revoke or gate-auto-disable")
+    print("GATE_AUTO_M2_CLEARANCE=recorded scope=gate-local formal-release-only; revoke with gate-m2-revoke or gate-auto-disable")
 
 
 def gate_m2_clearance_document(policy: dict, evidence: str) -> dict:
@@ -594,11 +583,7 @@ def finish_phase(phase: str, dry_run: bool) -> None:
         elif gate_status == "disabled" and gate_reason == "state_missing":
             print("GATE_DEPLOYMENT=READY_FOR_AUTO_ENABLE source_candidate=" + source[:12])
             print("GATE_DEPLOYMENT_NEXT=pnpm devctl configure gate-auto-enable")
-        elif gate_status == "enabled_m2_paused":
-            print("GATE_DEPLOYMENT=BLOCKED_OPERATOR_AUTHORIZATION reason=" + gate_reason +
-                  " source_candidate=" + source[:12])
-            print("GATE_DEPLOYMENT_NEXT=complete M2 human acceptance, then run pnpm devctl configure gate-m2-clear")
-        elif gate_status == "enabled_m2_cleared":
+        elif gate_status == "enabled":
             execute(["bash", "scripts/release-gate.sh", "candidate", "--apply",
                      "--approval-ref", "devctl:" + source[:12]], "gate-local-candidate", False)
             print("GATE_DEPLOYMENT=DEPLOYED_AND_NOTIFIED source_candidate=" + source[:12])
@@ -656,6 +641,7 @@ def main() -> None:
             gate_state, gate_reason = gate_auto_status()
             print("GATE_AUTO_STATUS=" + gate_state)
             print("GATE_AUTO_REASON=" + gate_reason)
+            print("GATE_M2_CLEARANCE_SCOPE=formal-release-only")
         elif args.option == "gate-auto-enable":
             gate_auto_enable()
         elif args.option == "gate-auto-disable":

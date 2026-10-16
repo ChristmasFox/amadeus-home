@@ -6,6 +6,10 @@ Keep Gate M2 paused until the owner records the completed acceptance through
 the separate local procedure. Do not use Lab accounts, production users, or
 real personal facts in synthetic checks.
 
+Safe Gate-Local application candidates may deploy while M2 stays paused; they
+do not enable memory flags or require this human acceptance. The recorded M2
+clearance is reserved for a future formal Release.
+
 ## Preconditions
 
 - Confirm the Gate-Local candidate SHA, Gate Bot account ID, and database

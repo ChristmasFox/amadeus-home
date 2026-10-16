@@ -9,7 +9,7 @@
 | Scope | Development | After a verified phase | Formal publication |
 | --- | --- | --- | --- |
 | Lab (OpenClaw self-hosted Kurisu) | focused edit/task checks | build and apply a *reversible candidate* automatically **only** with a one-time host-local operator authorization and safe source scope | formal tag/release remains a separate explicitly reviewed operation |
-| Gate (AI SDK KOOK service) | focused checks and isolated integration | **Gate-Local**: once locally opted-in, automatically build/apply reversible candidate after all safety gates and no active M2 pause; otherwise prepare only. **Staging/Prod** never auto-promote | operator selects formal environment/promotion and high-risk migration category |
+| Gate (AI SDK KOOK service) | focused checks and isolated integration | **Gate-Local**: once locally opted-in, automatically build/apply a reversible application candidate or backward-compatible schema candidate after all safety gates, even while M2 remains PAUSED. Candidate deployment does not clear or resume M2. **Staging/Prod** never auto-promote | operator selects formal environment/promotion and high-risk migration category; M2 clearance is reserved for formal release |
 | Shared Domain/Presentation | verify both affected consumers | each product may deploy its *own* candidate only under its independently authorized local policy; cross-product source changes never authorize the other deployment | independent product versions and release approvals |
 
 Candidate acceptance is not a formal release. Lab runtime health and owner
@@ -42,8 +42,9 @@ apply for them. Documentation text cannot grant OS-level access.
    immutable images, checkpoints, health checks, rollback and owner notification
    to `release-lab.sh` for Lab; for Gate-only phases it must use a distinct
    protected `release-gate.sh` candidate path **only if** the Gate-Local one-time
-   opt-in exists, target is healthy and authorized, and the M2 pause has been
-   explicitly cleared. The current Gate autopilot may require implementation;
+   opt-in exists and the target is healthy and authorized. M2 clearance is not
+   a candidate prerequisite; the candidate path must leave M2 PAUSED. The
+   current Gate autopilot may require implementation;
    mere policy text is not proof it is available. If the change is sensitive,
    unknown, config/security-related or Product Radar-only, it requests a reviewed
    deployment plan instead of running Compose directly.
@@ -70,8 +71,9 @@ non-interactive and reads its bounded target and backup configuration from the
 it writes the approval outside Git with mode 0600. It authorizes reversible app
 candidates and backward-compatible schema changes by default, with no expiry;
 `gate-auto-disable` revokes it. **Do not auto-enable** it from a Goal, CI or
-chat. An explicit M2 pause blocks auto-apply until M2 is separately accepted
-and cleared; the M2 clearance itself has no expiry and can be removed with
+chat. An explicit M2 pause does not block an otherwise-safe Gate-Local
+candidate; the path must leave M2 PAUSED and must not create or modify an M2
+clearance. M2 clearance is reserved for formal release and can be removed with
 `gate-m2-revoke` or `gate-auto-disable`. New pgvector image/extension, unsafe
 data migration, production credentials, paid-provider probe, real-memory
 ingestion schedule, formal release and Staging/Prod promotion remain separate
@@ -94,7 +96,7 @@ guard, **not a security boundary against a malicious agent**.
   contents, dependency/config files and execution command level. Changed
   inputs invalidate reuse. Phase/release checks rerun and may require real
   isolated database fixtures; never treat a cached result as production evidence.
-- The Goal phase is not `LIVE_VERIFIED` until the actual service was tested. For Gate, `READY_FOR_AUTO_ENABLE` or `BLOCKED_OPERATOR_AUTHORIZATION` is truthful if one-time local opt-in is absent or M2 is paused; do not claim auto deployment was performed.
+- The Goal phase is not `LIVE_VERIFIED` until the actual service was tested. For Gate, `READY_FOR_AUTO_ENABLE` or `BLOCKED_OPERATOR_AUTHORIZATION` is truthful if one-time local opt-in is absent or another candidate safety gate blocks; M2 being paused alone is not a candidate blocker. Do not claim auto deployment was performed unless the service was tested.
   `HUMAN_FEEDBACK_PENDING` can coexist with automatic candidate acceptance.
   Stalled platform sessions still require Codex's normal resume/restart path;
   this tooling does **not** pretend to bypass model/Goal capacity limits.

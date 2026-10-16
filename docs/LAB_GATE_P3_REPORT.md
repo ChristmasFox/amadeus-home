@@ -23,7 +23,9 @@ database, secret, image, release tag, or registry was changed.
   that state explicitly and preserves the deploy checkpoint for reconciliation;
   it does not automatically roll back.
 - `scripts/release-gate.sh` exposes the same planning, verification, status,
-  and rollback-plan commands. Gate-Local apply is rejected while M2 is paused.
+  and rollback-plan commands. At report time, Gate-Local apply was rejected
+  while M2 was paused. Policy was updated on 2026-10-16: safe Gate-Local
+  candidates may now deploy with M2 still paused and without M2 clearance.
   Gate-Staging/Prod apply is rejected until a reviewed source-controlled
   environment adapter exists. Its help is scoped to Gate environment,
   approval, tag, and manifest options and states the adapter boundary; it no

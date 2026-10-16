@@ -2,7 +2,8 @@
 """Fixtureable Gate-Local candidate authorization and execution guards.
 
 This module never creates authorization. Only explicit devctl commands may
-write the external 0600 approval and M2-clearance records.
+write the external 0600 Gate approval and M2-clearance records. M2 clearance
+is reserved for future formal releases; it does not gate local candidates.
 """
 from __future__ import annotations
 
@@ -351,17 +352,22 @@ def validate_m2_clearance(
 def preflight_candidate(
     *,
     approval: dict | None,
-    clearance: dict | None,
     repository: pathlib.Path,
     paths: list[str],
     instance_id: str,
     bot_account_id: str,
     candidate_sha: str,
     facts: dict[str, Any],
+    allow_reviewed_control_plane: bool = False,
     now: datetime | None = None,
 ) -> dict[str, str]:
     scope, scope_reason = classify_changed_scope(paths)
-    if scope != "gate_only":
+    reviewed_control_plane = (
+        allow_reviewed_control_plane
+        and scope == "gate_with_control_plane"
+        and scope_reason == "release_control_change"
+    )
+    if scope != "gate_only" and not reviewed_control_plane:
         return {"status": "BLOCKED", "reason": scope_reason or scope}
     risk, risk_reason = migration_risk(paths, repository)
     if risk_reason:
@@ -372,10 +378,6 @@ def preflight_candidate(
     if not allowed:
         status = "READY_FOR_AUTO_ENABLE" if reason == "approval_missing" else "BLOCKED_OPERATOR_AUTHORIZATION"
         return {"status": status, "reason": reason}
-    cleared, reason = validate_m2_clearance(clearance, repository=repository, instance_id=instance_id,
-                                            bot_account_id=bot_account_id, now=now)
-    if not cleared:
-        return {"status": "BLOCKED_OPERATOR_AUTHORIZATION", "reason": reason}
     if facts.get("targetTrusted") is not True or facts.get("instanceId") != instance_id:
         return {"status": "BLOCKED", "reason": "target_identity_untrusted"}
     if facts.get("botAccountId") != bot_account_id:

@@ -22,6 +22,9 @@ on:
       - "scripts/verify-image-provenance.py"
       - "scripts/verify-pubg-saas-oci.py"
       - "scripts/validate-pubg-saas-test-database.py"
+      - "scripts/gate-local-candidate.py"
+      - "scripts/gate_autopilot.py"
+      - "scripts/tests/test_gate_*.py"
       - "scripts/test-release-tooling.py"
       - "scripts/tests/test_pubg_saas_*.py"
       - "package.json"
@@ -49,6 +52,9 @@ on:
       - "scripts/verify-image-provenance.py"
       - "scripts/verify-pubg-saas-oci.py"
       - "scripts/validate-pubg-saas-test-database.py"
+      - "scripts/gate-local-candidate.py"
+      - "scripts/gate_autopilot.py"
+      - "scripts/tests/test_gate_*.py"
       - "scripts/test-release-tooling.py"
       - "scripts/tests/test_pubg_saas_*.py"
       - "package.json"
@@ -124,6 +130,10 @@ jobs:
           pnpm typecheck:pubg
       - name: Backup and restore safety tests
         run: python3 -m unittest discover -s scripts/tests -p 'test_pubg_saas_*.py' -v
+      - name: Gate candidate and M2 clearance safety contracts
+        run: |
+          python3 -m unittest discover -s scripts/tests -p 'test_gate_*.py' -v
+          python3 -m py_compile scripts/gate_autopilot.py scripts/gate-local-candidate.py
       - name: Synthetic 200-team worker benchmark
         run: PUBG_SAAS_BENCH_QUERIES_PER_TEAM=30 pnpm --filter @agent/pubg-saas exec tsx tests/m2-200-team-load.benchmark.ts
 

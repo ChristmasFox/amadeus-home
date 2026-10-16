@@ -3,6 +3,7 @@ import pathlib
 import tempfile
 import unittest
 from datetime import datetime, timezone
+from unittest.mock import patch
 
 MODULE_PATH = pathlib.Path(__file__).resolve().parents[1] / "gate_autopilot.py"
 spec = importlib.util.spec_from_file_location("gate_autopilot", MODULE_PATH)
@@ -69,7 +70,6 @@ def facts(**changes):
 def preflight(**changes):
     args = {
         "approval": approval(),
-        "clearance": clearance(),
         "repository": REPO,
         "paths": PATHS,
         "instance_id": INSTANCE,
@@ -152,13 +152,29 @@ class GateAutopilotContracts(unittest.TestCase):
         self.assertEqual(preflight(approval=approval(approvedAt="2026-10-16T12:01:00Z"))["reason"],
                          "approval_issued_at_invalid")
 
-    def test_paused_or_wrong_scope_m2_clearance_blocks_apply(self):
-        self.assertEqual(preflight(clearance=None)["reason"], "m2_pause_active")
-        self.assertEqual(preflight(clearance=clearance(instanceId="other-instance"))["reason"],
-                         "m2_clearance_target_mismatch")
-        self.assertEqual(preflight(clearance=clearance(expiresAt="2026-10-16T11:59:00Z"))["status"], "READY")
-        self.assertEqual(preflight(clearance=clearance(clearedAt="2026-10-16T12:01:00Z"))["reason"],
-                         "m2_clearance_issued_at_invalid")
+    def test_paused_m2_without_clearance_does_not_block_safe_candidate(self):
+        self.assertEqual(preflight()["status"], "READY")
+        self.assertEqual(
+            gate.validate_m2_clearance(None, repository=REPO, instance_id=INSTANCE,
+                                       bot_account_id=BOT, now=NOW),
+            (False, "m2_pause_active"),
+        )
+        self.assertEqual(
+            gate.validate_m2_clearance(clearance(), repository=REPO, instance_id=INSTANCE,
+                                       bot_account_id=BOT, now=NOW),
+            (True, "m2_cleared"),
+        )
+
+    def test_direct_reviewed_apply_can_allow_control_plane_but_not_mixed_scope(self):
+        control_plane_paths = PATHS + ["scripts/gate_autopilot.py"]
+        self.assertEqual(preflight(paths=control_plane_paths)["reason"], "release_control_change")
+        self.assertEqual(
+            preflight(paths=control_plane_paths, allow_reviewed_control_plane=True)["status"], "READY",
+        )
+        mixed_paths = control_plane_paths + ["plugins/amadeus/src/owner.ts"]
+        self.assertEqual(
+            preflight(paths=mixed_paths, allow_reviewed_control_plane=True)["reason"], "cross_product_change",
+        )
 
     def test_duplicate_sha_and_runtime_dual_bot_or_drift_stop(self):
         self.assertEqual(preflight(facts=facts(activeSha=SHA))["status"], "ALREADY_CURRENT")
@@ -181,6 +197,17 @@ class GateAutopilotContracts(unittest.TestCase):
                 ["apps/pubg-saas/src/infrastructure/postgres/migrations/0042_missing.sql"], root,
             )
         self.assertEqual(result, ("unreviewed_migration", "migration_source_missing_or_untrusted"))
+
+    def test_candidate_migration_delta_uses_active_image_source(self):
+        migration = "apps/pubg-saas/src/infrastructure/postgres/migrations/0022_scoped_agent_conversation.sql"
+        with patch.object(candidate, "command", side_effect=[b"", b"", migration.encode() + b"\0"]) as run:
+            self.assertEqual(candidate.candidate_migration_paths("b" * 40, "a" * 40, []), [migration])
+        self.assertEqual(run.call_count, 3)
+
+    def test_candidate_migration_delta_fails_closed_for_unknown_lineage(self):
+        with patch.object(candidate, "command", side_effect=candidate.CandidateError("command_failed")):
+            with self.assertRaisesRegex(candidate.CandidateError, "active_image_source_lineage_invalid"):
+                candidate.candidate_migration_paths("b" * 40, "a" * 40, [])
 
     def test_symlinked_changed_migration_fails_closed(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -312,7 +339,7 @@ class GateAutopilotContracts(unittest.TestCase):
                     self.assertEqual(gate.migration_risk([migration], root), expected)
 
     def test_candidate_authorization_blocks_include_recovery_steps(self):
-        self.assertIn("gate-m2-clear", candidate.recovery_step("m2_pause_active"))
+        self.assertIn("not required", candidate.recovery_step("m2_pause_active"))
         self.assertIn("backup", candidate.recovery_step("separate_data_migration_authorization_required"))
         self.assertIn("failed step", candidate.recovery_step("candidate_step_failed"))
         self.assertIn("external audit", candidate.recovery_step("candidate_adapter_failed"))

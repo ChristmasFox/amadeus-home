@@ -18,6 +18,7 @@ PROMOTE_LIVE_CANDIDATE=0
 PROMOTION_CHECKPOINT_REF=""
 LINEAGE_BRIDGE=0
 CREATE_TAG=0
+ALLOW_REVIEWED_CONTROL_PLANE=0
 LIVE=0
 ENVIRONMENT=""
 MANIFEST=""
@@ -67,11 +68,14 @@ Options:
   --environment <name>            gate-local|gate-staging|gate-prod (default: gate-local)
   --manifest <path>               protected external release manifest (status)
   --runtime-snapshot <path>       sanitized Gate runtime snapshot (status)
+  --allow-reviewed-control-plane  one-time direct Gate-Local apply of reviewed release-control source
 
 Gate-Local candidate apply uses the protected local autopilot and requires
-the external one-time Gate approval plus separate M2 clearance. M2 remains
-paused until the operator separately clears it. Staging/Prod apply requires
-a reviewed environment adapter.
+the external one-time Gate approval. M2 may remain paused; candidate apply
+does not clear or resume M2. M2 clearance is reserved for future formal
+release. The optional control-plane flag is only for an explicitly reviewed
+direct Gate-Local apply; automatic phase deployment still blocks those edits.
+Staging/Prod apply requires a reviewed environment adapter.
 Gate verify requires `PUBG_SAAS_TEST_DATABASE_URL` to point to a loopback
 database named `test`/`testing` or ending in `_test`/`_testing`.
 USAGE
@@ -92,6 +96,7 @@ while (($#)); do
     --checkpoint-ref) (($# >= 2)) || fail '--checkpoint-ref requires a value'; PROMOTION_CHECKPOINT_REF="$2"; shift ;;
     --lineage-bridge) LINEAGE_BRIDGE=1 ;;
     --create-tag) CREATE_TAG=1 ;;
+    --allow-reviewed-control-plane) ALLOW_REVIEWED_CONTROL_PLANE=1 ;;
     --live) LIVE=1 ;;
     --environment) (($# >= 2)) || fail '--environment requires a value'; ENVIRONMENT="$2"; shift ;;
     --manifest) (($# >= 2)) || fail '--manifest requires a path'; MANIFEST="$2"; shift ;;
@@ -139,11 +144,15 @@ if [[ "$PRODUCT" == gate ]]; then
   [[ "$ENVIRONMENT" =~ ^gate-(local|staging|prod)$ ]] || fail 'Gate environment must be gate-local, gate-staging, or gate-prod'
   ((BUILD_MODE_SET == 0)) || fail 'Gate build selection is owned by its future protected environment adapter'
   ((LINEAGE_BRIDGE == 0)) || fail 'lineage bridge applies only to the Lab image pair'
-  ((LIVE == 0)) || fail 'Gate runtime reads require an explicit sanitized --runtime-snapshot; no Gate-Local adapter is enabled while M2 is paused'
+  ((LIVE == 0)) || fail 'Gate runtime reads require an explicit sanitized --runtime-snapshot'
   [[ -z "$MEMORY_ACCEPTANCE" ]] || fail '--memory-acceptance applies only to Lab'
 else
   [[ -z "$ENVIRONMENT" || "$ENVIRONMENT" == lab-maintainer ]] || fail 'Lab environment is fixed to lab-maintainer'
   ENVIRONMENT=lab-maintainer
+fi
+if ((ALLOW_REVIEWED_CONTROL_PLANE)); then
+  [[ "$PRODUCT" == gate && "$COMMAND" == candidate && "$ENVIRONMENT" == gate-local && $APPLY -eq 1 ]] || \
+    fail '--allow-reviewed-control-plane is limited to an applied Gate-Local candidate'
 fi
 if [[ "$PRODUCT" == gate && "$COMMAND" == verify ]]; then
   python3 "$ROOT_DIR/scripts/validate-pubg-saas-test-database.py" || fail 'Gate verify requires a dedicated loopback PostgreSQL test database; see apps/pubg-saas/README.md'
@@ -322,12 +331,12 @@ case "$COMMAND" in
       bash "$ROOT_DIR/scripts/pubg-saas-version.sh" check
       printf 'GATE_RELEASE=DRY_RUN\n'
       if [[ "$ENVIRONMENT" == gate-local ]]; then
-        printf '%s\n' 'GATE_ADAPTER=protected-local-autopilot' 'GATE_M2_CLEARANCE=separate-and-required'
+        printf '%s\n' 'GATE_ADAPTER=protected-local-autopilot' 'GATE_M2_CLEARANCE=formal-release-only'
       else
         printf 'GATE_ADAPTER=%s\n' "$([[ -x "$ROOT_DIR/infra/pubg-saas/release-adapters/$ENVIRONMENT.sh" ]] && printf configured || printf unconfigured)"
       fi
       printf '%s\n' 'SEQUENCE=verify -> same-digest build -> backup/precheck -> migrator -> gateway/worker -> health/rollback-plan'
-      printf '%s\n' 'NO_RUNTIME_QUERY=planning never queries Gate-Local; apply requires the external Gate approval and independent M2 clearance.'
+      printf '%s\n' 'NO_RUNTIME_QUERY=planning never queries Gate-Local; candidate apply requires the external Gate approval; M2 clearance is formal-release-only.'
     fi
     ;;
   verify)
@@ -385,7 +394,9 @@ case "$COMMAND" in
       else
         if [[ "$ENVIRONMENT" == gate-local ]]; then
           [[ "$COMMAND" == candidate ]] || fail 'Gate-Local supports only an unreleased candidate; formal Gate release/tag is not available.'
-          python3 "$ROOT_DIR/scripts/gate-local-candidate.py" candidate --apply --approval-ref "$APPROVAL_REF"
+          candidate_args=(candidate --apply --approval-ref "$APPROVAL_REF")
+          ((ALLOW_REVIEWED_CONTROL_PLANE == 0)) || candidate_args+=(--allow-reviewed-control-plane)
+          python3 "$ROOT_DIR/scripts/gate-local-candidate.py" "${candidate_args[@]}"
           printf 'CANDIDATE_APPLIED=1\nAPPROVAL_REF=%s\n' "$APPROVAL_REF"
           exit 0
         fi
@@ -410,7 +421,7 @@ case "$COMMAND" in
         printf 'GATE_SEQUENCE=verify,build-once,precheck,protected-backup,migrator,application-switch,health\n'
         printf '%s\n' 'GATE_ROLLBACK=application rollback only when schema compatibility allows; never force-restore the entire PostgreSQL volume by default.'
         if [[ "$ENVIRONMENT" == gate-local ]]; then
-          printf '%s\n' 'GATE_ADAPTER=protected-local-autopilot' 'GATE_M2_CLEARANCE=separate-and-required'
+          printf '%s\n' 'GATE_ADAPTER=protected-local-autopilot' 'GATE_M2_CLEARANCE=formal-release-only'
         else
           printf 'GATE_ADAPTER=%s\n' "$([[ -x "$ROOT_DIR/infra/pubg-saas/release-adapters/$ENVIRONMENT.sh" ]] && printf configured || printf unconfigured)"
         fi

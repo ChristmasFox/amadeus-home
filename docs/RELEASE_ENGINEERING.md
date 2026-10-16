@@ -120,12 +120,13 @@ scripts/release-gate.sh status --environment gate-staging --manifest <external-f
 scripts/release-gate.sh rollback-plan --environment gate-staging
 ```
 
-Gate-Local remains the paused M2 environment. The Gate CLI does not query or
-change it. Without a real snapshot from a protected environment adapter,
-`status` returns `UNKNOWN`; synthetic snapshots are test evidence only. No
-Gate-Staging or Gate-Prod adapter currently exists, so Gate `--apply` fails
-closed. Adding an adapter requires a separate reviewed source change and
-environment authorization.
+Gate M2 remains paused. The protected Gate-Local candidate path may switch a
+safe application candidate while preserving that pause; it neither resumes
+M2 nor creates M2 clearance. Without a real snapshot from a protected
+environment adapter, `status` returns `UNKNOWN`; synthetic snapshots are test
+evidence only. No Gate-Staging or Gate-Prod adapter currently exists, so those
+Gate `--apply` operations fail closed. Adding an adapter requires a separate
+reviewed source change and environment authorization.
 
 `release-gate.sh verify` now refuses to run the SaaS suite without
 `PUBG_SAAS_TEST_DATABASE_URL` targeting loopback and a database named `test`,

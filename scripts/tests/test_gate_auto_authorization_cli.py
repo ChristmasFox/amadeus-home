@@ -75,6 +75,18 @@ class GateAutoAuthorizationCli(unittest.TestCase):
             self.assertEqual(policy_path.stat().st_mode & 0o777, 0o600)
             self.assertEqual(policy_path.parent.stat().st_mode & 0o777, 0o700)
 
+    def test_gate_status_allows_paused_m2_without_clearance_record(self):
+        with tempfile.TemporaryDirectory() as directory:
+            env = self.config(pathlib.Path(directory))
+            enabled = self.run_devctl(env, "gate-auto-enable")
+            self.assertEqual(enabled.returncode, 0, enabled.stdout + enabled.stderr)
+            status = self.run_devctl(env, "status")
+            self.assertEqual(status.returncode, 0, status.stdout + status.stderr)
+            self.assertIn("GATE_AUTO_STATUS=enabled", status.stdout)
+            self.assertIn("GATE_AUTO_REASON=ready_for_candidate_preflight", status.stdout)
+            self.assertIn("GATE_M2_CLEARANCE_SCOPE=formal-release-only", status.stdout)
+            self.assertFalse((pathlib.Path(env["HOME"]) / ".config/amadeus/gate-local-m2-clearance.json").exists())
+
     def test_noninteractive_enable_without_external_configuration_fails_closed(self):
         with tempfile.TemporaryDirectory() as directory:
             home = pathlib.Path(directory) / "home"
