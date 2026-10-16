@@ -3,6 +3,7 @@ import type { Pool, PoolClient, QueryResultRow } from 'pg';
 import { estimateGateEmbeddingTokens, type GateMemoryEmbeddingClient } from './gate-memory-embedding.js';
 import { reserveGateMemoryEmbeddingBudget, settleGateMemoryEmbeddingBudget } from './gate-memory-embedding-budget.js';
 import { KOOK_CHANNEL_BINDING_JOIN, KOOK_CHANNEL_VERSION_JOIN } from './kook-channel-binding-sql.js';
+import { GateMemoryIndexGenerationManager } from './gate-memory-index-generation.js';
 
 export type GateMemoryIndexWorkerResult =
   | 'empty' | 'indexed' | 'deleted' | 'obsolete' | 'semantic_unconfigured' | 'budget_deferred' | 'retry' | 'dead';
@@ -11,6 +12,7 @@ interface ClaimedJob {
   job_id: string;
   memory_id: string;
   source_revision: string;
+  index_version: number;
   operation: 'upsert' | 'delete';
   attempt_count: number;
   lease_token: string;
@@ -66,15 +68,35 @@ export class GateMemoryIndexWorker {
   private async claim(): Promise<ClaimedJob | null> {
     const result = await this.pool.query<ClaimedJob>(
       `WITH candidate AS (
-         SELECT job_id FROM gate_memory_embedding_jobs
-         WHERE ((status IN ('pending','retry') AND next_attempt_at<=now())
-           OR (status='processing' AND lease_until<=now()))
-         ORDER BY next_attempt_at,created_at,job_id FOR UPDATE SKIP LOCKED LIMIT 1
+         SELECT job.job_id FROM gate_memory_embedding_jobs job
+         WHERE ((job.status IN ('pending','retry') AND job.next_attempt_at<=now())
+           OR (job.status='processing' AND job.lease_until<=now()))
+           AND (job.operation='delete' OR $1::TEXT IS NULL OR (
+             job.index_version=$4 AND (
+               EXISTS (SELECT 1 FROM gate_memory_entries memory
+                 JOIN gate_memory_index_generation_state state USING (bot_account_id)
+                 WHERE memory.memory_id=job.memory_id AND state.active_index_version=job.index_version
+                   AND state.active_provider_id=$1 AND state.active_model_id=$2 AND state.active_dimensions=$3)
+               OR EXISTS (SELECT 1 FROM gate_memory_entries memory
+                 JOIN gate_memory_index_generation_state state USING (bot_account_id)
+                 WHERE memory.memory_id=job.memory_id AND state.reindex_status='building'
+                   AND state.building_index_version=job.index_version
+                   AND state.building_provider_id=$1 AND state.building_model_id=$2
+                   AND state.building_dimensions=$3)
+               OR (job.index_version=1 AND NOT EXISTS (SELECT 1 FROM gate_memory_entries memory
+                   JOIN gate_memory_index_generation_state state USING (bot_account_id)
+                   WHERE memory.memory_id=job.memory_id))
+             )
+           ))
+         ORDER BY (job.operation='delete') DESC,job.next_attempt_at,job.created_at,job.job_id
+         FOR UPDATE OF job SKIP LOCKED LIMIT 1
        )
        UPDATE gate_memory_embedding_jobs job SET status='processing',attempt_count=job.attempt_count+1,
          lease_token=gen_random_uuid(),lease_until=now()+interval '60 seconds',updated_at=now()
        FROM candidate WHERE job.job_id=candidate.job_id
-       RETURNING job.job_id,job.memory_id,job.source_revision,job.operation,job.attempt_count,job.lease_token`,
+       RETURNING job.job_id,job.memory_id,job.source_revision,job.index_version,job.operation,job.attempt_count,job.lease_token`,
+      [this.provider?.contract.providerId ?? null, this.provider?.contract.modelId ?? null,
+        this.provider?.contract.dimensions ?? null, this.provider?.contract.indexVersion ?? null],
     );
     return result.rows[0] ?? null;
   }
@@ -147,6 +169,7 @@ export class GateMemoryIndexWorker {
       || batch.contract.dimensions !== this.provider.contract.dimensions
       || batch.contract.normalization !== 'l2_unit'
       || batch.contract.indexVersion !== this.provider.contract.indexVersion
+      || batch.contract.indexVersion !== job.index_version
       || vector.length !== this.provider.contract.dimensions
       || vector.some(value => !Number.isFinite(value))
       || !Number.isFinite(norm) || Math.abs(Math.sqrt(norm) - 1) > 1e-3) {
@@ -177,6 +200,35 @@ export class GateMemoryIndexWorker {
         if (!row || row.revoked_at !== null || !row.scope_current) {
           await client.query('DELETE FROM gate_memory_embeddings WHERE memory_id=$1', [job.memory_id]);
         }
+        await client.query(
+          `UPDATE gate_memory_embedding_jobs SET status='done',lease_token=NULL,lease_until=NULL,
+             finished_at=now(),updated_at=now() WHERE job_id=$1 AND status='processing' AND lease_token=$2`,
+          [job.job_id, job.lease_token],
+        );
+        return false;
+      }
+
+      const generation = await client.query<{
+        active_index_version: number; active_provider_id: string; active_model_id: string; active_dimensions: number;
+        building_index_version: number | null; building_provider_id: string | null;
+        building_model_id: string | null; building_dimensions: number | null; reindex_status: string;
+      }>(
+        `SELECT active_index_version,active_provider_id,active_model_id,active_dimensions,
+           building_index_version,building_provider_id,building_model_id,building_dimensions,reindex_status
+         FROM gate_memory_index_generation_state WHERE bot_account_id=$1 FOR SHARE`, [memory.bot_account_id],
+      );
+      const state = generation.rows[0];
+      const generationAllowed = state
+        ? (state.active_index_version === job.index_version
+          && state.active_provider_id === batch.contract.providerId
+          && state.active_model_id === batch.contract.modelId
+          && state.active_dimensions === batch.contract.dimensions)
+          || (state.reindex_status === 'building' && state.building_index_version === job.index_version
+            && state.building_provider_id === batch.contract.providerId
+            && state.building_model_id === batch.contract.modelId
+            && state.building_dimensions === batch.contract.dimensions)
+        : job.index_version === 1;
+      if (!generationAllowed) {
         await client.query(
           `UPDATE gate_memory_embedding_jobs SET status='done',lease_token=NULL,lease_until=NULL,
              finished_at=now(),updated_at=now() WHERE job_id=$1 AND status='processing' AND lease_token=$2`,
@@ -244,6 +296,9 @@ export class GateMemoryIndexWorker {
         }
         await this.finish(job);
         return 'obsolete';
+      }
+      if (job.index_version === 1) {
+        await new GateMemoryIndexGenerationManager(this.pool).initialize(row.bot_account_id, this.provider.contract);
       }
       const value = `${row.memory_key}\n${row.content}`;
       reservedTokens = estimateGateEmbeddingTokens([value]);

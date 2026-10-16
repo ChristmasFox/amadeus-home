@@ -16,6 +16,7 @@ import { GateMemoryStore } from './application/gate-memory-store.js';
 import { MemoryRetriever } from './application/gate-memory-retriever.js';
 import { createGateMemoryEmbeddingProvider } from './infrastructure/ai/gate-memory-embedding-provider.js';
 import { GateMemoryIntentClassifier, GateMemoryWriteCoordinator } from './application/gate-memory-writer.js';
+import { GateMemoryConsolidationConsentService } from './application/gate-memory-consolidation.js';
 
 function optionalNumber(env: NodeJS.ProcessEnv, key: string): number | undefined {
   const value = env[key];
@@ -64,6 +65,7 @@ export async function gatewayMain(args: string[], env: NodeJS.ProcessEnv = proce
     const players = playerResolver.resolver;
     const authorizer = new PublicQueryAuthorizer(pool, permissions, { botAccountId: botId });
     const memoryStore = new GateMemoryStore(pool, authorizer);
+    const memoryConsolidationConsent = new GateMemoryConsolidationConsentService(pool, botId);
     let memoryEmbeddingProvider: ReturnType<typeof createGateMemoryEmbeddingProvider> = null;
     try { memoryEmbeddingProvider = createGateMemoryEmbeddingProvider(env); }
     catch {
@@ -87,11 +89,12 @@ export async function gatewayMain(args: string[], env: NodeJS.ProcessEnv = proce
       createKookPublicQueryHandler({
         authorizer, claims, agent,
         memoryRetriever,
+        memoryConsolidationConsent,
         ...(memoryWriter ? { memoryWriter } : {}),
         executeNaturalWrite: (job, intent, signal) => executeKookNaturalWrite(job, bindingServices, intent, signal),
         onAgentDiagnostic,
       }),
-      createKookManagementHandler({ teams, claims, players }),
+      createKookManagementHandler({ teams, claims, players }, memoryConsolidationConsent),
     );
     const runtime = new KookApplicationRuntime({
       pool, botAccountId: botId, token, handler,

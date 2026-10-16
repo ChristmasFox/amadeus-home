@@ -28,6 +28,7 @@ import { sanitizeKookMentionMarkup } from '../channels/kook/trusted-group-event.
 import { buildPublicAgentFacts } from './public-agent-facts.js';
 import type { MemoryRetriever } from './gate-memory-retriever.js';
 import type { GateMemoryWriteCoordinator } from './gate-memory-writer.js';
+import type { GateMemoryConsolidationConsentService } from './gate-memory-consolidation.js';
 
 type PublicQueryIntent =
   | { kind: 'team_stats'; period: 'today' | 'yesterday' }
@@ -50,6 +51,7 @@ export interface KookPublicQueryServices {
   onAgentDiagnostic?: (event: KookAgentDiagnostic) => void;
   memoryRetriever?: MemoryRetriever;
   memoryWriter?: GateMemoryWriteCoordinator;
+  memoryConsolidationConsent?: GateMemoryConsolidationConsentService;
   executor?: QueryPlanExecutor;
   now?: () => Date;
 }
@@ -283,6 +285,9 @@ async function naturalLanguageReply(
   const fallbackText = '我这边刚遇到一点技术问题，暂时没能给出可靠回复。你可以稍后再问一次。';
   const requestKey = createHash('sha256').update(`${job.botAccountId}\0${job.eventId}`).digest('hex').slice(0, 16);
   const channelId = job.request.kind === 'group' ? job.request.event.channelId : undefined;
+  if (job.request.kind === 'direct' && services.memoryConsolidationConsent) {
+    await services.memoryConsolidationConsent.admitCurrentMessage(job).catch(() => 0);
+  }
   if (!configured) {
     await services.authorizer.recordAgentRun(job, {
       modelId: null, outcome: 'model_unconfigured', failureCode: 'agent_model_unconfigured',

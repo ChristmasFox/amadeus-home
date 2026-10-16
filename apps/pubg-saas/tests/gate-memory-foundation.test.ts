@@ -152,7 +152,10 @@ test('real KOOK lease and scoped SQL guard isolate live DM and bound channel mem
     assert.equal(noVectorSearch.mode, 'lexical_only');
     assert.equal(noVectorSearch.reason, 'vector_index_unavailable');
     assert.equal(embeddingCalls, 0, 'standard PostgreSQL never sends a paid embedding request without the optional vector index');
-    assert.equal(await new GateMemoryIndexWorker(pool, null).processOne(), 'semantic_unconfigured');
+    const unconfiguredWorker = new GateMemoryIndexWorker(pool, null);
+    assert.equal(await unconfiguredWorker.processOne(), 'deleted',
+      'tombstone work is processed before optional embedding jobs, even without a provider');
+    assert.equal(await unconfiguredWorker.processOne(), 'semantic_unconfigured');
     const queuedChanges = await pool.query(
       `SELECT memory.memory_key,job.source_revision,job.operation FROM gate_memory_embedding_jobs job
        JOIN gate_memory_entries memory ON memory.memory_id=job.memory_id

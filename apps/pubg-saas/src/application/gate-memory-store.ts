@@ -46,6 +46,10 @@ const FILTER = `bot_account_id=$1 AND scope_kind=$2 AND actor_id=$3 AND
   channel_id=$4 AND tenant_id=$5 AND team_id=$6 AND binding_revision=$7`;
 const EMBEDDING_MEMORY_FILTER = `memory.bot_account_id=$1 AND memory.scope_kind=$2 AND memory.actor_id=$3 AND
   memory.channel_id=$4 AND memory.tenant_id=$5 AND memory.team_id=$6 AND memory.binding_revision=$7`;
+const enqueueUpserts = (source: 'updated') => `INSERT INTO gate_memory_embedding_jobs(memory_id,source_revision,operation,index_version)
+  SELECT ${source}.memory_id,${source}.revision,'upsert',generation.index_version FROM ${source}
+  CROSS JOIN LATERAL gate_memory_index_job_versions(${source}.bot_account_id) generation
+  ON CONFLICT DO NOTHING RETURNING job_id`;
 
 export interface GateMemorySearchResult {
   entries: GateMemoryEntry[];
@@ -371,7 +375,11 @@ export class GateMemoryStore {
         AND embedded.bot_account_id=$1 AND embedded.scope_kind=$2 AND embedded.actor_id=$3
         AND embedded.channel_id=$4 AND embedded.tenant_id=$5 AND embedded.team_id=$6
         AND embedded.binding_revision=$7::BIGINT AND embedded.provider_id=$10 AND embedded.model_id=$11
-        AND embedded.dimensions=$12 AND embedded.index_version=$13 AND embedded.normalization='l2_unit'`
+        AND embedded.dimensions=$12 AND embedded.index_version=$13 AND embedded.normalization='l2_unit'
+        AND EXISTS (SELECT 1 FROM gate_memory_index_generation_state generation
+          WHERE generation.bot_account_id=$1 AND generation.active_provider_id=$10
+            AND generation.active_model_id=$11 AND generation.active_dimensions=$12
+            AND generation.active_index_version=$13)`
       + liveFence(14, 15) + `
       ORDER BY embedded.embedding <=> $9::vector,memory.updated_at DESC,memory.memory_key LIMIT $8`;
     const client = await this.pool.connect();
@@ -412,6 +420,20 @@ export class GateMemoryStore {
       if (available.rows[0]?.available !== true) return { matches: [], reason: 'vector_index_unavailable' };
     } catch {
       return { matches: [], reason: 'vector_index_unavailable' };
+    }
+
+    try {
+      const active = await this.pool.query<{ active: boolean }>(
+        `SELECT EXISTS (SELECT 1 FROM gate_memory_index_generation_state generation
+         WHERE generation.bot_account_id=$1 AND generation.active_provider_id=$2
+           AND generation.active_model_id=$3 AND generation.active_dimensions=$4
+           AND generation.active_index_version=$5) AS active`,
+        [String(scope[0]), provider.contract.providerId, provider.contract.modelId,
+          provider.contract.dimensions, provider.contract.indexVersion],
+      );
+      if (active.rows[0]?.active !== true) return { matches: [], reason: 'semantic_unavailable' };
+    } catch {
+      return { matches: [], reason: 'semantic_unavailable' };
     }
 
     const estimatedTokens = estimateGateEmbeddingTokens([search]);
@@ -485,10 +507,12 @@ export class GateMemoryStore {
         (bot_account_id,scope_kind,actor_id,channel_id,tenant_id,team_id,binding_revision,memory_key,content,source_event_id,
          source_kind,source_reliability,valid_until)
         SELECT $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13 FROM allowed
-        ON CONFLICT DO NOTHING RETURNING memory_id
+        ON CONFLICT DO NOTHING RETURNING memory_id,bot_account_id
       ), queued AS (
-        INSERT INTO gate_memory_embedding_jobs(memory_id,source_revision,operation)
-        SELECT memory_id,1,'upsert' FROM inserted ON CONFLICT DO NOTHING RETURNING job_id
+        INSERT INTO gate_memory_embedding_jobs(memory_id,source_revision,operation,index_version)
+        SELECT inserted.memory_id,1,'upsert',generation.index_version FROM inserted
+        CROSS JOIN LATERAL gate_memory_index_job_versions(inserted.bot_account_id) generation
+        ON CONFLICT DO NOTHING RETURNING job_id
       )
       SELECT EXISTS(SELECT 1 FROM allowed) AS allowed,
              EXISTS(SELECT 1 FROM inserted) AS inserted,
@@ -509,10 +533,9 @@ export class GateMemoryStore {
       UPDATE gate_memory_entries SET content=$9,source_event_id=$10,source_kind=$11,source_reliability=$12,
         valid_until=$13,revision=revision+1,updated_at=now() WHERE `
       + FILTER + ' AND memory_key=$8 AND revision=$14 AND revoked_at IS NULL' + liveFence(10, 15) + `
-      RETURNING memory_id,revision
+      RETURNING memory_id,revision,bot_account_id
     ), queued AS (
-      INSERT INTO gate_memory_embedding_jobs(memory_id,source_revision,operation)
-      SELECT memory_id,revision,'upsert' FROM updated ON CONFLICT DO NOTHING RETURNING job_id
+      ${enqueueUpserts('updated')}
     ) SELECT EXISTS(SELECT 1 FROM updated) AS updated,EXISTS(SELECT 1 FROM queued) AS queued`;
     const result = await this.pool.query(sql, [...scope, value.key, value.content,
       boundedText(job.eventId, 256), source.sourceKind, source.sourceReliability, source.validUntil,
@@ -537,9 +560,8 @@ export class GateMemoryStore {
         WHERE ingress.bot_account_id=$1 AND ingress.event_id=$10 AND ingress.lease_token=$15
           AND ingress.status='processing' AND ingress.lease_until>now()
           AND ingress.expires_at>now()
-      )` + liveFence(10, 15) + ` RETURNING memory_id,revision), queued AS (
-        INSERT INTO gate_memory_embedding_jobs(memory_id,source_revision,operation)
-        SELECT memory_id,revision,'upsert' FROM updated ON CONFLICT DO NOTHING RETURNING job_id
+      )` + liveFence(10, 15) + ` RETURNING memory_id,revision,bot_account_id), queued AS (
+      ${enqueueUpserts('updated')}
       ) SELECT EXISTS(SELECT 1 FROM updated) AS updated,EXISTS(SELECT 1 FROM queued) AS queued`;
     const result = await this.pool.query(sql, [...scope, value.key, value.content,
       boundedText(job.eventId, 256), source.sourceKind, source.sourceReliability, source.validUntil,

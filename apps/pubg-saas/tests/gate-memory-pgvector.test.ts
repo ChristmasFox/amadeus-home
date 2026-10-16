@@ -8,6 +8,7 @@ import { MockLanguageModelV4 } from 'ai/test';
 import {
   AccountClaimService,
   GateMemoryIndexWorker,
+  GateMemoryIndexGenerationManager,
   MemoryRetriever,
   GateMemoryStore,
   KookIngressQueue,
@@ -26,7 +27,7 @@ if (enabled && (!databaseUrl || !containerId)) {
   throw new Error('gate_memory_pgvector_fixture_configuration_required');
 }
 
-function makeFixtureProvider(indexVersion = 1): GateMemoryEmbeddingClient & { calls: () => number } {
+function makeFixtureProvider(indexVersion = 1, dailyRequestBudget = 10): GateMemoryEmbeddingClient & { calls: () => number } {
   const contract = {
     providerId: 'gate-openai-compatible' as const,
     modelId: 'fixture-memory-v1',
@@ -38,7 +39,7 @@ function makeFixtureProvider(indexVersion = 1): GateMemoryEmbeddingClient & { ca
   return {
     contract,
     dailyTokenBudget: 10_000,
-    dailyRequestBudget: 10,
+    dailyRequestBudget,
     calls: () => calls,
     async embedMany(values) {
       calls += 1;
@@ -253,6 +254,7 @@ test('optional pgvector migration, exact scoped recall, budgets, deletion and re
     const otherJob = await startDirect('other-' + suffix, '记住另一位玩家的偏好');
     assert.equal(await memory.create(otherJob, { key: 'unrelated_note', content: '另一位玩家的独立记忆' }), 'created');
     assert.equal(await worker.processOne(), 'indexed');
+    await queue.complete(otherJob, null);
 
     const timeoutProvider: GateMemoryEmbeddingClient = {
       ...provider,
@@ -265,14 +267,96 @@ test('optional pgvector migration, exact scoped recall, budgets, deletion and re
 
     const nextGeneration = await memory.searchWithFallback(
       ownerJob, 'which battleground suits me', makeFixtureProvider(2));
-    assert.equal(nextGeneration.mode, 'semantic');
+    assert.equal(nextGeneration.mode, 'lexical_only');
+    assert.equal(nextGeneration.reason, 'semantic_unavailable', 'only the persisted active index contract can be queried');
     assert.deepEqual(nextGeneration.entries, [], 'a new index generation never reuses old-version vectors');
     const scoped = await memory.searchWithFallback(ownerJob, 'which battleground suits me', provider);
     assert.equal(scoped.mode, 'semantic');
     assert.deepEqual(scoped.entries.map(entry => entry.key), ['favorite_map']);
 
-    const memoryRetriever = new MemoryRetriever(memory, provider);
+    const generationManager = new GateMemoryIndexGenerationManager(memoryPool);
+    const shadowProvider = makeFixtureProvider(2, 13);
+    await generationManager.beginShadowReindex(bot, shadowProvider.contract);
+    const incrementalJob = await startDirect('other-' + suffix, '更正我常用的武器偏好');
+    assert.equal(await memory.revise(incrementalJob,
+      { key: 'unrelated_note', content: '更正后的独立用户偏好' }, 1), true);
+    const incrementalVersions = await memoryPool.query<{ index_version: number }>(
+      `SELECT index_version FROM gate_memory_embedding_jobs
+       WHERE memory_id=(SELECT memory_id FROM gate_memory_entries WHERE bot_account_id=$1 AND actor_id=$2 AND memory_key='unrelated_note')
+         AND source_revision=2 AND operation='upsert' ORDER BY index_version`, [bot, 'other-' + suffix],
+    );
+    assert.deepEqual(incrementalVersions.rows.map(row => row.index_version), [1, 2],
+      'mutations during a shadow build enqueue both active and building generations');
+    await queue.complete(incrementalJob, null);
+    const firstPage = await generationManager.scanNextPage(bot, 1);
+    assert.equal(firstPage.scanned, 1);
+    assert.equal(firstPage.complete, false);
+    const secondPageBeforeCrash = await generationManager.scanNextPage(bot, 1);
+    assert.equal(secondPageBeforeCrash.scanned, 1);
+    const firstShadowVector = await new GateMemoryIndexWorker(memoryPool, shadowProvider).processOne();
+    assert.equal(firstShadowVector, 'indexed');
+    const crashedJob = await memoryPool.query(
+      `UPDATE gate_memory_embedding_jobs SET status='processing',lease_token=gen_random_uuid(),
+         lease_until=now()-interval '1 second',updated_at=now()
+       WHERE job_id=(SELECT job.job_id FROM gate_memory_embedding_jobs job
+         JOIN gate_memory_entries memory USING (memory_id)
+         WHERE memory.bot_account_id=$1 AND job.index_version=2 AND job.operation='upsert'
+           AND job.status='pending' ORDER BY job.created_at,job.job_id LIMIT 1)
+       RETURNING job_id`, [bot],
+    );
+    assert.equal(crashedJob.rowCount, 1, 'the remaining shadow job is left under an expired worker lease');
+    await generationManager.pause(bot);
+    await assert.rejects(generationManager.scanNextPage(bot, 1), /generation_paused/u);
+    const recoveredManager = new GateMemoryIndexGenerationManager(memoryPool);
+    const requeuedJobs = await recoveredManager.resume(bot);
+    assert.equal(requeuedJobs, 0, 'resume preserves the durable expired lease for normal worker recovery');
+    let scanPage = await recoveredManager.scanNextPage(bot, 1);
+    while (!scanPage.complete) {
+      scanPage = await recoveredManager.scanNextPage(bot, 1);
+    }
+    await assert.rejects(generationManager.activate(bot), /has_missing_vectors/u,
+      'activation cannot proceed until every current memory has its shadow vector');
+    assert.equal(await worker.processOne(), 'indexed', 'the active generation catches up to concurrent mutations too');
+    let shadowResult: string;
+    do {
+      shadowResult = await new GateMemoryIndexWorker(memoryPool, shadowProvider).processOne();
+    } while (shadowResult === 'indexed' || shadowResult === 'obsolete');
+    await generationManager.activate(bot);
+    const activeGeneration = await generationManager.status(bot);
+    assert.equal(activeGeneration?.active_index_version, 2);
+    const activeShadowRecall = await memory.searchWithFallback(ownerJob,
+      'which battleground suits me', shadowProvider);
+    assert.equal(activeShadowRecall.mode, 'semantic');
+    assert.deepEqual(activeShadowRecall.entries.map(entry => entry.key), ['favorite_map']);
     await queue.complete(ownerJob, null);
+
+    const cancelledProvider = makeFixtureProvider(3);
+    await generationManager.beginShadowReindex(bot, cancelledProvider.contract);
+    assert.equal((await generationManager.scanNextPage(bot, 1)).queued, 1);
+    await generationManager.markFailed(bot, 'synthetic_worker_interruption');
+    assert.equal((await generationManager.status(bot))?.last_error_code, 'synthetic_worker_interruption');
+    assert.equal(await new GateMemoryIndexWorker(memoryPool, cancelledProvider).processOne(), 'empty',
+      'failed generations stop new shadow work until explicitly resumed');
+    await generationManager.resume(bot);
+    assert.equal((await generationManager.status(bot))?.reindex_status, 'building');
+    assert.equal(await generationManager.cancel(bot), true);
+    assert.equal((await generationManager.status(bot))?.reindex_status, 'idle');
+    assert.equal(await new GateMemoryIndexWorker(memoryPool, cancelledProvider).processOne(), 'empty',
+      'cancelled generation work cannot be claimed or written');
+    await assert.rejects(generationManager.beginShadowReindex(bot, cancelledProvider.contract), /not_monotonic/u,
+      'cancelled generation numbers cannot be reused after restart');
+
+    const tombstoneJob = await startDirect('owner-' + suffix, '请删除刚才写入的临时记忆');
+    assert.equal(await memory.create(tombstoneJob,
+      { key: 'temporary_note', content: 'temporary shadow generation fact' }), 'created');
+    assert.equal(await memory.forget(tombstoneJob, 'temporary_note'), true);
+    assert.equal(await new GateMemoryIndexWorker(memoryPool, shadowProvider).processOne(), 'deleted',
+      'tombstone delete jobs take priority over queued upserts');
+    assert.equal(await new GateMemoryIndexWorker(memoryPool, shadowProvider).processOne(), 'obsolete',
+      'a queued stale upsert cannot resurrect a tombstoned memory');
+    await queue.complete(tombstoneJob, null);
+
+    const memoryRetriever = new MemoryRetriever(memory, shadowProvider);
     const paraphraseJob = await startDirect('owner-' + suffix, 'where do I usually land?');
     const capturedPrompts: unknown[] = [];
     const syntheticAgent = new MockLanguageModelV4({ doGenerate: async input => {
@@ -315,14 +399,14 @@ test('optional pgvector migration, exact scoped recall, budgets, deletion and re
     assert.ok(archive.byteLength > 0);
 
     assert.equal(await memory.forget(paraphraseJob, 'favorite_map'), true);
-    const revokedRecall = await memoryRetriever.retrieve(paraphraseJob, 'which battleground suits me');
-    assert.equal(revokedRecall.context, null, 'revoked facts never enter the Agent context');
-    const revoked = await memory.searchWithFallback(paraphraseJob, 'which battleground suits me', provider);
+    const revoked = await memory.searchWithFallback(paraphraseJob, 'which battleground suits me', shadowProvider);
     assert.equal(revoked.mode, 'semantic');
     assert.deepEqual(revoked.entries, [], 'revocation excludes recall before the delete worker runs');
-    assert.equal(await memory.searchWithFallback(paraphraseJob, 'which battleground suits me', provider)
+    const revokedRecall = await memoryRetriever.retrieve(paraphraseJob, 'which battleground suits me');
+    assert.equal(revokedRecall.context, null, 'revoked facts never enter the Agent context');
+    assert.equal(await memory.searchWithFallback(paraphraseJob, 'which battleground suits me', shadowProvider)
       .then(result => result.reason), 'embedding_budget_exhausted');
-    assert.equal(provider.calls(), 8, 'daily request budget prevents another provider call');
+    assert.equal(shadowProvider.calls(), 6, 'daily request budget prevents another provider call');
     await queue.complete(paraphraseJob, reply ?? null);
     assert.equal(await worker.processOne(), 'deleted');
     const remaining = await memoryPool.query(
@@ -339,7 +423,7 @@ test('optional pgvector migration, exact scoped recall, budgets, deletion and re
     const restored = await admin.query<{ count: number }>(
       `SELECT COUNT(*)::INTEGER AS count FROM "${schema}".gate_memory_embeddings`,
     );
-    assert.equal(restored.rows[0]?.count, 2);
+    assert.equal(restored.rows[0]?.count, 4);
     const restoredFact = await admin.query<{ content: string }>(
       `SELECT content FROM "${schema}".gate_memory_entries WHERE bot_account_id=$1 AND memory_key='favorite_map'`, [bot],
     );
