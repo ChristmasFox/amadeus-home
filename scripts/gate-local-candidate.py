@@ -304,9 +304,7 @@ def restore_encrypted_database_backup(
 ) -> None:
     """Restore a verified encrypted checkpoint atomically without a plaintext file."""
     restore_shell = (
-        'export PGPASSWORD="$(cat /run/secrets/pubg_postgres_superuser_password)"; '
-        "exec pg_restore --single-transaction --clean --if-exists --no-owner --no-acl "
-        "-U pubg_bootstrap -d pubg_saas"
+        full_database_restore_shell()
     )
     target = ["orb", "-m", machine, "-u", "root", *compose_base(machine, layout),
               "exec", "--no-TTY", "postgres", "sh", "-c", restore_shell]
@@ -384,7 +382,14 @@ os.replace(t,p)
 def full_database_dump_shell() -> str:
     return (
         'export PGPASSWORD="$(cat /run/secrets/pubg_backup_password)"; '
-        "exec pg_dump -Fc --no-owner --no-acl -U pubg_backup -d pubg_saas"
+        "exec pg_dump -Fc -U pubg_backup -d pubg_saas"
+    )
+
+
+def full_database_restore_shell() -> str:
+    return (
+        'export PGPASSWORD="$(cat /run/secrets/pubg_postgres_superuser_password)"; '
+        "exec pg_restore --single-transaction --clean --if-exists -U pubg_bootstrap -d pubg_saas"
     )
 
 
