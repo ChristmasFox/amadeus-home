@@ -1,5 +1,34 @@
 # Project State — 2026-10-16
 
+## 2026-10-16T18:39+08:00 — Gate 9router 0.5.104 live
+
+PR #11 was rebased onto `8a731d9`, all seven GitHub checks passed, and merge
+commit `da39ff1767b6d2880a1acfc9fe78e11405461cad` was pulled to local `main`
+before building. Only the separate Gate `pubg-saas-9router` service on
+`pubg-saas-m2-clean` / Compose project `9router` was switched. It runs
+`local/9router-saas:git-da39ff1767b6d2880a1acfc9fe78e11405461cad`, image ID
+`sha256:2fbdfa2596fe655071d10f5e3252be88d0e10ba2a4ab28329a99decab91d4d02`,
+with OCI revision equal to the merge SHA and package version 0.5.104. The
+diagnostics and Combo safety patches were adapted to 0.5.104; the account
+policy, Gemini region fallback, TTS style, ASR/TTS bridges, and launcher remain
+in the image.
+
+Container health is `healthy`; the main API, ASR, and TTS health endpoints
+returned HTTP 200. SQLite `quick_check` returned `ok`. The persisted
+`arthur-combo` still places Gemini first, the authenticated minimal model
+request succeeded with HTTP 200 through `egress-proxy:8080`, and Gate Worker
+retrieved the authenticated 9router models list successfully. Gate Gateway,
+Worker, and egress-proxy stayed healthy on their existing 7208429 image; no
+Gate application image, Lab service, M2 state, or memory setting was changed.
+
+The fresh full-state backup is
+`/Volumes/Avalon/backups/operation-skuld/9router/gate-local-0.5.104-preupgrade-20261016T103944Z/pubg-saas-9router-full.tar.gz.age`
+with SHA-256
+`c37d4bab54a42f0b278fddb0969207725b0aad243013092090518c94f633e9a4`.
+The previous image `local/9router-saas:from-83bb76b-20261014` remains available
+for rollback. Detailed backup and recovery evidence is in
+`.agent/checkpoints/2026-10-16-gate-9router-0.5.104-upgrade.md`.
+
 ## 2026-10-16T17:31+08:00 — Gate-Local 7208429 candidate live
 
 Gate-Local on OrbStack `pubg-saas-m2-clean`, Compose project

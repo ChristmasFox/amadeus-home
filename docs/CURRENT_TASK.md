@@ -4,6 +4,20 @@ Date: 2026-10-16 (Asia/Shanghai).
 
 Active Goal: `docs/LAB_MEMORY_AND_DUAL_RELEASE_ENGINEERING_GOAL.md`.
 
+## 2026-10-16T18:39+08:00 — Gate 9router 0.5.104 live
+
+PR #11 was rebased onto `8a731d9`, passed all seven GitHub checks, and merged
+as `da39ff1767b6d2880a1acfc9fe78e11405461cad`. Only Gate's standalone
+`pubg-saas-9router` service was switched to
+`local/9router-saas:git-da39ff1767b6d2880a1acfc9fe78e11405461cad` (9router
+0.5.104, image ID `sha256:2fbdfa2596fe655071d10f5e3252be88d0e10ba2a4ab28329a99decab91d4d02`).
+It is healthy; API, ASR, and TTS health endpoints returned 200. `arthur-combo`
+still has Gemini first, a minimal request returned 200 through the configured
+egress proxy, and the Gate Worker can reach the authenticated 9router models
+API. Gate Gateway/Worker/egress-proxy remain on 7208429; Lab and M2 were not
+touched. The fresh encrypted full-state backup, checksum, and rollback command
+are recorded in `.agent/checkpoints/2026-10-16-gate-9router-0.5.104-upgrade.md`.
+
 ## 2026-10-16T17:31+08:00 — Gate-Local 7208429 candidate live
 
 Arthur authorized the PR #9 simplified Gate-Local candidate flow for
