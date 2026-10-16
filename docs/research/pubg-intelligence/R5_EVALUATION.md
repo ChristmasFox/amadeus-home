@@ -31,7 +31,7 @@ No SQL migration or additional service was added: the current Gate sync already 
 - `pnpm check:architecture`, `pnpm check:secrets`, and `git diff --check` — passed.
 - `pnpm install --lockfile-only` — passed.
 - Gate OCI image package check: `docker build --platform linux/arm64 ...` passed; importing `@agent/pubg-intelligence/gate` from the built runtime image confirmed API `1.0.0` loads without `node:sqlite`.
-- Gate autopilot safety suite: 36 tests passed, including the explicit full-database-backup selector and preserved default code-only behavior; Python compile, architecture check, secrets scan, and diff checks passed. Final R5 CI must re-run after this deployment-tool change.
+- Gate autopilot safety suite: 36 tests passed, including the explicit full-database-backup selector and preserved default code-only behavior; Python compile, architecture check, secrets scan, and diff checks passed. GitHub Actions for source `ce6553203d680f606d0a7e42bc2743acbcb81203` passed all six checks, including the isolated PostgreSQL suite, pgvector fixture, and amd64/arm64 OCI build.
 
 Local tests verify default-off and exact-tenant canary selection, no reads for a non-canary tenant, the typed AI SDK tool loop, response rendering through the KOOK adapter, bounded PostgreSQL adapter calls, stale/partial states, compact-facts validation, out-of-roster rejection, and evidence alias stability. The existing PostgreSQL repository integration test now checks that Tenant A cannot read Tenant B's match-scoped feature record; the KOOK integration test exercises the canary tool against a real disposable Gate PostgreSQL fixture when the CI database is available.
 
