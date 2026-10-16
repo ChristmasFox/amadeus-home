@@ -205,24 +205,53 @@ export class PublicQueryAuthorizer {
     } finally { client.release(); }
   }
 
-  /** Resolve memory scope from the active durable KOOK ingress lease. In a
-   * bound channel, authorize() also checks current membership and binding
-   * generation. Never trust a model-supplied tenant or scope identifier. */
+  /** Pure read-only memory admission: no session creation, lease renewal,
+   * advisory lock, FOR UPDATE or database write. On a channel the final
+   * statement rechecks the current live binding and ingress lease, after a
+   * fresh KOOK membership check. The returned revision is read from the
+   * database, never copied from the caller's job. */
   async resolveMemoryScope(jobInput: KookIngressJob): Promise<GateMemoryScope | null> {
     const job = await this.storedJob(this.pool, jobInput);
     if (job.request.kind === 'direct') {
+      // KOOK DM sender was verified at durable ingress; no implicit team
+      // membership or access to shared group memories is granted.
       return { kind: 'dm', botAccountId: this.botId, actorId: job.request.event.userId };
     }
-    if (job.request.kind !== 'group' || !job.boundTeam || job.bindingRevision === null) return null;
-    const authorization = await this.authorize(jobInput);
-    if (authorization.kind !== 'authorized') return null;
-    return {
-      kind: 'channel', botAccountId: this.botId,
-      channelId: authorization.query.conversation.channelId,
-      tenantId: authorization.query.teamContext.tenantId,
-      teamId: authorization.query.teamContext.team.id,
-      bindingRevision: job.bindingRevision,
-    };
+    const bound = job.boundTeam;
+    if (job.request.kind !== 'group' || !bound ||
+        job.bindingRevision === null || !/^[1-9][0-9]{0,17}$/u.test(job.bindingRevision)) return null;
+    const event = job.request.event;
+    const verifyBinding = async () => this.pool.query(
+      `SELECT tenant.tenant_id,binding.team_id,tenant.guild_id,version.revision
+       FROM tenants tenant
+       JOIN channel_bindings binding ON binding.tenant_id=tenant.tenant_id
+         AND binding.platform=tenant.platform AND binding.bot_account_id=tenant.bot_account_id
+       JOIN channel_binding_versions version ON version.bot_account_id=binding.bot_account_id
+         AND version.channel_id=binding.channel_id
+       JOIN kook_ingress_events ingress ON ingress.bot_account_id=tenant.bot_account_id
+         AND ingress.event_id=$5 AND ingress.lease_token=$6
+         AND ingress.status='processing' AND ingress.lease_until>now() AND ingress.expires_at>now()
+       WHERE tenant.platform='kook' AND tenant.bot_account_id=$1 AND tenant.guild_id=$2
+         AND binding.channel_id=$3 AND tenant.tenant_id=$4 AND binding.team_id=$7
+         AND version.revision=$8::BIGINT
+         AND ingress.event_kind='group' AND ingress.user_id=$9
+         AND ingress.guild_id=$2 AND ingress.channel_id=$3
+         AND ingress.tenant_id=$4 AND ingress.team_id=$7
+         AND ingress.binding_revision=$8::BIGINT
+       LIMIT 2`,
+      [this.botId, event.guildId, event.channelId, bound.tenantId,
+        job.eventId, job.leaseToken, bound.teamId, job.bindingRevision, event.userId],
+    );
+    const before = await verifyBinding();
+    if (before.rowCount !== 1) return null;
+    const allowed = await this.permissions.isTextChannelMember(event.guildId, event.channelId, event.userId);
+    if (!allowed) return null;
+    const after = await verifyBinding();
+    if (after.rowCount !== 1) return null;
+    const live = after.rows[0]!;
+    return { kind: 'channel', botAccountId: this.botId,
+      channelId: event.channelId, tenantId: String(live.tenant_id),
+      teamId: String(live.team_id), bindingRevision: String(live.revision) };
   }
 
   /** Returns the retained, speaker-labeled history from this trusted channel/DM.
