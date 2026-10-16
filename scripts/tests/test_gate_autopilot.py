@@ -238,6 +238,24 @@ class GateAutopilotContracts(unittest.TestCase):
             with self.subTest(changed=changed), self.assertRaises(candidate.OperatorAuthorizationRequired):
                 candidate.reviewed_egress_drift({"knownRuntimeDrift": changed})
 
+    def test_portable_image_identity_ignores_docker_id_normalization_but_binds_full_config_and_layers(self):
+        host = {
+            "Id": "sha256:" + "a" * 64,
+            "Os": "linux",
+            "Architecture": "arm64",
+            "Variant": "v8",
+            "Config": {"Env": ["NODE_ENV=production"], "Labels": {"revision": SHA}},
+            "RootFS": {"Layers": ["sha256:" + "b" * 64, "sha256:" + "c" * 64]},
+        }
+        imported = {**host, "Id": "sha256:" + "d" * 64}
+        self.assertEqual(candidate.portable_image_identity(host), candidate.portable_image_identity(imported))
+        changed_config = {**host, "Config": {**host["Config"], "Labels": {"revision": "e" * 40}}}
+        changed_layer = {**host, "RootFS": {"Layers": ["sha256:" + "f" * 64, "sha256:" + "c" * 64]}}
+        self.assertNotEqual(candidate.portable_image_identity(host), candidate.portable_image_identity(changed_config))
+        self.assertNotEqual(candidate.portable_image_identity(host), candidate.portable_image_identity(changed_layer))
+        with self.assertRaises(candidate.CandidateError):
+            candidate.portable_image_identity({**host, "Architecture": ""})
+
     def test_migration_inventory_excludes_only_the_optional_pgvector_file(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = pathlib.Path(temporary)

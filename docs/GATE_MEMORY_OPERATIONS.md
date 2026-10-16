@@ -100,8 +100,11 @@ secrets scan, requires a clean committed tree, checks that the target machine
 and Bot ID match, discovers the Compose project, working directory, and file
 from the active Gateway container labels, rejects ambiguous or untrusted
 layouts, duplicate Gateway/Worker processes, and runtime drift, builds a
-SHA-tagged immutable local image, and confirms its image ID
-after transfer. It writes a mode-`0700` external checkpoint containing the
+SHA-tagged immutable local image, and verifies the transferred image by its
+platform, complete image config, and every rootfs layer digest. The canonical
+content fingerprint tolerates Docker versions that normalize imported image
+IDs while still rejecting any config or layer mismatch; source and target
+daemon image IDs remain available as runtime evidence. It writes a mode-`0700` external checkpoint containing the
 prior Compose/env files and an encrypted full-database PostgreSQL custom dump
 (all schemas and data, without owner/ACL restoration). The candidate records
 encrypted size, SHA-256, and `pg_restore --list` entry count. It authenticates

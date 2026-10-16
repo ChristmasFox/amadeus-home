@@ -527,6 +527,35 @@ def parse_compose_ps(output: bytes) -> list[dict[str, Any]]:
     return rows
 
 
+def portable_image_identity(document: dict[str, Any]) -> str:
+    """Hash the complete image config and layer identity across Docker daemons.
+
+    Docker Engine versions can normalize an imported image's config JSON and
+    therefore assign a different local image ID even when the imported image
+    has the same platform, full config, and every rootfs layer digest.
+    """
+    config = document.get("Config")
+    rootfs = document.get("RootFS")
+    layers = rootfs.get("Layers") if isinstance(rootfs, dict) else None
+    os_name = document.get("Os")
+    architecture = document.get("Architecture")
+    if (not isinstance(config, dict) or not isinstance(layers, list)
+            or not layers or not all(isinstance(layer, str) and re.fullmatch(r"sha256:[0-9a-f]{64}", layer)
+                                     for layer in layers)
+            or not isinstance(os_name, str) or not os_name
+            or not isinstance(architecture, str) or not architecture):
+        raise CandidateError("immutable_candidate_digest_invalid")
+    identity = {
+        "os": os_name,
+        "architecture": architecture,
+        "variant": document.get("Variant"),
+        "config": config,
+        "rootfsLayers": layers,
+    }
+    canonical = json.dumps(identity, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    return "sha256:" + hashlib.sha256(canonical).hexdigest()
+
+
 def runtime_facts(machine: str, policy: dict[str, Any], sha: str,
                   paths: list[str], *, reviewed_migration_authorization: bool = False,
                   known_egress_drift: dict[str, str] | None = None) -> tuple[dict[str, Any], str, str, dict[str, str]]:
@@ -752,7 +781,11 @@ def gate_apply(approval_ref: str, *, allow_reviewed_control_plane: bool = False,
                      "--build-arg", f"OCI_PRODUCT_VERSION={version}", "--build-arg",
                      f"OCI_BUILD_TIMESTAMP={build_time}", "-f", "apps/pubg-saas/Dockerfile", "-t", image, "."],
                     timeout=1800)
-            digest = text(["docker", "image", "inspect", "--format", "{{.Id}}", image])
+            try:
+                image_document = json.loads(text(["docker", "image", "inspect", "--format", "{{json .}}", image]))
+            except (CandidateError, json.JSONDecodeError) as error:
+                raise CandidateError("immutable_candidate_digest_invalid") from error
+            digest = portable_image_identity(image_document)
             if not re.fullmatch(r"sha256:[0-9a-f]{64}", digest):
                 raise CandidateError("immutable_candidate_digest_invalid")
             save = subprocess.Popen(["docker", "save", image], stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
@@ -774,8 +807,12 @@ def gate_apply(approval_ref: str, *, allow_reviewed_control_plane: bool = False,
             current_bot = read_remote_value(machine, layout["gatewayEnv"], "KOOK_BOT_ACCOUNT_ID")
             if current_bot != policy.get("botAccountId"):
                 raise CandidateError("target_bot_identity_changed")
-            candidate_id = remote_text(machine, "docker", "image", "inspect", "--format", "{{.Id}}", image)
-            if candidate_id != state.get("digest"):
+            try:
+                image_document = json.loads(remote_text(machine, "docker", "image", "inspect", "--format", "{{json .}}", image))
+            except (CandidateError, json.JSONDecodeError) as error:
+                raise CandidateError("candidate_image_digest_mismatch") from error
+            state["targetImageId"] = image_document.get("Id")
+            if portable_image_identity(image_document) != state.get("digest"):
                 raise CandidateError("candidate_image_digest_mismatch")
 
         def backup() -> dict[str, Any]:
@@ -961,7 +998,11 @@ def gate_apply(approval_ref: str, *, allow_reviewed_control_plane: bool = False,
             payload = {"schema": "gate-local-candidate-audit/v1", "observedAt": datetime.now(timezone.utc).isoformat(),
                        "sourceSha": sha, "approvalRef": approval_ref, "instanceId": policy.get("instanceId"),
                        "environment": "gate-local", "risk": risk, "runtimeChanges": state, "result": result}
-            with (checkpoint / "audit.json").open("w", encoding="utf-8") as output:
+            audit_path = checkpoint / "audit.json" if checkpoint.is_dir() else (
+                backup_root / f"gate-local-precheckpoint-failure-{created}-{sha[:12]}.json"
+            )
+            mode = "w" if checkpoint.is_dir() else "x"
+            with audit_path.open(mode, encoding="utf-8") as output:
                 os.fchmod(output.fileno(), 0o600)
                 json.dump(payload, output, ensure_ascii=False, sort_keys=True)
                 output.write("\n")
@@ -979,9 +1020,13 @@ def gate_apply(approval_ref: str, *, allow_reviewed_control_plane: bool = False,
                                          "audit": audit, "rollback": rollback})
         print("GATE_DEPLOYMENT=" + result["status"] + " source_candidate=" + sha[:12])
         print("GATE_DEPLOYMENT_REASON=" + result["reason"])
+        if result.get("failedStep"):
+            print("GATE_DEPLOYMENT_FAILED_STEP=" + str(result["failedStep"]))
         if result["status"] not in {"DEPLOYED_AND_NOTIFIED", "ALREADY_CURRENT"}:
             print("GATE_DEPLOYMENT_NEXT=" + recovery_step(result["reason"]))
-        print("GATE_CHECKPOINT=" + str(checkpoint))
+        print("GATE_CHECKPOINT=" + (str(checkpoint) if checkpoint.is_dir() else "not-created"))
+        if not checkpoint.is_dir():
+            print("GATE_AUDIT_PATH=" + str(backup_root / f"gate-local-precheckpoint-failure-{created}-{sha[:12]}.json"))
         if result.get("auditStatus") == "failed":
             print("GATE_AUDIT=FAILED manual evidence review required")
         return 0 if result["status"] in {"DEPLOYED_AND_NOTIFIED", "ALREADY_CURRENT"} else 2
