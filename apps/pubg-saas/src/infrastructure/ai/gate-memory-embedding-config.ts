@@ -74,15 +74,21 @@ function validBaseURL(value: string, allowedInternalHosts: readonly string[]): b
   }
 }
 
-/** Returns null unless the embedding feature has an explicit Gate-local enable flag. */
+/** Auto-enable when fully configured. Missing config means lexical fallback; =0 is a kill switch. */
 export function readGateMemoryEmbeddingConfig(env: NodeJS.ProcessEnv): GateMemoryEmbeddingConfig | null {
-  if (env.GATE_MEMORY_EMBEDDING_ENABLED === undefined || env.GATE_MEMORY_EMBEDDING_ENABLED.trim() === ''
-    || env.GATE_MEMORY_EMBEDDING_ENABLED === '0') return null;
-  if (env.GATE_MEMORY_EMBEDDING_ENABLED !== '1') throw new Error('gate_memory_embedding_config_invalid');
+  const enable = clean(env.GATE_MEMORY_EMBEDDING_ENABLED);
+  if (enable === '0') return null;
+  if (enable && enable !== '1') throw new Error('gate_memory_embedding_config_invalid');
   const baseURL = clean(env[keys.baseURL]);
   const modelId = clean(env[keys.modelId]);
   const apiKey = clean(env[keys.apiKey]);
-  if (!baseURL || !modelId || !apiKey || !clean(env[keys.dailyTokenBudget])) {
+  const dailyTokenBudget = clean(env[keys.dailyTokenBudget]);
+  // A stray secret alone is not configuration. Endpoint/model presence declares intent.
+  if (!baseURL && !modelId) {
+    if (enable === '1') throw new Error('gate_memory_embedding_config_incomplete');
+    return null;
+  }
+  if (!baseURL || !modelId || !apiKey || !dailyTokenBudget) {
     throw new Error('gate_memory_embedding_config_incomplete');
   }
   const allowedInternalHosts = parseAllowedInternalHosts(env[keys.internalHosts]);

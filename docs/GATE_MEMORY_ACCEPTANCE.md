@@ -14,15 +14,14 @@ clearance is reserved for a future formal Release.
 
 - Confirm the Gate-Local candidate SHA, Gate Bot account ID, and database
   target through the Gate operator's protected configuration.
-- Confirm memory read and write flags are enabled independently for the
-  acceptance window. Confirm embedding status separately; lexical fallback is
-  an acceptable explicit result when embeddings are unavailable.
+- Memory read, explicit write, and auto-learning are default-on capabilities. Confirm none of the
+  `GATE_MEMORY_*_ENABLED=0` kill switches are set for the acceptance window. Embedding is used
+  automatically when its dedicated configuration is complete; lexical fallback is the expected mode otherwise.
 - Use a consenting test account. Explain that Gate stores raw KOOK
   conversations and that memory deletion does not erase those transcripts or
   protected database backups.
-- Do not enable Light/REM consent or operator auto-learning unless the test is
-  specifically exercising that separate behavior. Never create a cron or
-  long-running consolidation worker for acceptance.
+- Light and REM are on by default for DM auto-learning and run through the bounded background scheduler.
+  Use `light/rem off` only when specifically testing opt-out behavior.
 
 ## Private-message checks
 
@@ -41,11 +40,9 @@ clearance is reserved for a future formal Release.
    list memories. Confirm the forgotten value is not returned.
 6. Repeat the same prompts from a second test user and, if available, a
    second test Bot. Confirm no first-user memory appears.
-7. Send `/pubg memory light status`, `/pubg memory light on`, and
-   `/pubg memory light off` in the test user's DM. Confirm consent status,
-   explicit operator gating, and revocation behavior. Repeat for REM only if
-   its low-frequency batch path has been separately approved. A group command
-   must not grant personal DM consent.
+7. Send `/pubg memory light status`, then `/pubg memory light off` and `on` in the test user's DM.
+   Confirm default-on status, opt-out, and re-enable behavior. Repeat for REM. Group traffic must never
+   enter a user's private memory-learning corpus.
 
 ## Group and history checks
 
@@ -77,13 +74,12 @@ into Git or a public issue.
 - A user can list, correct, or forget their own private memories in a DM.
   Group messages do not become private memories. Long-term memory cannot
   grant Bot, tenant, PUBG team, or channel permissions.
-- Light and REM are separate opt-ins. User consent alone does not enable
-  operator auto-learning; operator enablement alone does not replace personal
-  consent. Revoking consent invalidates queued admissions and unconfirmed
-  candidates. Consolidation candidates require the owner's confirmation
-  before becoming durable memory.
-- Read, write, auto-learning, and embedding have independent operator flags.
-  Every flag defaults off. A deploy does not enable them.
+- Light and REM are default-on personal memory-learning modes. Users can opt out independently with
+  `light/rem off`; disabling invalidates queued admissions. High-confidence, non-sensitive, source-backed
+  self facts are promoted automatically. Explicitly forgotten memories are never auto-resurrected.
+- Read, explicit write, and auto-learning default on. Their environment variables are emergency kill
+  switches when set to `0`. Embedding is capability-detected from complete dedicated configuration and
+  otherwise falls back to lexical recall.
 
 ## Evidence record
 

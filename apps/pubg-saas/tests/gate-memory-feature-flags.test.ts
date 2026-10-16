@@ -7,25 +7,23 @@ function env(values: NodeJS.ProcessEnv = {}): NodeJS.ProcessEnv {
   return { ...values };
 }
 
-test('Gate memory reads, writes, auto-learning and embeddings default off independently', () => {
+test('Gate memory reads, writes and auto-learning default on; embeddings capability-detect config', () => {
   assert.deepEqual(readGateMemoryFeatureFlags(env()), {
-    read: { enabled: false, status: 'disabled_missing' },
-    write: { enabled: false, status: 'disabled_missing' },
-    autoLearn: { enabled: false, status: 'disabled_missing', secondGate: 'per_user_consent' },
+    read: { enabled: true, status: 'enabled_default' },
+    write: { enabled: true, status: 'enabled_default' },
+    autoLearn: { enabled: true, status: 'enabled_default' },
   });
-  assert.equal(gateMemoryEmbeddingStatus(env(), readGateMemoryEmbeddingConfig), 'disabled_missing');
+  assert.equal(gateMemoryEmbeddingStatus(env(), readGateMemoryEmbeddingConfig), 'disabled_unconfigured');
 });
 
-test('operator flags do not enable sibling capabilities and require user consent for auto-learning', () => {
+test('operator flags are independent kill switches', () => {
   const flags = readGateMemoryFeatureFlags(env({
     GATE_MEMORY_READ_ENABLED: '1', GATE_MEMORY_WRITE_ENABLED: '0',
     GATE_MEMORY_AUTO_LEARN_ENABLED: '1',
   }));
   assert.equal(flags.read.status, 'enabled_by_operator');
   assert.equal(flags.write.status, 'disabled_by_operator');
-  assert.deepEqual(flags.autoLearn, {
-    enabled: true, status: 'enabled_by_operator', secondGate: 'per_user_consent',
-  });
+  assert.deepEqual(flags.autoLearn, { enabled: true, status: 'enabled_by_operator' });
 });
 
 test('invalid operator and embedding configuration reports misconfigured and fails closed', () => {
@@ -46,11 +44,12 @@ test('invalid operator and embedding configuration reports misconfigured and fai
 
 test('a complete embedding contract reports configured without returning secret values', () => {
   const config = env({
-    GATE_MEMORY_EMBEDDING_ENABLED: '1',
     GATE_MEMORY_EMBEDDING_BASE_URL: 'https://embedding.example.test/v1',
     GATE_MEMORY_EMBEDDING_MODEL_ID: 'fixture-memory-v1',
     GATE_MEMORY_EMBEDDING_API_KEY: 'fixture-only-key',
     GATE_MEMORY_EMBEDDING_DAILY_TOKEN_BUDGET: '1000',
   });
   assert.equal(gateMemoryEmbeddingStatus(config, readGateMemoryEmbeddingConfig), 'enabled_configured');
+  assert.equal(gateMemoryEmbeddingStatus({ ...config, GATE_MEMORY_EMBEDDING_ENABLED: '0' },
+    readGateMemoryEmbeddingConfig), 'disabled_by_operator');
 });

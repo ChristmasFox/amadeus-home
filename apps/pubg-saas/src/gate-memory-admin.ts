@@ -69,7 +69,7 @@ export async function gateMemoryAdminMain(args: string[], env: NodeJS.ProcessEnv
   printPlan(options);
   if (env.GATE_MEMORY_ADMIN_TARGET !== options.target) throw new Error('gate_memory_admin_target_mismatch');
   if (options.command !== 'status' && !options.apply) return;
-  if (options.command === 'work' && (!options.allowProviderRequests || env.GATE_MEMORY_EMBEDDING_ENABLED !== '1')) {
+  if (options.command === 'work' && !options.allowProviderRequests) {
     throw new Error('gate_memory_admin_provider_apply_requires_explicit_enable');
   }
   if (options.command !== 'work' && options.allowProviderRequests) throw new Error('gate_memory_admin_provider_flag_invalid');
