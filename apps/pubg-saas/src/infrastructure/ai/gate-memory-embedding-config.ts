@@ -83,7 +83,8 @@ export function readGateMemoryEmbeddingConfig(env: NodeJS.ProcessEnv): GateMemor
   const modelId = clean(env[keys.modelId]);
   const apiKey = clean(env[keys.apiKey]);
   const dailyTokenBudget = clean(env[keys.dailyTokenBudget]);
-  if (!baseURL && !modelId && !apiKey && !dailyTokenBudget) {
+  // A stray secret alone is not configuration. Endpoint/model presence declares intent.
+  if (!baseURL && !modelId) {
     if (enable === '1') throw new Error('gate_memory_embedding_config_incomplete');
     return null;
   }
