@@ -1,9 +1,8 @@
 #!/usr/bin/env python3
-"""Small, dependency-free Goal executor: state, affected validation and Lab candidate handoff.
+"""Small, dependency-free Goal executor: state, affected validation and candidate handoff.
 
-Never grants itself permission to deploy. An operator must enable a protected,
-repository-bound local approval once. All actual runtime changes still go
-through scripts/release-lab.sh and its immutable-image/backup/health gates.
+Gate-Local's protected host approval is repo-wide across linked worktrees.
+Runtime changes still go through the guarded release adapters.
 """
 from __future__ import annotations
 
@@ -267,9 +266,16 @@ def gate_auto_enable_document(environment: dict[str, str], lab_machine: str) -> 
     if notify_path.name in {"notify-owner.sh", "codex-notify.sh"}:
         raise ValueError("Gate-private notification hook must not use a Lab notification path")
     current = datetime.now(timezone.utc)
+    common_dir = subprocess.run(
+        ["git", "-C", str(ROOT), "rev-parse", "--path-format=absolute", "--git-common-dir"],
+        capture_output=True, text=True, check=False,
+    )
+    if common_dir.returncode != 0 or not common_dir.stdout.strip():
+        raise ValueError("Gate-Local repository identity is unavailable")
     return {
         "schema": GATE_APPROVAL_SCHEMA,
         "repository": str(ROOT.resolve()),
+        "repositoryCommonDir": str(pathlib.Path(common_dir.stdout.strip()).resolve()),
         "environment": "gate-local",
         "instanceId": instance_id,
         "botAccountId": bot_account_id,
@@ -278,7 +284,8 @@ def gate_auto_enable_document(environment: dict[str, str], lab_machine: str) -> 
         "ageRecipientsFile": str(recipients_path.resolve()),
         "ageIdentityFile": str(identity_path.resolve()),
         "notificationHook": str(notify_path.resolve()),
-        "riskCategories": ["reversible_app_candidate", "backward_compatible_schema"],
+        "riskCategories": ["reversible_app_candidate", "backward_compatible_schema",
+                           "destructive_schema_warning"],
         "approvedAt": current.isoformat(),
     }
 
@@ -292,7 +299,7 @@ def gate_auto_enable() -> None:
         write_gate_private_state(GATE_LOCAL_POLICY, ROOT, document)
     except (OSError, ValueError):
         die("could not create protected Gate-Local authorization state")
-    print("GATE_AUTO_ENABLED=true scope=gate-local risks=reversible_app_candidate,backward_compatible_schema")
+    print("GATE_AUTO_ENABLED=true scope=gate-local risks=reversible_app_candidate,backward_compatible_schema,destructive_schema_warning")
     print("GATE_AUTO_M2_CLEARANCE=not_required_for_local_candidates; formal_release_only")
 
 

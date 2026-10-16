@@ -69,8 +69,12 @@ class GateAutoAuthorizationCli(unittest.TestCase):
             policy = json.loads(policy_path.read_text(encoding="utf-8"))
             self.assertEqual(
                 policy["riskCategories"],
-                ["reversible_app_candidate", "backward_compatible_schema"],
+                ["reversible_app_candidate", "backward_compatible_schema", "destructive_schema_warning"],
             )
+            self.assertEqual(policy["repositoryCommonDir"],
+                             subprocess.run(["git", "-C", str(ROOT), "rev-parse", "--path-format=absolute",
+                                             "--git-common-dir"], check=True, capture_output=True,
+                                            text=True).stdout.strip())
             self.assertNotIn("expiresAt", policy)
             self.assertEqual(policy_path.stat().st_mode & 0o777, 0o600)
             self.assertEqual(policy_path.parent.stat().st_mode & 0o777, 0o700)

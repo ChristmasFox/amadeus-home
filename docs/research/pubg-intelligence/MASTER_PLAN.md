@@ -119,7 +119,7 @@ Tasks:
 Acceptance:
 - Tenant A cannot query tenant B's raw events or derived insight.
 - Existing stats, telemetry prefetch and bot conversations regression-tested.
-- Gate-Local canary before production; explicit manual approval and release checklist.
+- Gate-Local canary before any production decision; repo-wide standing Gate-Local authorization, verified PostgreSQL backup, red warning for destructive migrations, and automatic database/application rollback on failure. M2 remains PAUSED.
 - Measurable usefulness from actual squad testers, with opt-out and corrections.
 
 ## 4. Dependency / implementation order
