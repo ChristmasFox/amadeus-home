@@ -160,7 +160,7 @@ def changed_paths() -> list[str]:
     except CandidateError:
         output = command(["git", "-C", str(ROOT), "show", "--pretty=format:", "--name-only", "-z", "HEAD"])
     return sorted({item.decode("utf-8", errors="surrogateescape")
-                   for item in output.split(b"\\0") if item})
+                   for item in output.split(b"\0") if item})
 
 
 def candidate_migration_paths(active_sha: str, candidate_sha: str, phase_paths: list[str]) -> list[str]:
