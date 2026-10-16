@@ -32,6 +32,11 @@ IMAGE_RE = re.compile(r"local/pubg-saas:git-([0-9a-f]{40})\Z")
 COMPOSE_NAMES = {"compose.yaml", "compose.yml", "docker-compose.yaml", "docker-compose.yml"}
 MIGRATION_PREFIX = "apps/pubg-saas/src/infrastructure/postgres/migrations/"
 OPTIONAL_MIGRATION = "0025_gate_memory_pgvector.sql"
+HOMEBREW_LIBPQ_BIN_CANDIDATES = (
+    pathlib.Path("/opt/homebrew/opt/libpq/bin"),
+    pathlib.Path("/usr/local/opt/libpq/bin"),
+    pathlib.Path("/home/linuxbrew/.linuxbrew/opt/libpq/bin"),
+)
 
 class CandidateError(Exception):
     pass
@@ -124,6 +129,23 @@ def command(args: list[str], *, input_data: bytes | None = None, timeout: int = 
     if result.returncode:
         raise CandidateError("command_failed")
     return result.stdout
+
+
+def path_with_libpq_pg_restore(
+    path_value: str,
+    candidates: tuple[pathlib.Path, ...] = HOMEBREW_LIBPQ_BIN_CANDIDATES,
+) -> str:
+    """Add a keg-only Homebrew libpq bin directory when pg_restore is not on PATH."""
+    if shutil.which("pg_restore", path=path_value):
+        return path_value
+    entries = [entry for entry in path_value.split(os.pathsep) if entry]
+    for bin_dir in candidates:
+        executable = bin_dir / "pg_restore"
+        if executable.is_file() and os.access(executable, os.X_OK):
+            if str(bin_dir) not in entries:
+                entries.insert(0, str(bin_dir))
+            return os.pathsep.join(entries)
+    return path_value
 
 
 def text(args: list[str], *, timeout: int = 60) -> str:
@@ -562,6 +584,7 @@ def gate_apply(approval_ref: str) -> int:
     recipients = safe_external_file(policy.get("ageRecipientsFile"))
     identity = safe_external_file(policy.get("ageIdentityFile"), private=True)
     notify_hook = safe_external_file(policy.get("notificationHook"), executable=True)
+    os.environ["PATH"] = path_with_libpq_pg_restore(os.environ.get("PATH", ""))
     if shutil.which("docker") is None or shutil.which("age") is None or shutil.which("pg_restore") is None:
         raise CandidateError("candidate_host_tools_unavailable")
     paths = changed_paths()

@@ -4,6 +4,40 @@ Date: 2026-10-16 (Asia/Shanghai).
 
 Active Goal: `docs/LAB_MEMORY_AND_DUAL_RELEASE_ENGINEERING_GOAL.md`.
 
+## 2026-10-16T17:31+08:00 — Gate-Local 7208429 candidate live
+
+Arthur authorized the PR #9 simplified Gate-Local candidate flow for
+`7208429655ab953c0f5840d89838e7e508435ac8`. Its command
+`bash scripts/release-gate.sh candidate --apply --approval-ref arthur-20261016-gate-local-7208429`
+stopped before runtime changes with `candidate_host_tools_unavailable` because
+the Homebrew libpq bin directory was not on PATH. The authorized manual fallback built with the existing
+OrbStack Buildx builder and `apps/pubg-saas/Dockerfile`, ran the Compose
+migrator, then switched Gateway, Worker, and egress-proxy. Detailed evidence,
+the encrypted PG backup, and recovery notes are in
+`.agent/checkpoints/2026-10-16-gate-local-7208429-candidate-live.md`.
+
+Gate-Local is live on `pubg-saas-m2-clean` / `pubg-saas-public` at image
+`local/pubg-saas:git-7208429655ab953c0f5840d89838e7e508435ac8`
+(image ID `sha256:aa15e0fb7072f4d708f9e419eea2e253b62a8245d0ab7f8ccb550c6a04c0ab0d`).
+All three app containers and PostgreSQL are healthy; Gateway `/healthz` is 200,
+and no Gateway error-level logs were found in the post-deploy window. The
+migrator succeeded and `schema_migrations` matches the 28 IDs in the candidate
+runner through `0029_gate_memory_index_generations.sql`; optional pgvector
+`0025` remains absent. The encrypted pre-deploy PG dump is verified and its
+SHA-256 and rollback copies are recorded in the checkpoint. Gate memory flags
+remain unset/default-off. M2 remains PAUSED with no clearance created; Lab was
+not touched.
+
+## 2026-10-16T17:38+08:00 — Gate pg_restore PATH fix
+
+M204 already has Homebrew `libpq 18.6_1` and
+`/opt/homebrew/opt/libpq/bin/pg_restore` (PostgreSQL 18.6); `brew install
+libpq` confirmed it is current. `gate-local-candidate.py` now detects standard
+Homebrew libpq bin directories and adds the one containing `pg_restore` to its
+child-process PATH. Focused Gate autopilot tests pass (29), the installed
+path/version lookup passes, and `bash scripts/release-gate.sh candidate`
+reports `APPLY=not-requested`. No deployment/apply was run.
+
 ## 2026-10-16T00:16+08:00 — read-only confirmation after authorization correction
 
 Arthur's withdrawal of the previous Dreaming/config/restart authorization is

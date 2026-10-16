@@ -1,5 +1,39 @@
 # Project State — 2026-10-16
 
+## 2026-10-16T17:31+08:00 — Gate-Local 7208429 candidate live
+
+Gate-Local on OrbStack `pubg-saas-m2-clean`, Compose project
+`pubg-saas-public`, now runs source SHA
+`7208429655ab953c0f5840d89838e7e508435ac8` as
+`local/pubg-saas:git-7208429655ab953c0f5840d89838e7e508435ac8`
+(image ID `sha256:aa15e0fb7072f4d708f9e419eea2e253b62a8245d0ab7f8ccb550c6a04c0ab0d`).
+The PR #9 release command stopped before runtime changes because local
+`pg_restore` was unavailable; the operator-authorized manual fallback built
+through the existing Buildx/Dockerfile path, ran the migrator, and switched
+Gateway, Worker, and egress-proxy. These app containers are running and
+healthy; Gateway `/healthz` returned 200 and the post-deploy Gateway error log
+count is zero. PostgreSQL remains the same healthy container and volume. The
+migrator succeeded; the live `schema_migrations` IDs match the candidate's 28
+runner IDs through `0029_gate_memory_index_generations.sql`, with optional
+pgvector `0025` absent. All four Gate memory flags remain unset/default-off.
+M2 remains PAUSED; no clearance was created or resumed, and Lab was untouched.
+
+The verified encrypted full-database backup, checksum, pre-deploy Compose/env
+copies, image transfer identity, migration log, and rollback details are in
+`.agent/checkpoints/2026-10-16-gate-local-7208429-candidate-live.md` and the
+owner-only external checkpoint
+`~/.local/share/pubg-saas-backup/gate-local-pg-predeploy-7208429-20261016T092803Z`.
+
+## 2026-10-16T17:38+08:00 — Gate candidate host pg_restore lookup
+
+M204 already had Homebrew `libpq 18.6_1` installed; its `pg_restore` is
+`/opt/homebrew/opt/libpq/bin/pg_restore` version 18.6. The candidate adapter
+now adds a standard Homebrew libpq bin directory to its PATH when needed.
+Focused Gate autopilot tests passed (29), direct path/version verification
+passed, and `release-gate.sh candidate` dry-run reported `APPLY=not-requested`.
+No candidate apply or runtime change was performed. Evidence is appended to
+`.agent/checkpoints/2026-10-16-gate-local-7208429-candidate-live.md`.
+
 ## 2026-10-16T00:29+08:00 — final source fixture sweep
 
 The final P1/P3 fixture sweep passed for Memory Core patch/admission, Telegram

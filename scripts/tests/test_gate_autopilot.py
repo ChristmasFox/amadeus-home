@@ -1,6 +1,7 @@
 import importlib.util
 import hashlib
 import json
+import os
 import pathlib
 import tempfile
 import unittest
@@ -103,6 +104,31 @@ def operations(**overrides):
 
 
 class GateAutopilotContracts(unittest.TestCase):
+    def test_keg_only_homebrew_libpq_is_added_when_pg_restore_is_not_on_path(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            bin_dir = pathlib.Path(temporary) / "libpq" / "bin"
+            bin_dir.mkdir(parents=True)
+            executable = bin_dir / "pg_restore"
+            executable.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+            executable.chmod(0o755)
+
+            with patch.object(candidate.shutil, "which", return_value=None):
+                path = candidate.path_with_libpq_pg_restore("/usr/bin", (bin_dir,))
+
+        self.assertEqual(path.split(os.pathsep, 1)[0], str(bin_dir))
+
+    def test_existing_pg_restore_path_is_preserved(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            bin_dir = pathlib.Path(temporary)
+            executable = bin_dir / "pg_restore"
+            executable.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+            executable.chmod(0o755)
+
+            with patch.object(candidate.shutil, "which", return_value=str(executable)):
+                path = candidate.path_with_libpq_pg_restore(str(bin_dir), (pathlib.Path("/missing"),))
+
+        self.assertEqual(path, str(bin_dir))
+
     def test_gate_target_layout_is_discovered_from_active_compose_labels(self):
         layout = candidate.target_layout_from_labels(
             "pubg-saas-public", "gateway",
