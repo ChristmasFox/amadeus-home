@@ -8,7 +8,7 @@ replacement for an operator-selected Goal; live Git/runtime are factual sources.
 
 Lab's default is automatic *reversible candidate* deployment after a verified
 phase **only when the operator has granted one-time host-local authorization**
-and the guarded release tooling approves the change. Gate never auto-deploys.
+and the guarded release tooling approves the change. Gate-Local may also auto-deploy a reversible candidate **after its own separate one-time local opt-in**, release safety gates and explicit M2 pause clearance. Gate-Staging/Prod never auto-promote; Gate auto-deploy support must first be implemented and tested.
 A Goal describes requirements, not default runtime permissions; for old Goals
 with explicit authorization limits, reconcile those limits before deploying.
 Controlled apply still goes through `release-lab.sh`. Never infer OS permissions
@@ -113,8 +113,8 @@ Before adding a capability, record the answers in `docs/CAPABILITY_TEMPLATE.md`:
 统一遵守 `docs/ENGINEERING_POLICY.md`，由 `pnpm devctl` 选择编辑/任务/阶段/发行验证等级。
 已有 `developer-workflow.sh` 和 `release-lab.sh` 是被复用的底层执行器；
 不得在每次 Commit 后默认跑全量测试或重启常驻容器。
-只有通过本机一次性批准和安全门禁的 Lab Candidate 才能按阶段自动切换；
-Gate-Local、Gate-Staging 和 Gate-Prod 仍需独立发布决策。
+Lab Candidate 在独立的一次性本机授权和安全门禁下按阶段自动切换；Gate-Local 也应支持**独立的一次性授权、M2 暂停解除、可恢复备份、健康验证后的自动候选部署和测试通知**，无需每阶段重复人工批准（若工具尚未实现则先实现并验证）。
+Gate-Staging、Gate-Prod 的正式晋级、首次高风险数据库/pgvector 镜像切换、真实付费调用与正式发布仍需分别明确批准。两条产品部署绝不相互触发。
 
 ## Codex Goal 预算（强制）
 
