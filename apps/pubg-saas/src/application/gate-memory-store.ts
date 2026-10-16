@@ -155,7 +155,7 @@ export class GateMemoryStore {
             WHERE position(gram.token in lower(memory_key))>0
                OR position(gram.token in lower(content))>0
           ) END AS score
-      FROM gate_memory_entries WHERE ` + FILTER + ` AND revoked_at IS NULL AND (' + candidates + ')' + liveFence(11, 12) + `
+      FROM gate_memory_entries WHERE ` + FILTER + ' AND revoked_at IS NULL AND (' + candidates + ')' + liveFence(11, 12) + `
     )
     SELECT memory_key,content,revision,updated_at FROM candidates WHERE score>0
     ORDER BY score DESC,updated_at DESC,memory_key LIMIT $10`;
