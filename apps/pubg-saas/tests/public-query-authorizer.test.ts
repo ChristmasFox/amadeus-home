@@ -219,7 +219,8 @@ test('public query context comes from a live stored ingress and isolates guild, 
     await assert.rejects(forged.countMatches(), /public_query_session_unavailable/u);
     await assert.rejects(f.auth.authorize(job), /public_query_ingress_unavailable/u);
     await assert.rejects(f.auth.authorize({ ...job, botAccountId: 'another-bot' }), /public_query_bot_scope_mismatch/u);
-    assert.equal(f.permissions.calls.every(call => !call.includes('999')), true);
+    const checkedActors = new Set([f.user, f.other]);
+    assert.equal(f.permissions.calls.every(call => checkedActors.has(call.slice(call.lastIndexOf(':') + 1))), true);
     const ledger = JSON.stringify((await f.pool.query('SELECT * FROM public_query_requests WHERE bot_account_id=$1', [f.bot])).rows);
     assert.equal(ledger.includes('last other user context'), false); assert.equal(ledger.includes('content'), false);
   } finally { await f.cleanup(); }
