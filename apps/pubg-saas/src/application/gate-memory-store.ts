@@ -294,7 +294,8 @@ export class GateMemoryStore {
     const scope = await this.trustedScope(job);
     const query = 'SELECT memory_key,content,revision,updated_at FROM gate_memory_entries WHERE '
       + FILTER + ' AND revoked_at IS NULL ORDER BY updated_at DESC,memory_id LIMIT $8';
-    const result = await this.pool.query(query + liveFence(9, 10), [...scope, limit, job.eventId, job.leaseToken]);
+    const guarded = query.replace('ORDER BY updated_at DESC,memory_id', liveFence(9, 10) + ' ORDER BY updated_at DESC,memory_id');
+    const result = await this.pool.query(guarded, [...scope, limit, job.eventId, job.leaseToken]);
     return result.rows.map(entry);
   }
 
