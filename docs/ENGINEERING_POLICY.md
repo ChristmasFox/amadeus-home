@@ -63,18 +63,19 @@ in `~/.config/amadeus/lab-auto-approval.json`. No per-Goal “lab-auto” prefix
 needed. Disable with `pnpm devctl configure lab-auto-disable`. Without that
 approval, phase validation continues but Lab deployment is reported as pending.
 It cannot bypass the existing `release-lab.sh --apply --approval-ref` guards.
-For Gate-Local, implement a **separate** operator-created, host-local opt-in
-(`pnpm devctl configure gate-auto-enable` / `gate-auto-disable` are *planned*
-commands until implemented and tested). Scope it to the single Gate-Local
-instance, checkout, Bot identity and approved safe change classes. On an
-approved Gate-only phase, auto-build immutable candidate, backup/checkpoint,
-perform single-instance switch, health/synthetic smoke, notification and
-rollback/blocked reporting through `release-gate.sh`, without repetitive
-per-phase operator prompts. **Do not auto-enable** it from a Goal, CI or chat.
-An explicit M2 pause blocks auto-apply until the owner resumes M2. New pgvector
-image/extension, unsafe data migration, production credentials, paid-provider
-probe, real-memory ingestion schedule, formal release and Staging/Prod promotion
-remain separate risk classes requiring explicit preauthorization.
+For Gate-Local, use the separate operator-controlled host-local opt-in
+(`pnpm devctl configure gate-auto-enable` / `gate-auto-disable`). Enable is
+non-interactive and reads its bounded target and backup configuration from the
+`GATE_LOCAL_*` environment fields documented in `docs/GATE_MEMORY_OPERATIONS.md`;
+it writes the approval outside Git with mode 0600. It authorizes reversible app
+candidates and backward-compatible schema changes by default, with no expiry;
+`gate-auto-disable` revokes it. **Do not auto-enable** it from a Goal, CI or
+chat. An explicit M2 pause blocks auto-apply until M2 is separately accepted
+and cleared; the M2 clearance itself has no expiry and can be removed with
+`gate-m2-revoke` or `gate-auto-disable`. New pgvector image/extension, unsafe
+data migration, production credentials, paid-provider probe, real-memory
+ingestion schedule, formal release and Staging/Prod promotion remain separate
+risk classes requiring explicit preauthorization.
 
 For stronger privilege separation, use a dedicated deploy user with limited
 Docker/SSH rights; a file readable by a code agent is an accidental-action

@@ -31,7 +31,6 @@ def approval(**changes):
         "botAccountId": BOT,
         "riskCategories": ["reversible_app_candidate", "backward_compatible_schema"],
         "approvedAt": "2026-10-01T00:00:00Z",
-        "expiresAt": "2027-01-01T00:00:00Z",
         **changes,
     }
 
@@ -45,7 +44,6 @@ def clearance(**changes):
         "botAccountId": BOT,
         "acceptanceEvidenceRef": "m2-acceptance-fixture-01",
         "clearedAt": "2026-10-15T00:00:00Z",
-        "expiresAt": "2026-11-15T00:00:00Z",
         **changes,
     }
 
@@ -118,20 +116,22 @@ class GateAutopilotContracts(unittest.TestCase):
                          "shared_package_change")
         self.assertEqual(gate.classify_changed_scope(["docs/GATE_MEMORY.md"])[0], "non_runtime")
 
-    def test_missing_expired_and_wrong_scope_approvals_fail_closed(self):
+    def test_missing_approval_fails_closed_and_legacy_expiry_is_ignored(self):
         self.assertEqual(preflight(approval=None)["status"], "READY_FOR_AUTO_ENABLE")
-        self.assertEqual(preflight(approval=approval(expiresAt="2026-10-16T11:59:00Z"))["reason"],
-                         "approval_expired_or_invalid")
+        self.assertEqual(preflight(approval=approval(expiresAt="2026-10-16T11:59:00Z"))["status"], "READY")
         self.assertEqual(preflight(approval=approval(botAccountId="other-bot"))["reason"],
                          "approval_target_mismatch")
         self.assertEqual(preflight(approval=approval(repository="/other/checkout"))["reason"],
                          "approval_checkout_mismatch")
+        self.assertEqual(preflight(approval=approval(approvedAt="2026-10-16T12:01:00Z"))["reason"],
+                         "approval_expired_or_invalid")
 
     def test_paused_or_wrong_scope_m2_clearance_blocks_apply(self):
         self.assertEqual(preflight(clearance=None)["reason"], "m2_pause_active")
         self.assertEqual(preflight(clearance=clearance(instanceId="other-instance"))["reason"],
                          "m2_clearance_target_mismatch")
-        self.assertEqual(preflight(clearance=clearance(expiresAt="2026-10-16T11:59:00Z"))["reason"],
+        self.assertEqual(preflight(clearance=clearance(expiresAt="2026-10-16T11:59:00Z"))["status"], "READY")
+        self.assertEqual(preflight(clearance=clearance(clearedAt="2026-10-16T12:01:00Z"))["reason"],
                          "m2_clearance_expired_or_invalid")
 
     def test_duplicate_sha_and_runtime_dual_bot_or_drift_stop(self):

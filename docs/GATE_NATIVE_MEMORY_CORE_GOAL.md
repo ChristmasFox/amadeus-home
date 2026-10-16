@@ -175,7 +175,7 @@ KOOK trusted ingress + current identity/binding/membership
 ### Gate-Local 自动候选部署（本 Goal 必须实现的交付）
 
 1. 保留 Lab 现有 `lab-auto-enable`、安全检查、候选回滚与测试通知；**Gate 另建独立的自动候选发布能力**，不能复用 Lab 的批准文件、镜像、令牌或 release target。
-2. 在 Gate 原有 `scripts/release-gate.sh` 和仓库 `devctl` 工作流上实现受保护的 Gate-Local candidate autopilot。建议命令 `pnpm devctl configure gate-auto-enable` / `gate-auto-disable`（**计划中的功能，不代表现存命令**）；许可必须在操作者的交互式本机环境创建，存放仓库外 mode 0600，绑定 checkout + Gate-Local + 单一 Bot/实例 + 允许的迁移风险类别。CI/Goal/聊天文本都不能自行产生或拓宽授权。
+2. 在 Gate 原有 `scripts/release-gate.sh` 和仓库 `devctl` 工作流上实现受保护的 Gate-Local candidate autopilot。使用 `pnpm devctl configure gate-auto-enable` / `gate-auto-disable`；enable 可由 Codex 或脚本非交互执行，但必须显式调用并从 `GATE_LOCAL_*` 环境读取完整的非密钥目标/备份配置。许可存放仓库外 mode 0600，绑定 checkout + Gate-Local + 单一 Bot/实例；默认授权 `reversible_app_candidate` 与 `backward_compatible_schema`，无过期时间，直到 disable 撤销。破坏性、不兼容、数据变更、pgvector/extension 和未知 SQL 仍 fail closed。CI/Goal 不能自行产生或拓宽授权。
 3. 操作者仅需**首次决定是否开启 Gate-Local 自动候选**；开启后每个 phase `finish-phase` 对 Gate-only 变更通过 focused tests、CI/secret gate、兼容性预检、target 身份/digest 校验后自动构建不可变 candidate、制作安全 checkpoint、切换唯一实例、健康检查 + 合成/非扰动 smoke、发送测试通知（延用现有可用的私有通知桥，失败需显式报告），并落下脱敏审计和自动/计划回退路径。不得因为用户没有立即真人测试就停止后续不冲突开发。避免重复部署同一 SHA/digest；有未完成发布/危险 drift 时停机。
 4. **M2 显式暂停、真实 KOOK 真人验收未满足且会干扰 M2、双活 Bot Token、无可恢复备份、Gate-Local target 不可信或被其他 Goal 锁住时，自动部署必须阻止。**阻止时输出一条明确 BLOCKED reason 和可用恢复步骤，不是对每个普通安全变更都要求人工批准。M2 Gate 必须由操作者单独解除，不能以本 Goal 取代。
 5. 任何会改变真实 PG extension/image/无兼容窗口的 schema、真数据 backfill/reindex、密钥、付费 provider、真实自动整理、删除、Gate-Staging/Prod 提升或正式 Tag，必须使用**对应风险类别的额外一次性/明确授权**；通过保护门禁后，对批准范围内的重复可逆操作自动化完成。不可通过自动发布默认打开 `AUTO_LEARN` 或未知消费者可见新功能。

@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Fixtureable Gate-Local candidate authorization and execution guards.
 
-This module never creates authorization. Only devctl's interactive commands
-may write the external 0600 approval and M2-clearance records.
+This module never creates authorization. Only explicit devctl commands may
+write the external 0600 approval and M2-clearance records.
 """
 from __future__ import annotations
 
@@ -307,10 +307,11 @@ def validate_approval(
         return False, "approval_environment_mismatch"
     if approval.get("instanceId") != instance_id or approval.get("botAccountId") != bot_account_id:
         return False, "approval_target_mismatch"
-    expires = parse_time(approval.get("expiresAt"))
     issued = parse_time(approval.get("approvedAt"))
     current = (now or datetime.now(timezone.utc)).astimezone(timezone.utc)
-    if not expires or not issued or issued > current or expires <= current:
+    # Gate-Local approval is revoked explicitly. Ignore a legacy expiresAt
+    # field so existing records do not silently lose their intended lifetime.
+    if not issued or issued > current:
         return False, "approval_expired_or_invalid"
     categories = approval.get("riskCategories")
     if not isinstance(categories, list) or any(category not in RISK_CATEGORIES for category in categories):
@@ -337,10 +338,10 @@ def validate_m2_clearance(
     if clearance.get("instanceId") != instance_id or clearance.get("botAccountId") != bot_account_id:
         return False, "m2_clearance_target_mismatch"
     issued = parse_time(clearance.get("clearedAt"))
-    expires = parse_time(clearance.get("expiresAt"))
     evidence = clearance.get("acceptanceEvidenceRef")
     current = (now or datetime.now(timezone.utc)).astimezone(timezone.utc)
-    if not issued or not expires or issued > current or expires <= current:
+    # M2 clearance is revoked explicitly; legacy expiresAt fields are ignored.
+    if not issued or issued > current:
         return False, "m2_clearance_expired_or_invalid"
     if not isinstance(evidence, str) or not IDENTIFIER.fullmatch(evidence):
         return False, "m2_acceptance_evidence_missing"

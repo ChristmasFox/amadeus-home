@@ -38,35 +38,53 @@ operator controls live outside Git at:
 - `~/.config/amadeus/gate-local-auto-approval.json`
 - `~/.config/amadeus/gate-local-m2-clearance.json`
 
-Both are owner-only `0600` files in an owner-only `0700` directory. The first
-record is created only by the interactive command below; it binds this
-checkout to one Gate-Local instance, one Bot account, one OrbStack machine,
-external backup/encryption files, and selected risk categories. Reversible
-application candidates are the default. Backward-compatible schema changes
-need a separate typed choice. Expired, malformed, wrong-checkout, or
-wrong-target records fail closed.
+Both are owner-only `0600` files in an owner-only `0700` directory. The
+non-interactive enable command binds this checkout to one Gate-Local instance,
+one Bot account, one OrbStack machine, external backup/encryption files, and
+the two default risk categories: `reversible_app_candidate` and
+`backward_compatible_schema`. Supply these non-secret fields in the invoking
+process environment; no terminal prompt is used:
+
+| Variable | Value |
+| --- | --- |
+| `GATE_LOCAL_INSTANCE_ID` | Bounded Gate-Local instance identifier |
+| `GATE_LOCAL_BOT_ACCOUNT_ID` | The single authorized KOOK Bot account ID |
+| `GATE_LOCAL_ORBSTACK_MACHINE` | The dedicated Gate-Local OrbStack machine |
+| `GATE_LOCAL_BACKUP_ROOT` | Existing external directory, owner-only mode `0700` |
+| `GATE_LOCAL_AGE_RECIPIENTS_FILE` | External age recipients file |
+| `GATE_LOCAL_AGE_IDENTITY_FILE` | External age identity file, mode `0600` |
+| `GATE_LOCAL_NOTIFICATION_HOOK` | Executable external Gate-private test notification hook |
+
+The approval has no expiry and remains active until `gate-auto-disable` or a
+protected state-file removal. A legacy `expiresAt` field is ignored. Malformed,
+wrong-checkout, wrong-target, or unsafe-path records still fail closed. The
+migration classifier continues to reject destructive or incompatible changes,
+data mutations, extensions, and unrecognized SQL regardless of the default
+authorization categories.
 
 ```sh
 pnpm devctl configure status
 pnpm devctl configure gate-auto-enable
 ```
 
-The enable command requires an interactive TTY and the exact phrase
-`ENABLE GATE LOCAL AUTO`. It records the selected target and Gate-private
-notification hook. Lab notification hooks are rejected so Gate cannot trigger
-the Lab owner outbox. It does not clear the M2 pause or enable memory features.
+`gate-auto-enable` can run directly from Codex or a script with those fields
+present. It records the selected target and Gate-private notification hook.
+Lab notification hooks are rejected so Gate cannot trigger the Lab owner
+outbox. It does not clear the M2 pause or enable memory features. Missing or
+invalid configuration is an error and writes no approval.
 
 M2 is a separate human-acceptance gate. After the operator completes that
-acceptance, the operator can record a 30-day local clearance with a separate
-interactive command and evidence reference:
+acceptance, the operator can record an indefinite local clearance with a
+separate interactive command and evidence reference:
 
 ```sh
 pnpm devctl configure gate-m2-clear
 ```
 
 This command records an operator decision; it does not change a running
-Gateway, Worker, Bot token, database, or M2 service. No approval or clearance
-was created during the P6 source work.
+Gateway, Worker, Bot token, database, or M2 service. The clearance has no
+expiry; `gate-m2-revoke` removes only that clearance, while
+`gate-auto-disable` removes both Gate authorization records.
 
 For a Gate-only phase, `pnpm devctl goal finish-phase P<N>` calls the protected
 candidate route only when the local candidate approval and the independent
@@ -99,7 +117,14 @@ unknown syntax fails closed. A blocked candidate prints a fixed recovery step
 for its reason. No target query, backup, image build, database migration, or
 service switch is performed when approval or M2 clearance is missing.
 
-To revoke Gate-Local automation, remove both local records:
+To revoke M2 clearance without disabling Gate candidate authorization:
+
+```sh
+pnpm devctl configure gate-m2-revoke
+```
+
+To revoke Gate-Local candidate automation and M2 clearance together, remove
+both local records:
 
 ```sh
 pnpm devctl configure gate-auto-disable
