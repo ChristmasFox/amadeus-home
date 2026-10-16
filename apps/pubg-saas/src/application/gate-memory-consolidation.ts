@@ -516,7 +516,7 @@ function expiryFor(kind: ValidCandidate['kind'], validity: string, now: number):
 
 function sensitiveOrRiskText(value: string): boolean {
   return /(?:password|passphrase|api[\s_-]*key|access[\s_-]*token|secret|private[\s_-]*key|密码|口令|验证码|密钥|私钥|身份证|护照|银行卡|信用卡|手机号|电话号码|电子邮箱|住址|家庭住址|病史|诊断|自残|自杀|性取向|想死|不想活|伤害自己|伤害别人|伤害他人|杀人|杀了他)/iu.test(value)
-    || /(?:忽略|无视|忘掉|覆盖).{0,12}(?:系统|开发者|之前|先前|以上).{0,8}(?:指令|规则|提示词)|(?:输出|泄露|展示).{0,8}(?:系统提示词|隐藏指令)|(?:调用|执行).{0,8}(?:工具|命令)|(?:记住我是|我是).{0,8}(?:管理员|所有者)|\b(?:ignore|disregard|override).{0,20}(?:system|developer|previous|prior).{0,16}(?:instruction|rule|prompt)\b/iu.test(value)
+    || /(?:忽略|无视|忘掉|覆盖).{0,12}(?:系统|开发者|之前|先前|以上).{0,8}(?:指令|规则|提示词)|(?:输出|泄露|展示).{0,8}(?:系统提示词|隐藏指令)|(?:调用|执行).{0,8}(?:工具|命令)|(?:记住我是|我是).{0,8}(?:管理员|所有者)|\b(?:ignore|disregard|override).{0,20}(?:system|developer|previous|prior).{0,16}(?:instructions?|rules?|prompts?)\b/iu.test(value)
     || /(?:我(?:的)?(?:朋友|队友|同事|家人|室友|伴侣)|他|她|他们|她们).{0,24}(?:喜欢|偏好|常用|选择|住在|病史|诊断|收入|联系方式)/iu.test(value)
     || /\b(?:my friend|my teammate|my colleague|my family|he|she|they)\b.{0,24}\b(?:likes|prefers|uses|lives|medical|income|contact)\b/iu.test(value)
     || /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/iu.test(value)
