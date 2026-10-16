@@ -1,5 +1,34 @@
 # Project State — 2026-10-16
 
+## 2026-10-16T23:54+08:00 — Lab 9router 0.5.104 live
+
+OrbStack `nyannyan`, Compose project `9router`, runs image
+`local/9router:git-907c5fffc348-lab-20261016T154506Z` (0.5.104, ARM64,
+image ID `sha256:00d435f49c4d064fa70e6629db34f6aa52532dcfca14ff9d06fb2cbb4bb792ba`).
+OCI revision is `907c5fffc34848980a17dfab1827cdaeac5e79fb` from `origin/main`.
+The old image `local/9router:git-83bb76b5e7c8-20261010T032550Z` remains
+available. The only Compose change is the image field; existing data and
+secret-file mounts, env file, host port 20128, proxy `host.docker.internal:7897`,
+and shared `9router_default` network are unchanged.
+
+The container is running. This Compose definition has no Docker healthcheck,
+but `/api/health`, ASR `/healthz` (20129), and TTS `/healthz` (20130) all
+return HTTP 200. SQLite quick check is `ok`. The `arthur-combo` model order
+starts with `ag/gemini-3.8-flash-low`. An authenticated minimal request from
+OpenClaw completed with `antigravity / gemini-3.8-flash-low`; the usage status
+was `ok` with input and output tokens. OpenClaw stayed healthy, retained
+`nine_router/arthur-combo`, and was not restarted.
+
+The full encrypted pre-retry archive is
+`/Users/nyannyan/.local/share/pubg-saas-backup/lab-9router-0.5.104-preretry-20261016T155254Z/lab-9router-full.tar.gz.age`
+(SHA-256 `df167d2dbc9b74a8a073319b43b16e625eec7a770384fbb9b34d455af10c3b4d`).
+The focused 0.5.104 patch/bridge suite and isolated image smoke passed. A first
+cutover was rolled back after a later shell acceptance check; the recorded
+Gemini request had succeeded. After a fresh full backup, the same immutable
+image was reapplied and the non-billing live checks passed. Gate memory/M2 and
+PR #12 were untouched. See
+`.agent/checkpoints/2026-10-16-lab-9router-0.5.104-upgrade.md` for rollback.
+
 ## 2026-10-16T18:39+08:00 — Gate 9router 0.5.104 live
 
 PR #11 was rebased onto `8a731d9`, all seven GitHub checks passed, and merge

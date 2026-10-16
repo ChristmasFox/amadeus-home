@@ -4,6 +4,41 @@ Date: 2026-10-16 (Asia/Shanghai).
 
 Active Goal: `docs/LAB_MEMORY_AND_DUAL_RELEASE_ENGINEERING_GOAL.md`.
 
+## 2026-10-16T23:54+08:00 — Lab 9router 0.5.104 live
+
+Lab 9router on OrbStack `nyannyan` now runs 0.5.104 from source SHA
+`907c5fffc34848980a17dfab1827cdaeac5e79fb` as
+`local/9router:git-907c5fffc348-lab-20261016T154506Z` (image ID
+`sha256:00d435f49c4d064fa70e6629db34f6aa52532dcfca14ff9d06fb2cbb4bb792ba`).
+Only the `9router` Compose service was recreated; its Compose file changed only
+in the image field. Data, secret-file mounts, env file, port, proxy
+`host.docker.internal:7897`, and the shared `9router_default` network remain
+unchanged. OpenClaw stayed running and healthy and was not restarted.
+
+The 0.5.104 image retains account policy, Gemini location fallback, image
+upstream diagnostics, image Combo safety, self-hosted TTS style, ASR/TTS
+bridges, and the launcher. Focused patch/bridge tests, isolated speech-image
+smoke, private-policy verification, `pnpm check:secrets`, and
+`git diff --check` passed. API, ASR, and TTS health endpoints return HTTP 200;
+SQLite `quick_check` is `ok`. The persisted Combo still puts
+`ag/gemini-3.8-flash-low` first. One authenticated minimal OpenClaw request
+completed through `antigravity / gemini-3.8-flash-low`; its usage record is
+`ok` with input and output tokens. No second model request was issued.
+
+The first candidate cutover was automatically rolled back after a later shell
+acceptance check failed. Read-only checks confirmed the model request itself
+had succeeded; a fresh full backup was taken before reapplying the same
+immutable image. Final verification passed. Gate memory/M2 and PR #12 were not
+touched; the deployed source is `origin/main`, not PR #12.
+
+Fresh encrypted pre-retry backup:
+`/Users/nyannyan/.local/share/pubg-saas-backup/lab-9router-0.5.104-preretry-20261016T155254Z/lab-9router-full.tar.gz.age`
+(SHA-256 `df167d2dbc9b74a8a073319b43b16e625eec7a770384fbb9b34d455af10c3b4d`,
+165,627,157 bytes). The first pre-upgrade backup is also retained under
+`lab-9router-0.5.104-preupgrade-20261016T154506Z/`.
+Detailed restore notes are in
+`.agent/checkpoints/2026-10-16-lab-9router-0.5.104-upgrade.md`.
+
 ## 2026-10-16T18:39+08:00 — Gate 9router 0.5.104 live
 
 PR #11 was rebased onto `8a731d9`, passed all seven GitHub checks, and merged
