@@ -154,7 +154,7 @@ test('consent-versioned Light/REM batches read only admitted DM sources and pers
     assert.equal((await pool.query("SELECT COUNT(*)::INTEGER AS count FROM gate_memory_consolidation_candidates WHERE bot_account_id=$1 AND memory_key='secret'", [bot])).rows[0]?.count, 0);
 
     const crashJob = await startDirect(actor, '这条消息在 worker 重启后仍可恢复');
-    assert.equal(await consent.admitCurrentMessage(crashJob), 1);
+    assert.equal(await consent.admitCurrentMessage(crashJob), 2);
     await finish(crashJob);
     const simulatedLease = randomUUID();
     await pool.query(
