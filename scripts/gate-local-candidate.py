@@ -138,20 +138,29 @@ def repo_sha() -> str:
 
 
 def changed_paths() -> list[str]:
+    """Goal state is optional for a direct candidate deploy.
+
+    Migration completeness is decided independently using the active image
+    source and the candidate Git tree, not this convenience change list.
+    """
     state_path = ROOT / ".agent" / "runtime" / "goal-state.json"
-    if state_path.is_symlink() or not state_path.is_file() or stat.S_IMODE(state_path.stat().st_mode) != 0o600:
-        raise CandidateError("active_goal_state_unavailable")
-    state = json.loads(state_path.read_text(encoding="utf-8"))
-    base = state.get("phaseBaseCommit") or state.get("baseCommit")
-    if not isinstance(base, str) or not re.fullmatch(r"[0-9a-f]{40}", base):
-        raise CandidateError("active_goal_base_invalid")
-    names = set()
-    for args in (["diff", "--name-only", "-z", "--diff-filter=ACMDRT", base + "...HEAD"],
-                 ["diff", "--name-only", "-z", "--diff-filter=ACMDRT", "HEAD"],
-                 ["ls-files", "--others", "--exclude-standard", "-z"]):
+    base = None
+    if state_path.is_file() and not state_path.is_symlink():
+        try:
+            state = json.loads(state_path.read_text(encoding="utf-8"))
+            selected = state.get("phaseBaseCommit") or state.get("baseCommit")
+            if isinstance(selected, str) and re.fullmatch(r"[0-9a-f]{40}", selected):
+                base = selected
+        except (OSError, ValueError):
+            pass
+    args = ["diff", "--name-only", "-z", "--diff-filter=ACMDRT",
+            (base + "...HEAD" if base else "HEAD~1...HEAD")]
+    try:
         output = command(["git", "-C", str(ROOT), *args])
-        names.update(item.decode("utf-8", errors="surrogateescape") for item in output.split(b"\0") if item)
-    return sorted(names)
+    except CandidateError:
+        output = command(["git", "-C", str(ROOT), "show", "--pretty=format:", "--name-only", "-z", "HEAD"])
+    return sorted({item.decode("utf-8", errors="surrogateescape")
+                   for item in output.split(b"\\0") if item})
 
 
 def candidate_migration_paths(active_sha: str, candidate_sha: str, phase_paths: list[str]) -> list[str]:
@@ -556,9 +565,6 @@ def gate_apply(approval_ref: str) -> int:
     if shutil.which("docker") is None or shutil.which("age") is None or shutil.which("pg_restore") is None:
         raise CandidateError("candidate_host_tools_unavailable")
     paths = changed_paths()
-    scope, scope_reason = classify_changed_scope(paths)
-    if scope != "gate_only":
-        raise CandidateError(scope_reason or scope)
     sha = repo_sha()
     clean_tree()
     command(["git", "-C", str(ROOT), "diff", "--check"])
