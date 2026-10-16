@@ -92,10 +92,11 @@ automatically. A failed migration or post-switch health/smoke check stops
 Gateway and Worker, restores the full database checkpoint and previous
 Compose/environment files, then restarts the previous application image.
 
-The canary path selects exactly one tenant marked test/fixture/canary for the
-Gate Bot, writes the ID only to the protected Gateway environment, and prints
-only a redacted status. If selection is absent or ambiguous, deployment stops
-before backup or migration. The canary sets only
+The canary path prefers exactly one tenant marked test/fixture/canary for the
+Gate Bot. If no marker exists, it may use the sole tenant bound to the verified
+Gate-Local Bot; multiple unmarked tenants remain ambiguous and stop deployment
+before backup or migration. The ID is written only to the protected Gateway
+environment, and status output is redacted. The canary sets only
 `GATE_PUBG_INTELLIGENCE_ENABLED=1` and the exact one-tenant allowlist. Existing
 Gate tenant authorization and bounded PostgreSQL reads remain in force. Health
 checks cover PostgreSQL, egress, Gateway, and Worker, followed by local health

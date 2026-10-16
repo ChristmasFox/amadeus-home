@@ -148,6 +148,25 @@ class GateAutopilotContracts(unittest.TestCase):
         self.assertIn("SELECT COUNT(DISTINCT t.tenant_id)", query.call_args_list[0].args[-1])
         self.assertIn("SELECT DISTINCT t.tenant_id", query.call_args_list[1].args[-1])
 
+    def test_live_canary_selector_accepts_the_only_gate_local_tenant_when_unmarked(self):
+        output = io.StringIO()
+        with patch.object(candidate, "remote_compose", side_effect=[b"0\n", b"1\n", b"fixture-local-01\n"]) as query:
+            with redirect_stdout(output):
+                tenant_id = candidate.select_existing_test_tenant("gate-ci-fixture", {}, BOT)
+        self.assertEqual(tenant_id, "fixture-local-01")
+        self.assertEqual(output.getvalue(), "")
+        self.assertIn("COUNT(DISTINCT t.tenant_id)", query.call_args_list[1].args[-1])
+        self.assertIn("WHERE t.bot_account_id=", query.call_args_list[2].args[-1])
+
+    def test_live_canary_selector_refuses_multiple_unmarked_gate_local_tenants(self):
+        output = io.StringIO()
+        with patch.object(candidate, "remote_compose", side_effect=[b"0\n", b"2\n"]) as query:
+            with redirect_stdout(output):
+                with self.assertRaisesRegex(candidate.CandidateError, "canary_test_tenant_not_unique"):
+                    candidate.select_existing_test_tenant("gate-ci-fixture", {}, BOT)
+        self.assertEqual(output.getvalue(), "")
+        self.assertEqual(query.call_count, 2)
+
     def test_canary_environment_writer_sends_tenant_id_only_on_stdin(self):
         output = io.StringIO()
         tenant_id = "fixture-canary-01"
