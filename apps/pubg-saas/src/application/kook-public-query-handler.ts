@@ -285,9 +285,6 @@ async function naturalLanguageReply(
   const fallbackText = '我这边刚遇到一点技术问题，暂时没能给出可靠回复。你可以稍后再问一次。';
   const requestKey = createHash('sha256').update(`${job.botAccountId}\0${job.eventId}`).digest('hex').slice(0, 16);
   const channelId = job.request.kind === 'group' ? job.request.event.channelId : undefined;
-  if (job.request.kind === 'direct' && services.memoryConsolidationConsent) {
-    await services.memoryConsolidationConsent.admitCurrentMessage(job).catch(() => 0);
-  }
   if (!configured) {
     await services.authorizer.recordAgentRun(job, {
       modelId: null, outcome: 'model_unconfigured', failureCode: 'agent_model_unconfigured',
@@ -300,6 +297,12 @@ async function naturalLanguageReply(
   if (services.memoryWriter) {
     const memoryReply = await services.memoryWriter.handle(job, signal).catch(() => undefined);
     if (memoryReply) return memoryReply;
+  }
+  // Explicit remember/correct/forget commands are handled above and are not
+  // re-learned as ordinary conversation. Natural DM messages are admitted
+  // automatically unless the user explicitly disabled Light/REM.
+  if (job.request.kind === 'direct' && services.memoryConsolidationConsent) {
+    await services.memoryConsolidationConsent.admitCurrentMessage(job).catch(() => 0);
   }
 
   let toolDegraded = false;
