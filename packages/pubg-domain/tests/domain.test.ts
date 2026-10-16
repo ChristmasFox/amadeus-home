@@ -1,5 +1,6 @@
 import { strict as assert } from 'node:assert';
 import { createRequire } from 'node:module';
+import { createHash } from 'node:crypto';
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
@@ -969,6 +970,31 @@ test('SQLite repository survives restart, counts duplicate inputs, and isolates 
     assert.ok(second.getResultSet('session-a', 'rs-a'));
     assert.equal(second.getResultSet('session-b', 'rs-a'), null);
     second.close();
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('SQLite repository opens an existing database without migration or write access in read-only mode', () => {
+  const root = mkdtempSync(join(tmpdir(), 'pubg-domain-readonly-'));
+  const dbPath = join(root, 'pubg.sqlite');
+  try {
+    const writable = new SqlitePubgRepository(dbPath);
+    writable.upsertMatches([RAW_RECORDS[0]!]);
+    writable.close();
+    const sourceHash = createHash('sha256').update(readFileSync(dbPath)).digest('hex');
+
+    const reader = new SqlitePubgRepository(dbPath, { readOnly: true });
+    assert.equal(reader.countMatches(), 1);
+    assert.equal(reader.getMatch('m1')?.players.length, 2);
+    assert.throws(() => reader.upsertMatches([RAW_RECORDS[1]!]), /readonly|read-only/iu);
+    reader.close();
+
+    const verification = new SqlitePubgRepository(dbPath, { readOnly: true });
+    assert.equal(verification.countMatches(), 1);
+    assert.equal(verification.getMatch('m2'), null);
+    verification.close();
+    assert.equal(createHash('sha256').update(readFileSync(dbPath)).digest('hex'), sourceHash);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
