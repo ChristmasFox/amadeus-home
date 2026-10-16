@@ -350,7 +350,7 @@ case "$COMMAND" in
       pnpm check:architecture
       pnpm check:secrets
       pnpm build:pubg
-      pnpm --filter @agent/pubg-saas build
+      pnpm build:pubg-saas
       pnpm typecheck:pubg-saas
       pnpm test:pubg-saas
       pnpm typecheck:pubg

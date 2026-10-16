@@ -104,6 +104,7 @@ services:
     environment:
       PUBG_SAAS_EGRESS_PROXY: http://egress-proxy:8080
       PUBG_SAAS_EGRESS_PROXY_REQUIRED: "1"
+      GATE_MEMORY_DREAMING_TIMEZONE: ${GATE_MEMORY_DREAMING_TIMEZONE:-Asia/Shanghai}
     secrets:
       - pubg_app_password
     command: ["node", "dist/src/gateway.js", "--apply"]

@@ -1,4 +1,24 @@
+import { createHash } from 'node:crypto';
 import type { Pool } from 'pg';
+import {
+  MAX_MEMORY_RESULTS,
+  MemoryPolicyError,
+  canonicalizeMemoryKey,
+  memorySearchTokens as tokenizeMemorySearch,
+  rankMemoryEntries,
+  validateMemoryDraft,
+} from '@agent/memory';
+import type {
+  MemoryDraft,
+  MemoryEntry,
+  MemorySearchMetric,
+  MemorySearchResult,
+  MemorySemanticSearchResult,
+  MemoryUsageSignal,
+  MemoryUsageSignalKind,
+  MemoryWriteState,
+  MemoryWriteMetadata,
+} from '@agent/memory';
 import type { KookIngressJob } from './kook-ingress-queue.js';
 import type { GateMemoryEmbeddingClient, GateMemoryEmbeddingContract } from './gate-memory-embedding.js';
 import { estimateGateEmbeddingTokens } from './gate-memory-embedding.js';
@@ -12,35 +32,16 @@ export type GateMemoryScope =
 export interface GateMemoryScopeResolver {
   resolveMemoryScope(job: KookIngressJob): Promise<GateMemoryScope | null>;
 }
-export interface GateMemoryEntry {
-  key: string;
-  content: string;
-  revision: number;
-  updatedAt: string;
-  sourceEventId: string;
-  sourceKind: 'trusted_ingress' | 'user_confirmed' | 'system_verified' | 'unknown';
-  sourceReliability: number;
-  validUntil: string | null;
-  semanticSimilarity?: number;
-}
-export interface GateMemoryDraft {
-  key: string;
-  content: string;
-}
-export interface GateMemoryWriteMetadata {
-  sourceKind?: GateMemoryEntry['sourceKind'];
-  sourceReliability?: number;
-  validUntil?: string | null;
-}
-export interface GateMemoryWriteState extends GateMemoryEntry {
-  revoked: boolean;
-}
+export type GateMemoryEntry = MemoryEntry;
+export type GateMemoryDraft = MemoryDraft;
+export type GateMemoryWriteMetadata = MemoryWriteMetadata;
+export type GateMemoryWriteState = MemoryWriteState;
 export interface GateMemoryStoreOptions {
   lexicalSearchTimeoutMs?: number;
   onSearchMetric?: (metric: GateMemorySearchMetric) => void;
 }
 
-const MAX_RESULTS = 24;
+const MAX_RESULTS = MAX_MEMORY_RESULTS;
 const DEFAULT_LEXICAL_SEARCH_TIMEOUT_MS = 500;
 const FILTER = `bot_account_id=$1 AND scope_kind=$2 AND actor_id=$3 AND
   channel_id=$4 AND tenant_id=$5 AND team_id=$6 AND binding_revision=$7`;
@@ -51,21 +52,9 @@ const enqueueUpserts = (source: 'updated') => `INSERT INTO gate_memory_embedding
   CROSS JOIN LATERAL gate_memory_index_job_versions(${source}.bot_account_id) generation
   ON CONFLICT DO NOTHING RETURNING job_id`;
 
-export interface GateMemorySearchResult {
-  entries: GateMemoryEntry[];
-  mode: 'semantic' | 'lexical_only';
-  reason: 'semantic_unconfigured' | 'vector_index_unavailable' | 'semantic_unavailable'
-    | 'semantic_timeout' | 'embedding_budget_exhausted' | 'embedding_budget_unavailable' | null;
-}
-export interface GateMemorySearchMetric {
-  durationMs: number;
-  mode: GateMemorySearchResult['mode'];
-  reason: GateMemorySearchResult['reason'];
-}
-export interface GateMemorySemanticSearchResult {
-  matches: GateMemoryEntry[];
-  reason: GateMemorySearchResult['reason'];
-}
+export type GateMemorySearchResult = MemorySearchResult;
+export type GateMemorySearchMetric = MemorySearchMetric;
+export type GateMemorySemanticSearchResult = MemorySemanticSearchResult;
 export interface GateMemoryAuthorizedSearch {
   exact(query: string, limit?: number): Promise<GateMemoryEntry[]>;
   lexical(query: string, limit?: number): Promise<GateMemoryEntry[]>;
@@ -93,16 +82,20 @@ function boundedText(value: string, max: number, emojiSequence = false): string 
   return text;
 }
 
+function withGateMemoryPolicyErrors<T>(work: () => T): T {
+  try { return work(); }
+  catch (error) {
+    if (error instanceof MemoryPolicyError) throw new Error(`gate_memory_${error.code}`);
+    throw error;
+  }
+}
+
 export function validateGateMemoryDraft(input: GateMemoryDraft): GateMemoryDraft {
-  return { key: canonicalizeGateMemoryKey(input.key),
-    content: boundedText(input.content, 800, true) };
+  return withGateMemoryPolicyErrors(() => validateMemoryDraft(input));
 }
 
 export function canonicalizeGateMemoryKey(value: string): string {
-  const normalized = boundedText(value, 96).normalize('NFKC').toLocaleLowerCase('en-US')
-    .replace(/[^\p{L}\p{N}]+/gu, '_').replace(/^_+|_+$/gu, '');
-  if (!normalized || normalized.length > 96) throw new Error('gate_memory_input_invalid');
-  return normalized;
+  return withGateMemoryPolicyErrors(() => canonicalizeMemoryKey(value));
 }
 
 function validatedWriteMetadata(input: GateMemoryWriteMetadata = {}): {
@@ -129,32 +122,11 @@ function validatedWriteMetadata(input: GateMemoryWriteMetadata = {}): {
 
 /** A bounded lexical fallback, not an embedding or a semantic model. */
 export function memorySearchTokens(query: string): string[] {
-  const normalized = boundedText(query, 240, true).toLocaleLowerCase('en-US');
-  const tokens: string[] = [];
-  // Split a mixed Latin/Han run by script; Han characters are also \p{L}.
-  for (const match of normalized.matchAll(/[\p{L}\p{N}]+/gu)) {
-    for (const chunk of match[0]!.match(/\p{Script=Han}+|[^\p{Script=Han}]+/gu) ?? []) {
-      if (/^\p{Script=Han}+$/u.test(chunk)) {
-        const chars = Array.from(chunk);
-        for (let index = 0; index + 1 < chars.length; index += 1)
-          tokens.push(chars[index]! + chars[index + 1]!);
-      } else if (chunk.length > 1) tokens.push(chunk);
-    }
-  }
-  return [...new Set(tokens)].slice(0, 240);
+  return withGateMemoryPolicyErrors(() => tokenizeMemorySearch(query));
 }
 
 export function rankGateMemories(entries: GateMemoryEntry[], query: string, limit = 8): GateMemoryEntry[] {
-  if (!Number.isSafeInteger(limit) || limit < 1 || limit > MAX_RESULTS) throw new Error('gate_memory_limit_invalid');
-  const search = boundedText(query, 240, true).toLocaleLowerCase('en-US');
-  const words = memorySearchTokens(search);
-  return entries.map((item, index) => {
-    const haystack = (item.key + ' ' + item.content).toLocaleLowerCase('en-US');
-    const score = haystack.includes(search) ? 1000
-      : words.reduce((value, word) => value + (haystack.includes(word) ? 1 : 0), 0);
-    return { item, index, score };
-  }).filter(match => match.score > 0).sort((a, b) => b.score - a.score || a.index - b.index)
-    .slice(0, limit).map(match => match.item);
+  return withGateMemoryPolicyErrors(() => rankMemoryEntries(entries, query, limit));
 }
 
 function scopedArgs(scope: GateMemoryScope): (string | number)[] {
@@ -253,6 +225,74 @@ export class GateMemoryStore {
       lexical: (query, limit = 8) => this.searchLexicalScoped(job, query, limit, scope),
       semantic: (query, provider, limit = 8) => this.searchSemanticScoped(job, query, provider, limit, scope),
     });
+  }
+
+  /** Persist only keyed usage evidence; query text and memory content are not copied. */
+  async recordUsageSignals(
+    job: KookIngressJob,
+    signals: readonly MemoryUsageSignal[],
+    kind: MemoryUsageSignalKind,
+  ): Promise<void> {
+    if (!signals.length) return;
+    if (kind !== 'recalled' && kind !== 'used') throw new Error('gate_memory_usage_signal_kind_invalid');
+    const valid = signals.filter(signal => typeof signal.key === 'string' && signal.key.length > 0
+      && signal.key.length <= 96 && Number.isSafeInteger(signal.revision) && signal.revision > 0
+      && typeof signal.sourceEventId === 'string' && signal.sourceEventId.length > 0
+      && signal.sourceEventId.length <= 256 && /^[a-f0-9]{64}$/u.test(signal.queryFingerprint));
+    if (!valid.length) return;
+    const scope = await this.trustedScope(job);
+    const sql = `WITH requested AS (
+        SELECT * FROM unnest($9::TEXT[],$10::BIGINT[],$11::TEXT[],$12::CHAR(64)[])
+          AS item(memory_key,memory_revision,memory_source_event_id,query_fingerprint)
+      )
+      INSERT INTO gate_memory_usage_signals(
+        bot_account_id,scope_kind,actor_id,channel_id,tenant_id,team_id,binding_revision,
+        memory_key,memory_revision,memory_source_event_id,request_event_id,query_fingerprint,signal_kind
+      )
+      SELECT $1,$2,$3,$4,$5,$6,$7,item.memory_key,item.memory_revision,item.memory_source_event_id,
+        $8,item.query_fingerprint,$13
+      FROM requested item
+      JOIN gate_memory_entries memory ON memory.bot_account_id=$1 AND memory.scope_kind=$2
+        AND memory.actor_id=$3 AND memory.channel_id=$4 AND memory.tenant_id=$5
+        AND memory.team_id=$6 AND memory.binding_revision=$7::BIGINT
+        AND memory.memory_key=item.memory_key AND memory.revision=item.memory_revision
+        AND memory.source_event_id=item.memory_source_event_id
+        AND memory.revoked_at IS NULL AND memory.superseded_at IS NULL
+        AND (memory.valid_until IS NULL OR memory.valid_until>now()) AND memory.source_kind<>'unknown'
+      WHERE EXISTS (
+        SELECT 1 FROM kook_ingress_events ingress
+        WHERE ingress.bot_account_id=$1 AND ingress.event_id=$14
+          AND ingress.lease_token=$15 AND ingress.status='processing'
+          AND ingress.lease_until>now() AND ingress.expires_at>now()
+          AND (
+            ($2='dm' AND ingress.event_kind='direct' AND ingress.user_id=$3)
+            OR ($2='channel' AND ingress.event_kind='group'
+              AND ingress.channel_id=$4 AND ingress.tenant_id=$5 AND ingress.team_id=$6
+              AND ingress.binding_revision=$7::BIGINT
+              AND EXISTS (
+                SELECT 1 FROM tenants tenant
+                ${KOOK_CHANNEL_BINDING_JOIN}
+                ${KOOK_CHANNEL_VERSION_JOIN}
+                WHERE tenant.bot_account_id=$1 AND binding.channel_id=$4
+                  AND binding.tenant_id=$5 AND binding.team_id=$6
+                  AND tenant.platform='kook' AND tenant.guild_id=ingress.guild_id
+                  AND version.revision=$7::BIGINT
+              )
+            )
+          )
+      )
+      ON CONFLICT DO NOTHING`;
+    await this.pool.query(sql, [
+      ...scope,
+      job.eventId,
+      valid.map(signal => signal.key),
+      valid.map(signal => signal.revision),
+      valid.map(signal => signal.sourceEventId),
+      valid.map(signal => signal.queryFingerprint),
+      kind,
+      job.eventId,
+      job.leaseToken,
+    ]);
   }
 
   async listRecent(job: KookIngressJob, limit = 16): Promise<GateMemoryEntry[]> {
@@ -569,17 +609,40 @@ export class GateMemoryStore {
     return result.rows[0]?.updated === true;
   }
 
-  /** Tombstone removes stored text and blocks replayed creates. */
-  async forget(job: KookIngressJob, key: string): Promise<boolean> {
+  /** Tombstone removes stored text, usage evidence, and stale episodic candidates. */
+  async forget(job: KookIngressJob, key: string, expectedRevision?: number): Promise<boolean> {
+    if (expectedRevision !== undefined && (!Number.isSafeInteger(expectedRevision) || expectedRevision < 1)) {
+      throw new Error('gate_memory_revision_invalid');
+    }
     const scope = await this.trustedScope(job);
-    const sql = `WITH updated AS (UPDATE gate_memory_entries SET content='',revoked_at=now(),source_event_id=$9,
+    const canonicalKey = canonicalizeGateMemoryKey(key);
+    const memoryLockKey = createHash('sha256').update([...scope, canonicalKey].join('\0')).digest('hex');
+    const sql = `WITH key_lock AS MATERIALIZED (
+        SELECT pg_advisory_xact_lock(hashtextextended($11,0))
+      ), updated AS (UPDATE gate_memory_entries SET content='',revoked_at=now(),source_event_id=$9,
       revision=revision+1,updated_at=now() WHERE ` + FILTER + ' AND memory_key=$8 AND revoked_at IS NULL'
-      + liveFence(9, 10) + ` RETURNING memory_id,revision), queued AS (
+      + ' AND ($12::BIGINT IS NULL OR revision=$12)'
+      + ' AND EXISTS (SELECT 1 FROM key_lock)'
+      + liveFence(9, 10) + ` RETURNING memory_id,revision), usage_deleted AS (
+        DELETE FROM gate_memory_usage_signals WHERE ` + FILTER + ' AND memory_key=$8'
+          + ' AND EXISTS (SELECT 1 FROM key_lock)'
+          + ' AND EXISTS (SELECT 1 FROM updated)'
+          + liveFence(9, 10) + ` RETURNING signal_id
+      ), candidates_deleted AS (
+        UPDATE gate_memory_consolidation_candidates SET status='rejected',result_reason=NULL,
+          memory_key='rejected',content='[rejected]',source_event_ids=ARRAY[]::TEXT[],
+          expected_revision=NULL,confirmed_by_event_id=NULL,updated_at=now()
+        WHERE $2='dm' AND bot_account_id=$1 AND actor_id=$3 AND memory_key=$8
+          AND status IN ('pending_confirmation','conflict','duplicate','promoted')
+          AND (EXISTS (SELECT 1 FROM updated) OR $12::BIGINT IS NULL)
+          AND EXISTS (SELECT 1 FROM key_lock)` + liveFence(9, 10) + ` RETURNING candidate_id
+      ), queued AS (
         INSERT INTO gate_memory_embedding_jobs(memory_id,source_revision,operation)
         SELECT memory_id,revision,'delete' FROM updated ON CONFLICT DO NOTHING RETURNING job_id
-      ) SELECT EXISTS(SELECT 1 FROM updated) AS updated,EXISTS(SELECT 1 FROM queued) AS queued`;
+      ) SELECT EXISTS(SELECT 1 FROM updated) AS updated,EXISTS(SELECT 1 FROM queued) AS queued,
+        EXISTS(SELECT 1 FROM candidates_deleted) AS candidate_deleted`;
     const result = await this.pool.query(sql, [...scope,
-      canonicalizeGateMemoryKey(key), boundedText(job.eventId, 256), job.leaseToken]);
-    return result.rows[0]?.updated === true;
+      canonicalKey, boundedText(job.eventId, 256), job.leaseToken, memoryLockKey, expectedRevision ?? null]);
+    return result.rows[0]?.updated === true || result.rows[0]?.candidate_deleted === true;
   }
 }

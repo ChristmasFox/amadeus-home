@@ -10,6 +10,7 @@
     "worker": "node dist/src/public-sync-worker.js"
   },
   "dependencies": {
+    "@agent/memory": "workspace:*",
     "@agent/presentation": "workspace:*",
     "@agent/pubg-domain": "workspace:*",
     "@ai-sdk/openai-compatible": "3.0.67",

@@ -17,9 +17,13 @@ import { MemoryRetriever } from './application/gate-memory-retriever.js';
 import { createGateMemoryEmbeddingProvider } from './infrastructure/ai/gate-memory-embedding-provider.js';
 import { GateMemoryIntentClassifier, GateMemoryWriteCoordinator } from './application/gate-memory-writer.js';
 import { GateMemoryConsolidationAiPlanner, GateMemoryConsolidationConsentService, GateMemoryConsolidationWorker } from './application/gate-memory-consolidation.js';
+import { GateMemoryPlugin } from './application/gate-memory-plugin.js';
 import { gateMemoryEmbeddingStatus, readGateMemoryFeatureFlags } from './application/gate-memory-feature-flags.js';
 import { readGateMemoryEmbeddingConfig } from './infrastructure/ai/gate-memory-embedding-config.js';
+import { PostgresGateMemoryDreamingRunStore, runMemoryLearningScheduler } from './application/gate-memory-dreaming.js';
 import { startGatewayHealthServer, stopGatewayHealthServer } from './infrastructure/gateway-health-server.js';
+
+export { runMemoryLearningScheduler } from './application/gate-memory-dreaming.js';
 
 function optionalNumber(env: NodeJS.ProcessEnv, key: string): number | undefined {
   const value = env[key];
@@ -27,43 +31,6 @@ function optionalNumber(env: NodeJS.ProcessEnv, key: string): number | undefined
   return Number(value);
 }
 
-const MEMORY_LIGHT_INTERVAL_MS = 30_000;
-const MEMORY_REM_INTERVAL_MS = 6 * 60 * 60_000;
-
-function waitFor(ms: number, signal: AbortSignal): Promise<void> {
-  if (signal.aborted) return Promise.resolve();
-  return new Promise(resolve => {
-    const done = () => { clearTimeout(timer); signal.removeEventListener('abort', done); resolve(); };
-    const timer = setTimeout(done, ms);
-    signal.addEventListener('abort', done, { once: true });
-  });
-}
-
-async function runMemoryLearningScheduler(
-  worker: GateMemoryConsolidationWorker,
-  signal: AbortSignal,
-  onRun: (value: Record<string, unknown>) => void,
-): Promise<void> {
-  let lastRemAt = 0;
-  while (!signal.aborted) {
-    for (let attempt = 0; attempt < 8 && !signal.aborted; attempt += 1) {
-      const result = await worker.processNext('light', signal).catch(() => null);
-      if (!result) { onRun({ workflow: 'light', status: 'error' }); break; }
-      if (result.status === 'SKIPPED_NO_ELIGIBLE_CORPUS') break;
-      onRun(result as unknown as Record<string, unknown>);
-    }
-    if (!signal.aborted && Date.now() - lastRemAt >= MEMORY_REM_INTERVAL_MS) {
-      lastRemAt = Date.now();
-      for (let attempt = 0; attempt < 2 && !signal.aborted; attempt += 1) {
-        const result = await worker.processNext('rem', signal).catch(() => null);
-        if (!result) { onRun({ workflow: 'rem', status: 'error' }); break; }
-        if (result.status === 'SKIPPED_NO_ELIGIBLE_CORPUS') break;
-        onRun(result as unknown as Record<string, unknown>);
-      }
-    }
-    await waitFor(MEMORY_LIGHT_INTERVAL_MS, signal);
-  }
-}
 /** Explicit source startup target. Without --apply it reads no runtime secret,
  * connects to no service and applies no database migration. */
 export async function gatewayMain(args: string[], env: NodeJS.ProcessEnv = process.env): Promise<void> {
@@ -125,16 +92,30 @@ export async function gatewayMain(args: string[], env: NodeJS.ProcessEnv = proce
     }
     const memoryRetriever = memoryFlags.read.enabled ? new MemoryRetriever(memoryStore, memoryEmbeddingProvider, {
       onMetric: metric => process.stdout.write(`${JSON.stringify({ component: 'gate-memory-retrieval', ...metric })}\n`),
-    }) : undefined;
+    }) : null;
     const memoryWriter = agent && memoryFlags.write.enabled
       ? new GateMemoryWriteCoordinator(pool, memoryStore, authorizer, new GateMemoryIntentClassifier(agent.model))
-      : undefined;
+      : null;
     const memoryLearningWorker = agent && memoryFlags.autoLearn.enabled
       ? new GateMemoryConsolidationWorker(pool, botId, new GateMemoryConsolidationAiPlanner(agent.model))
-      : undefined;
+      : null;
+    const memoryPlugin = new GateMemoryPlugin({
+      botAccountId: botId,
+      readEnabled: memoryFlags.read.enabled,
+      writeEnabled: memoryFlags.write.enabled,
+      autoLearnEnabled: memoryFlags.autoLearn.enabled,
+      retriever: memoryRetriever,
+      writer: memoryWriter,
+      consent: memoryConsolidationConsent,
+      worker: memoryLearningWorker,
+    });
     if (memoryLearningWorker) {
-      memoryScheduler = runMemoryLearningScheduler(memoryLearningWorker, stop.signal, result =>
-        process.stdout.write(`${JSON.stringify({ component: 'gate-memory-learning', ...result })}\n`));
+      const dreamingOptions = env.GATE_MEMORY_DREAMING_TIMEZONE === undefined
+        ? {} : { timezone: env.GATE_MEMORY_DREAMING_TIMEZONE };
+      memoryScheduler = runMemoryLearningScheduler(memoryPlugin,
+        new PostgresGateMemoryDreamingRunStore(pool), botId, stop.signal, result =>
+          process.stdout.write(`${JSON.stringify({ component: 'gate-memory-learning', ...result })}\n`),
+        dreamingOptions);
     }
     process.stdout.write(`${JSON.stringify({ component: 'gate-memory', event: 'feature_readiness',
       read: memoryFlags.read.status, write: memoryFlags.write.status,
@@ -150,14 +131,12 @@ export async function gatewayMain(args: string[], env: NodeJS.ProcessEnv = proce
       createKookGroupBindingHandler(bindingServices),
       createKookPublicQueryHandler({
         authorizer, claims, agent,
-        ...(memoryRetriever ? { memoryRetriever } : {}),
-        ...(memoryLearningWorker ? { memoryConsolidationConsent } : {}),
-        ...(memoryWriter ? { memoryWriter } : {}),
+        memoryPlugin,
         executeNaturalWrite: (job, intent, signal) => executeKookNaturalWrite(job, bindingServices, intent, signal),
         onAgentDiagnostic,
       }),
-      createKookManagementHandler({ teams, claims, players }, memoryConsolidationConsent,
-        { autoLearnEnabled: Boolean(memoryLearningWorker) }),
+      createKookManagementHandler({ teams, claims, players }, memoryPlugin,
+        { autoLearnEnabled: memoryPlugin.autoLearnEnabled }),
     );
     const runtime = new KookApplicationRuntime({
       pool, botAccountId: botId, token, handler,

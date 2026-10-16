@@ -2,7 +2,43 @@
 
 Date: 2026-10-16 (Asia/Shanghai).
 
-Active Goal: `docs/LAB_MEMORY_AND_DUAL_RELEASE_ENGINEERING_GOAL.md`.
+Active Goal: `docs/GATE_MEMORY_PLUGIN_EXTRACTION_GOAL.md`.
+
+## 2026-10-16 — Gate memory P3–P5 candidate deployed
+
+P0–P5 are complete. PR #12 source commit
+`3e96b573839b26897cdaa0438a48a9c0f1b39f56` passed all six GitHub checks and
+was deployed to Gate-Local through `devctl goal finish-phase P3` and the
+protected `release-gate.sh candidate --apply` path. Candidate image
+`local/pubg-saas:git-3e96b573839b26897cdaa0438a48a9c0f1b39f56` is running
+healthy in Gateway, Worker, and egress-proxy; PostgreSQL remains healthy and
+unchanged. Migrations 0030 and 0031 are present in `schema_migrations`.
+
+The full encrypted PostgreSQL backup is at
+`/Users/nyannyan/.local/share/pubg-saas-backup/gate-local-20261016T132836Z-3e96b573839b/pubg-saas.dump.age`
+(SHA-256 `c71caff3e8dea9595c4e5d794be934b69a6f8f5d04516b2cd2385613fd5961d6`);
+the protected checkpoint reports `verified_recoverable`. Detailed runtime,
+migration, rollback and source evidence is in
+`.agent/checkpoints/2026-10-16-gate-memory-plugin-extraction-p3-candidate.md`.
+M2 remains PAUSED with no clearance; Lab and the separate 9router service were
+not changed. Runtime memory flags report default-enabled read/write/autoLearn;
+embedding is disabled because its dedicated config is absent. P6 final audit
+remains active.
+
+## 2026-10-16T19:01+08:00 — Gate memory extraction P0 candidate
+
+P0 is complete at source SHA `243ab74ebd9a87f0f132fe56f904dfaf601f7492`.
+The pre-extraction boundary map and the ordinary-reply/Dreaming concurrency
+regression are recorded in `docs/GATE_MEMORY_PACKAGE_BOUNDARY.md` and
+`apps/pubg-saas/tests/gate-memory-consolidation.integration.test.ts`. The
+protected `devctl goal finish-phase P0` path applied Gate-Local candidate
+`local/pubg-saas:git-243ab74ebd9a87f0f132fe56f904dfaf601f7492` (image ID
+`sha256:409e2de388f403d12578d27f0292928e53de0c35404d7470533aa49c60e99695`).
+Gateway, Worker, PostgreSQL, and egress-proxy are running healthy; the three
+app containers have restart count 0. The protected deployment checkpoint is
+`/Users/nyannyan/.local/share/pubg-saas-backup/gate-local-20261016T110130Z-243ab74ebd9a`.
+M2 remains PAUSED with clearance reserved for formal release; Lab was not
+touched. P1 is now in progress.
 
 ## 2026-10-16T18:39+08:00 — Gate 9router 0.5.104 live
 

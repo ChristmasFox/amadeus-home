@@ -168,6 +168,39 @@ both local records:
 pnpm devctl configure gate-auto-disable
 ```
 
+## Automatic memory learning and Deep promotion
+
+Light and REM persist short-lived candidates with provenance; neither stage
+writes ordinary chat directly into long-term memory. REM can merge repeated
+same-key, same-value observations while retaining only current, consent-scoped
+DM source IDs. Deep rechecks the active consent, source admissions, direct
+speaker identity, transcript expiry, candidate content against its source, and
+the sensitive/third-party/prompt-injection filters before considering a write.
+
+Deep uses a deterministic policy. A single observation is never sufficient;
+the source reliability must be at least 80, evidence must be no older than 30
+days, and at least two distinct observations are required. Promotion then
+requires either repetition on at least two UTC dates or at least two distinct
+recall queries plus a successful-use signal. Unresolved competing values,
+weak sources, stale evidence, and prohibited content fail closed. Candidate
+kind sets the score threshold; a high planner confidence alone is not part of
+the promotion decision. A correction against a current value receives a score
+penalty and must still match the captured revision with compare-and-set. A
+qualifying correction advances that revision and queues the configured
+embedding generations.
+
+An existing forget tombstone is an absolute barrier to automatic promotion.
+Explicit remember/correct remains the immediate, user-confirmed path. Recall
+and use signals remain query-text-free and expire according to their schema.
+The P4 Gateway scheduler waits for the next 03:00 in
+`GATE_MEMORY_DREAMING_TIMEZONE` (defaults to `Asia/Shanghai`) and runs Light,
+REM, then Deep once. It does not catch up a missed run at startup. A
+content-free PostgreSQL claim keyed by Bot, timezone, and local date prevents
+duplicate runs across concurrent Gateway instances. A failed run records only
+a fixed error code and is retried at the next scheduled date. The scheduler
+runs only when Gate automatic learning is enabled; it does not enable any
+memory or embedding feature flag.
+
 ## Scoped vector index rebuild
 
 Migrations `0024`, `0028`, and `0029` provide the embedding outbox,
@@ -182,7 +215,7 @@ the same environment as `--target`; the URL and password are never command-line
 arguments. The admin uses one Bot account at a time.
 
 ```sh
-pnpm --filter @agent/pubg-saas build
+pnpm build:pubg-saas
 export GATE_MEMORY_ADMIN_TARGET=gate-local
 # Load GATE_MEMORY_ADMIN_DATABASE_URL from the protected secret store.
 node apps/pubg-saas/dist/src/gate-memory-admin.js status \
@@ -242,7 +275,9 @@ node apps/pubg-saas/dist/src/gate-memory-admin.js activate \
 it does not bulk-delete orphaned vectors. Do not delete old vector generations
 until a separately reviewed retention/cleanup change has a verified backup.
 The normal read path uses only the active contract and falls back to lexical
-recall if vectors are unavailable. The admin tool itself creates no scheduler. The running Gateway owns the bounded default Light/REM scheduler; index administration remains separate.
+recall if vectors are unavailable. The admin tool itself creates no scheduler.
+The running Gateway owns the bounded daily Light/REM/Deep scheduler; index
+administration remains separate.
 
 ## Limits and recovery
 

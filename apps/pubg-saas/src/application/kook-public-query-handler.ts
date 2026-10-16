@@ -26,9 +26,8 @@ import { parseTeamLeaderboardMetric, type TeamLeaderboardMetric } from '../contr
 import { MAX_TEAM_ROSTER_SIZE } from '../contracts/team-roster.js';
 import { sanitizeKookMentionMarkup } from '../channels/kook/trusted-group-event.js';
 import { buildPublicAgentFacts } from './public-agent-facts.js';
-import type { MemoryRetriever } from './gate-memory-retriever.js';
-import type { GateMemoryWriteCoordinator } from './gate-memory-writer.js';
-import type { GateMemoryConsolidationConsentService } from './gate-memory-consolidation.js';
+import type { MemoryObservation } from '@agent/memory';
+import type { GateMemoryPlugin } from './gate-memory-plugin.js';
 
 type PublicQueryIntent =
   | { kind: 'team_stats'; period: 'today' | 'yesterday' }
@@ -49,9 +48,7 @@ export interface KookPublicQueryServices {
   agent?: { model: Exclude<LanguageModel, string>; provider: string; modelId: string } | null;
   executeNaturalWrite?: (job: KookIngressJob, intent: KookNaturalWriteIntent, signal: AbortSignal) => Promise<KookNaturalWriteResult>;
   onAgentDiagnostic?: (event: KookAgentDiagnostic) => void;
-  memoryRetriever?: MemoryRetriever;
-  memoryWriter?: GateMemoryWriteCoordinator;
-  memoryConsolidationConsent?: GateMemoryConsolidationConsentService;
+  memoryPlugin?: GateMemoryPlugin;
   executor?: QueryPlanExecutor;
   now?: () => Date;
 }
@@ -275,6 +272,21 @@ function naturalMessage(job: KookIngressJob): string {
   return sanitizeKookMentionMarkup(content.replace(new RegExp(`^\\s*(?:<@!?${bot}>|\\(met\\)${bot}\\(met\\)|@${bot})\\s*`, 'u'), '')).trim();
 }
 
+function directObservation(job: KookIngressJob): MemoryObservation | null {
+  if (job.request.kind !== 'direct') return null;
+  const observedAt = new Date(job.request.event.timestamp).toISOString();
+  return {
+    content: job.request.event.content,
+    observedAt,
+    evidence: [{ id: job.eventId, observedAt, source: 'conversation' }],
+  };
+}
+
+async function observeDirectMessage(services: KookPublicQueryServices, job: KookIngressJob): Promise<void> {
+  const observation = directObservation(job);
+  if (observation) await services.memoryPlugin?.observe(job, observation).catch(() => undefined);
+}
+
 async function naturalLanguageReply(
   services: KookPublicQueryServices,
   job: KookIngressJob,
@@ -286,9 +298,7 @@ async function naturalLanguageReply(
   const requestKey = createHash('sha256').update(`${job.botAccountId}\0${job.eventId}`).digest('hex').slice(0, 16);
   const channelId = job.request.kind === 'group' ? job.request.event.channelId : undefined;
   if (!configured) {
-    if (job.request.kind === 'direct' && services.memoryConsolidationConsent) {
-      await services.memoryConsolidationConsent.admitCurrentMessage(job).catch(() => 0);
-    }
+    await observeDirectMessage(services, job);
     await services.authorizer.recordAgentRun(job, {
       modelId: null, outcome: 'model_unconfigured', failureCode: 'agent_model_unconfigured',
       inputTokens: null, outputTokens: null, totalTokens: null,
@@ -297,16 +307,14 @@ async function naturalLanguageReply(
     return message('我这边的公共助手还没连上模型，暂时无法正常接话。稍后再试一下。');
   }
 
-  if (services.memoryWriter) {
-    const memoryReply = await services.memoryWriter.handle(job, signal).catch(() => undefined);
+  if (services.memoryPlugin) {
+    const memoryReply = await services.memoryPlugin.handleExplicitMessage(job, signal).catch(() => undefined);
     if (memoryReply) return memoryReply;
   }
   // Explicit remember/correct/forget commands are handled above and are not
   // re-learned as ordinary conversation. Natural DM messages are admitted
   // automatically unless the user explicitly disabled Light/REM.
-  if (job.request.kind === 'direct' && services.memoryConsolidationConsent) {
-    await services.memoryConsolidationConsent.admitCurrentMessage(job).catch(() => 0);
-  }
+  await observeDirectMessage(services, job);
 
   let toolDegraded = false;
   let toolFailureCode = 'agent_tool_degraded';
@@ -546,8 +554,8 @@ async function naturalLanguageReply(
   try {
     const [window, memoryResult] = await Promise.all([
       services.authorizer.loadAgentConversation(job),
-      services.memoryRetriever
-        ? services.memoryRetriever.retrieve(job, currentMessage).catch(() => null)
+      services.memoryPlugin
+        ? services.memoryPlugin.recall(job, { query: currentMessage }).catch(() => null)
         : Promise.resolve(null),
     ]);
     const context = buildGateWorkingContext(window, currentMessage, undefined, memoryResult?.context ?? null);
@@ -561,6 +569,13 @@ async function naturalLanguageReply(
       { role: 'user', content: `${window.currentSpeakerLabel}说：${currentContext}${context.currentMessage}` },
     ];
     const result = await runPublicKookAgent({ model: configured.model, tools, messages, signal, currentMessage });
+    if (!result.recoveryCode && context.longTermMemoryContext
+      && memoryResult?.candidates.length && services.memoryPlugin) {
+      const presented = memoryResult.candidates.filter(candidate =>
+        context.longTermMemoryContext?.includes(JSON.stringify(candidate.key))
+        && context.longTermMemoryContext?.includes(JSON.stringify(candidate.content)));
+      await services.memoryPlugin.recordUsed(job, currentMessage, presented).catch(() => undefined);
+    }
     const outcome = toolDegraded ? 'tool_degraded' : authorizationDenied ? 'authorization_denied' : 'replied';
     if (result.recoveryCode) {
       services.onAgentDiagnostic?.({ event: 'kook_agent_error', stage: 'model', reason: result.recoveryCode, requestKey, ...(channelId ? { channelId } : {}), count: 1 });

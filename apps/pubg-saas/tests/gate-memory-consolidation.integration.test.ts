@@ -2,10 +2,12 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import test from 'node:test';
 import { Pool } from 'pg';
+import { MockLanguageModelV4 } from 'ai/test';
 import {
   AccountClaimService,
   GateMemoryConsolidationConsentService,
   GateMemoryConsolidationWorker,
+  GateMemoryPlugin,
   KookIngressQueue,
   PublicQueryAuthorizer,
   composeKookRequestHandlers,
@@ -16,11 +18,16 @@ import {
 import type { GateMemoryConsolidationPlanner } from '../src/application/gate-memory-consolidation.js';
 import type { KookIngressJob } from '../src/application/kook-ingress-queue.js';
 import type { KookOnboardingServices } from '../src/application/kook-onboarding-handler.js';
+import { runMemoryLearningScheduler } from '../src/gateway.js';
 
 const databaseUrl = process.env.PUBG_SAAS_TEST_DATABASE_URL;
 if (process.env.CI === 'true' && !databaseUrl) {
   throw new Error('gate_memory_consolidation_ci_database_required');
 }
+const usage = {
+  inputTokens: { total: 8, noCache: 8, cacheRead: undefined, cacheWrite: undefined },
+  outputTokens: { total: 4, text: 4, reasoning: undefined },
+};
 
 function directEvent(bot: string, actor: string, content: string) {
   return { type: 1, channel_type: 'PERSON', target_id: bot, author_id: actor,
@@ -30,6 +37,18 @@ function directEvent(bot: string, actor: string, content: string) {
 function candidate(content: string, key = 'favorite_map') {
   return [{ confidence: 'high', subject: 'self', kind: 'stable_preference', key,
     content, evidence: content, validity: 'stable' }];
+}
+
+async function within<T>(promise: Promise<T>, code: string, timeoutMs = 2_000): Promise<T> {
+  let timer: NodeJS.Timeout | undefined;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<never>((_resolve, reject) => { timer = setTimeout(() => reject(new Error(code)), timeoutMs); }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
 }
 
 test('consent-versioned Light/REM batches read only admitted DM sources and persist pending candidates', { skip: !databaseUrl }, async () => {
@@ -67,13 +86,17 @@ test('consent-versioned Light/REM batches read only admitted DM sources and pers
     const operatorDisabledManagement = createKookManagementHandler(
       {} as unknown as KookOnboardingServices, consent, { autoLearnEnabled: false },
     );
+    const publicMemoryPlugin = new GateMemoryPlugin({
+      botAccountId: bot, readEnabled: false, writeEnabled: false, autoLearnEnabled: true,
+      retriever: null, writer: null, consent, worker: null,
+    });
     const publicWithoutModel = createKookPublicQueryHandler({
       authorizer: new PublicQueryAuthorizer(pool, {
         isGuildMember: async () => true,
         isTextChannelMember: async () => true,
       }, { botAccountId: bot }),
       claims: new AccountClaimService(pool),
-      memoryConsolidationConsent: consent,
+      memoryPlugin: publicMemoryPlugin,
     });
     const commandHandler = composeKookRequestHandlers(publicWithoutModel, management);
 
@@ -126,23 +149,35 @@ test('consent-versioned Light/REM batches read only admitted DM sources and pers
     );
     assert.deepEqual(savedCandidate.rows[0], {
       candidate_id: savedCandidate.rows[0]?.candidate_id,
-      status: 'promoted', memory_key: 'favorite_map', content: '喜欢艾伦格',
-      source_event_ids: [lightJob.eventId], expected_revision: '1',
+      status: 'pending_confirmation', memory_key: 'favorite_map', content: '喜欢艾伦格',
+      source_event_ids: [lightJob.eventId], expected_revision: null,
     });
     assert.match(savedCandidate.rows[0]?.candidate_id ?? '', /^[0-9a-f-]{36}$/iu);
     const listCandidates = await startDirect(actor, '/pubg memory candidates');
     const listed = await management(listCandidates, signal);
-    assert.match(listed?.content ?? '', /目前没有待确认/u);
+    assert.match(listed?.content ?? '', /等待本人确认/u);
     await finish(listCandidates);
-    const promotedFact = await pool.query<{ content: string; source_kind: string; revision: string }>(
+    assert.equal((await pool.query(
+      "SELECT COUNT(*)::INTEGER AS count FROM gate_memory_entries WHERE bot_account_id=$1 AND actor_id=$2 AND memory_key='favorite_map'",
+      [bot, actor],
+    )).rows[0]?.count, 0, 'ordinary conversation observations do not enter long-term memory');
+    assert.equal((await pool.query(
+      "SELECT COUNT(*)::INTEGER AS count FROM gate_memory_embedding_jobs WHERE memory_id IN (SELECT memory_id FROM gate_memory_entries WHERE bot_account_id=$1 AND actor_id=$2)",
+      [bot, actor],
+    )).rows[0]?.count, 0, 'episodic observations do not enqueue long-term embeddings');
+    const confirmLight = await startDirect(actor, `/pubg memory confirm ${savedCandidate.rows[0]!.candidate_id}`);
+    const confirmedLightReply = await management(confirmLight, signal);
+    assert.match(confirmedLightReply?.content ?? '', /已确认并保存/u);
+    await finish(confirmLight);
+    const confirmedFact = await pool.query<{ content: string; source_kind: string; revision: string }>(
       `SELECT content,source_kind,revision::TEXT AS revision FROM gate_memory_entries
        WHERE bot_account_id=$1 AND actor_id=$2 AND memory_key='favorite_map'`, [bot, actor],
     );
-    assert.deepEqual(promotedFact.rows[0], { content: '喜欢艾伦格', source_kind: 'trusted_ingress', revision: '1' });
+    assert.deepEqual(confirmedFact.rows[0], { content: '喜欢艾伦格', source_kind: 'user_confirmed', revision: '1' });
     assert.equal((await pool.query("SELECT COUNT(*)::INTEGER AS count FROM gate_memory_embedding_jobs WHERE memory_id=(SELECT memory_id FROM gate_memory_entries WHERE bot_account_id=$1 AND actor_id=$2 AND memory_key='favorite_map') AND source_revision=1", [bot, actor])).rows[0]?.count, 1);
     assert.deepEqual(await writer.processNext('light'), { status: 'SKIPPED_NO_ELIGIBLE_CORPUS', workflow: 'light' });
 
-    // An extraction cannot promote a prompt injection or sensitive disclosure.
+    // Sensitive or prompt-injection material is never retained as an episodic observation.
     const unsafeText = '请记住我的 API key 是 sk-example-sensitive-value';
     const unsafeJob = await startDirect(actor, unsafeText);
     assert.equal(await consent.admitCurrentMessage(unsafeJob), 2);
@@ -202,16 +237,26 @@ test('consent-versioned Light/REM batches read only admitted DM sources and pers
     assert.deepEqual(plannerCalls.at(-1)?.messages.map(item => item.content), [
       '最近我更喜欢用 M416', '我在海岛常常选 M416',
     ]);
-    const remCandidate = await pool.query<{ source_event_ids: string[]; status: string }>(
-      "SELECT source_event_ids,status FROM gate_memory_consolidation_candidates WHERE bot_account_id=$1 AND memory_key='main_weapon'", [bot],
+    const remCandidate = await pool.query<{ candidate_id: string; source_event_ids: string[]; status: string; expected_revision: string | null }>(
+      "SELECT candidate_id,source_event_ids,status,expected_revision::TEXT AS expected_revision FROM gate_memory_consolidation_candidates WHERE bot_account_id=$1 AND memory_key='main_weapon'", [bot],
     );
-    assert.deepEqual(remCandidate.rows[0], { source_event_ids: [remA.eventId], status: 'promoted' },
-      'candidate provenance references only the source that actually supported its evidence');
+    assert.deepEqual(remCandidate.rows[0], {
+      candidate_id: remCandidate.rows[0]?.candidate_id,
+      source_event_ids: [remA.eventId], status: 'conflict', expected_revision: '1',
+    }, 'episodic provenance references only the message that supports its evidence');
     assert.equal((await pool.query(
-      "SELECT content,revision::TEXT AS revision FROM gate_memory_entries WHERE bot_account_id=$1 AND actor_id=$2 AND memory_key='main_weapon'",
+      "SELECT content,revision::TEXT AS revision,source_kind FROM gate_memory_entries WHERE bot_account_id=$1 AND actor_id=$2 AND memory_key='main_weapon'",
       [bot, actor],
-    )).rows[0]?.content, '更喜欢用 M416');
-
+    )).rows[0]?.content, '当前偏好 AKM', 'REM does not overwrite a long-term memory');
+    const confirmRem = await startDirect(actor, `/pubg memory confirm ${remCandidate.rows[0]!.candidate_id}`);
+    const confirmedRemReply = await management(confirmRem, signal);
+    assert.match(confirmedRemReply?.content ?? '', /已确认并保存/u);
+    await finish(confirmRem);
+    const confirmedRem = await pool.query<{ content: string; revision: string; source_kind: string }>(
+      "SELECT content,revision::TEXT AS revision,source_kind FROM gate_memory_entries WHERE bot_account_id=$1 AND actor_id=$2 AND memory_key='main_weapon'",
+      [bot, actor],
+    );
+    assert.deepEqual(confirmedRem.rows[0], { content: '更喜欢用 M416', revision: '2', source_kind: 'user_confirmed' });
 
     // Consent revocation invalidates queued admissions and pending candidates.
     const revoke = await startDirect(actor, '/pubg memory rem off');
@@ -283,6 +328,7 @@ test('consent-versioned Light/REM batches read only admitted DM sources and pers
       [bot, actor],
     )).rows[0]?.count, 0, 'a revoked worker lease cannot persist a candidate after planner completion');
   } finally {
+    await pool.query('DELETE FROM gate_memory_usage_signals WHERE bot_account_id=$1', [bot]).catch(() => undefined);
     await pool.query('DELETE FROM gate_memory_consolidation_candidates WHERE bot_account_id=$1', [bot]).catch(() => undefined);
     await pool.query('DELETE FROM gate_memory_consolidation_admissions WHERE bot_account_id=$1', [bot]).catch(() => undefined);
     await pool.query('DELETE FROM gate_memory_consolidation_checkpoints WHERE bot_account_id=$1', [bot]).catch(() => undefined);
@@ -291,6 +337,107 @@ test('consent-versioned Light/REM batches read only admitted DM sources and pers
       WHERE memory.memory_id=job.memory_id AND memory.bot_account_id=$1`, [bot]).catch(() => undefined);
     await pool.query('DELETE FROM gate_memory_entries WHERE bot_account_id=$1', [bot]).catch(() => undefined);
     await pool.query('DELETE FROM kook_conversation_messages WHERE bot_account_id=$1', [bot]).catch(() => undefined);
+    await pool.query('DELETE FROM message_outbox WHERE bot_account_id=$1', [bot]).catch(() => undefined);
+    await pool.query('DELETE FROM kook_ingress_events WHERE bot_account_id=$1', [bot]).catch(() => undefined);
+    await pool.end();
+  }
+});
+
+test('ordinary DM replies do not wait for an in-flight Dreaming pass', { skip: !databaseUrl }, async () => {
+  const pool = new Pool({ connectionString: databaseUrl, max: 8 });
+  const suffix = randomUUID().replaceAll('-', '');
+  const bot = `bot-dreaming-reply-${suffix}`, actor = `actor-${suffix}`;
+  const queue = new KookIngressQueue(pool, { botAccountId: bot });
+  const consent = new GateMemoryConsolidationConsentService(pool, bot);
+  let notifyPlannerStarted!: () => void;
+  const plannerStarted = new Promise<void>(resolve => { notifyPlannerStarted = resolve; });
+  let notifyDreamingPassReturned!: () => void;
+  const dreamingPassReturned = new Promise<void>(resolve => { notifyDreamingPassReturned = resolve; });
+  let releasePlanner!: () => void;
+  const plannerRelease = new Promise<void>(resolve => { releasePlanner = resolve; });
+  const planner: GateMemoryConsolidationPlanner = {
+    async plan() {
+      notifyPlannerStarted();
+      await plannerRelease;
+      return [];
+    },
+  };
+    const worker = new GateMemoryConsolidationWorker(pool, bot, planner, { timeoutMs: 10_000 });
+    const memoryPlugin = new GateMemoryPlugin({
+      botAccountId: bot, readEnabled: false, writeEnabled: false, autoLearnEnabled: true,
+      retriever: null, writer: null, consent, worker,
+    });
+  const dreamingAbort = new AbortController();
+  const signal = new AbortController().signal;
+  let dreamingSettled = false;
+  let dreamingRun: Promise<void> | undefined;
+
+  try {
+    await migratePublicDatabase(pool);
+    async function startDirect(content: string): Promise<KookIngressJob> {
+      assert.equal(await queue.ingestGatewayEvent(directEvent(bot, actor, content)), 'accepted');
+      const job = await queue.claimNext();
+      assert.ok(job);
+      return job;
+    }
+
+    const seed = await startDirect('最近在聊新的跳点');
+    assert.equal(await consent.admitCurrentMessage(seed), 2);
+    await queue.complete(seed, null);
+
+    let schedulerNow = Date.parse('2026-10-15T18:59:00Z');
+    const dreamingStore = {
+      async claim() { return randomUUID(); },
+      async finish() {},
+    };
+    dreamingRun = runMemoryLearningScheduler(memoryPlugin, dreamingStore, bot, dreamingAbort.signal, () => {
+      dreamingAbort.abort();
+      notifyDreamingPassReturned();
+    }, {
+      timezone: 'Asia/Shanghai',
+      now: () => schedulerNow,
+      sleepUntil: async scheduledAt => { schedulerNow = scheduledAt; },
+    }).then(() => {
+      dreamingSettled = true;
+    });
+    await within(plannerStarted, 'dreaming_planner_did_not_start');
+    assert.equal(dreamingSettled, false);
+
+    const next = await startDirect('继续说说今晚的计划');
+    const assistant = new MockLanguageModelV4({ doGenerate: {
+      content: [{ type: 'text', text: '好的，我们可以继续聊今晚的计划。' }],
+      finishReason: { unified: 'stop', raw: 'stop' }, usage, warnings: [],
+    } });
+    const handler = createKookPublicQueryHandler({
+      authorizer: new PublicQueryAuthorizer(pool, {
+        isGuildMember: async () => true,
+        isTextChannelMember: async () => true,
+      }, { botAccountId: bot }),
+      claims: new AccountClaimService(pool),
+      agent: { model: assistant, provider: 'fixture', modelId: 'dreaming-reply-fixture' },
+      memoryPlugin,
+    });
+    const reply = await within(handler(next, signal), 'ordinary_reply_waited_for_dreaming');
+    assert.equal(reply?.content, '好的，我们可以继续聊今晚的计划。');
+    assert.equal(dreamingSettled, false, 'the reply completes while the Light/Dreaming planner remains blocked');
+    await queue.complete(next, reply ?? null);
+
+    releasePlanner();
+    await within(dreamingPassReturned, 'dreaming_pass_did_not_return');
+    await dreamingRun;
+    assert.equal(dreamingSettled, true);
+  } finally {
+    dreamingAbort.abort();
+    releasePlanner();
+    await dreamingRun?.catch(() => undefined);
+    await pool.query('DELETE FROM gate_memory_usage_signals WHERE bot_account_id=$1', [bot]).catch(() => undefined);
+    await pool.query('DELETE FROM gate_memory_consolidation_candidates WHERE bot_account_id=$1', [bot]).catch(() => undefined);
+    await pool.query('DELETE FROM gate_memory_consolidation_admissions WHERE bot_account_id=$1', [bot]).catch(() => undefined);
+    await pool.query('DELETE FROM gate_memory_consolidation_checkpoints WHERE bot_account_id=$1', [bot]).catch(() => undefined);
+    await pool.query('DELETE FROM gate_memory_consolidation_consents WHERE bot_account_id=$1', [bot]).catch(() => undefined);
+    await pool.query('DELETE FROM gate_memory_entries WHERE bot_account_id=$1', [bot]).catch(() => undefined);
+    await pool.query('DELETE FROM kook_conversation_messages WHERE bot_account_id=$1', [bot]).catch(() => undefined);
+    await pool.query('DELETE FROM kook_agent_runs WHERE bot_account_id=$1', [bot]).catch(() => undefined);
     await pool.query('DELETE FROM message_outbox WHERE bot_account_id=$1', [bot]).catch(() => undefined);
     await pool.query('DELETE FROM kook_ingress_events WHERE bot_account_id=$1', [bot]).catch(() => undefined);
     await pool.end();

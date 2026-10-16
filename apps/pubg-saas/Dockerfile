@@ -8,6 +8,7 @@ ENV COREPACK_ENABLE_DOWNLOAD_PROMPT=0
 
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY apps/pubg-saas/package.json apps/pubg-saas/package.json
+COPY packages/agent-memory/package.json packages/agent-memory/package.json
 COPY packages/pubg-domain/package.json packages/pubg-domain/package.json
 COPY packages/presentation/package.json packages/presentation/package.json
 
@@ -16,16 +17,20 @@ RUN corepack enable \
   && pnpm install --frozen-lockfile --filter @agent/pubg-saas...
 
 COPY apps/pubg-saas ./apps/pubg-saas
+COPY packages/agent-memory ./packages/agent-memory
 COPY packages/pubg-domain ./packages/pubg-domain
 COPY packages/presentation ./packages/presentation
 COPY infra/pubg-saas/container-entrypoint.sh ./infra/pubg-saas/container-entrypoint.sh
 
-RUN pnpm --filter @agent/presentation build \
+RUN pnpm --filter @agent/memory build \
+  && pnpm --filter @agent/presentation build \
   && pnpm --filter @agent/pubg-domain build \
   && pnpm --filter @agent/pubg-saas build \
   && pnpm --filter @agent/pubg-saas deploy --prod --legacy /prod \
-  && rm -rf /prod/node_modules/@agent/pubg-domain /prod/node_modules/@agent/presentation \
-  && mkdir -p /prod/node_modules/@agent/pubg-domain /prod/node_modules/@agent/presentation \
+  && rm -rf /prod/node_modules/@agent/memory /prod/node_modules/@agent/pubg-domain /prod/node_modules/@agent/presentation \
+  && mkdir -p /prod/node_modules/@agent/memory /prod/node_modules/@agent/pubg-domain /prod/node_modules/@agent/presentation \
+  && cp packages/agent-memory/package.json /prod/node_modules/@agent/memory/package.json \
+  && cp -a packages/agent-memory/dist /prod/node_modules/@agent/memory/dist \
   && cp packages/pubg-domain/package.json /prod/node_modules/@agent/pubg-domain/package.json \
   && cp packages/presentation/package.json /prod/node_modules/@agent/presentation/package.json \
   && cp -a packages/pubg-domain/dist /prod/node_modules/@agent/pubg-domain/dist \

@@ -80,6 +80,7 @@ for path in "${FILES[@]-}"; do
     packages/pubg-domain/src/*) has_pubg=1; has_pubg_private=1; has_pubg_domain=1; has_pubg_saas=1 ;;
     plugins/pubg/*) has_pubg=1; has_pubg_private=1 ;;
     packages/pubg-domain/*) has_pubg=1; has_pubg_domain=1; has_pubg_saas=1 ;;
+    packages/agent-memory/*) has_pubg_saas=1 ;;
     apps/pubg-saas/src/*|apps/pubg-saas/tests/*|apps/pubg-saas/tsconfig.json) has_pubg=1; has_pubg_saas=1 ;;
     packages/presentation/*) has_presentation=1; has_pubg_saas=1; has_amadeus=1; has_product=1 ;;
     packages/identity/*) has_identity=1 ;;

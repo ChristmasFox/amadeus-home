@@ -8,6 +8,7 @@ import { MockLanguageModelV4 } from 'ai/test';
 import {
   AccountClaimService,
   GateMemoryIndexWorker,
+  GateMemoryPlugin,
   GateMemoryIndexGenerationManager,
   MemoryRetriever,
   GateMemoryStore,
@@ -357,6 +358,10 @@ test('optional pgvector migration, exact scoped recall, budgets, deletion and re
     await queue.complete(tombstoneJob, null);
 
     const memoryRetriever = new MemoryRetriever(memory, shadowProvider);
+    const memoryPlugin = new GateMemoryPlugin({
+      botAccountId: bot, readEnabled: true, writeEnabled: false, autoLearnEnabled: false,
+      retriever: memoryRetriever, writer: null, consent: null, worker: null,
+    });
     const paraphraseJob = await startDirect('owner-' + suffix, 'where do I usually land?');
     const capturedPrompts: unknown[] = [];
     const syntheticAgent = new MockLanguageModelV4({ doGenerate: async input => {
@@ -367,7 +372,7 @@ test('optional pgvector migration, exact scoped recall, budgets, deletion and re
       authorizer: auth,
       claims: new AccountClaimService(memoryPool),
       agent: { model: syntheticAgent, provider: 'synthetic-fixture', modelId: 'synthetic-agent-v1' },
-      memoryRetriever,
+      memoryPlugin,
     });
     const reply = await handler(paraphraseJob, new AbortController().signal);
     assert.match(reply?.content ?? '', /艾伦格的森林/u);
