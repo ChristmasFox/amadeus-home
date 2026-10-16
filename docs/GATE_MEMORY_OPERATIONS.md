@@ -104,9 +104,15 @@ SHA-tagged immutable local image, and verifies the transferred image by its
 platform, complete image config, and every rootfs layer digest. The canonical
 content fingerprint tolerates Docker versions that normalize imported image
 IDs while still rejecting any config or layer mismatch; source and target
-daemon image IDs remain available as runtime evidence. It writes a mode-`0700` external checkpoint containing the
-prior Compose/env files and an encrypted full-database PostgreSQL custom dump
-(all schemas and data, without owner/ACL restoration). The candidate records
+daemon image IDs remain available as runtime evidence. Every candidate writes
+a mode-`0700` external checkpoint containing the prior Compose/env files. By
+default, a reversible application-only candidate records an application
+rollback checkpoint without a database dump; schema changes require a full
+encrypted PostgreSQL custom dump. Operators who explicitly require a database
+backup for an application-only candidate can pass
+`--database-backup full` to `scripts/gate-local-candidate.py candidate --apply`
+(after the approval reference). This requests the same all-schema/all-data dump
+without owner/ACL restoration. The candidate records
 encrypted size, SHA-256, and `pg_restore --list` entry count. It authenticates
 the complete age stream and verifies the archive before the migrator runs;
 no plaintext dump is retained. The image/Compose switch waits for PostgreSQL, egress proxy,

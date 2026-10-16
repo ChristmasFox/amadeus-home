@@ -177,6 +177,7 @@ jobs:
           pnpm --filter @agent/memory build
           pnpm --filter @agent/presentation build
           pnpm --filter @agent/pubg-domain build
+          pnpm --filter @agent/pubg-intelligence build
       - name: Run isolated optional pgvector fixture
         env:
           PUBG_SAAS_PGVECTOR_TEST_CONTAINER_ID: ${{ job.services.postgres.id }}

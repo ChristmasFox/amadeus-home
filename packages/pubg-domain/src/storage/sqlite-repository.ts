@@ -26,7 +26,9 @@ interface SqliteDatabase {
 }
 
 const require = createRequire(import.meta.url);
-const { DatabaseSync } = require('node:sqlite') as { DatabaseSync: new (path: string) => SqliteDatabase };
+const { DatabaseSync } = require('node:sqlite') as {
+  DatabaseSync: new (path: string, options?: { readOnly?: boolean }) => SqliteDatabase;
+};
 
 function numeric(value: unknown, fallback = 0): number {
   const result = Number(value);
@@ -96,11 +98,15 @@ function keyForFeature(key: TelemetryFeatureKey): string {
 export class SqlitePubgRepository implements TelemetryFeatureStore {
   readonly db: SqliteDatabase;
 
-  constructor(readonly filename = ':memory:') {
-    if (filename !== ':memory:') mkdirSync(dirname(filename), { recursive: true });
-    this.db = new DatabaseSync(filename);
-    this.db.exec('PRAGMA foreign_keys = ON; PRAGMA busy_timeout = 5000; PRAGMA journal_mode = WAL;');
-    this.migrate();
+  constructor(readonly filename = ':memory:', options: { readOnly?: boolean } = {}) {
+    if (!options.readOnly && filename !== ':memory:') mkdirSync(dirname(filename), { recursive: true });
+    this.db = options.readOnly
+      ? new DatabaseSync(filename, { readOnly: true })
+      : new DatabaseSync(filename);
+    if (!options.readOnly) {
+      this.db.exec('PRAGMA foreign_keys = ON; PRAGMA busy_timeout = 5000; PRAGMA journal_mode = WAL;');
+      this.migrate();
+    }
   }
 
   migrate(): void {

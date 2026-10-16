@@ -322,6 +322,36 @@ This resolves only `P3SyntheticAlpha`, `P3SyntheticBravo`,
 IDs; unknown names remain missing and never fall through to PUBG. These fixture
 accounts have no real PUBG matches or statistics. Production rejects this mode.
 
+## PUBG Intelligence canary
+
+Gate can optionally register the typed `pubg_intelligence_summary` AI SDK tool.
+It is disabled unless both `GATE_PUBG_INTELLIGENCE_ENABLED=1` and a valid,
+comma-separated `GATE_PUBG_INTELLIGENCE_CANARY_TENANT_IDS` allowlist are set in
+the Gate runtime environment. The allowlist is private runtime configuration;
+tenant IDs must not be committed or logged. An empty, malformed, oversized, or
+duplicate allowlist fails closed. The current verified KOOK authorization
+provides the tenant/team scope; tool arguments cannot select either.
+
+The tool reads at most 30 matches in a requested 7- or 30-day window and fetches
+at most four team-scoped current-version feature records concurrently through
+`PostgresPubgRepository`. It performs no API refresh and writes no database
+state. The versioned pure Gate API is `@agent/pubg-intelligence/gate` 1.0.0
+(`gate-compact-facts-v1`). PostgreSQL stores compact review facts with the raw
+event stream removed, so the output is limited to integrity-checked fight
+outcomes and explicitly phased directed friendly-damage aggregates. Missing or
+older feature versions, unknown damage phases, and failed fight-integrity
+checks remain partial/unknown; no R1 episode reconstruction, first-knock
+ownership, or event-stream claim is inferred from the aggregates. Evidence is
+rendered as response-local match/event aliases, without account IDs, match IDs,
+or raw event identifiers.
+
+No schema migration or additional service is required. Disabling the flag or
+removing the canary tenant from the allowlist immediately removes its tool
+access after the Gateway reload. The existing guarded Gate application
+rollback restores the previous Gateway/Worker image and configuration while
+preserving the current PostgreSQL volume; see
+[`GATE_MEMORY_OPERATIONS.md`](../../docs/GATE_MEMORY_OPERATIONS.md).
+
 ## Local verification
 
 Build the shared dependencies and package with `pnpm build:pubg-saas`, then
