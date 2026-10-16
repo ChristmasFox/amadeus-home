@@ -12,6 +12,9 @@ import { KookApplicationRuntime } from './kook-runtime.js';
 import { PostgresPublicPubgAdmission } from './infrastructure/pubg/request-limiter.js';
 import { createConfiguredPublicPubgPlayerResolver } from './infrastructure/pubg/player-resolver.js';
 import { configurePublicEgress } from './infrastructure/public-egress.js';
+import { GateMemoryStore } from './application/gate-memory-store.js';
+import { MemoryRetriever } from './application/gate-memory-retriever.js';
+import { createGateMemoryEmbeddingProvider } from './infrastructure/ai/gate-memory-embedding-provider.js';
 
 function optionalNumber(env: NodeJS.ProcessEnv, key: string): number | undefined {
   const value = env[key];
@@ -59,6 +62,15 @@ export async function gatewayMain(args: string[], env: NodeJS.ProcessEnv = proce
     if (playerResolver.synthetic) process.stdout.write('PUBG_SAAS_PLAYER_LOOKUP=synthetic-acceptance-fixtures; no PUBG API requests will be made.\n');
     const players = playerResolver.resolver;
     const authorizer = new PublicQueryAuthorizer(pool, permissions, { botAccountId: botId });
+    const memoryStore = new GateMemoryStore(pool, authorizer);
+    let memoryEmbeddingProvider: ReturnType<typeof createGateMemoryEmbeddingProvider> = null;
+    try { memoryEmbeddingProvider = createGateMemoryEmbeddingProvider(env); }
+    catch {
+      process.stderr.write(`${JSON.stringify({ component: 'gate-memory-retrieval', event: 'embedding_configuration_unavailable' })}\n`);
+    }
+    const memoryRetriever = new MemoryRetriever(memoryStore, memoryEmbeddingProvider, {
+      onMetric: metric => process.stdout.write(`${JSON.stringify({ component: 'gate-memory-retrieval', ...metric })}\n`),
+    });
     const onDiagnostic = (event: import('./application/kook-ingress-queue.js').KookIngressDiscardLog) =>
       process.stdout.write(`${JSON.stringify({ component: 'kook-ingress', ...event })}\n`);
     const onAgentDiagnostic = (event: import('./application/kook-public-query-handler.js').KookAgentDiagnostic) =>
@@ -70,6 +82,7 @@ export async function gatewayMain(args: string[], env: NodeJS.ProcessEnv = proce
       createKookGroupBindingHandler(bindingServices),
       createKookPublicQueryHandler({
         authorizer, claims, agent,
+        memoryRetriever,
         executeNaturalWrite: (job, intent, signal) => executeKookNaturalWrite(job, bindingServices, intent, signal),
         onAgentDiagnostic,
       }),

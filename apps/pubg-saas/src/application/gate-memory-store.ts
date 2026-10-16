@@ -17,6 +17,11 @@ export interface GateMemoryEntry {
   content: string;
   revision: number;
   updatedAt: string;
+  sourceEventId: string;
+  sourceKind: 'trusted_ingress' | 'user_confirmed' | 'system_verified' | 'unknown';
+  sourceReliability: number;
+  validUntil: string | null;
+  semanticSimilarity?: number;
 }
 export interface GateMemoryDraft {
   key: string;
@@ -44,6 +49,15 @@ export interface GateMemorySearchMetric {
   durationMs: number;
   mode: GateMemorySearchResult['mode'];
   reason: GateMemorySearchResult['reason'];
+}
+export interface GateMemorySemanticSearchResult {
+  matches: GateMemoryEntry[];
+  reason: GateMemorySearchResult['reason'];
+}
+export interface GateMemoryAuthorizedSearch {
+  exact(query: string, limit?: number): Promise<GateMemoryEntry[]>;
+  lexical(query: string, limit?: number): Promise<GateMemoryEntry[]>;
+  semantic(query: string, provider: GateMemoryEmbeddingClient | null, limit?: number): Promise<GateMemorySemanticSearchResult>;
 }
 
 function vectorLiteral(values: readonly number[]): string {
@@ -113,8 +127,21 @@ function scopedArgs(scope: GateMemoryScope): (string | number)[] {
 function project(row: Record<string, unknown>): GateMemoryEntry {
   return { key: String(row.memory_key), content: String(row.content),
     revision: Number(row.revision),
-    updatedAt: row.updated_at instanceof Date ? row.updated_at.toISOString() : String(row.updated_at) };
+    updatedAt: row.updated_at instanceof Date ? row.updated_at.toISOString() : String(row.updated_at),
+    sourceEventId: String(row.source_event_id),
+    sourceKind: row.source_kind === 'user_confirmed' || row.source_kind === 'system_verified' || row.source_kind === 'unknown'
+      ? row.source_kind : 'trusted_ingress',
+    sourceReliability: Number(row.source_reliability),
+    validUntil: row.valid_until == null ? null
+      : row.valid_until instanceof Date ? row.valid_until.toISOString() : String(row.valid_until),
+    ...(row.semantic_similarity == null ? {} : { semanticSimilarity: Number(row.semantic_similarity) }),
+  };
 }
+
+const ACTIVE_MEMORY_FILTER = `revoked_at IS NULL AND superseded_at IS NULL
+  AND (valid_until IS NULL OR valid_until>now()) AND source_kind<>'unknown'`;
+const ACTIVE_JOINED_MEMORY_FILTER = `memory.revoked_at IS NULL AND memory.superseded_at IS NULL
+  AND (memory.valid_until IS NULL OR memory.valid_until>now()) AND memory.source_kind<>'unknown'`;
 
 /** The statement-level live check denies stale scopes after a channel rebind. */
 function liveFence(eventIndex: number, tokenIndex: number): string {
@@ -173,21 +200,66 @@ export class GateMemoryStore {
     return scopedArgs(trusted);
   }
 
+  /** Resolve the remote KOOK membership once, then expose only scoped reads.
+   * Every SQL operation still rechecks the active lease and binding revision. */
+  async withAuthorizedSearch<T>(
+    job: KookIngressJob,
+    work: (search: GateMemoryAuthorizedSearch) => Promise<T>,
+  ): Promise<T> {
+    const scope = await this.trustedScope(job);
+    return work({
+      exact: (query, limit = 8) => this.searchExactScoped(job, query, limit, scope),
+      lexical: (query, limit = 8) => this.searchLexicalScoped(job, query, limit, scope),
+      semantic: (query, provider, limit = 8) => this.searchSemanticScoped(job, query, provider, limit, scope),
+    });
+  }
+
   async listRecent(job: KookIngressJob, limit = 16): Promise<GateMemoryEntry[]> {
     if (!Number.isSafeInteger(limit) || limit < 1 || limit > MAX_RESULTS) throw new Error('gate_memory_limit_invalid');
     const scope = await this.trustedScope(job);
-    const sql = `SELECT memory_key,content,revision,updated_at
-      FROM gate_memory_entries WHERE ` + FILTER + ` AND revoked_at IS NULL`
+    const sql = `SELECT memory_key,content,revision,updated_at,source_event_id,source_kind,
+        source_reliability,valid_until
+      FROM gate_memory_entries WHERE ` + FILTER + ` AND ` + ACTIVE_MEMORY_FILTER
       + liveFence(9, 10) + ` ORDER BY updated_at DESC,memory_id LIMIT $8`;
     const result = await this.pool.query(sql, [...scope, limit, job.eventId, job.leaseToken]);
     return result.rows.map(project);
   }
 
+  async searchExact(job: KookIngressJob, query: string, limit = 8): Promise<GateMemoryEntry[]> {
+    return this.withAuthorizedSearch(job, search => search.exact(query, limit));
+  }
+
   async searchLexical(job: KookIngressJob, query: string, limit = 8): Promise<GateMemoryEntry[]> {
+    return this.withAuthorizedSearch(job, search => search.lexical(query, limit));
+  }
+
+  private async searchExactScoped(
+    job: KookIngressJob,
+    rawQuery: string,
+    limit: number,
+    scope: (string | number)[],
+  ): Promise<GateMemoryEntry[]> {
     if (!Number.isSafeInteger(limit) || limit < 1 || limit > MAX_RESULTS) throw new Error('gate_memory_limit_invalid');
-    const search = boundedText(query, 240, true).toLocaleLowerCase('en-US');
+    const search = boundedText(rawQuery, 240, true).toLocaleLowerCase('en-US');
+    const canonicalKey = search.replace(/[^\p{L}\p{N}]+/gu, '_').replace(/^_+|_+$/gu, '');
+    const sql = `SELECT memory_key,content,revision,updated_at,source_event_id,source_kind,
+        source_reliability,valid_until
+      FROM gate_memory_entries WHERE ` + FILTER + ` AND ` + ACTIVE_MEMORY_FILTER
+      + ` AND (memory_key=$8 OR lower(content)=$9)` + liveFence(11, 12)
+      + ` ORDER BY (memory_key=$8) DESC,updated_at DESC,memory_key LIMIT $10`;
+    const result = await this.pool.query(sql, [...scope, canonicalKey, search, limit, job.eventId, job.leaseToken]);
+    return result.rows.map(project);
+  }
+
+  private async searchLexicalScoped(
+    job: KookIngressJob,
+    rawQuery: string,
+    limit: number,
+    scope: (string | number)[],
+  ): Promise<GateMemoryEntry[]> {
+    if (!Number.isSafeInteger(limit) || limit < 1 || limit > MAX_RESULTS) throw new Error('gate_memory_limit_invalid');
+    const search = boundedText(rawQuery, 240, true).toLocaleLowerCase('en-US');
     const grams = memorySearchTokens(search);
-    const scope = await this.trustedScope(job);
     // Filter candidates before expensive scoring; never discard old matches by age.
     const terms = [...new Set([search, ...grams])].slice(0, 32);
     const patterns = terms.map(term => '%' + term.replace(/[#%_]/gu, char => '#' + char) + '%');
@@ -195,16 +267,16 @@ export class GateMemoryStore {
       "(lower(memory_key) LIKE $" + (13 + i) + " ESCAPE '#' OR lower(content) LIKE $" + (13 + i) + " ESCAPE '#')"
     ).join(' OR ');
     const sql = `WITH candidates AS (
-      SELECT memory_key,content,revision,updated_at,
+      SELECT memory_key,content,revision,updated_at,source_event_id,source_kind,source_reliability,valid_until,
         CASE WHEN position($8 in lower(memory_key))>0 OR position($8 in lower(content))>0
           THEN 1000 ELSE (
             SELECT COUNT(*)::INTEGER FROM unnest($9::TEXT[]) AS gram(token)
             WHERE position(gram.token in lower(memory_key))>0
                OR position(gram.token in lower(content))>0
           ) END AS score
-      FROM gate_memory_entries WHERE ` + FILTER + ' AND revoked_at IS NULL AND (' + candidates + ')' + liveFence(11, 12) + `
+      FROM gate_memory_entries WHERE ` + FILTER + ' AND ' + ACTIVE_MEMORY_FILTER + ' AND (' + candidates + ')' + liveFence(11, 12) + `
     )
-    SELECT memory_key,content,revision,updated_at FROM candidates WHERE score>0
+    SELECT memory_key,content,revision,updated_at,source_event_id,source_kind,source_reliability,valid_until FROM candidates WHERE score>0
     ORDER BY score DESC,updated_at DESC,memory_key LIMIT $10`;
     const client = await this.pool.connect();
     try {
@@ -229,6 +301,7 @@ export class GateMemoryStore {
     vector: readonly number[],
     contract: GateMemoryEmbeddingContract,
     limit: number,
+    scope: (string | number)[],
   ): Promise<GateMemoryEntry[]> {
     if (!Number.isSafeInteger(limit) || limit < 1 || limit > MAX_RESULTS
       || vector.length !== contract.dimensions || !Number.isSafeInteger(contract.indexVersion)
@@ -236,11 +309,12 @@ export class GateMemoryStore {
       || contract.normalization !== 'l2_unit') {
       throw new Error('gate_memory_embedding_contract_invalid');
     }
-    const scope = await this.trustedScope(job);
-    const sql = `SELECT memory.memory_key,memory.content,memory.revision,memory.updated_at
+    const sql = `SELECT memory.memory_key,memory.content,memory.revision,memory.updated_at,
+        memory.source_event_id,memory.source_kind,memory.source_reliability,memory.valid_until,
+        1-(embedded.embedding <=> $9::vector) AS semantic_similarity
       FROM gate_memory_embeddings embedded
       JOIN gate_memory_entries memory ON memory.memory_id=embedded.memory_id
-      WHERE ` + EMBEDDING_MEMORY_FILTER + ` AND memory.revoked_at IS NULL
+      WHERE ` + EMBEDDING_MEMORY_FILTER + ` AND ` + ACTIVE_JOINED_MEMORY_FILTER + `
         AND memory.revision=embedded.source_revision
         AND embedded.bot_account_id=$1 AND embedded.scope_kind=$2 AND embedded.actor_id=$3
         AND embedded.channel_id=$4 AND embedded.tenant_id=$5 AND embedded.team_id=$6
@@ -267,53 +341,40 @@ export class GateMemoryStore {
     } finally { client.release(); }
   }
 
-  /** Exact scope-filtered cosine search. No provider call occurs unless the
-   * live request has authority and the separately applied vector schema exists. */
-  async searchWithFallback(
+  private async searchSemanticScoped(
     job: KookIngressJob,
-    query: string,
+    rawQuery: string,
     provider: GateMemoryEmbeddingClient | null,
-    limit = 8,
-  ): Promise<GateMemorySearchResult> {
-    const startedAt = Date.now();
-    const search = boundedText(query, 240, true);
-    if (!Number.isSafeInteger(limit) || limit < 1 || limit > MAX_RESULTS) throw new Error('gate_memory_limit_invalid');
-    const trustedScope = await this.trustedScope(job);
-    if (!provider) {
-      return this.observedSearch(startedAt, {
-        entries: await this.searchLexical(job, search, limit), mode: 'lexical_only', reason: 'semantic_unconfigured' });
-    }
-    let available = false;
+    limit: number,
+    scope: (string | number)[],
+  ): Promise<GateMemorySemanticSearchResult> {
+    const search = boundedText(rawQuery, 240, true);
+    if (!Number.isSafeInteger(limit) || limit < 1 || limit > MAX_RESULTS)
+      throw new Error('gate_memory_limit_invalid');
+    if (!provider) return { matches: [], reason: 'semantic_unconfigured' };
     try {
-      const result = await this.pool.query<{ available: boolean }>(
+      const available = await this.pool.query<{ available: boolean }>(
         `SELECT EXISTS(SELECT 1 FROM pg_extension WHERE extname='vector')
            AND to_regclass('gate_memory_embeddings') IS NOT NULL AS available`,
       );
-      available = result.rows[0]?.available === true;
+      if (available.rows[0]?.available !== true) return { matches: [], reason: 'vector_index_unavailable' };
     } catch {
-      return this.observedSearch(startedAt, {
-        entries: await this.searchLexical(job, search, limit), mode: 'lexical_only', reason: 'vector_index_unavailable' });
+      return { matches: [], reason: 'vector_index_unavailable' };
     }
-    if (!available) {
-      return this.observedSearch(startedAt, {
-        entries: await this.searchLexical(job, search, limit), mode: 'lexical_only', reason: 'vector_index_unavailable' });
-    }
+
     const estimatedTokens = estimateGateEmbeddingTokens([search]);
     let budgetDay: string | null;
     try {
-      budgetDay = await reserveGateMemoryEmbeddingBudget(this.pool, String(trustedScope[0]), estimatedTokens, provider);
+      budgetDay = await reserveGateMemoryEmbeddingBudget(this.pool, String(scope[0]), estimatedTokens, provider);
     } catch {
-      return this.observedSearch(startedAt, {
-        entries: await this.searchLexical(job, search, limit), mode: 'lexical_only', reason: 'embedding_budget_unavailable' });
+      return { matches: [], reason: 'embedding_budget_unavailable' };
     }
-    if (!budgetDay) {
-      return this.observedSearch(startedAt, {
-        entries: await this.searchLexical(job, search, limit), mode: 'lexical_only', reason: 'embedding_budget_exhausted' });
-    }
+    if (!budgetDay) return { matches: [], reason: 'embedding_budget_exhausted' };
+
     let budgetSettled = false;
     try {
       const batch = await provider.embedMany([search]);
-      await settleGateMemoryEmbeddingBudget(this.pool, String(trustedScope[0]), budgetDay, estimatedTokens, batch.inputTokens);
+      await settleGateMemoryEmbeddingBudget(this.pool, String(scope[0]), budgetDay, estimatedTokens, batch.inputTokens);
       budgetSettled = true;
       const vector = batch.vectors[0];
       const norm = vector?.reduce((sum, value) => sum + value * value, 0) ?? 0;
@@ -327,20 +388,38 @@ export class GateMemoryStore {
         || batch.contract.indexVersion !== provider.contract.indexVersion) {
         throw new Error('gate_memory_embedding_contract_invalid');
       }
-      return this.observedSearch(startedAt, {
-        entries: await this.searchVector(job, vector, provider.contract, limit),
-        mode: 'semantic', reason: null,
-      });
+      return { matches: await this.searchVector(job, vector, provider.contract, limit, scope), reason: null };
     } catch (error) {
       if (!budgetSettled) {
-        await settleGateMemoryEmbeddingBudget(this.pool, String(trustedScope[0]), budgetDay, estimatedTokens, null).catch(() => undefined);
+        await settleGateMemoryEmbeddingBudget(this.pool, String(scope[0]), budgetDay, estimatedTokens, null).catch(() => undefined);
       }
       const reason = error instanceof Error
         && (error.message === 'gate_memory_embedding_timeout' || error.message === 'gate_memory_semantic_timeout')
         ? 'semantic_timeout' : 'semantic_unavailable';
-      return this.observedSearch(startedAt, {
-        entries: await this.searchLexical(job, search, limit), mode: 'lexical_only', reason });
+      return { matches: [], reason };
     }
+  }
+
+  /** Exact scope-filtered cosine search. No provider call occurs unless the
+   * live request has authority and the separately applied vector schema exists. */
+  async searchWithFallback(
+    job: KookIngressJob,
+    query: string,
+    provider: GateMemoryEmbeddingClient | null,
+    limit = 8,
+  ): Promise<GateMemorySearchResult> {
+    const startedAt = Date.now();
+    const search = boundedText(query, 240, true);
+    if (!Number.isSafeInteger(limit) || limit < 1 || limit > MAX_RESULTS) throw new Error('gate_memory_limit_invalid');
+    return this.withAuthorizedSearch(job, async sources => {
+      const semantic = await sources.semantic(search, provider, limit);
+      if (semantic.reason === null) return this.observedSearch(startedAt, {
+        entries: semantic.matches, mode: 'semantic', reason: null,
+      });
+      return this.observedSearch(startedAt, {
+        entries: await sources.lexical(search, limit), mode: 'lexical_only', reason: semantic.reason,
+      });
+    });
   }
 
   /** New key only; a conflicting revision/tombstone is never overwritten. */

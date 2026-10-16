@@ -1,8 +1,10 @@
 # Gate Memory Foundation — KOOK / AI SDK
 
-> This is a **source foundation**, not a Gate-Local memory deployment. No
-> automatic learning, semantic recall or Dreaming is claimed as implemented.
-> Lab Memory Core 1.10.5 remains completely independent.
+> This is a **source foundation**, not a Gate-Local memory deployment. P0–P3
+> now provide scoped working context and hybrid long-term recall using
+> synthetic embeddings in acceptance fixtures. Automatic learning, real
+> provider validation and Dreaming are not implemented. Lab Memory Core
+> 1.10.5 remains completely independent.
 
 ## Boundaries
 
@@ -46,24 +48,23 @@ Do not copy Lab's SQLite, sessions, Owner allowlists or provider API keys.
 
 ## Further milestones
 
-1. The source now replaces the unbounded prompt-history load with a bounded
-   working window, a same-scope lookup for the current quote, and a small
-   extractive rolling checkpoint. Add citation-aware historical retrieval;
-   keep the full PostgreSQL history and preserve meaningful reply relations.
-2. Add a Gate-only Embedding adapter with an explicit key and routing policy,
-   dimension/model-index contract, timeouts, cost caps and rate limits. The
-   Lab 9Router Qwen embedding result (1024 dimensions) **does not** prove
-   Gate has provider entitlement or authorization. Do not share Lab secrets.
-3. For SaaS scale, evaluate a pgvector-capable PostgreSQL image or a separate
-   isolated vector index. Default PostgreSQL text search cannot supply robust
-   Chinese semantic search; bounded lexical fallback is not a substitute.
-4. Add low-priority consolidation of *trusted* transcripts into candidate
-   memory, with explicit privacy, consent, conflict, prompt-injection and
-   deduplication rules. No group shared memory write merely because an LLM
-   saw a message. Deletion and revocation must be testable.
-5. Integrate scoped read-only recall into AI SDK after privacy, latency and
-   token budget tests. Real KOOK human acceptance plus explicit Gate deploy
-   selection are required before claiming LIVE_VERIFIED.
+1. P0/P1 completed the bounded working window, same-scope quote lookup, and
+   extractive rolling checkpoint. Full PostgreSQL history remains available;
+   citation-aware historical retrieval is still future work.
+2. P2 added the Gate-only Embedding adapter, explicit configuration, egress
+   guard, contract validation, and budgets. Lab credentials and its observed
+   provider route are not reused; real Gate provider entitlement remains
+   unverified.
+3. P2 added an optional pgvector schema and isolated fixture. The normal
+   PostgreSQL startup path remains extension-free; live Gate image or schema
+   changes remain separately gated.
+4. P3 integrated scoped hybrid read-only recall with fixed fallbacks and a
+   dedicated context budget. The details and synthetic acceptance evidence
+   are recorded below.
+5. P4/P5 remain future work: any transcript consolidation or memory writer
+   needs explicit privacy, consent, conflict, prompt-injection, and
+   deduplication rules. No group memory is written merely because an LLM saw
+   a message.
 
 ## Audit remediation — 2026-10-16
 
@@ -100,11 +101,11 @@ Source follow-up: `fix(gate-memory): audit authorization, lexical recall and lif
 
 ### Explicitly unfinished
 
-- The `GateMemoryStore` is **not wired to AI SDK prompt assembly**. Ordinary
-  chat receives bounded recent transcript turns, the current quote, and a
-  deterministic extractive checkpoint. There is still no semantic memory
-  recall, autonomous conversation summarization, or embedding/vector index.
-  Existing full message archives remain.
+- P3 wires `GateMemoryStore` through `MemoryRetriever` into AI SDK prompt
+  assembly. The acceptance path uses synthetic embeddings. Real provider
+  entitlement, semantic quality, and live Gate acceptance remain unverified.
+  There is still no autonomous conversation summarization or memory
+  consolidation; existing full message archives remain.
 - There is no automatic deletion of inaccessible **old channel generations**.
   Their isolation is intentional; implement a reviewed retention/erasure
   policy, safe cleanup preview, and protected Gate backup before scheduling
@@ -376,3 +377,37 @@ P2 source changes are in `apps/pubg-saas/src/application/gate-memory-*`,
 `apps/pubg-saas/src/infrastructure/ai/gate-memory-embedding-*`, migrations
 `0024` and `0025`, the focused provider/foundation/pgvector tests, and
 `.github/workflows/pubg-saas.yml`.
+
+## P3 scoped hybrid recall and prompt injection boundary — 2026-10-16
+
+- Migration `0026_gate_memory_retrieval_metadata.sql` adds source kind,
+  reliability, expiry, and supersession metadata. Recall SQL excludes
+  revoked, superseded, expired, and unknown-source facts before ranking.
+  Exact, lexical, and semantic searches all run under one freshly resolved
+  scope; every database statement retains its current ingress lease and
+  binding-generation fence.
+- `MemoryRetriever` requests exact/key, lexical, and semantic candidates in
+  parallel, then combines them with reciprocal-rank fusion, source reliability,
+  freshness, a semantic threshold, canonical-key/revision deduplication, and
+  a minimum relevance threshold. It returns fixed `hybrid`, `lexical_only`,
+  or `disabled` modes and fixed reason labels. Diagnostic metrics contain only
+  counts, duration, mode, and reason; prompt context omits source event IDs.
+- Every natural-language Agent turn attempts recall without a keyword trigger.
+  Missing scope or retrieval failures yield no memory context and do not stop
+  ordinary chat. Current-message tools retain their independent authorization.
+  Recalled text is injected as bounded user-role data under explicit
+  instructions to ignore embedded commands and never use memory as identity,
+  authorization, or PUBG evidence. The 1,000-token long-term slot is fitted
+  with the same conservative estimator used by context planning.
+- Focused synthetic tests cover paraphrased semantic recall through the real
+  AI SDK Agent, untrusted prompt-injection content, ordinary chat without
+  memory, lexical timeout/unconfigured fallback, authorization failure,
+  revocation before vector deletion, and old versus new channel binding
+  revisions. The optional pgvector fixture also verifies backup/restore.
+  No provider API request or Gate-Local connection, migration, or deployment
+  was made; M2 remains `PAUSED / BLOCKED_BY_RELEASE_ENGINEERING`.
+
+P3 source changes are in `apps/pubg-saas/src/application/gate-memory-*`,
+`gate-context-builder.ts`, `kook-public-query-handler.ts`,
+`kook-conversation-agent.ts`, migration `0026`, and focused retriever,
+context-builder, foundation, and pgvector tests.

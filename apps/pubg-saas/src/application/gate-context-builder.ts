@@ -27,11 +27,13 @@ export interface BuiltGateWorkingContext {
   currentQuoteContext: string | null;
   episodicSummaryContext: string | null;
   episodicSummarySourceEventIds: string[];
+  longTermMemoryContext: string | null;
   currentMessage: string;
   estimateMethod: 'conservative_unicode_char_v1';
   estimatedRecentTokens: number;
   estimatedQuoteTokens: number;
   estimatedEpisodicSummaryTokens: number;
+  estimatedLongTermMemoryTokens: number;
   estimatedCurrentMessageTokens: number;
   reservedProviderTokens: number;
   estimatedTotalContextTokens: number;
@@ -55,20 +57,26 @@ function fitText(text: string, budget: number): string {
   const suffix = budget >= markerCost ? marker : '';
   const prefixBudget = suffix ? budget - markerCost : budget;
   let prefix = '';
-  let used = 0;
+  let usedUnits = 0;
   for (const character of text) {
-    const cost = estimateGateTokens(character);
-    if (used + cost > prefixBudget) break;
+    const cost = character.codePointAt(0)! <= 0x7f ? 1 / 3 : 1;
+    if (Math.ceil(usedUnits + cost) > prefixBudget) break;
     prefix += character;
-    used += cost;
+    usedUnits += cost;
   }
-  return `${prefix.trimEnd()}${suffix}`;
+  let fitted = `${prefix.trimEnd()}${suffix}`;
+  while (estimateGateTokens(fitted) > budget && prefix.length > 0) {
+    prefix = Array.from(prefix).slice(0, -1).join('');
+    fitted = `${prefix.trimEnd()}${suffix}`;
+  }
+  return fitted;
 }
 
 export function buildGateWorkingContext(
   window: KookAgentConversationWindow,
   currentMessage: string,
   policy: Readonly<GateContextBudgetPolicy> = DEFAULT_GATE_CONTEXT_BUDGET_POLICY,
+  longTermMemoryContext: string | null = null,
 ): BuiltGateWorkingContext {
   for (const [name, limit] of Object.entries(policy)) {
     if (!Number.isSafeInteger(limit) || limit < 0) throw new Error(`gate_context_budget_${name}_invalid`);
@@ -79,6 +87,9 @@ export function buildGateWorkingContext(
     ? null
     : fitText(window.currentQuoteContext, policy.quotedMessageTokens);
   const quoteTokens = quote === null ? 0 : estimateGateTokens(quote);
+  const memoryContext = longTermMemoryContext === null
+    ? null : fitText(longTermMemoryContext, policy.longTermRecallTokens);
+  const memoryTokens = memoryContext === null ? 0 : estimateGateTokens(memoryContext);
   const reservedProviderTokens = policy.systemAndToolSchemaReserveTokens
     + policy.toolResultReserveTokens + policy.finalAnswerReserveTokens
     + policy.longTermRecallTokens;
@@ -113,11 +124,13 @@ export function buildGateWorkingContext(
     currentQuoteContext: quote,
     episodicSummaryContext,
     episodicSummarySourceEventIds: checkpoint?.sourceEventIds ?? [],
+    longTermMemoryContext: memoryContext,
     currentMessage,
     estimateMethod: 'conservative_unicode_char_v1',
     estimatedRecentTokens: recentTokens,
     estimatedQuoteTokens: quoteTokens,
     estimatedEpisodicSummaryTokens: summaryTokens,
+    estimatedLongTermMemoryTokens: memoryTokens,
     estimatedCurrentMessageTokens: currentTokens,
     reservedProviderTokens,
     estimatedTotalContextTokens,

@@ -26,6 +26,7 @@ import { parseTeamLeaderboardMetric, type TeamLeaderboardMetric } from '../contr
 import { MAX_TEAM_ROSTER_SIZE } from '../contracts/team-roster.js';
 import { sanitizeKookMentionMarkup } from '../channels/kook/trusted-group-event.js';
 import { buildPublicAgentFacts } from './public-agent-facts.js';
+import type { MemoryRetriever } from './gate-memory-retriever.js';
 
 type PublicQueryIntent =
   | { kind: 'team_stats'; period: 'today' | 'yesterday' }
@@ -46,6 +47,7 @@ export interface KookPublicQueryServices {
   agent?: { model: Exclude<LanguageModel, string>; provider: string; modelId: string } | null;
   executeNaturalWrite?: (job: KookIngressJob, intent: KookNaturalWriteIntent, signal: AbortSignal) => Promise<KookNaturalWriteResult>;
   onAgentDiagnostic?: (event: KookAgentDiagnostic) => void;
+  memoryRetriever?: MemoryRetriever;
   executor?: QueryPlanExecutor;
   now?: () => Date;
 }
@@ -524,10 +526,17 @@ async function naturalLanguageReply(
   };
 
   try {
-    const window = await services.authorizer.loadAgentConversation(job);
-    const context = buildGateWorkingContext(window, currentMessage);
+    const [window, memoryResult] = await Promise.all([
+      services.authorizer.loadAgentConversation(job),
+      services.memoryRetriever
+        ? services.memoryRetriever.retrieve(job, currentMessage).catch(() => null)
+        : Promise.resolve(null),
+    ]);
+    const context = buildGateWorkingContext(window, currentMessage, undefined, memoryResult?.context ?? null);
     const currentContext = context.currentQuoteContext ? `${context.currentQuoteContext}\n` : '';
     const messages: ModelMessage[] = [
+      ...(context.longTermMemoryContext
+        ? [{ role: 'user', content: context.longTermMemoryContext } as ModelMessage] : []),
       ...(context.episodicSummaryContext
         ? [{ role: 'user', content: context.episodicSummaryContext } as ModelMessage] : []),
       ...context.turns.map(turn => ({ role: turn.role, content: turn.content }) as ModelMessage),

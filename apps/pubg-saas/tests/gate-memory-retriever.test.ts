@@ -1,0 +1,79 @@
+import assert from 'node:assert/strict';
+import test from 'node:test';
+import { MemoryRetriever } from '../src/application/gate-memory-retriever.js';
+import type { GateMemoryAuthorizedSearch, GateMemoryEntry, GateMemoryStore } from '../src/application/gate-memory-store.js';
+import type { KookIngressJob } from '../src/application/kook-ingress-queue.js';
+
+const job = { botAccountId: 'bot', eventId: 'event', leaseToken: 'lease' } as KookIngressJob;
+
+function entry(overrides: Partial<GateMemoryEntry> = {}): GateMemoryEntry {
+  return {
+    key: 'favorite_map', content: '我常去艾伦格的森林区域', revision: 2,
+    updatedAt: new Date().toISOString(), sourceEventId: 'private-source-event',
+    sourceKind: 'user_confirmed', sourceReliability: 95, validUntil: null,
+    ...overrides,
+  };
+}
+
+function fakeStore(search: Partial<GateMemoryAuthorizedSearch>, authorize: () => Promise<void> = async () => undefined) {
+  let scoped = 0;
+  const store = {
+    async withAuthorizedSearch(_job: KookIngressJob, work: (sources: GateMemoryAuthorizedSearch) => Promise<unknown>) {
+      scoped += 1;
+      await authorize();
+      return work({
+        exact: async () => [], lexical: async () => [],
+        semantic: async () => ({ matches: [], reason: 'semantic_unconfigured' }),
+        ...search,
+      } as GateMemoryAuthorizedSearch);
+    },
+  } as unknown as GateMemoryStore;
+  return { store, scoped: () => scoped };
+}
+
+test('semantic candidates recover a different wording and carry explainable provenance', async () => {
+  const fact = entry({ semanticSimilarity: 0.94 });
+  const fixture = fakeStore({ semantic: async () => ({ matches: [fact], reason: null }) });
+  const retriever = new MemoryRetriever(fixture.store, null);
+  const result = await retriever.retrieve(job, 'where do I usually land in Erangel?');
+
+  assert.equal(fixture.scoped(), 1, 'all candidate sources share one current authorization resolution');
+  assert.equal(result.mode, 'hybrid');
+  assert.equal(result.candidates[0]?.key, 'favorite_map');
+  assert.ok(result.candidates[0]?.sources.includes('semantic'));
+  assert.ok(result.candidates[0]?.reasons.some(reason => reason.startsWith('cosine_similarity_')));
+  assert.match(result.context ?? '', /艾伦格的森林区域/u);
+  assert.doesNotMatch(result.context ?? '', /private-source-event/u);
+});
+
+test('fixed lexical fallback filters expired and unknown facts', async () => {
+  const fixture = fakeStore({
+    lexical: async () => [
+      entry({ key: 'active_fact' }),
+      entry({ key: 'expired_fact', validUntil: '2000-01-01T00:00:00.000Z' }),
+      entry({ key: 'unknown_fact', sourceKind: 'unknown' }),
+    ],
+    semantic: async () => ({ matches: [], reason: 'semantic_timeout' }),
+  });
+  const result = await new MemoryRetriever(fixture.store, null).retrieve(job, '艾伦格森林');
+
+  assert.equal(result.mode, 'lexical_only');
+  assert.equal(result.reason, 'semantic_timeout');
+  assert.deepEqual(result.candidates.map(candidate => candidate.key), ['active_fact']);
+});
+
+test('scope uncertainty and complete store failure disable recall', async () => {
+  const denied = fakeStore({}, async () => { throw new Error('permission_unavailable'); });
+  const deniedResult = await new MemoryRetriever(denied.store, null).retrieve(job, 'query');
+  assert.equal(deniedResult.mode, 'disabled');
+  assert.equal(deniedResult.context, null);
+  assert.equal(deniedResult.reason, 'memory_scope_unavailable');
+
+  const failedSources = fakeStore({
+    exact: async () => { throw new Error('db'); },
+    lexical: async () => { throw new Error('db'); },
+  });
+  const failedResult = await new MemoryRetriever(failedSources.store, null).retrieve(job, 'query');
+  assert.equal(failedResult.mode, 'disabled');
+  assert.equal(failedResult.context, null);
+});

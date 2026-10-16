@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import test from 'node:test';
 import { Pool } from 'pg';
-import { GateMemoryStore, GateMemoryIndexWorker, rankGateMemories, memorySearchTokens, validateGateMemoryDraft, migratePublicDatabase, KookIngressQueue, TeamAdminService, PublicQueryAuthorizer, parseTrustedKookGroupMessage } from '../src/index.js';
+import { GateMemoryStore, GateMemoryIndexWorker, MemoryRetriever, rankGateMemories, memorySearchTokens, validateGateMemoryDraft, migratePublicDatabase, KookIngressQueue, TeamAdminService, PublicQueryAuthorizer, parseTrustedKookGroupMessage } from '../src/index.js';
 import type { GateMemoryScope, GateMemoryScopeResolver } from '../src/index.js';
 import type { KookIngressJob } from '../src/application/kook-ingress-queue.js';
 
@@ -25,8 +25,10 @@ test('memory facts are bounded and keys are normalized', () => {
 
 test('Chinese bigrams recover related surface forms without claiming semantics', () => {
   const facts = [
-    { key: 'favorite_map', content: '喜欢艾伦格地图', revision: 1, updatedAt: '2026-10-16' },
-    { key: 'football', content: '喜欢看足球', revision: 1, updatedAt: '2026-10-16' },
+    { key: 'favorite_map', content: '喜欢艾伦格地图', revision: 1, updatedAt: '2026-10-16',
+      sourceEventId: 'event-map', sourceKind: 'trusted_ingress' as const, sourceReliability: 80, validUntil: null },
+    { key: 'football', content: '喜欢看足球', revision: 1, updatedAt: '2026-10-16',
+      sourceEventId: 'event-football', sourceKind: 'trusted_ingress' as const, sourceReliability: 80, validUntil: null },
   ];
   assert.equal(rankGateMemories(facts, '喜欢艾伦格')[0]?.key, 'favorite_map');
   assert.deepEqual(rankGateMemories(facts, '在哪个地图玩得最多').map(e => e.key), ['favorite_map']);
@@ -133,6 +135,12 @@ test('real KOOK lease and scoped SQL guard isolate live DM and bound channel mem
     assert.equal(searchMetrics.at(-1)?.mode, 'lexical_only');
     assert.equal(searchMetrics.at(-1)?.reason, 'semantic_unconfigured');
     assert.ok((searchMetrics.at(-1)?.durationMs ?? -1) >= 0);
+    const retriever = new MemoryRetriever(memory, null);
+    const lexicalRecall = await retriever.retrieve(group, '喜欢艾伦格');
+    assert.equal(lexicalRecall.mode, 'lexical_only');
+    assert.equal(lexicalRecall.candidates[0]?.key, 'map_preference');
+    assert.doesNotMatch(lexicalRecall.context ?? '', new RegExp(group.eventId, 'u'),
+      'source event IDs stay out of the model context');
     let embeddingCalls = 0;
     const fixtureProvider = {
       contract: { providerId: 'gate-openai-compatible' as const, modelId: 'fixture', dimensions: 3,
@@ -197,11 +205,22 @@ test('real KOOK lease and scoped SQL guard isolate live DM and bound channel mem
       onMembershipCheck = null;
     };
     assert.equal(await auth.resolveMemoryScope(group), null);
+    const staleRecall = await retriever.retrieve(group, '艾伦格地图');
+    assert.equal(staleRecall.mode, 'disabled');
+    assert.equal(staleRecall.context, null, 'a stale ingress job cannot retrieve memories after rebind');
     // A stale server-scope object cannot bypass the SQL-level live fence.
     const stale = new GateMemoryStore(pool, { resolveMemoryScope: async () => original });
     assert.deepEqual(await stale.listRecent(group), []);
     await assert.rejects(stale.create(group, { key: 'stale', content: '不应写入' }), /gate_memory_scope_unavailable/u);
     assert.equal((await pool.query("SELECT COUNT(*)::INTEGER AS count FROM gate_memory_entries WHERE bot_account_id=$1 AND memory_key='stale'", [bot])).rows[0]?.count, 0);
+    // The original event cannot be completed after its binding revision changes;
+    // close this isolated fixture lease so a new revision can be claimed.
+    await pool.query("UPDATE kook_ingress_events SET status='done',lease_token=NULL,lease_until=NULL WHERE bot_account_id=$1 AND event_id=$2", [bot, group.eventId]);
+    const reboundEvent = message();
+    assert.equal(await queue.ingestGatewayEvent(reboundEvent.d), 'accepted');
+    const reboundJob = await queue.claimNext(); assert.ok(reboundJob);
+    const reboundRecall = await retriever.retrieve(reboundJob, '艾伦格地图');
+    assert.equal(reboundRecall.context, null, 'a new binding revision cannot see facts from the previous revision');
   } finally {
     await pool.query('DELETE FROM gate_memory_embedding_usage_daily WHERE bot_account_id=$1', [bot]).catch(() => undefined);
     await pool.query('DELETE FROM gate_memory_entries WHERE bot_account_id=$1', [bot]).catch(() => undefined);

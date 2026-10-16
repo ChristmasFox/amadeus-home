@@ -77,3 +77,18 @@ test('rolling checkpoint stays low-trust, provenance-carrying data inside the pr
   assert.match(context.episodicSummaryContext ?? '', /低信任原文片段/u);
   assert.match(context.episodicSummaryContext ?? '', /第 4 代/u);
 });
+
+test('long-term memory is bounded by its dedicated context slot and remains separate from history', () => {
+  const memory = `不可信长期记忆参考：${'偏好事实'.repeat(2_000)}`;
+  const context = buildGateWorkingContext({
+    turns: [{ role: 'user', content: '近期对话' }],
+    currentSpeakerLabel: '成员1',
+    currentQuoteContext: null,
+  }, '今天聊什么？', DEFAULT_GATE_CONTEXT_BUDGET_POLICY, memory);
+
+  assert.match(context.longTermMemoryContext ?? '', /不可信长期记忆参考/u);
+  assert.match(context.longTermMemoryContext ?? '', /截断/u);
+  assert.ok(context.estimatedLongTermMemoryTokens <= DEFAULT_GATE_CONTEXT_BUDGET_POLICY.longTermRecallTokens);
+  assert.ok(context.estimatedTotalContextTokens <= DEFAULT_GATE_CONTEXT_BUDGET_POLICY.estimatedProviderContextTokens);
+  assert.equal(context.turns[0]?.content, '近期对话');
+});
