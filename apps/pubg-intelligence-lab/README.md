@@ -26,6 +26,16 @@ Without model settings, a deterministic local answer is shown with a clear degra
 
 The response can use tactical coaching, squad-humor, or chronological-story wording. Templates change wording only; candidate claims are schema-validated, every claim must cite evidence returned by a read-only server tool, and unsupported numeric values or references fall back to local deterministic output. The server fixes the selected squad and date scope; model tool inputs cannot choose a tenant, file, database, or arbitrary match ID.
 
+## Offline evaluation
+
+Replay the checked-in sanitized benchmark without reading the Lab match snapshot:
+
+```sh
+pnpm --filter @agent/pubg-intelligence evaluation:replay
+```
+
+The runner compares the frozen `legacy-any-tracked-knock-v0` baseline with `tactical-social-rules-v1`, fingerprints the fixture corpus, and registers per-run metrics, error cases, resource use, parser/rule versions, and thresholds in the separate experiment SQLite file. The page's **实验登记 / 反例浏览** panel runs the same replay and stores bounded review labels (`confirm`, `reject`, `unresolved`, `wrong_evidence`) locally. Labels do not alter rules or production data. Template replay also checks that the three templates preserve numeric facts while changing wording; human preference was not collected. The current fixture holdout is synthetic and small; its promotion gate stays closed until an independently reviewed historical holdout is available.
+
 ## Data handling
 
 - Keep the Lab production SQLite file read-only; snapshots are preferred for interactive work.

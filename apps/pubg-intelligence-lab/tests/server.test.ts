@@ -197,6 +197,32 @@ test('local API serves history and research from a read-only source and stores e
     assert.equal(latestQuestion.includes(credential), false);
     assert.equal(experimentDatabase.prepare('SELECT COUNT(*) AS count FROM research_runs').get().count, 4);
     experimentDatabase.close();
+    const evaluationResponse = await fetch(`${server.url}/api/evaluations/replay`, {
+      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({}),
+    });
+    assert.equal(evaluationResponse.status, 201);
+    const evaluation = await evaluationResponse.json() as {
+      runId: string;
+      report: { dataset: { caseCount: number }; comparison: { holdoutFalsePositiveDelta: number }; promotionGate: { ready: boolean } };
+      reviews: unknown[];
+    };
+    assert.equal(evaluation.report.dataset.caseCount, 8);
+    assert.equal(evaluation.report.comparison.holdoutFalsePositiveDelta, -1);
+    assert.equal(evaluation.report.promotionGate.ready, false);
+    assert.deepEqual(evaluation.reviews, []);
+    assert.doesNotMatch(JSON.stringify(evaluation.report), /private-player|OutsideVictim|\/DATA/u);
+    const reviewResponse = await fetch(`${server.url}/api/evaluations/runs/${evaluation.runId}/reviews`, {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ caseId: 'r4-holdout-negative-01', ruleId: 'combat.first-knock-share', label: 'wrong_evidence' }),
+    });
+    assert.equal(reviewResponse.status, 201);
+    const reviewPayload = await reviewResponse.json() as { reviews: Array<{ label: string; caseId: string }> };
+    assert.deepEqual(reviewPayload.reviews.map((row) => [row.caseId, row.label]), [['r4-holdout-negative-01', 'wrong_evidence']]);
+    const savedEvaluation = await fetch(`${server.url}/api/evaluations/runs/${evaluation.runId}`).then((response) => response.json()) as { reviews: Array<{ label: string }> };
+    assert.equal(savedEvaluation.reviews[0]?.label, 'wrong_evidence');
+    const runRegistry = await fetch(`${server.url}/api/evaluations/runs`).then((response) => response.json()) as { runs: Array<{ runId: string; reviewedLabels: number }> };
+    assert.equal(runRegistry.runs[0]?.runId, evaluation.runId);
+    assert.equal(runRegistry.runs[0]?.reviewedLabels, 1);
     assert.equal(createHash('sha256').update(readFileSync(source)).digest('hex'), sourceHash);
   } finally {
     if (server) await server.close();

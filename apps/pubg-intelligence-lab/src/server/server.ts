@@ -23,6 +23,7 @@ import {
   buildResearchSquads,
   buildFrequentPairCandidates,
   ExperimentRunStore,
+  replayTacticalBenchmark,
   analyzeTacticalMatch,
   anonymizeResearchText,
   NaturalLanguageResearchPlanner,
@@ -38,6 +39,7 @@ import {
   type ResearchAssistantEvidence,
   type ResearchAssistantToolset,
   type TacticalMatchAnalysis,
+  type EvaluationReviewLabel,
 } from '@agent/pubg-intelligence';
 import { createResearchModel } from './model.js';
 
@@ -697,6 +699,50 @@ function scrubText(value: string, match: NormalizedMatch): string {
 
 async function handleApi(request: IncomingMessage, response: ServerResponse, snapshot: Snapshot): Promise<void> {
   const url = new URL(request.url ?? '/', 'http://127.0.0.1');
+  if (request.method === 'POST' && url.pathname === '/api/evaluations/replay') {
+    const report = replayTacticalBenchmark();
+    const runId = snapshot.experimentStore.saveEvaluation(report);
+    send(response, 201, { runId, report, reviews: [], runs: snapshot.experimentStore.listEvaluations(20) });
+    return;
+  }
+  if (request.method === 'GET' && url.pathname === '/api/evaluations/runs') {
+    send(response, 200, { runs: snapshot.experimentStore.listEvaluations(20) });
+    return;
+  }
+  const evaluationRoute = /^\/api\/evaluations\/runs\/([a-f0-9-]{36})(?:\/(reviews))?$/u.exec(url.pathname);
+  if (evaluationRoute?.[1] && request.method === 'GET' && !evaluationRoute[2]) {
+    const report = snapshot.experimentStore.getEvaluation(evaluationRoute[1]);
+    if (!report) { send(response, 404, { error: 'evaluation_run_not_found' }); return; }
+    send(response, 200, { runId: evaluationRoute[1], report, reviews: snapshot.experimentStore.listEvaluationReviews(evaluationRoute[1]) });
+    return;
+  }
+  if (evaluationRoute?.[1] && evaluationRoute[2] === 'reviews' && request.method === 'POST') {
+    let body: Record<string, unknown>;
+    try {
+      const value = await requestBody(request);
+      if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('invalid_json');
+      body = value as Record<string, unknown>;
+    } catch {
+      send(response, 400, { error: 'invalid_review' });
+      return;
+    }
+    const labels: EvaluationReviewLabel[] = ['confirm', 'reject', 'unresolved', 'wrong_evidence'];
+    if (typeof body.caseId !== 'string' || typeof body.ruleId !== 'string' || !labels.includes(body.label as EvaluationReviewLabel)) {
+      send(response, 400, { error: 'invalid_review' });
+      return;
+    }
+    try {
+      const review = snapshot.experimentStore.saveEvaluationReview({
+        runId: evaluationRoute[1], caseId: body.caseId, ruleId: body.ruleId, label: body.label as EvaluationReviewLabel,
+      });
+      send(response, 201, { review, reviews: snapshot.experimentStore.listEvaluationReviews(evaluationRoute[1]) });
+    } catch (error) {
+      send(response, error instanceof Error && error.message === 'evaluation_run_not_found' ? 404 : 400, {
+        error: error instanceof Error && error.message === 'evaluation_run_not_found' ? 'evaluation_run_not_found' : 'evaluation_review_outside_run',
+      });
+    }
+    return;
+  }
   if (request.method === 'GET' && url.pathname === '/api/bootstrap') {
     const dates = snapshot.matches.map((match) => localDateLabel(match.timestamp, DEFAULT_TIMEZONE)).sort();
     send(response, 200, {

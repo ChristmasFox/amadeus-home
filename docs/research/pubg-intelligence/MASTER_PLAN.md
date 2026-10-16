@@ -1,6 +1,6 @@
 # PUBG Intelligence Lab — Research & Delivery Plan
 
-Status: R3 complete — see [`STATUS.md`](STATUS.md), [`R1_EVALUATION.md`](R1_EVALUATION.md), [`R2_EVALUATION.md`](R2_EVALUATION.md), and [`R3_EVALUATION.md`](R3_EVALUATION.md).
+Status: R4 complete; R5 in progress — see [`STATUS.md`](STATUS.md) and the stage evaluation reports.
 Branch: `research/pubg-intelligence`  
 Scope: Lab historical PUBG telemetry research; Gate consumes only validated, versioned insights.  
 Owner of execution: Codex via /goal, with stage-by-stage acceptance.
@@ -155,7 +155,7 @@ R0 → R1 → R2 → R3 → R4 → R5 is the **promotion order**. R3 UI shell ca
 - R1: complete; source, build, fixture, and real snapshot evidence at `STATUS.md` and `R1_EVALUATION.md`.
 - R2: complete; see `STATUS.md` and `R2_EVALUATION.md`.
 - R3: complete; source, build, scoped mock-model, and real-snapshot evidence at [`STATUS.md`](STATUS.md) and [`R3_EVALUATION.md`](R3_EVALUATION.md). No real-provider request was verified because local AI configuration is absent.
-- R4: not started.
-- R5: not started; no Gate integration or deployment was performed.
+- R4: complete; see [`R4_EVALUATION.md`](R4_EVALUATION.md). The fixture promotion gate remains closed because no independently labeled historical holdout is available.
+- R5: in progress; Gate boundary and release procedures are being audited before any integration. No Gate deployment has been performed.
 
 Update this ledger only from verified repository and local runtime evidence.

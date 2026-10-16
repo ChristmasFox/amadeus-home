@@ -197,6 +197,51 @@ interface ResearchResponse {
   };
 }
 
+interface EvaluationMetrics {
+  labeledCases: number;
+  unresolvedLabels: number;
+  abstainedPredictions: number;
+  truePositive: number;
+  falsePositive: number;
+  falseNegative: number;
+  trueNegative: number;
+  precision: number | null;
+  recall: number | null;
+  f1: number | null;
+}
+
+interface EvaluationCase {
+  caseId: string;
+  split: 'development' | 'holdout';
+  stratum: string;
+  expected: boolean | null;
+  baseline: boolean | null;
+  candidate: boolean | null;
+  baselineEvidence: Array<{ eventId: string | null; kind: string }>;
+  candidateEvidence: Array<{ eventId: string | null; kind: string }>;
+  baselineError: string | null;
+  candidateError: string | null;
+  comparison: string;
+}
+
+interface EvaluationReport {
+  experimentName: string;
+  dataset: { id: string; fingerprint: string; caseCount: number; holdoutCaseCount: number; strata: Array<{ name: string; count: number }> };
+  algorithm: { ruleId: string; baselineVersion: string; candidateVersion: string; parserVersion: string; thresholds: Record<string, unknown> };
+  provenance: { runtimeMs: number; startedAt: string; resourceUsage: { heapUsedDeltaBytes: number; rssBytesAfter: number } };
+  baseline: { holdout: EvaluationMetrics };
+  candidate: { holdout: EvaluationMetrics };
+  templateEvaluation: { templateCount: number; numericFactParity: boolean; uniqueWordingCount: number; humanPreferenceLabels: number; humanPreferenceStatus: 'not_collected' };
+  comparison: { holdoutFalsePositiveDelta: number; holdoutFalseNegativeDelta: number; baselineNotRegressed: boolean; fixtureLabeledHoldoutCaseCount: number };
+  promotionGate: { ready: boolean; humanReviewedHoldoutAvailable: false; reasons: string[] };
+  caseOutcomes: EvaluationCase[];
+}
+
+type EvaluationReviewLabel = 'confirm' | 'reject' | 'unresolved' | 'wrong_evidence';
+interface EvaluationReview { caseId: string; ruleId: string; label: EvaluationReviewLabel; createdAt: string }
+interface EvaluationRunSummary { runId: string; createdAt: string; experimentName: string; datasetFingerprint: string; candidateVersion: string; caseCount: number; runtimeMs: number; reviewedLabels: number }
+interface EvaluationRunResponse { runId: string; report: EvaluationReport; reviews: EvaluationReview[]; runs?: EvaluationRunSummary[] }
+
 interface ChatEntry {
   role: 'user' | 'assistant';
   text: string;
@@ -346,6 +391,13 @@ export function App() {
   const [loading, setLoading] = useState(false);
   const [detailLoading, setDetailLoading] = useState(false);
   const [error, setError] = useState('');
+  const [evaluationRunId, setEvaluationRunId] = useState('');
+  const [evaluationRuns, setEvaluationRuns] = useState<EvaluationRunSummary[]>([]);
+  const [evaluationReport, setEvaluationReport] = useState<EvaluationReport | null>(null);
+  const [evaluationReviews, setEvaluationReviews] = useState<EvaluationReview[]>([]);
+  const [evaluationLoading, setEvaluationLoading] = useState(false);
+  const [evaluationReviewingCase, setEvaluationReviewingCase] = useState('');
+  const [evaluationError, setEvaluationError] = useState('');
 
   useEffect(() => {
     void json<Bootstrap>('/api/bootstrap').then((data) => {
@@ -354,6 +406,18 @@ export function App() {
       setFrom(data.dateFrom ?? '');
       setTo(data.dateTo ?? '');
     }).catch(() => setError('无法读取本地只读数据快照。'));
+  }, []);
+
+  useEffect(() => {
+    void json<{ runs: EvaluationRunSummary[] }>('/api/evaluations/runs').then(({ runs }) => {
+      setEvaluationRuns(runs);
+      if (!runs[0]) return;
+      void json<EvaluationRunResponse>(`/api/evaluations/runs/${encodeURIComponent(runs[0].runId)}`).then((saved) => {
+        setEvaluationRunId(saved.runId);
+        setEvaluationReport(saved.report);
+        setEvaluationReviews(saved.reviews);
+      });
+    }).catch(() => undefined);
   }, []);
 
   useEffect(() => {
@@ -489,6 +553,51 @@ export function App() {
     setDetail(null);
   }
 
+  async function replayEvaluation() {
+    setEvaluationLoading(true);
+    setEvaluationError('');
+    try {
+      const result = await json<EvaluationRunResponse>('/api/evaluations/replay', { method: 'POST', body: JSON.stringify({}) });
+      setEvaluationRunId(result.runId);
+      setEvaluationRuns(result.runs ?? []);
+      setEvaluationReport(result.report);
+      setEvaluationReviews(result.reviews);
+    } catch {
+      setEvaluationError('离线评估重放失败，请检查实验库状态后重试。');
+    } finally {
+      setEvaluationLoading(false);
+    }
+  }
+
+  async function openEvaluationRun(runId: string) {
+    try {
+      const saved = await json<EvaluationRunResponse>(`/api/evaluations/runs/${encodeURIComponent(runId)}`);
+      setEvaluationRunId(saved.runId);
+      setEvaluationReport(saved.report);
+      setEvaluationReviews(saved.reviews);
+    } catch {
+      setEvaluationError('登记的实验结果读取失败。');
+    }
+  }
+
+  async function labelEvaluationCase(caseId: string, label: EvaluationReviewLabel) {
+    if (!evaluationRunId || !evaluationReport) return;
+    setEvaluationReviewingCase(caseId);
+    setEvaluationError('');
+    try {
+      const result = await json<{ reviews: EvaluationReview[] }>(`/api/evaluations/runs/${encodeURIComponent(evaluationRunId)}/reviews`, {
+        method: 'POST',
+        body: JSON.stringify({ caseId, ruleId: evaluationReport.algorithm.ruleId, label }),
+      });
+      setEvaluationReviews(result.reviews);
+      setEvaluationRuns((runs) => runs.map((run) => run.runId === evaluationRunId ? { ...run, reviewedLabels: result.reviews.length } : run));
+    } catch {
+      setEvaluationError('复核标签未保存。');
+    } finally {
+      setEvaluationReviewingCase('');
+    }
+  }
+
   if (!bootstrap && !error) return <div className="boot-screen"><div className="boot-mark">P</div><span>正在载入本地研究快照</span></div>;
 
   return (
@@ -614,6 +723,39 @@ export function App() {
             </div>}
             <div className="battle-evaluation-note">启发式：对敌有效 DAMAGE / KNOCK / KILL 按队伍对聚合；相邻接触间隔 ≤28 秒合并，或 knock 后 120 秒内对应 kill 延续。位置按队员每 15 秒取首条样本；歧义事件不强行归属。圈采样仅作为时间邻近的上下文证据，可被相邻 episode 共享。</div>
           </section>}
+          <section className="evidence-card evaluation-panel">
+            <div className="evidence-heading"><div><span className="eyebrow">OFFLINE EVALUATION</span><b>实验登记 / 反例浏览</b></div><button type="button" className="evaluation-run-button" onClick={() => void replayEvaluation()} disabled={evaluationLoading}>{evaluationLoading ? '重放中…' : '重放基准'}</button></div>
+            {!evaluationReport && <p className="evaluation-empty">运行固定脱敏 fixture 的 baseline / candidate 对比；结果写入独立的本地实验库。</p>}
+            {evaluationError && <div className="inline-error">{evaluationError}</div>}
+            {evaluationRuns.length > 0 && <details className="evaluation-registry"><summary>登记历史（{evaluationRuns.length}）</summary>{evaluationRuns.map((run) => <button type="button" key={run.runId} className={run.runId === evaluationRunId ? 'active' : ''} onClick={() => void openEvaluationRun(run.runId)}><span>{new Date(run.createdAt).toLocaleString('zh-CN')} · {run.candidateVersion}</span><small>{run.caseCount} cases · 已复核 {run.reviewedLabels}</small></button>)}</details>}
+            {evaluationReport && <>
+              <div className="evaluation-meta"><b>{evaluationReport.experimentName}</b><span>{evaluationReport.algorithm.ruleId} · {evaluationReport.algorithm.candidateVersion}</span><span>语料 {evaluationReport.dataset.caseCount} 条 · holdout {evaluationReport.dataset.holdoutCaseCount} 条 · {evaluationReport.provenance.runtimeMs.toFixed(1)} ms · heap Δ {Math.round(evaluationReport.provenance.resourceUsage.heapUsedDeltaBytes / 1024)} KiB</span><code title={evaluationReport.dataset.fingerprint}>dataset sha256 · {evaluationReport.dataset.fingerprint.slice(0, 16)}…</code></div>
+              <div className="evaluation-comparison">
+                <div className="evaluation-comparison-heading"><span>holdout</span><b>Baseline · {evaluationReport.algorithm.baselineVersion}</b><b>Candidate · {evaluationReport.algorithm.candidateVersion}</b></div>
+                {([['TP', 'truePositive'], ['FP', 'falsePositive'], ['FN', 'falseNegative'], ['TN', 'trueNegative'], ['Precision', 'precision'], ['Recall', 'recall']] as const).map(([label, key]) => {
+                  const value = (metrics: EvaluationMetrics) => key === 'precision' || key === 'recall'
+                    ? metrics[key] === null ? '—' : `${(metrics[key]! * 100).toFixed(0)}%`
+                    : metrics[key];
+                  return <div className="evaluation-metric-row" key={label}><span>{label}</span><b>{value(evaluationReport.baseline.holdout)}</b><b>{value(evaluationReport.candidate.holdout)}</b></div>;
+                })}
+              </div>
+              <div className={`evaluation-gate ${evaluationReport.promotionGate.ready ? 'passed' : 'blocked'}`}><b>{evaluationReport.promotionGate.ready ? '候选门禁通过' : '候选门禁未满足'}</b><span>FP Δ {evaluationReport.comparison.holdoutFalsePositiveDelta} · FN Δ {evaluationReport.comparison.holdoutFalseNegativeDelta} · fixture 真值标签 {evaluationReport.comparison.fixtureLabeledHoldoutCaseCount} · 分析师复核 {evaluationReviews.length}</span>{evaluationReport.promotionGate.reasons.map((reason, index) => <small key={index}>{reason}</small>)}</div>
+              <div className="evaluation-template-note">模板检查：事实数值一致 {evaluationReport.templateEvaluation.numericFactParity ? '通过' : '失败'} · 不同措辞 {evaluationReport.templateEvaluation.uniqueWordingCount}/{evaluationReport.templateEvaluation.templateCount} · 人工偏好标签 {evaluationReport.templateEvaluation.humanPreferenceLabels}</div>
+              <details className="evaluation-counterexamples" open>
+                <summary>Holdout 样例 / 反例（{evaluationReport.caseOutcomes.filter((row) => row.split === 'holdout').length}）</summary>
+                {evaluationReport.caseOutcomes.filter((row) => row.split === 'holdout').map((row) => {
+                  const review = evaluationReviews.find((item) => item.caseId === row.caseId && item.ruleId === evaluationReport.algorithm.ruleId);
+                  const predictionLabel = row.candidate === null ? '未知' : row.candidate ? '命中' : '未命中';
+                  return <article className="evaluation-case" key={row.caseId}>
+                    <div className="evaluation-case-heading"><b>{row.caseId}</b><span>{row.stratum}</span></div>
+                    <div className="evaluation-case-result">标签：{row.expected === null ? '未决' : row.expected ? '正例' : '反例'} · Baseline {row.baseline === null ? '未知' : row.baseline ? '命中' : '未命中'} · Candidate {predictionLabel}{row.candidateError ? ` · ${row.candidateError}` : ''}{row.baselineError ? ` · baseline ${row.baselineError}` : ''}</div>
+                    <small>候选引用：{row.candidateEvidence.map((ref) => `${ref.eventId ?? 'match'}:${ref.kind}`).join(' · ') || '无'}</small>
+                    <div className="evaluation-review-actions"><span>{review ? `已复核：${({ confirm: '确认', reject: '否定', unresolved: '未决', wrong_evidence: '证据错误' } as const)[review.label]}` : '人工复核'}</span>{([['confirm', '确认'], ['reject', '否定'], ['unresolved', '未决'], ['wrong_evidence', '证据错']] as const).map(([label, text]) => <button type="button" key={label} disabled={evaluationReviewingCase === row.caseId} onClick={() => void labelEvaluationCase(row.caseId, label)}>{text}</button>)}</div>
+                  </article>;
+                })}
+              </details>
+            </>}
+          </section>
           <div className="right-footer"><span>解析器版本</span><b>{bootstrap?.parserVersion} / {bootstrap?.featureVersion} · battle-reconstruction-v1</b><small>交战重建按需从快照内资产引用只读获取；实验结果不写回 Lab 数据库。</small></div>
         </aside>
       </main>
