@@ -330,9 +330,9 @@ def preflight_candidate(
     allow_reviewed_control_plane: bool = False,
     now: datetime | None = None,
 ) -> dict[str, str]:
-    scope, scope_reason = classify_changed_scope(paths)
-    if scope != "gate_only":
-        return {"status": "BLOCKED", "reason": scope_reason or scope}
+    # The phase runner decides whether to automatically trigger Gate; a
+    # direct candidate invocation must never be blocked by an arbitrary
+    # changed-file category after the user explicitly selected Gate-Local.
     risk, risk_reason = migration_risk(paths, repository)
     if risk_reason:
         status = "BLOCKED_OPERATOR_AUTHORIZATION" if risk_reason.startswith("separate_") else "BLOCKED"
