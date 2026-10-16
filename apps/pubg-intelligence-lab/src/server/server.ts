@@ -1,5 +1,5 @@
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
-import { homedir } from 'node:os';
+import { homedir, networkInterfaces } from 'node:os';
 import { basename, dirname, join, resolve } from 'node:path';
 import { existsSync, mkdirSync, realpathSync, statSync } from 'node:fs';
 import { createServer as createViteServer } from 'vite';
@@ -26,6 +26,7 @@ import { createResearchModel } from './model.js';
 const PARSER_VERSION = 'telemetry-parser-6';
 const FEATURE_VERSION = 'review-features-6';
 const DEFAULT_PORT = 4179;
+const DEFAULT_HOST = '127.0.0.1';
 const MAX_REQUEST_BYTES = 16 * 1024;
 const MAX_MATCHES_PER_PAGE = 100;
 
@@ -129,9 +130,47 @@ async function openSnapshot(): Promise<Snapshot> {
   };
 }
 
-function isLocalRequest(request: IncomingMessage): boolean {
-  const address = request.socket.remoteAddress ?? '';
-  return address === '127.0.0.1' || address === '::1' || address === '::ffff:127.0.0.1';
+interface IPv4Network {
+  address: string;
+  netmask: string;
+}
+
+function toIPv4Number(address: string): number | null {
+  const parts = address.split('.');
+  if (parts.length !== 4 || parts.some((part) => !/^\d{1,3}$/u.test(part) || Number(part) > 255)) return null;
+  return parts.reduce((value, part) => ((value << 8) | Number(part)) >>> 0, 0);
+}
+
+function isLoopbackHost(host: string): boolean {
+  return host === '127.0.0.1' || host === '::1';
+}
+
+function isPrivateIPv4Host(host: string): boolean {
+  const value = toIPv4Number(host);
+  if (value === null) return false;
+  return (value >= 0x0a000000 && value <= 0x0affffff)
+    || (value >= 0xac100000 && value <= 0xac1fffff)
+    || (value >= 0xc0a80000 && value <= 0xc0a8ffff);
+}
+
+function bindNetwork(host: string): IPv4Network | undefined {
+  for (const addresses of Object.values(networkInterfaces())) {
+    for (const address of addresses ?? []) {
+      if (address.family === 'IPv4' && address.address === host) return { address: address.address, netmask: address.netmask };
+    }
+  }
+  return undefined;
+}
+
+function isLocalRequest(request: IncomingMessage, network?: IPv4Network): boolean {
+  const address = (request.socket.remoteAddress ?? '').replace(/^::ffff:/u, '');
+  if (address === '127.0.0.1' || address === '::1') return true;
+  if (!network) return false;
+  const peerNumber = toIPv4Number(address);
+  const localNumber = toIPv4Number(network.address);
+  const maskNumber = toIPv4Number(network.netmask);
+  return peerNumber !== null && localNumber !== null && maskNumber !== null
+    && (peerNumber & maskNumber) === (localNumber & maskNumber);
 }
 
 function send(response: ServerResponse, status: number, payload: unknown): void {
@@ -369,35 +408,39 @@ async function handleApi(request: IncomingMessage, response: ServerResponse, sna
 
 export async function startServer(): Promise<{ close: () => Promise<void>; url: string }> {
   const snapshot = await openSnapshot();
-  const vite = await createViteServer({
-    server: { middlewareMode: true },
-    appType: 'spa',
-    optimizeDeps: { noDiscovery: true, include: [] },
-  });
   const port = Number(process.env.PORT ?? DEFAULT_PORT);
+  const host = process.env.HOST?.trim() || DEFAULT_HOST;
+  if (!isLoopbackHost(host) && !isPrivateIPv4Host(host)) throw new Error('HOST_MUST_BE_LOOPBACK_OR_PRIVATE_IPV4');
+  const allowedNetwork = bindNetwork(host);
+  let vite: Awaited<ReturnType<typeof createViteServer>> | undefined;
   const server = createServer((request, response) => {
     if ((request.url ?? '').startsWith('/api/')) {
-      if (!isLocalRequest(request)) { send(response, 403, { error: 'local_access_only' }); return; }
+      if (!isLocalRequest(request, allowedNetwork)) { send(response, 403, { error: 'local_network_access_only' }); return; }
       void handleApi(request, response, snapshot).catch(() => {
         if (!response.headersSent) send(response, 500, { error: 'research_request_failed' });
       });
       return;
     }
-    vite.middlewares(request, response, () => {
+    vite?.middlewares(request, response, () => {
       if (!response.headersSent) { response.writeHead(404); response.end('Not found'); }
     });
   });
+  vite = await createViteServer({
+    server: { middlewareMode: true, hmr: { server } },
+    appType: 'spa',
+    optimizeDeps: { noDiscovery: true, include: [] },
+  });
   await new Promise<void>((resolveStart, reject) => {
     server.once('error', reject);
-    server.listen(port, '127.0.0.1', () => resolveStart());
+    server.listen(port, host, () => resolveStart());
   });
   const address = server.address();
   const actualPort = typeof address === 'object' && address ? address.port : port;
   return {
-    url: `http://127.0.0.1:${actualPort}`,
+    url: `http://${host}:${actualPort}`,
     close: async () => {
       await new Promise<void>((resolveClose, reject) => server.close((error) => error ? reject(error) : resolveClose()));
-      await vite.close();
+      await vite?.close();
       snapshot.experimentStore.close();
     },
   };

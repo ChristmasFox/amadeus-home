@@ -34,6 +34,7 @@ test('local API serves history and research from a read-only source and stores e
     db: process.env.PUBG_INTELLIGENCE_DB,
     experiment: process.env.PUBG_INTELLIGENCE_EXPERIMENT_DB,
     port: process.env.PORT,
+    host: process.env.HOST,
     base: process.env.PUBG_INTELLIGENCE_AI_BASE_URL,
     key: process.env.PUBG_INTELLIGENCE_AI_API_KEY,
     model: process.env.PUBG_INTELLIGENCE_AI_MODEL,
@@ -51,6 +52,7 @@ test('local API serves history and research from a read-only source and stores e
     process.env.PUBG_INTELLIGENCE_DB = source;
     process.env.PUBG_INTELLIGENCE_EXPERIMENT_DB = experiments;
     process.env.PORT = '0';
+    process.env.HOST = '127.0.0.1';
     delete process.env.PUBG_INTELLIGENCE_AI_BASE_URL;
     delete process.env.PUBG_INTELLIGENCE_AI_API_KEY;
     delete process.env.PUBG_INTELLIGENCE_AI_MODEL;
@@ -100,6 +102,7 @@ test('local API serves history and research from a read-only source and stores e
     restore('PUBG_INTELLIGENCE_DB', previous.db);
     restore('PUBG_INTELLIGENCE_EXPERIMENT_DB', previous.experiment);
     restore('PORT', previous.port);
+    restore('HOST', previous.host);
     restore('PUBG_INTELLIGENCE_AI_BASE_URL', previous.base);
     restore('PUBG_INTELLIGENCE_AI_API_KEY', previous.key);
     restore('PUBG_INTELLIGENCE_AI_MODEL', previous.model);
