@@ -17,6 +17,9 @@ import { MemoryRetriever } from './application/gate-memory-retriever.js';
 import { createGateMemoryEmbeddingProvider } from './infrastructure/ai/gate-memory-embedding-provider.js';
 import { GateMemoryIntentClassifier, GateMemoryWriteCoordinator } from './application/gate-memory-writer.js';
 import { GateMemoryConsolidationConsentService } from './application/gate-memory-consolidation.js';
+import { gateMemoryEmbeddingStatus, readGateMemoryFeatureFlags } from './application/gate-memory-feature-flags.js';
+import { readGateMemoryEmbeddingConfig } from './infrastructure/ai/gate-memory-embedding-config.js';
+import { startGatewayHealthServer, stopGatewayHealthServer } from './infrastructure/gateway-health-server.js';
 
 function optionalNumber(env: NodeJS.ProcessEnv, key: string): number | undefined {
   const value = env[key];
@@ -49,6 +52,8 @@ export async function gatewayMain(args: string[], env: NodeJS.ProcessEnv = proce
   const agent = createPublicAgentModel(env);
   const pool = new Pool({ connectionString: databaseUrl, max: 8, connectionTimeoutMillis: 5000, idleTimeoutMillis: 10000, statement_timeout: 5000 });
   const stop = new AbortController();
+  let gatewayConnected = false;
+  let healthServer: Awaited<ReturnType<typeof startGatewayHealthServer>> | undefined;
   const onStop = () => stop.abort();
   process.once('SIGINT', onStop);
   process.once('SIGTERM', onStop);
@@ -56,6 +61,10 @@ export async function gatewayMain(args: string[], env: NodeJS.ProcessEnv = proce
     const ready = await pool.query("SELECT 1 FROM schema_migrations WHERE migration_id='0020_persistent_query_context.sql'");
     if (!ready.rowCount)
       throw new Error('pubg_saas_schema_upgrade_required');
+    const healthPort = optionalNumber(env, 'PUBG_SAAS_GATEWAY_HEALTH_PORT') ?? 8082;
+    if (!Number.isSafeInteger(healthPort) || healthPort < 1 || healthPort > 65535)
+      throw new Error('pubg_saas_gateway_health_port_invalid');
+    healthServer = await startGatewayHealthServer(() => gatewayConnected, healthPort);
     const permissions = new KookPermissionClient({ token });
     const teams = new TeamAdminService(pool, permissions);
     const claims = new AccountClaimService(pool);
@@ -66,17 +75,24 @@ export async function gatewayMain(args: string[], env: NodeJS.ProcessEnv = proce
     const authorizer = new PublicQueryAuthorizer(pool, permissions, { botAccountId: botId });
     const memoryStore = new GateMemoryStore(pool, authorizer);
     const memoryConsolidationConsent = new GateMemoryConsolidationConsentService(pool, botId);
+    const memoryFlags = readGateMemoryFeatureFlags(env);
+    const embeddingStatus = gateMemoryEmbeddingStatus(env, readGateMemoryEmbeddingConfig);
     let memoryEmbeddingProvider: ReturnType<typeof createGateMemoryEmbeddingProvider> = null;
-    try { memoryEmbeddingProvider = createGateMemoryEmbeddingProvider(env); }
-    catch {
-      process.stderr.write(`${JSON.stringify({ component: 'gate-memory-retrieval', event: 'embedding_configuration_unavailable' })}\n`);
+    if (memoryFlags.read.enabled || memoryFlags.write.enabled) {
+      try { memoryEmbeddingProvider = createGateMemoryEmbeddingProvider(env); }
+      catch {
+        process.stderr.write(`${JSON.stringify({ component: 'gate-memory-retrieval', event: 'embedding_configuration_unavailable' })}\n`);
+      }
     }
-    const memoryRetriever = new MemoryRetriever(memoryStore, memoryEmbeddingProvider, {
+    const memoryRetriever = memoryFlags.read.enabled ? new MemoryRetriever(memoryStore, memoryEmbeddingProvider, {
       onMetric: metric => process.stdout.write(`${JSON.stringify({ component: 'gate-memory-retrieval', ...metric })}\n`),
-    });
-    const memoryWriter = agent
+    }) : undefined;
+    const memoryWriter = agent && memoryFlags.write.enabled
       ? new GateMemoryWriteCoordinator(pool, memoryStore, authorizer, new GateMemoryIntentClassifier(agent.model))
       : undefined;
+    process.stdout.write(`${JSON.stringify({ component: 'gate-memory', event: 'feature_readiness',
+      read: memoryFlags.read.status, write: memoryFlags.write.status,
+      autoLearn: memoryFlags.autoLearn.status, embedding: embeddingStatus })}\n`);
     const onDiagnostic = (event: import('./application/kook-ingress-queue.js').KookIngressDiscardLog) =>
       process.stdout.write(`${JSON.stringify({ component: 'kook-ingress', ...event })}\n`);
     const onAgentDiagnostic = (event: import('./application/kook-public-query-handler.js').KookAgentDiagnostic) =>
@@ -88,13 +104,14 @@ export async function gatewayMain(args: string[], env: NodeJS.ProcessEnv = proce
       createKookGroupBindingHandler(bindingServices),
       createKookPublicQueryHandler({
         authorizer, claims, agent,
-        memoryRetriever,
-        memoryConsolidationConsent,
+        ...(memoryRetriever ? { memoryRetriever } : {}),
+        ...(memoryFlags.autoLearn.enabled ? { memoryConsolidationConsent } : {}),
         ...(memoryWriter ? { memoryWriter } : {}),
         executeNaturalWrite: (job, intent, signal) => executeKookNaturalWrite(job, bindingServices, intent, signal),
         onAgentDiagnostic,
       }),
-      createKookManagementHandler({ teams, claims, players }, memoryConsolidationConsent),
+      createKookManagementHandler({ teams, claims, players }, memoryConsolidationConsent,
+        { autoLearnEnabled: memoryFlags.autoLearn.enabled }),
     );
     const runtime = new KookApplicationRuntime({
       pool, botAccountId: botId, token, handler,
@@ -107,6 +124,7 @@ export async function gatewayMain(args: string[], env: NodeJS.ProcessEnv = proce
         return { type: 'text', content: `已为服务器「${name}」创建并绑定 PUBG 队伍，默认平台为 Steam。队员可在群聊发送“我的 PUBG 账号是 游戏名”或 /pubg me 游戏名。` };
       },
       maintenance: () => authorizer.prune(),
+      onGatewayConnectionStatus: status => { gatewayConnected = status === 'connected'; },
       onError: code => process.stderr.write(`${JSON.stringify({ component: 'kook-runtime', event: 'error', code })}\n`),
       onDiagnostic,
       onOutboxDiagnostic,
@@ -117,7 +135,11 @@ export async function gatewayMain(args: string[], env: NodeJS.ProcessEnv = proce
     stop.abort();
     process.removeListener('SIGINT', onStop);
     process.removeListener('SIGTERM', onStop);
-    await pool.end();
+    try {
+      if (healthServer) await stopGatewayHealthServer(healthServer);
+    } finally {
+      await pool.end();
+    }
   }
 }
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {

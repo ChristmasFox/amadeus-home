@@ -76,7 +76,9 @@ function validBaseURL(value: string, allowedInternalHosts: readonly string[]): b
 
 /** Returns null unless the embedding feature has an explicit Gate-local enable flag. */
 export function readGateMemoryEmbeddingConfig(env: NodeJS.ProcessEnv): GateMemoryEmbeddingConfig | null {
-  if (env.GATE_MEMORY_EMBEDDING_ENABLED !== '1') return null;
+  if (env.GATE_MEMORY_EMBEDDING_ENABLED === undefined || env.GATE_MEMORY_EMBEDDING_ENABLED.trim() === ''
+    || env.GATE_MEMORY_EMBEDDING_ENABLED === '0') return null;
+  if (env.GATE_MEMORY_EMBEDDING_ENABLED !== '1') throw new Error('gate_memory_embedding_config_invalid');
   const baseURL = clean(env[keys.baseURL]);
   const modelId = clean(env[keys.modelId]);
   const apiKey = clean(env[keys.apiKey]);

@@ -17,6 +17,7 @@ export interface KookApplicationRuntimeOptions {
   pollMs?: number;
   maintenance?: () => Promise<void>;
   onError?: (code: string) => void;
+  onGatewayConnectionStatus?: (status: 'connected' | 'disconnected') => void;
   onDiagnostic?: (event: KookIngressDiscardLog) => void;
   onOutboxDiagnostic?: (event: KookOutboxFailureDiagnostic) => void;
 }
@@ -66,6 +67,7 @@ export class KookApplicationRuntime {
       socketFactory: options.socketFactory ?? createNodeWebSocketFactory(),
       handleEvent: async (data) => { await this.ingress.ingestGatewayEvent(data); },
       ...(options.onError ? { onError: options.onError } : {}),
+      ...(options.onGatewayConnectionStatus ? { onConnectionStatus: options.onGatewayConnectionStatus } : {}),
     });
   }
   async run(signal: AbortSignal): Promise<void> {

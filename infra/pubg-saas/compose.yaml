@@ -107,6 +107,12 @@ services:
     secrets:
       - pubg_app_password
     command: ["node", "dist/src/gateway.js", "--apply"]
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8082/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 15s
+      timeout: 3s
+      retries: 4
+      start_period: 30s
     depends_on:
       postgres:
         condition: service_healthy

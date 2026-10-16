@@ -69,6 +69,7 @@ export interface KookGatewayClientOptions {
   maxBufferedEvents?: number;
   random?: () => number;
   onError?: (code: string) => void;
+  onConnectionStatus?: (status: 'connected' | 'disconnected') => void;
 }
 
 type GatewayFrame = {
@@ -261,6 +262,7 @@ export class KookGatewayClient {
         const url = resumeUrl(await this.options.gatewayUrlProvider.getGatewayUrl(), state);
         exit = await this.connectOnce(url, state, signal);
       } catch {
+        try { this.options.onConnectionStatus?.('disconnected'); } catch { /* observation cannot stop reconnect */ }
         this.options.onError?.('kook_gateway_connection_failed');
       }
       if (exit === 'aborted' || signal?.aborted) return;
@@ -292,11 +294,20 @@ export class KookGatewayClient {
       let helloTimer: ReturnType<typeof setTimeout> | undefined;
       let heartbeatTimer: ReturnType<typeof setTimeout> | undefined;
       let pongTimer: ReturnType<typeof setTimeout> | undefined;
+      let connectionReported = false;
+
+      const reportConnection = (connected: boolean) => {
+        if (connectionReported === connected) return;
+        connectionReported = connected;
+        try { this.options.onConnectionStatus?.(connected ? 'connected' : 'disconnected'); }
+        catch { /* health observation cannot change the gateway state */ }
+      };
 
       const clearTimers = () => {
         if (helloTimer) clearTimeout(helloTimer);
         if (heartbeatTimer) clearTimeout(heartbeatTimer);
         if (pongTimer) clearTimeout(pongTimer);
+        reportConnection(false);
       };
       const finish = (exit: SessionExit, code?: string) => {
         if (settled) return;
@@ -340,6 +351,7 @@ export class KookGatewayClient {
           }
           try { sessionId = requiredText(data.session_id, 'session_id', 256); } catch { finish('closed', 'kook_gateway_hello_invalid'); return; }
           ready = true;
+          reportConnection(true);
           if (helloTimer) clearTimeout(helloTimer);
           try { await this.options.stateStore.save(this.botAccountId, { sessionId, lastSn }); } catch { finish('closed', 'kook_gateway_state_write_failed'); return; }
           scheduleHeartbeat();
@@ -350,6 +362,7 @@ export class KookGatewayClient {
           try { data = dataRecord(frame.d); } catch { finish('closed', 'kook_gateway_resume_ack_invalid'); return; }
           if (typeof data.session_id === 'string' && data.session_id.trim()) sessionId = data.session_id.trim();
           ready = true;
+          reportConnection(true);
           if (helloTimer) clearTimeout(helloTimer);
           try { await this.options.stateStore.save(this.botAccountId, { sessionId, lastSn }); } catch { finish('closed', 'kook_gateway_state_write_failed'); return; }
           scheduleHeartbeat();

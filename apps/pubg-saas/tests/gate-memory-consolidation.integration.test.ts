@@ -18,6 +18,9 @@ import type { KookIngressJob } from '../src/application/kook-ingress-queue.js';
 import type { KookOnboardingServices } from '../src/application/kook-onboarding-handler.js';
 
 const databaseUrl = process.env.PUBG_SAAS_TEST_DATABASE_URL;
+if (process.env.CI === 'true' && !databaseUrl) {
+  throw new Error('gate_memory_consolidation_ci_database_required');
+}
 
 function directEvent(bot: string, actor: string, content: string) {
   return { type: 1, channel_type: 'PERSON', target_id: bot, author_id: actor,
@@ -61,6 +64,9 @@ test('consent-versioned Light/REM batches read only admitted DM sources and pers
     }
     async function finish(job: KookIngressJob): Promise<void> { await queue.complete(job, null); }
     const management = createKookManagementHandler({} as unknown as KookOnboardingServices, consent);
+    const operatorDisabledManagement = createKookManagementHandler(
+      {} as unknown as KookOnboardingServices, consent, { autoLearnEnabled: false },
+    );
     const publicWithoutModel = createKookPublicQueryHandler({
       authorizer: new PublicQueryAuthorizer(pool, {
         isGuildMember: async () => true,
@@ -70,6 +76,15 @@ test('consent-versioned Light/REM batches read only admitted DM sources and pers
       memoryConsolidationConsent: consent,
     });
     const commandHandler = composeKookRequestHandlers(publicWithoutModel, management);
+
+    const blockedOptIn = await startDirect(actor, '/pubg memory light on');
+    const blockedOptInReply = await operatorDisabledManagement(blockedOptIn, signal);
+    assert.match(blockedOptInReply?.content ?? '', /运营者尚未启用.*未保存本次授权/u);
+    await finish(blockedOptIn);
+    assert.equal((await pool.query(
+      "SELECT 1 FROM gate_memory_consolidation_consents WHERE bot_account_id=$1 AND actor_id=$2 AND workflow='light'",
+      [bot, actor],
+    )).rowCount, 0, 'an operator-disabled auto-learning flag cannot save apparent user consent');
 
     const enableLight = await startDirect(actor, '/pubg memory light on');
     const liveLease = await pool.query<{ event_kind: string; user_id: string; target_kind: string; target_id: string; status: string; token_matches: boolean; lease_live: boolean }>(

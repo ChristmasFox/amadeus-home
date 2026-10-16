@@ -109,6 +109,7 @@ test('gateway processes events in sn order and resumes from the last durably han
   const sockets: FakeSocket[] = [];
   const urls: string[] = [];
   const handled: number[] = [];
+  const connectionStates: Array<'connected' | 'disconnected'> = [];
   const client = new KookGatewayClient({
     botAccountId: 'configured-bot',
     gatewayUrlProvider: {
@@ -122,6 +123,7 @@ test('gateway processes events in sn order and resumes from the last durably han
     reconnectBaseMs: 1,
     reconnectMaxMs: 2,
     random: () => 0.5,
+    onConnectionStatus: status => connectionStates.push(status),
   });
   const abort = new AbortController();
   const run = client.run(abort.signal);
@@ -130,6 +132,7 @@ test('gateway processes events in sn order and resumes from the last durably han
   first.open();
   first.frame({ s: 1, d: { code: 0, session_id: 'session-a' } });
   await waitFor(() => stateStore.state?.sessionId === 'session-a', 'gateway hello state');
+  assert.equal(connectionStates.at(-1), 'connected');
 
   first.frame({ s: 0, sn: 1, d: { message: 'one' } });
   await waitFor(() => stateStore.state?.lastSn === 1, 'first event sequence');
@@ -144,6 +147,7 @@ test('gateway processes events in sn order and resumes from the last durably han
   assert.deepEqual(handled, [1, 2, 3]);
 
   first.close();
+  assert.equal(connectionStates.at(-1), 'disconnected');
   await waitFor(() => sockets.length === 2, 'resumed WebSocket');
   const resumedUrl = new URL(urls[1]!);
   assert.equal(resumedUrl.searchParams.get('resume'), '1');
@@ -154,6 +158,7 @@ test('gateway processes events in sn order and resumes from the last durably han
   await waitFor(() => sockets[1]!.sent.length === 0, 'second hello');
   abort.abort();
   await run;
+  assert.equal(connectionStates.at(-1), 'disconnected');
 });
 
 test('gateway bounds queued frames and waits for the in-flight durable write during shutdown', async () => {

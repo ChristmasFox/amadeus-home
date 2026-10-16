@@ -34,6 +34,7 @@ export * from './application/gate-memory-embedding.js';
 export * from './application/gate-memory-embedding-budget.js';
 export * from './application/gate-memory-index-worker.js';
 export * from './application/gate-memory-index-generation.js';
+export * from './application/gate-memory-feature-flags.js';
 export * from './application/nl-query-planner.js';
 export * from './contracts/team-preferences.js';
 export * from './contracts/team-aliases.js';
