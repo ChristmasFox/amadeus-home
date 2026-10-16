@@ -370,6 +370,7 @@ assert "--reviewed-migration-authorization" not in gate_help
 assert "PUBG_SAAS_TEST_DATABASE_URL" in gate_help
 assert "database named `test`/`testing`" in gate_help
 assert all(option not in gate_help for option in ("--build-auto", "--lineage-bridge", "--live", "--memory-acceptance"))
+release_cli = (ROOT / "scripts/release-cli.sh").read_text(encoding="utf-8")
 assert "--promote-live-candidate" in release_cli and "LIVE_CANDIDATE_MATCH=passed" in release_cli
 
 with tempfile.TemporaryDirectory(prefix="release-cli-dry-run-") as temporary:
