@@ -9,15 +9,17 @@
 | Scope | Development | After a verified phase | Formal publication |
 | --- | --- | --- | --- |
 | Lab (OpenClaw self-hosted Kurisu) | focused edit/task checks | build and apply a *reversible candidate* automatically **only** with a one-time host-local operator authorization and safe source scope | formal tag/release remains a separate explicitly reviewed operation |
-| Gate (AI SDK KOOK service) | focused checks and isolated integration | build/prepare candidate if needed; **never auto-apply to Gate-Local, Staging or Prod** | operator selects environment and promotion |
-| Shared Domain/Presentation | verify both affected consumers | Lab may follow its own candidate path; Gate remains isolated | independent product versions and release approvals |
+| Gate (AI SDK KOOK service) | focused checks and isolated integration | **Gate-Local**: once locally opted-in, automatically build/apply reversible candidate after all safety gates and no active M2 pause; otherwise prepare only. **Staging/Prod** never auto-promote | operator selects formal environment/promotion and high-risk migration category |
+| Shared Domain/Presentation | verify both affected consumers | each product may deploy its *own* candidate only under its independently authorized local policy; cross-product source changes never authorize the other deployment | independent product versions and release approvals |
 
 Candidate acceptance is not a formal release. Lab runtime health and owner
 WhatsApp notification are provided by the existing guarded release path. Human
 feedback is asynchronous; it need not block unrelated development. A runtime
-write outside the preauthorized Lab candidate contract (destructive schema
-change, memory reindex, secret rotation, network/SSH/firewall change, risky
-maintenance, Gate changes, cloud infrastructure) still needs its own approval.
+write outside the preauthorized **product-specific candidate contract** (destructive schema
+change, memory reindex, new pgvector runtime/image or extension, secret rotation,
+network/SSH/firewall change, risky maintenance, Gate-Staging/Prod promotion,
+cloud infrastructure) still needs its own risk-class approval. Gate-Local's normal
+preauthorized reversible candidate rollout must not be re-approved per phase.
 
 A prior Goal's explicit stop/permission clauses are **not silently overridden**.
 Review and amend conflicting legacy Goals with the operator before enabling auto
@@ -38,7 +40,11 @@ apply for them. Documentation text cannot grant OS-level access.
    tree may the preauthorized Lab candidate switch occur.
 4. The phase command deduplicates already-deployed HEAD, delegates actual
    immutable images, checkpoints, health checks, rollback and owner notification
-   to `release-lab.sh`, and **never deploys Gate**. If the change is sensitive,
+   to `release-lab.sh` for Lab; for Gate-only phases it must use a distinct
+   protected `release-gate.sh` candidate path **only if** the Gate-Local one-time
+   opt-in exists, target is healthy and authorized, and the M2 pause has been
+   explicitly cleared. The current Gate autopilot may require implementation;
+   mere policy text is not proof it is available. If the change is sensitive,
    unknown, config/security-related or Product Radar-only, it requests a reviewed
    deployment plan instead of running Compose directly.
 5. Once for a release candidate, use `pnpm devctl check --level release` when
@@ -57,6 +63,19 @@ in `~/.config/amadeus/lab-auto-approval.json`. No per-Goal “lab-auto” prefix
 needed. Disable with `pnpm devctl configure lab-auto-disable`. Without that
 approval, phase validation continues but Lab deployment is reported as pending.
 It cannot bypass the existing `release-lab.sh --apply --approval-ref` guards.
+For Gate-Local, implement a **separate** operator-created, host-local opt-in
+(`pnpm devctl configure gate-auto-enable` / `gate-auto-disable` are *planned*
+commands until implemented and tested). Scope it to the single Gate-Local
+instance, checkout, Bot identity and approved safe change classes. On an
+approved Gate-only phase, auto-build immutable candidate, backup/checkpoint,
+perform single-instance switch, health/synthetic smoke, notification and
+rollback/blocked reporting through `release-gate.sh`, without repetitive
+per-phase operator prompts. **Do not auto-enable** it from a Goal, CI or chat.
+An explicit M2 pause blocks auto-apply until the owner resumes M2. New pgvector
+image/extension, unsafe data migration, production credentials, paid-provider
+probe, real-memory ingestion schedule, formal release and Staging/Prod promotion
+remain separate risk classes requiring explicit preauthorization.
+
 For stronger privilege separation, use a dedicated deploy user with limited
 Docker/SSH rights; a file readable by a code agent is an accidental-action
 guard, **not a security boundary against a malicious agent**.
@@ -74,7 +93,7 @@ guard, **not a security boundary against a malicious agent**.
   contents, dependency/config files and execution command level. Changed
   inputs invalidate reuse. Phase/release checks rerun and may require real
   isolated database fixtures; never treat a cached result as production evidence.
-- The Goal phase is not `LIVE_VERIFIED` until the actual service was tested.
+- The Goal phase is not `LIVE_VERIFIED` until the actual service was tested. For Gate, `READY_FOR_AUTO_ENABLE` or `BLOCKED_OPERATOR_AUTHORIZATION` is truthful if one-time local opt-in is absent or M2 is paused; do not claim auto deployment was performed.
   `HUMAN_FEEDBACK_PENDING` can coexist with automatic candidate acceptance.
   Stalled platform sessions still require Codex's normal resume/restart path;
   this tooling does **not** pretend to bypass model/Goal capacity limits.
