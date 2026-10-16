@@ -7,6 +7,7 @@ import { sanitizeKookAssistantReplyContent } from './kook-message-queue.js';
 import { PostgresPubgRepository, type TrustedConversationScope } from '../infrastructure/postgres/pubg-repository.js';
 import type { KookIngressJob } from './kook-ingress-queue.js';
 import { MAX_TEAM_ROSTER_SIZE } from '../contracts/team-roster.js';
+import type { GateMemoryScope } from './gate-memory-store.js';
 
 type MessageEvent = TrustedKookGroupMessage | TrustedKookDirectMessage;
 export interface PublicQueryPermissionChecker {
@@ -202,6 +203,26 @@ export class PublicQueryAuthorizer {
       await client.query('ROLLBACK').catch(() => undefined);
       throw error;
     } finally { client.release(); }
+  }
+
+  /** Resolve memory scope from the active durable KOOK ingress lease. In a
+   * bound channel, authorize() also checks current membership and binding
+   * generation. Never trust a model-supplied tenant or scope identifier. */
+  async resolveMemoryScope(jobInput: KookIngressJob): Promise<GateMemoryScope | null> {
+    const job = await this.storedJob(this.pool, jobInput);
+    if (job.request.kind === 'direct') {
+      return { kind: 'dm', botAccountId: this.botId, actorId: job.request.event.userId };
+    }
+    if (job.request.kind !== 'group' || !job.boundTeam || job.bindingRevision === null) return null;
+    const authorization = await this.authorize(jobInput);
+    if (authorization.kind !== 'authorized') return null;
+    return {
+      kind: 'channel', botAccountId: this.botId,
+      channelId: authorization.query.conversation.channelId,
+      tenantId: authorization.query.teamContext.tenantId,
+      teamId: authorization.query.teamContext.team.id,
+      bindingRevision: job.bindingRevision,
+    };
   }
 
   /** Returns the retained, speaker-labeled history from this trusted channel/DM.
