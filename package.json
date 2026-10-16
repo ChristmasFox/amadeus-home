@@ -54,6 +54,8 @@
     "test:skuld-preparation-tooling": "bash scripts/test-skuld-preparation-tooling.sh",
     "test:immich-checksum-equivalence": "bash scripts/test-immich-checksum-equivalence.sh",
     "init:pubg-team": "node scripts/init-pubg-team.mjs",
-    "test:pubg-onboarding": "node --test scripts/test-init-pubg-team.mjs"
+    "test:pubg-onboarding": "node --test scripts/test-init-pubg-team.mjs",
+    "devctl": "python3 scripts/devctl.py",
+    "test:devctl": "python3 -m unittest discover -s scripts/tests -p test_devctl.py -v"
   }
 }

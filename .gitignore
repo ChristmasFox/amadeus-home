@@ -83,3 +83,6 @@ infra/9router/runtime-policy.json
 
 # Local-only privacy scanner lists (real domains/ids, never commit)
 /.privacy/
+
+# Private, resumable Goal state (never commit transcripts or execution metadata)
+/.agent/runtime/
