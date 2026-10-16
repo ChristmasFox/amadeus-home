@@ -29,7 +29,9 @@ test('privacy help is available in DMs and unbound groups without database or mo
   assert.match(KOOK_PUBLIC_PRIVACY_NOTICE, /按频道隔离.*按用户隔离并持久保留/u);
   assert.match(KOOK_PUBLIC_PRIVACY_NOTICE, /Gate 长期记忆只用于本人私聊.*明确的保存\/更正请求会立即写入.*普通私聊.*自动整理/u);
   assert.match(KOOK_PUBLIC_PRIVACY_NOTICE, /立即退出召回.*原始 KOOK 聊天记录、受保护备份.*写入幂等回执.*没有自动过期/u);
-  assert.match(KOOK_PUBLIC_PRIVACY_NOTICE, /Light\/REM 自动整理默认开启.*本人可在私聊.*off.*群聊不会进入个人记忆整理队列.*不会自动晋升为长期记忆/u);
+  assert.match(KOOK_PUBLIC_PRIVACY_NOTICE, /Light\/REM 自动整理默认开启.*本人可在私聊.*off.*群聊不会进入个人记忆整理队列/u);
+  assert.match(KOOK_PUBLIC_PRIVACY_NOTICE, /每天本地 03:00 的 Dreaming.*本人同意.*跨日重复.*实际使用证据.*决定是否晋升为长期记忆/u);
+  assert.doesNotMatch(KOOK_PUBLIC_PRIVACY_NOTICE, /不会自动晋升为长期记忆/u);
   assert.match(KOOK_PUBLIC_PRIVACY_NOTICE, /被召回或实际用于回答的记忆键、版本.*90 天的查询指纹.*不保存查询原文或记忆正文/u);
   assert.doesNotMatch(KOOK_PUBLIC_PRIVACY_NOTICE, /最多保留 12 小时|每分钟 10 条|每日 200 条/u);
   const handler = createKookManagementHandler({} as unknown as KookOnboardingServices);

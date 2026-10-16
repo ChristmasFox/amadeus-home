@@ -7,6 +7,7 @@ import {
   AccountClaimService,
   GateMemoryConsolidationConsentService,
   GateMemoryConsolidationWorker,
+  GateMemoryPlugin,
   KookIngressQueue,
   PublicQueryAuthorizer,
   composeKookRequestHandlers,
@@ -85,13 +86,17 @@ test('consent-versioned Light/REM batches read only admitted DM sources and pers
     const operatorDisabledManagement = createKookManagementHandler(
       {} as unknown as KookOnboardingServices, consent, { autoLearnEnabled: false },
     );
+    const publicMemoryPlugin = new GateMemoryPlugin({
+      botAccountId: bot, readEnabled: false, writeEnabled: false, autoLearnEnabled: true,
+      retriever: null, writer: null, consent, worker: null,
+    });
     const publicWithoutModel = createKookPublicQueryHandler({
       authorizer: new PublicQueryAuthorizer(pool, {
         isGuildMember: async () => true,
         isTextChannelMember: async () => true,
       }, { botAccountId: bot }),
       claims: new AccountClaimService(pool),
-      memoryConsolidationConsent: consent,
+      memoryPlugin: publicMemoryPlugin,
     });
     const commandHandler = composeKookRequestHandlers(publicWithoutModel, management);
 
@@ -357,7 +362,11 @@ test('ordinary DM replies do not wait for an in-flight Dreaming pass', { skip: !
       return [];
     },
   };
-  const worker = new GateMemoryConsolidationWorker(pool, bot, planner, { timeoutMs: 10_000 });
+    const worker = new GateMemoryConsolidationWorker(pool, bot, planner, { timeoutMs: 10_000 });
+    const memoryPlugin = new GateMemoryPlugin({
+      botAccountId: bot, readEnabled: false, writeEnabled: false, autoLearnEnabled: true,
+      retriever: null, writer: null, consent, worker,
+    });
   const dreamingAbort = new AbortController();
   const signal = new AbortController().signal;
   let dreamingSettled = false;
@@ -381,7 +390,7 @@ test('ordinary DM replies do not wait for an in-flight Dreaming pass', { skip: !
       async claim() { return randomUUID(); },
       async finish() {},
     };
-    dreamingRun = runMemoryLearningScheduler(worker, dreamingStore, bot, dreamingAbort.signal, () => {
+    dreamingRun = runMemoryLearningScheduler(memoryPlugin, dreamingStore, bot, dreamingAbort.signal, () => {
       dreamingAbort.abort();
       notifyDreamingPassReturned();
     }, {
@@ -406,7 +415,7 @@ test('ordinary DM replies do not wait for an in-flight Dreaming pass', { skip: !
       }, { botAccountId: bot }),
       claims: new AccountClaimService(pool),
       agent: { model: assistant, provider: 'fixture', modelId: 'dreaming-reply-fixture' },
-      memoryConsolidationConsent: consent,
+      memoryPlugin,
     });
     const reply = await within(handler(next, signal), 'ordinary_reply_waited_for_dreaming');
     assert.equal(reply?.content, '好的，我们可以继续聊今晚的计划。');

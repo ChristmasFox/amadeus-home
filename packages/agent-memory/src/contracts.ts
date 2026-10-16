@@ -51,7 +51,8 @@ export interface MemorySemanticSearchResult {
 
 export type MemoryRetrievalMode = 'hybrid' | 'lexical_only' | 'disabled';
 export type MemoryRetrievalReason = MemorySearchReason
-  | 'memory_scope_unavailable' | 'memory_store_unavailable' | 'memory_candidate_source_unavailable';
+  | 'memory_scope_unavailable' | 'memory_store_unavailable' | 'memory_candidate_source_unavailable'
+  | 'disabled_by_operator';
 
 export interface MemoryRetrievedCandidate {
   canonicalKey: string;
@@ -119,10 +120,12 @@ export interface MemoryRecallRequest {
 export interface ExplicitMemoryWrite extends MemoryDraft {
   operation: 'remember' | 'correct';
   expectedRevision?: number;
+  validUntil?: string | null;
 }
 
 export interface MemoryForgetRequest {
   key: string;
+  expectedRevision?: number;
 }
 
 export type MemoryWriteResult =
@@ -164,7 +167,13 @@ export interface MemoryHealth {
   reason: string | null;
 }
 
-export const MEMORY_FEATURE_DEFAULTS = {
+export interface MemoryFeatureFlags {
+  read: boolean;
+  write: boolean;
+  autoLearn: boolean;
+}
+
+export const MEMORY_FEATURE_DEFAULTS: Readonly<MemoryFeatureFlags> = {
   read: true,
   write: true,
   autoLearn: true,

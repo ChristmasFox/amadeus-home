@@ -2,7 +2,12 @@ import { createHash, randomUUID } from 'node:crypto';
 import type { Pool, PoolClient, QueryResultRow } from 'pg';
 import { z } from 'zod';
 import { generateText, tool, type LanguageModel } from 'ai';
-import { evaluateDeepPromotion, type MemoryCandidateDraft } from '@agent/memory';
+import {
+  evaluateDeepPromotion,
+  normalizeMemoryCandidates,
+  type MemoryCandidateDraft,
+  type NormalizedMemoryCandidate,
+} from '@agent/memory';
 import type { KookIngressJob } from './kook-ingress-queue.js';
 import { canonicalizeGateMemoryKey } from './gate-memory-store.js';
 
@@ -173,14 +178,7 @@ interface SourceMessage extends QueryResultRow {
   created_at: Date;
 }
 
-interface ValidCandidate {
-  key: string;
-  content: string;
-  kind: z.infer<typeof GateMemoryConsolidationCandidateSchema>['kind'];
-  validUntil: string | null;
-  evidenceEventIds: string[];
-  idempotencyKey: string;
-}
+type ValidCandidate = NormalizedMemoryCandidate;
 
 function directIdentity(job: KookIngressJob): { botId: string; actorId: string; channelId: string } | null {
   if (job.request.kind !== 'direct' || job.botAccountId.length < 1
@@ -507,13 +505,6 @@ export class GateMemoryConsolidationConsentService {
   }
 }
 
-function expiryFor(kind: ValidCandidate['kind'], validity: string, now: number): string | null {
-  if (kind === 'stable_preference' && validity === 'stable') return null;
-  const days = validity === '7_days' ? 7 : validity === '30_days' ? 30 : validity === '90_days' ? 90 : 0;
-  if (kind === 'stable_preference' || days === 0) return null;
-  return new Date(now + days * 86_400_000).toISOString();
-}
-
 function sensitiveOrRiskText(value: string): boolean {
   return /(?:password|passphrase|api[\s_-]*key|access[\s_-]*token|secret|private[\s_-]*key|密码|口令|验证码|密钥|私钥|身份证|护照|银行卡|信用卡|手机号|电话号码|电子邮箱|住址|家庭住址|病史|诊断|自残|自杀|性取向|想死|不想活|伤害自己|伤害别人|伤害他人|杀人|杀了他)/iu.test(value)
     || /(?:忽略|无视|忘掉|覆盖).{0,12}(?:系统|开发者|之前|先前|以上).{0,8}(?:指令|规则|提示词)|(?:输出|泄露|展示).{0,8}(?:系统提示词|隐藏指令)|(?:调用|执行).{0,8}(?:工具|命令)|(?:记住我是|我是).{0,8}(?:管理员|所有者)|\b(?:ignore|disregard|override).{0,20}(?:system|developer|previous|prior).{0,16}(?:instructions?|rules?|prompts?)\b/iu.test(value)
@@ -726,37 +717,25 @@ export class GateMemoryConsolidationWorker {
   }
 
   private validateCandidates(raw: unknown[], messages: SourceMessage[], workflow: GateMemoryConsolidationWorkflow): ValidCandidate[] {
-    const result: ValidCandidate[] = [];
-    const seen = new Map<string, string>();
+    const drafts: MemoryCandidateDraft[] = [];
     for (const item of raw.slice(0, this.maxCandidates)) {
       const parsed = GateMemoryConsolidationCandidateSchema.safeParse(item);
-      if (!parsed.success || parsed.data.subject !== 'self') continue;
-      const candidate = parsed.data;
-      if (candidate.confidence !== 'high') continue;
-      if (candidate.kind === 'stable_preference' && candidate.validity !== 'stable') continue;
-      if (candidate.kind === 'verifiable_fact' && !['7_days','30_days','90_days'].includes(candidate.validity)) continue;
-      if (candidate.kind === 'episodic_checkpoint' && !['7_days','30_days'].includes(candidate.validity)) continue;
-      const evidence = candidate.evidence.normalize('NFKC');
-      const content = candidate.content.normalize('NFKC');
-      if (!content || !evidence.includes(content) || sensitiveOrRiskText(`${evidence}\n${content}`)) continue;
-      const sourceRows = messages.filter(source => source.content.normalize('NFKC').includes(evidence));
-      if (!sourceRows.length) continue;
-      let key: string;
-      try { key = canonicalizeGateMemoryKey(candidate.key); }
-      catch { continue; }
-      if (seen.has(key)) continue;
-      seen.set(key, content);
-      const evidenceEventIds = [...new Set(sourceRows.map(source => source.source_event_id))].slice(0, 8);
-      const validUntil = expiryFor(candidate.kind, candidate.validity, this.now());
-      const idempotencyKey = createHash('sha256').update([
+      if (parsed.success) drafts.push(parsed.data);
+    }
+    return normalizeMemoryCandidates(drafts, messages.map(source => ({
+      content: source.content,
+      sourceEventId: source.source_event_id,
+    })), {
+      maxCandidates: this.maxCandidates,
+      now: this.now,
+      canonicalizeKey: canonicalizeGateMemoryKey,
+      isProhibited: sensitiveOrRiskText,
+      createIdempotencyKey: ({ key, content, evidenceEventIds }) => createHash('sha256').update([
         this.botAccountId, messages[0]!.source_event_id, workflow,
         messages[0]!.admission_id, // a new consent version receives a new admission capability
         ...evidenceEventIds, key, content,
-      ].join('\0')).digest('hex');
-      result.push({ key, content, kind: candidate.kind, validUntil,
-        evidenceEventIds, idempotencyKey });
-    }
-    return result;
+      ].join('\0')).digest('hex'),
+    });
   }
 
   private async complete(batch: Admission[], messages: SourceMessage[], candidates: ValidCandidate[]): Promise<boolean> {

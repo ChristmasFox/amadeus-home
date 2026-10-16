@@ -17,6 +17,7 @@ import { MemoryRetriever } from './application/gate-memory-retriever.js';
 import { createGateMemoryEmbeddingProvider } from './infrastructure/ai/gate-memory-embedding-provider.js';
 import { GateMemoryIntentClassifier, GateMemoryWriteCoordinator } from './application/gate-memory-writer.js';
 import { GateMemoryConsolidationAiPlanner, GateMemoryConsolidationConsentService, GateMemoryConsolidationWorker } from './application/gate-memory-consolidation.js';
+import { GateMemoryPlugin } from './application/gate-memory-plugin.js';
 import { gateMemoryEmbeddingStatus, readGateMemoryFeatureFlags } from './application/gate-memory-feature-flags.js';
 import { readGateMemoryEmbeddingConfig } from './infrastructure/ai/gate-memory-embedding-config.js';
 import { PostgresGateMemoryDreamingRunStore, runMemoryLearningScheduler } from './application/gate-memory-dreaming.js';
@@ -91,17 +92,27 @@ export async function gatewayMain(args: string[], env: NodeJS.ProcessEnv = proce
     }
     const memoryRetriever = memoryFlags.read.enabled ? new MemoryRetriever(memoryStore, memoryEmbeddingProvider, {
       onMetric: metric => process.stdout.write(`${JSON.stringify({ component: 'gate-memory-retrieval', ...metric })}\n`),
-    }) : undefined;
+    }) : null;
     const memoryWriter = agent && memoryFlags.write.enabled
       ? new GateMemoryWriteCoordinator(pool, memoryStore, authorizer, new GateMemoryIntentClassifier(agent.model))
-      : undefined;
+      : null;
     const memoryLearningWorker = agent && memoryFlags.autoLearn.enabled
       ? new GateMemoryConsolidationWorker(pool, botId, new GateMemoryConsolidationAiPlanner(agent.model))
-      : undefined;
+      : null;
+    const memoryPlugin = new GateMemoryPlugin({
+      botAccountId: botId,
+      readEnabled: memoryFlags.read.enabled,
+      writeEnabled: memoryFlags.write.enabled,
+      autoLearnEnabled: memoryFlags.autoLearn.enabled,
+      retriever: memoryRetriever,
+      writer: memoryWriter,
+      consent: memoryConsolidationConsent,
+      worker: memoryLearningWorker,
+    });
     if (memoryLearningWorker) {
       const dreamingOptions = env.GATE_MEMORY_DREAMING_TIMEZONE === undefined
         ? {} : { timezone: env.GATE_MEMORY_DREAMING_TIMEZONE };
-      memoryScheduler = runMemoryLearningScheduler(memoryLearningWorker,
+      memoryScheduler = runMemoryLearningScheduler(memoryPlugin,
         new PostgresGateMemoryDreamingRunStore(pool), botId, stop.signal, result =>
           process.stdout.write(`${JSON.stringify({ component: 'gate-memory-learning', ...result })}\n`),
         dreamingOptions);
@@ -120,14 +131,12 @@ export async function gatewayMain(args: string[], env: NodeJS.ProcessEnv = proce
       createKookGroupBindingHandler(bindingServices),
       createKookPublicQueryHandler({
         authorizer, claims, agent,
-        ...(memoryRetriever ? { memoryRetriever } : {}),
-        ...(memoryLearningWorker ? { memoryConsolidationConsent } : {}),
-        ...(memoryWriter ? { memoryWriter } : {}),
+        memoryPlugin,
         executeNaturalWrite: (job, intent, signal) => executeKookNaturalWrite(job, bindingServices, intent, signal),
         onAgentDiagnostic,
       }),
-      createKookManagementHandler({ teams, claims, players }, memoryConsolidationConsent,
-        { autoLearnEnabled: Boolean(memoryLearningWorker) }),
+      createKookManagementHandler({ teams, claims, players }, memoryPlugin,
+        { autoLearnEnabled: memoryPlugin.autoLearnEnabled }),
     );
     const runtime = new KookApplicationRuntime({
       pool, botAccountId: botId, token, handler,

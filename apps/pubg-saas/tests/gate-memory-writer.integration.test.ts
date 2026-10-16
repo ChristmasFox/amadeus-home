@@ -6,6 +6,7 @@ import { MockLanguageModelV4 } from 'ai/test';
 import {
   AccountClaimService,
   GateMemoryIntentClassifier,
+  GateMemoryPlugin,
   GateMemoryStore,
   GateMemoryWriteCoordinator,
   KookIngressQueue,
@@ -78,11 +79,15 @@ test('explicit DM memory writes are scoped, consented, conflict-safe, and idempo
       const assistantModel = agentModel('收到。');
       const coordinator = new GateMemoryWriteCoordinator(pool, store, authority,
         new GateMemoryIntentClassifier(intentModel));
+      const memoryPlugin = new GateMemoryPlugin({
+        botAccountId: bot, readEnabled: false, writeEnabled: true, autoLearnEnabled: false,
+        retriever: null, writer: coordinator, consent: null, worker: null,
+      });
       const handler = createKookPublicQueryHandler({
         authorizer: authority,
         claims: new AccountClaimService(pool),
         agent: { model: assistantModel, provider: 'fixture', modelId: 'memory-writer-agent' },
-        memoryWriter: coordinator,
+        memoryPlugin,
       });
       const reply = await handler(job, signal);
       const replay = retry ? await handler(job, signal) : undefined;
@@ -217,12 +222,18 @@ test('explicit DM memory writes are scoped, consented, conflict-safe, and idempo
       evidence: '请记住我喜欢群聊里的地图', validity: 'stable',
     }));
     const groupAssistantModel = agentModel('群聊普通回复。');
+    const groupMemoryPlugin = new GateMemoryPlugin({
+      botAccountId: bot, readEnabled: false, writeEnabled: true, autoLearnEnabled: false,
+      retriever: null,
+      writer: new GateMemoryWriteCoordinator(pool, store, authority,
+        new GateMemoryIntentClassifier(groupIntentModel)),
+      consent: null, worker: null,
+    });
     const groupHandler = createKookPublicQueryHandler({
       authorizer: authority,
       claims: new AccountClaimService(pool),
       agent: { model: groupAssistantModel, provider: 'fixture', modelId: 'memory-writer-agent' },
-      memoryWriter: new GateMemoryWriteCoordinator(pool, store, authority,
-        new GateMemoryIntentClassifier(groupIntentModel)),
+      memoryPlugin: groupMemoryPlugin,
     });
     const groupReply = await groupHandler(groupJob, signal);
     assert.equal(groupReply?.content, '群聊普通回复。');

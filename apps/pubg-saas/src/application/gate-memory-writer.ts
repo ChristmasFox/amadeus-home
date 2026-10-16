@@ -9,12 +9,13 @@ import {
 } from 'ai';
 import type { Pool } from 'pg';
 import { z } from 'zod';
+import { equivalentMemoryContent, findMemoryConflicts, MemoryWriteService } from '@agent/memory';
+import type { AgentMemoryPlugin, ExplicitMemoryWrite, MemoryForgetRequest, MemoryWriteResult } from '@agent/memory';
 import type { KookIngressJob } from './kook-ingress-queue.js';
 import type { KookTextPayload } from './kook-message-queue.js';
 import {
   canonicalizeGateMemoryKey,
   GateMemoryStore,
-  memorySearchTokens,
   type GateMemoryScope,
   type GateMemoryScopeResolver,
 } from './gate-memory-store.js';
@@ -119,15 +120,6 @@ function expiryFor(plan: GateMemoryIntent, now = Date.now()): string | null {
   return null;
 }
 
-function tokenOverlap(left: string, right: string): number {
-  const leftTokens = new Set(memorySearchTokens(left));
-  const rightTokens = new Set(memorySearchTokens(right));
-  if (!leftTokens.size || !rightTokens.size) return 0;
-  let intersection = 0;
-  for (const token of leftTokens) if (rightTokens.has(token)) intersection += 1;
-  return intersection / (leftTokens.size + rightTokens.size - intersection);
-}
-
 function replyForOutcome(outcome: GateMemoryWriteOutcome, key: string): string {
   const label = safeMemoryText(key, 96);
   if (outcome === 'created') return `已记住「${label}」。这条记忆只属于你的私聊范围。`;
@@ -152,12 +144,22 @@ function idempotencyKey(scope: Extract<GateMemoryScope, { kind: 'dm' }>, job: Ko
 }
 
 export class GateMemoryWriteCoordinator {
+  private readonly lifecycle: MemoryWriteService<KookIngressJob>;
+
   constructor(
     private readonly pool: Pool,
     private readonly store: GateMemoryStore,
     private readonly authority: GateMemoryScopeResolver,
     private readonly classifier: GateMemoryIntentClassifier,
-  ) {}
+  ) {
+    this.lifecycle = new MemoryWriteService({
+      getWriteState: (job, key) => store.getWriteState(job, key),
+      create: (job, draft, metadata) => store.create(job, draft, metadata),
+      revise: (job, draft, revision, metadata) => store.revise(job, draft, revision, metadata),
+      rememberAgain: (job, draft, revision, metadata) => store.rememberAgain(job, draft, revision, metadata),
+      forget: (job, key, revision) => store.forget(job, key, revision),
+    });
+  }
 
   private async trustedDm(job: KookIngressJob): Promise<Extract<GateMemoryScope, { kind: 'dm' }> | null> {
     if (job.request.kind !== 'direct') return null;
@@ -165,6 +167,22 @@ export class GateMemoryWriteCoordinator {
     if (!scope || scope.kind !== 'dm' || scope.botAccountId !== job.botAccountId
       || scope.actorId !== job.request.event.userId) return null;
     return scope;
+  }
+
+  /** Persist one already-classified explicit write behind the trusted DM fence. */
+  async remember(job: KookIngressJob, write: ExplicitMemoryWrite): Promise<MemoryWriteResult> {
+    const scope = await this.trustedDm(job);
+    if (!scope) return { status: 'not_found' };
+    return this.lifecycle.remember(job, write, { sourceEventId: job.eventId }, {
+      sourceKind: 'user_confirmed', sourceReliability: 95, validUntil: write.validUntil ?? null,
+    });
+  }
+
+  /** Persist one explicit forget through the same scope and revision fence. */
+  async forget(job: KookIngressJob, request: MemoryForgetRequest): Promise<MemoryWriteResult> {
+    const scope = await this.trustedDm(job);
+    if (!scope) return { status: 'not_found' };
+    return this.lifecycle.forget(job, request, { sourceEventId: job.eventId });
   }
 
   private async receipt(job: KookIngressJob, scope: Extract<GateMemoryScope, { kind: 'dm' }>, key: string): Promise<{
@@ -230,7 +248,8 @@ export class GateMemoryWriteCoordinator {
     return text(`你私聊中的长期记忆：\n${lines.join('\n')}`);
   }
 
-  private async mutate(job: KookIngressJob, scope: Extract<GateMemoryScope, { kind: 'dm' }>, plan: GateMemoryIntent): Promise<KookTextPayload> {
+  private async mutate(job: KookIngressJob, scope: Extract<GateMemoryScope, { kind: 'dm' }>, plan: GateMemoryIntent,
+    memory: Pick<AgentMemoryPlugin<KookIngressJob>, 'remember' | 'forget'>): Promise<KookTextPayload> {
     if (job.request.kind !== 'direct') return text('记忆写入仅支持本人私聊。');
     if (plan.confidence !== 'high') return text('我还不能确定你要保存或更改哪条个人信息，请用一句话明确说出要记住或更正的内容。');
     if (plan.subject !== 'self') return text('我只保存你明确提供的本人信息，不会把其他人的私密内容写入你的记忆。');
@@ -255,9 +274,9 @@ export class GateMemoryWriteCoordinator {
           outcome: 'not_found', revision: state?.revision ?? null });
         return text(replyForOutcome('not_found', key));
       }
-      const forgotten = await this.store.forget(job, key);
+      const result = await memory.forget(job, { key, expectedRevision: state.revision });
       const finalState = await this.store.getWriteState(job, key);
-      const outcome: GateMemoryWriteOutcome = forgotten || finalState?.revoked ? 'forgotten' : 'not_found';
+      const outcome: GateMemoryWriteOutcome = result.status === 'forgotten' || finalState?.revoked ? 'forgotten' : 'not_found';
       await this.recordReceipt(job, scope, { key: requestKey, intent: 'forget', memoryKey: key,
         outcome, revision: finalState?.revision ?? state.revision });
       return text(replyForOutcome(outcome, key));
@@ -283,20 +302,13 @@ export class GateMemoryWriteCoordinator {
       return text('这条信息的有效时间还不明确，请说明它是长期偏好，或补充一个有效期限。');
     }
     const validUntil = expiryFor(plan);
-    const draft = { key, content: plan.content };
-    const metadata = { sourceKind: 'user_confirmed' as const, sourceReliability: 95, validUntil };
-
     const writeCandidates = await this.store.withAuthorizedSearch(job, async searches => Promise.all([
       searches.exact(key, 24), searches.lexical(plan.content!, 24),
     ]));
-    const similar = [...new Map(writeCandidates.flat().map(entry => [`${entry.key}\0${entry.revision}`, entry])).values()]
-      .filter(entry => canonicalizeGateMemoryKey(entry.key) !== key)
-      .map(entry => ({ entry, overlap: tokenOverlap(`${key} ${plan.content}`, `${entry.key} ${entry.content}`) }))
-      .filter(candidate => candidate.overlap >= 0.72)
-      .sort((left, right) => right.overlap - left.overlap);
+    const similar = findMemoryConflicts(key, plan.content, writeCandidates.flat());
     if (similar.length) {
       const existing = similar[0]!.entry;
-      if (plan.intent === 'remember' && tokenOverlap(plan.content, existing.content) >= 0.9) {
+      if (plan.intent === 'remember' && equivalentMemoryContent(plan.content, existing.content)) {
         await this.recordReceipt(job, scope, { key: requestKey, intent: 'remember', memoryKey: key,
           outcome: 'already_present', revision: existing.revision });
         return text(`相近内容已经记在「${safeMemoryText(existing.key, 96)}」下，没有重复保存。`);
@@ -311,14 +323,16 @@ export class GateMemoryWriteCoordinator {
       if (state.sourceEventId === job.eventId && state.content === plan.content) {
         outcome = 'revised'; revision = state.revision;
       } else {
-        const updated = await this.store.revise(job, draft, state.revision, metadata);
-        if (!updated) return text('这条记忆已被另一条更新覆盖，没有执行更正；请重新列出记忆后再试。');
+        const updated = await memory.remember(job, { operation: 'correct', key, content: plan.content,
+          expectedRevision: state.revision, validUntil });
+        if (updated.status !== 'revised') return text('这条记忆已被另一条更新覆盖，没有执行更正；请重新列出记忆后再试。');
         outcome = 'revised'; revision = state.revision + 1;
       }
     } else if (state?.revoked) {
       if (state.sourceEventId === job.eventId) return text('这条旧请求已经执行遗忘；如需重新记住，请发送一条新的明确请求。');
-      const restored = await this.store.rememberAgain(job, draft, state.revision, metadata);
-      if (!restored) return text('这条记忆已变化或无法恢复，请重新列出记忆后再试。');
+      const restored = await memory.remember(job, { operation: 'remember', key, content: plan.content,
+        expectedRevision: state.revision, validUntil });
+      if (restored.status !== 'revised') return text('这条记忆已变化或无法恢复，请重新列出记忆后再试。');
       outcome = 'revised'; revision = state.revision + 1;
     } else if (state) {
       if (state.content === plan.content) {
@@ -327,8 +341,8 @@ export class GateMemoryWriteCoordinator {
         return text(`「${key}」已经保存了不同内容。若要替换，请明确说“更正 ${key} 为……”。`);
       }
     } else {
-      const created = await this.store.create(job, draft, metadata);
-      if (created === 'already_exists') {
+      const created = await memory.remember(job, { operation: 'remember', key, content: plan.content, validUntil });
+      if (created.status !== 'created') {
         const current = await this.store.getWriteState(job, key);
         if (current?.sourceEventId === job.eventId && current.content === plan.content && !current.revoked) {
           outcome = 'created'; revision = current.revision;
@@ -342,7 +356,8 @@ export class GateMemoryWriteCoordinator {
     return text(replyForOutcome(outcome, key));
   }
 
-  async handle(job: KookIngressJob, signal: AbortSignal): Promise<KookTextPayload | undefined> {
+  async handle(job: KookIngressJob, signal: AbortSignal,
+    memory: Pick<AgentMemoryPlugin<KookIngressJob>, 'remember' | 'forget'>): Promise<KookTextPayload | undefined> {
     if (job.request.kind !== 'direct') return undefined;
     if (signal.aborted) throw new Error('kook_request_aborted');
     const trustedScope = await this.trustedDm(job).catch(() => null);
@@ -367,7 +382,7 @@ export class GateMemoryWriteCoordinator {
         if (prior) return text(replyForOutcome(prior.outcome, prior.memory_key));
       } catch { return text('当前无法安全确认这条请求是否已处理，请稍后查看你的记忆列表。'); }
     }
-    try { return await this.mutate(job, scope, plan); }
+    try { return await this.mutate(job, scope, plan, memory); }
     catch { return text('当前无法安全处理这条记忆请求；没有确认的新结果，请稍后重试。'); }
   }
 }
