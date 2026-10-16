@@ -16,7 +16,7 @@ import { GateMemoryStore } from './application/gate-memory-store.js';
 import { MemoryRetriever } from './application/gate-memory-retriever.js';
 import { createGateMemoryEmbeddingProvider } from './infrastructure/ai/gate-memory-embedding-provider.js';
 import { GateMemoryIntentClassifier, GateMemoryWriteCoordinator } from './application/gate-memory-writer.js';
-import { GateMemoryConsolidationConsentService } from './application/gate-memory-consolidation.js';
+import { GateMemoryConsolidationAiPlanner, GateMemoryConsolidationConsentService, GateMemoryConsolidationWorker } from './application/gate-memory-consolidation.js';
 import { gateMemoryEmbeddingStatus, readGateMemoryFeatureFlags } from './application/gate-memory-feature-flags.js';
 import { readGateMemoryEmbeddingConfig } from './infrastructure/ai/gate-memory-embedding-config.js';
 import { startGatewayHealthServer, stopGatewayHealthServer } from './infrastructure/gateway-health-server.js';
@@ -25,6 +25,44 @@ function optionalNumber(env: NodeJS.ProcessEnv, key: string): number | undefined
   const value = env[key];
   if (value === undefined || value.trim() === '') return undefined;
   return Number(value);
+}
+
+const MEMORY_LIGHT_INTERVAL_MS = 30_000;
+const MEMORY_REM_INTERVAL_MS = 6 * 60 * 60_000;
+
+function waitFor(ms: number, signal: AbortSignal): Promise<void> {
+  if (signal.aborted) return Promise.resolve();
+  return new Promise(resolve => {
+    const done = () => { clearTimeout(timer); signal.removeEventListener('abort', done); resolve(); };
+    const timer = setTimeout(done, ms);
+    signal.addEventListener('abort', done, { once: true });
+  });
+}
+
+async function runMemoryLearningScheduler(
+  worker: GateMemoryConsolidationWorker,
+  signal: AbortSignal,
+  onRun: (value: Record<string, unknown>) => void,
+): Promise<void> {
+  let lastRemAt = 0;
+  while (!signal.aborted) {
+    for (let attempt = 0; attempt < 8 && !signal.aborted; attempt += 1) {
+      const result = await worker.processNext('light', signal).catch(() => null);
+      if (!result) { onRun({ workflow: 'light', status: 'error' }); break; }
+      if (result.status === 'SKIPPED_NO_ELIGIBLE_CORPUS') break;
+      onRun(result as unknown as Record<string, unknown>);
+    }
+    if (!signal.aborted && Date.now() - lastRemAt >= MEMORY_REM_INTERVAL_MS) {
+      lastRemAt = Date.now();
+      for (let attempt = 0; attempt < 2 && !signal.aborted; attempt += 1) {
+        const result = await worker.processNext('rem', signal).catch(() => null);
+        if (!result) { onRun({ workflow: 'rem', status: 'error' }); break; }
+        if (result.status === 'SKIPPED_NO_ELIGIBLE_CORPUS') break;
+        onRun(result as unknown as Record<string, unknown>);
+      }
+    }
+    await waitFor(MEMORY_LIGHT_INTERVAL_MS, signal);
+  }
 }
 /** Explicit source startup target. Without --apply it reads no runtime secret,
  * connects to no service and applies no database migration. */
@@ -54,6 +92,7 @@ export async function gatewayMain(args: string[], env: NodeJS.ProcessEnv = proce
   const stop = new AbortController();
   let gatewayConnected = false;
   let healthServer: Awaited<ReturnType<typeof startGatewayHealthServer>> | undefined;
+  let memoryScheduler: Promise<void> | undefined;
   const onStop = () => stop.abort();
   process.once('SIGINT', onStop);
   process.once('SIGTERM', onStop);
@@ -90,6 +129,13 @@ export async function gatewayMain(args: string[], env: NodeJS.ProcessEnv = proce
     const memoryWriter = agent && memoryFlags.write.enabled
       ? new GateMemoryWriteCoordinator(pool, memoryStore, authorizer, new GateMemoryIntentClassifier(agent.model))
       : undefined;
+    const memoryLearningWorker = agent && memoryFlags.autoLearn.enabled
+      ? new GateMemoryConsolidationWorker(pool, botId, new GateMemoryConsolidationAiPlanner(agent.model))
+      : undefined;
+    if (memoryLearningWorker) {
+      memoryScheduler = runMemoryLearningScheduler(memoryLearningWorker, stop.signal, result =>
+        process.stdout.write(`${JSON.stringify({ component: 'gate-memory-learning', ...result })}\n`));
+    }
     process.stdout.write(`${JSON.stringify({ component: 'gate-memory', event: 'feature_readiness',
       read: memoryFlags.read.status, write: memoryFlags.write.status,
       autoLearn: memoryFlags.autoLearn.status, embedding: embeddingStatus })}\n`);
@@ -105,13 +151,13 @@ export async function gatewayMain(args: string[], env: NodeJS.ProcessEnv = proce
       createKookPublicQueryHandler({
         authorizer, claims, agent,
         ...(memoryRetriever ? { memoryRetriever } : {}),
-        ...(memoryFlags.autoLearn.enabled ? { memoryConsolidationConsent } : {}),
+        ...(memoryLearningWorker ? { memoryConsolidationConsent } : {}),
         ...(memoryWriter ? { memoryWriter } : {}),
         executeNaturalWrite: (job, intent, signal) => executeKookNaturalWrite(job, bindingServices, intent, signal),
         onAgentDiagnostic,
       }),
       createKookManagementHandler({ teams, claims, players }, memoryConsolidationConsent,
-        { autoLearnEnabled: memoryFlags.autoLearn.enabled }),
+        { autoLearnEnabled: Boolean(memoryLearningWorker) }),
     );
     const runtime = new KookApplicationRuntime({
       pool, botAccountId: botId, token, handler,
@@ -136,6 +182,7 @@ export async function gatewayMain(args: string[], env: NodeJS.ProcessEnv = proce
     process.removeListener('SIGINT', onStop);
     process.removeListener('SIGTERM', onStop);
     try {
+      if (memoryScheduler) await memoryScheduler.catch(() => undefined);
       if (healthServer) await stopGatewayHealthServer(healthServer);
     } finally {
       await pool.end();
