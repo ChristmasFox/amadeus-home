@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import type { Pool } from 'pg';
 import {
   MAX_MEMORY_RESULTS,
@@ -612,24 +613,30 @@ export class GateMemoryStore {
   async forget(job: KookIngressJob, key: string): Promise<boolean> {
     const scope = await this.trustedScope(job);
     const canonicalKey = canonicalizeGateMemoryKey(key);
-    const sql = `WITH updated AS (UPDATE gate_memory_entries SET content='',revoked_at=now(),source_event_id=$9,
+    const memoryLockKey = createHash('sha256').update([...scope, canonicalKey].join('\0')).digest('hex');
+    const sql = `WITH key_lock AS MATERIALIZED (
+        SELECT pg_advisory_xact_lock(hashtextextended($11,0))
+      ), updated AS (UPDATE gate_memory_entries SET content='',revoked_at=now(),source_event_id=$9,
       revision=revision+1,updated_at=now() WHERE ` + FILTER + ' AND memory_key=$8 AND revoked_at IS NULL'
+      + ' AND EXISTS (SELECT 1 FROM key_lock)'
       + liveFence(9, 10) + ` RETURNING memory_id,revision), usage_deleted AS (
         DELETE FROM gate_memory_usage_signals WHERE ` + FILTER + ' AND memory_key=$8'
+          + ' AND EXISTS (SELECT 1 FROM key_lock)'
           + liveFence(9, 10) + ` RETURNING signal_id
       ), candidates_deleted AS (
         UPDATE gate_memory_consolidation_candidates SET status='rejected',result_reason=NULL,
           memory_key='rejected',content='[rejected]',source_event_ids=ARRAY[]::TEXT[],
           expected_revision=NULL,confirmed_by_event_id=NULL,updated_at=now()
         WHERE $2='dm' AND bot_account_id=$1 AND actor_id=$3 AND memory_key=$8
-          AND status IN ('pending_confirmation','conflict','duplicate','promoted')` + liveFence(9, 10) + ` RETURNING candidate_id
+          AND status IN ('pending_confirmation','conflict','duplicate','promoted')
+          AND EXISTS (SELECT 1 FROM key_lock)` + liveFence(9, 10) + ` RETURNING candidate_id
       ), queued AS (
         INSERT INTO gate_memory_embedding_jobs(memory_id,source_revision,operation)
         SELECT memory_id,revision,'delete' FROM updated ON CONFLICT DO NOTHING RETURNING job_id
       ) SELECT EXISTS(SELECT 1 FROM updated) AS updated,EXISTS(SELECT 1 FROM queued) AS queued,
         EXISTS(SELECT 1 FROM candidates_deleted) AS candidate_deleted`;
     const result = await this.pool.query(sql, [...scope,
-      canonicalKey, boundedText(job.eventId, 256), job.leaseToken]);
+      canonicalKey, boundedText(job.eventId, 256), job.leaseToken, memoryLockKey]);
     return result.rows[0]?.updated === true || result.rows[0]?.candidate_deleted === true;
   }
 }
