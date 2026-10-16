@@ -261,7 +261,7 @@ export class GateMemoryStore {
       WHERE EXISTS (
         SELECT 1 FROM kook_ingress_events ingress
         WHERE ingress.bot_account_id=$1 AND ingress.event_id=$14
-          AND ingress.lease_token=$15::UUID AND ingress.status='processing'
+          AND ingress.lease_token=$15 AND ingress.status='processing'
           AND ingress.lease_until>now() AND ingress.expires_at>now()
           AND (
             ($2='dm' AND ingress.event_kind='direct' AND ingress.user_id=$3)
