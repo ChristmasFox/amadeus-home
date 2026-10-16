@@ -91,11 +91,13 @@ The adapter does not enable `GATE_MEMORY_READ_ENABLED`,
 requests. It rejects Gate-Staging/Prod, mixed Lab/Gate source changes,
 unreviewed control-plane changes, destructive schema changes, data-changing
 migrations, unrecognized SQL statements, and extension/pgvector operations.
-The migration classifier only auto-authorizes an explicit allowlist of
-additive table/index/function DDL; unknown syntax fails closed. A blocked
-candidate prints a fixed recovery step for its reason. No target query,
-backup, image build, database migration, or service switch is performed when
-approval or M2 clearance is missing.
+The migration classifier only auto-authorizes new tables, non-unique indexes,
+nullable columns without defaults or constraints, reviewed-safe functions, and
+`COMMENT ON` metadata. Unique indexes, defaulted or constrained columns, data
+mutations, and destructive schema changes require separate authorization;
+unknown syntax fails closed. A blocked candidate prints a fixed recovery step
+for its reason. No target query, backup, image build, database migration, or
+service switch is performed when approval or M2 clearance is missing.
 
 To revoke Gate-Local automation, remove both local records:
 
