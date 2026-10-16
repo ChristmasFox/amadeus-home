@@ -18,6 +18,21 @@ class DevctlContracts(unittest.TestCase):
     def test_shared_domain_requires_both_products(self):
         self.assertEqual(devctl.scope_kind(["packages/pubg-domain/src/index.ts"]), (True, True, "eligible"))
 
+    def test_workspace_persona_requires_candidate(self):
+        self.assertEqual(devctl.scope_kind(["integrations/openclaw/workspace/SOUL.md"])[2], "eligible")
+
+    def test_skill_instruction_requires_candidate(self):
+        self.assertEqual(devctl.scope_kind(["plugins/amadeus/skills/skill/SKILL.md"])[2], "eligible")
+
+    def test_legacy_goal_restrictions_still_block_runtime(self):
+        with tempfile.TemporaryDirectory(dir=devctl.ROOT) as folder:
+            path = pathlib.Path(folder) / "legacy.md"
+            path.write_text("未经操作者明确授权不得部署 Lab 容器", encoding="utf-8")
+            relative = path.relative_to(devctl.ROOT).as_posix()
+            self.assertTrue(devctl.goal_blocks_deploy({"goalPath": relative}))
+            path.write_text("# Feature\nImplement and test memory.", encoding="utf-8")
+            self.assertFalse(devctl.goal_blocks_deploy({"goalPath": relative}))
+
     def test_doc_only_no_lab_candidate(self):
         self.assertEqual(devctl.scope_kind(["docs/RELEASE_ENGINEERING.md"])[2], "not-affected")
 

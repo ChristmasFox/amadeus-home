@@ -49,7 +49,7 @@ from text. This bootstrap applies to Codex and other repository-aware agents.
 
 ## 新会话启动
 
-先读 `docs/CONTEXT.md`、`docs/CURRENT_TASK.md`，如有活动 Goal 再读其文档；然后执行 `git status --short --branch`、`git log -5 --oneline --decorate`。对具体改动按需阅读 `README.md`、`docs/ARCHITECTURE.md`、`docs/PROJECT_STATE.md`、`.agent/state.md` 及相关源码。不要将历史 diary 当成 live 指令，也不要仅依赖聊天历史。
+先读 `docs/ENGINEERING_POLICY.md` 和用户选定 Goal 的必要验收条款，运行 `pnpm devctl goal status`（新 Goal 先 `pnpm devctl goal start <path>`）；然后检查 Git 状态。不要默认整份阅读 `docs/CURRENT_TASK.md`、`docs/CONTEXT.md` 或历史日志；需核对事实时仅阅读相关段落。
 
 ## 全局工程规则
 

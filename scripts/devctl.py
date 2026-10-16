@@ -12,6 +12,7 @@ import hashlib
 import json
 import os
 import pathlib
+import re
 import stat
 import subprocess
 import sys
@@ -108,7 +109,12 @@ def scope_kind(paths: list[str]) -> tuple[bool, bool, str]:
     gate = any(p.startswith(("apps/pubg-saas/", "packages/pubg-domain/", "packages/presentation/", "packages/identity/")) for p in paths)
     if not lab:
         return lab, gate, "not-affected"
-    runtime = [p for p in paths if p.startswith(SOURCE_ROOTS) and not p.endswith((".md", ".json.example"))]
+    # Workspace prompts and Skills are runtime inputs, even when Markdown.
+    runtime = [p for p in paths if p.startswith(SOURCE_ROOTS) and
+               not p.endswith((".json.example", "README.md")) and
+               (not p.endswith(".md") or p.startswith((
+                   "integrations/openclaw/workspace/", "plugins/pubg/skills/",
+                   "plugins/amadeus/skills/")))]
     if not runtime:
         return lab, gate, "no-runtime-change"
     if any(p.startswith(SENSITIVE) or p in {"VERSION", "RELEASE_NOTES.md"} for p in paths):
@@ -136,6 +142,25 @@ def fingerprint(paths: list[str], level: str, base: str) -> str:
         else:
             entries.append([path, "missing"])
     return checksum(json.dumps([level, base, git("rev-parse", "HEAD"), sys.version, entries]).encode())
+
+
+def goal_blocks_deploy(data: dict) -> bool:
+    """Honor explicit restrictions in historical Goals until reviewed.
+
+    This deliberately errs toward a false positive: a Goal should no longer
+    embed runtime authorization paragraphs in the first place.
+    """
+    path = ROOT / data.get("goalPath", "")
+    if not path.is_file() or path.is_symlink():
+        return True
+    content = path.read_text(encoding="utf-8")
+    blockers = (r"RUNTIME_APPLY_NOT_AUTHORIZED", r"runtime.apply.not.authorized",
+                r"未经.{0,32}授权.{0,50}(?:部署|重启|--apply)",
+                r"不得.{0,32}(?:部署|重启|--apply)",
+                r"不执行.{0,32}(?:部署|发布)",
+                r"no (?:production |live )?(?:deploy|apply) without",
+                r"separate (?:explicit )?authorization.*(?:deploy|restart)")
+    return any(re.search(pattern, content, re.IGNORECASE) for pattern in blockers)
 
 
 def approval_active() -> bool:
@@ -177,7 +202,7 @@ def tests_for_task(paths: list[str]) -> list[tuple[str, list[str]]]:
 
 
 def check(level: str, data: dict, dry_run: bool = False) -> None:
-    base = data["baseCommit"]
+    base = data["baseCommit"] if level == "release" else data.get("phaseBaseCommit", data["baseCommit"])
     paths = scope_paths(base)
     key = fingerprint(paths, level, base)
     if level in ("edit", "task") and data.get("checks", {}).get(level) == key and not dry_run:
@@ -230,7 +255,8 @@ def goal_start(file: str) -> None:
         archive = STATE.parent / "archive" / (now().replace(":", "-") + ".json")
         protected_write(archive, old)
     data = {"goalPath": relative, "goalSha256": rev,
-            "baseCommit": git("rev-parse", "HEAD"), "phase": "P0",
+            "baseCommit": git("rev-parse", "HEAD"),
+            "phaseBaseCommit": git("rev-parse", "HEAD"), "phase": "P0",
             "nextAction": "identify first uncompleted acceptance item",
             "completedPhases": [], "checks": {}, "deployments": {},
             "startedAt": now()}
@@ -245,7 +271,8 @@ def goal_status() -> None:
     modified = not current.is_file() or checksum(current.read_bytes()) != data["goalSha256"]
     info = {"goal": data["goalPath"], "phase": data["phase"],
             "next": data.get("nextAction"), "completed": data["completedPhases"],
-            "changedFiles": len(scope_paths(data["baseCommit"])),
+            "changedFiles": len(scope_paths(data.get("phaseBaseCommit", data["baseCommit"]))),
+            "goalTotalChanged": len(scope_paths(data["baseCommit"])),
             "goalChanged": modified,
             "lastDeployed": data.get("deployments", {}).get("lab")}
     print(json.dumps(info, ensure_ascii=False, separators=(",", ":")))
@@ -258,14 +285,18 @@ def finish_phase(phase: str, dry_run: bool) -> None:
     if phase != data["phase"]:
         die("phase does not match current Goal state")
     check("phase", data, dry_run=dry_run)
-    paths = scope_paths(data["baseCommit"])
+    paths = scope_paths(data.get("phaseBaseCommit", data["baseCommit"]))
     lab, gate, reason = scope_kind(paths)
+    if reason == "eligible" and goal_blocks_deploy(data):
+        reason = "legacy-goal-runtime-restriction"
     source = git("rev-parse", "HEAD")
     if dry_run:
         print("PHASE_PLAN=lab:" + reason + " gate:" + str(gate))
         return
     if git("status", "--porcelain"):
         die("commit verified source before completing phase; no deployment attempted")
+    if checksum((ROOT / data["goalPath"]).read_bytes()) != data["goalSha256"]:
+        die("Goal changed: review amended acceptance requirements before phase exit")
     if lab and reason == "eligible" and data.get("deployments", {}).get("lab") != source:
         if approval_active():
             # Never mint release tags, alter Gate or bypass the existing
@@ -281,6 +312,8 @@ def finish_phase(phase: str, dry_run: bool) -> None:
     if gate:
         print("GATE_DEPLOYMENT=NOT_AUTHORIZED source_candidate=" + source[:12])
     data["completedPhases"].append(phase)
+    data["phaseBaseCommit"] = source
+    data["checks"] = {}
     data["phase"] = "P" + str(int(phase[1:]) + 1)
     data["nextAction"] = "read current phase acceptance criteria and implement"
     data["lastPhaseCompletedAt"] = now()

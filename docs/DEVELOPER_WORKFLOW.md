@@ -1,3 +1,5 @@
+> **Current policy:** [Autonomous Goal Workflow V2](ENGINEERING_POLICY.md). This file documents the legacy script contracts; the Goal phase entry point and automatic Lab candidate rules are defined in ENGINEERING_POLICY.md.
+
 # Developer Workflow
 
 默认根据 Git 改动选择最低足够验证，不隐式重启或部署：
