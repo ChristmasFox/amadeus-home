@@ -642,7 +642,8 @@ export class GateMemoryConsolidationWorker {
       const parsed = GateMemoryConsolidationCandidateSchema.safeParse(item);
       if (!parsed.success || parsed.data.subject !== 'self') continue;
       const candidate = parsed.data;
-      if (candidate.kind === 'stable_preference' && (candidate.confidence !== 'high' || candidate.validity !== 'stable')) continue;
+      if (candidate.confidence !== 'high') continue;
+      if (candidate.kind === 'stable_preference' && candidate.validity !== 'stable') continue;
       if (candidate.kind === 'verifiable_fact' && !['7_days','30_days','90_days'].includes(candidate.validity)) continue;
       if (candidate.kind === 'episodic_checkpoint' && !['7_days','30_days'].includes(candidate.validity)) continue;
       const evidence = candidate.evidence.normalize('NFKC');
