@@ -312,7 +312,7 @@ def validate_approval(
     # Gate-Local approval is revoked explicitly. Ignore a legacy expiresAt
     # field so existing records do not silently lose their intended lifetime.
     if not issued or issued > current:
-        return False, "approval_expired_or_invalid"
+        return False, "approval_issued_at_invalid"
     categories = approval.get("riskCategories")
     if not isinstance(categories, list) or any(category not in RISK_CATEGORIES for category in categories):
         return False, "approval_risk_scope_invalid"
@@ -342,7 +342,7 @@ def validate_m2_clearance(
     current = (now or datetime.now(timezone.utc)).astimezone(timezone.utc)
     # M2 clearance is revoked explicitly; legacy expiresAt fields are ignored.
     if not issued or issued > current:
-        return False, "m2_clearance_expired_or_invalid"
+        return False, "m2_clearance_issued_at_invalid"
     if not isinstance(evidence, str) or not IDENTIFIER.fullmatch(evidence):
         return False, "m2_acceptance_evidence_missing"
     return True, "m2_cleared"

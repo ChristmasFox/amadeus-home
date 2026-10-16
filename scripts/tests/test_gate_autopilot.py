@@ -124,7 +124,7 @@ class GateAutopilotContracts(unittest.TestCase):
         self.assertEqual(preflight(approval=approval(repository="/other/checkout"))["reason"],
                          "approval_checkout_mismatch")
         self.assertEqual(preflight(approval=approval(approvedAt="2026-10-16T12:01:00Z"))["reason"],
-                         "approval_expired_or_invalid")
+                         "approval_issued_at_invalid")
 
     def test_paused_or_wrong_scope_m2_clearance_blocks_apply(self):
         self.assertEqual(preflight(clearance=None)["reason"], "m2_pause_active")
@@ -132,7 +132,7 @@ class GateAutopilotContracts(unittest.TestCase):
                          "m2_clearance_target_mismatch")
         self.assertEqual(preflight(clearance=clearance(expiresAt="2026-10-16T11:59:00Z"))["status"], "READY")
         self.assertEqual(preflight(clearance=clearance(clearedAt="2026-10-16T12:01:00Z"))["reason"],
-                         "m2_clearance_expired_or_invalid")
+                         "m2_clearance_issued_at_invalid")
 
     def test_duplicate_sha_and_runtime_dual_bot_or_drift_stop(self):
         self.assertEqual(preflight(facts=facts(activeSha=SHA))["status"], "ALREADY_CURRENT")
