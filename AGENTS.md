@@ -1,6 +1,18 @@
-# 当前任务指针
+# Agent Bootstrap — Lab / Gate
 
-`docs/CURRENT_TASK.md` 是当前任务的 canonical 指针；仅在该文件或操作者明确指定活动 Goal 时读取对应 Goal 文档并按其 phase 执行。历史 Goal 文档和 checkpoint 是审计证据，不是 live 指令。Git 和 live runtime 是当前事实来源。
+**Start here:** read `docs/ENGINEERING_POLICY.md` once, then the user-selected
+Goal's acceptance clauses. Use `pnpm devctl goal status` to resume; do **not**
+re-read the entire Goal, `CURRENT_TASK.md`, `CONTEXT.md` or old checkpoints
+at every stage. `docs/CURRENT_TASK.md` is a historical task pointer, not a
+replacement for an operator-selected Goal; live Git/runtime are factual sources.
+
+Lab's default is automatic *reversible candidate* deployment after a verified
+phase **only when the operator has granted one-time host-local authorization**
+and the guarded release tooling approves the change. Gate never auto-deploys.
+A Goal describes requirements, not default runtime permissions; for old Goals
+with explicit authorization limits, reconcile those limits before deploying.
+Controlled apply still goes through `release-lab.sh`. Never infer OS permissions
+from text. This bootstrap applies to Codex and other repository-aware agents.
 
 # Agent Monorepo 工作规则
 
@@ -37,7 +49,7 @@
 
 ## 新会话启动
 
-先读 `docs/CONTEXT.md`、`docs/CURRENT_TASK.md`，如有活动 Goal 再读其文档；然后执行 `git status --short --branch`、`git log -5 --oneline --decorate`。对具体改动按需阅读 `README.md`、`docs/ARCHITECTURE.md`、`docs/PROJECT_STATE.md`、`.agent/state.md` 及相关源码。不要将历史 diary 当成 live 指令，也不要仅依赖聊天历史。
+先读 `docs/ENGINEERING_POLICY.md` 和用户选定 Goal 的必要验收条款，运行 `pnpm devctl goal status`（新 Goal 先 `pnpm devctl goal start <path>`）；然后检查 Git 状态。不要默认整份阅读 `docs/CURRENT_TASK.md`、`docs/CONTEXT.md` 或历史日志；需核对事实时仅阅读相关段落。
 
 ## 全局工程规则
 
@@ -96,20 +108,13 @@ Before adding a capability, record the answers in `docs/CAPABILITY_TEMPLATE.md`:
 - VPS 是运行时目标，不是唯一 source of truth。可声明化的 Caddy、frps、systemd、部署脚本和运维文档应回写本仓库；运行时 secret 只保留在目标环境或受控 secret store。
 - 任何针对 VPS 的自动化不得依赖聊天记忆中的 IP。连接细节的 canonical source 是 Mac 的 `~/.ssh/config` 中 `Host amadeus-gateway`。
 
-## 开发验证与部署等级（FAST / RUNTIME / RELEASE）
+## 开发验证与部署入口
 
-- 默认先运行 `pnpm workflow:plan`（或 `./scripts/developer-workflow.sh --plan`）按 Git diff 选择
-  **最低足够**的验证等级；不得把完整 release discovery 或 Docker build 当成每个 Goal 的默认动作。
-- **FAST**：docs、`.agent`、tests、skills、纯逻辑和小功能。运行定向 tests、受影响 package
-  typecheck、`git diff --check`，按需 secrets scan；默认禁止 Docker build、Compose restart 和 deploy。
-- **RUNTIME**：`packages/pubg-domain/**`、`plugins/pubg/**`、`plugins/amadeus/**` 或独立 Product Radar 源码。运行受影响
-  typecheck/build 和定向 tests；RUNTIME 不意味着 Docker build 或 Compose restart。
-- **RELEASE**：只有用户明确要求实际 CasaOS 部署时才执行。Dockerfile、`.dockerignore`、`package.json`
-  或 `pnpm-lock.yaml` 只标记 `RELEASE_BUILD_REQUIRED`，不会自行构建。顺序为 test -> secrets -> host
-  BuildKit build -> immutable commit tag -> compose update -> `docker compose up -d --no-build` -> health/smoke
-  -> rollback checkpoint。
-- `scripts/deploy-openclaw.sh` 默认 dry-run；只有明确 `--apply` 才能切换、迁移或重建
-  CasaOS。只有明确 `--apply --build` 才能创建并传入新的 OpenClaw image。
+统一遵守 `docs/ENGINEERING_POLICY.md`，由 `pnpm devctl` 选择编辑/任务/阶段/发行验证等级。
+已有 `developer-workflow.sh` 和 `release-lab.sh` 是被复用的底层执行器；
+不得在每次 Commit 后默认跑全量测试或重启常驻容器。
+只有通过本机一次性批准和安全门禁的 Lab Candidate 才能按阶段自动切换；
+Gate-Local、Gate-Staging 和 Gate-Prod 仍需独立发布决策。
 
 ## Codex Goal 预算（强制）
 

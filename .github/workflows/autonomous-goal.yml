@@ -1,0 +1,41 @@
+name: Autonomous Goal workflow (source only)
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "scripts/devctl.py"
+      - "scripts/tests/test_devctl.py"
+      - "scripts/developer-workflow.sh"
+      - "scripts/run-check.sh"
+      - "docs/ENGINEERING_POLICY.md"
+      - "AGENTS.md"
+      - "package.json"
+      - ".github/workflows/autonomous-goal.yml"
+  push:
+    branches: [main]
+    paths:
+      - "scripts/devctl.py"
+      - "scripts/tests/test_devctl.py"
+      - "scripts/developer-workflow.sh"
+      - "scripts/run-check.sh"
+      - "docs/ENGINEERING_POLICY.md"
+      - "AGENTS.md"
+      - "package.json"
+      - ".github/workflows/autonomous-goal.yml"
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Goal executor contracts
+        run: |
+          python3 -m unittest discover -s scripts/tests -p test_devctl.py -v
+          python3 -m py_compile scripts/devctl.py
+          python3 scripts/devctl.py --help
+      - name: Existing affected-path classifier contracts
+        run: bash scripts/test-developer-workflow.sh
