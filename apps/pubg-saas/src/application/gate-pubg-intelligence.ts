@@ -8,7 +8,7 @@ import {
   GATE_PUBG_INTELLIGENCE_MAX_MATCHES,
   summarizeGateCachedFeatures,
   type GateIntelligenceSummary,
-} from '@agent/pubg-intelligence';
+} from '@agent/pubg-intelligence/gate';
 
 export const GATE_PUBG_INTELLIGENCE_WINDOW_DAYS = [7, 30] as const;
 export const GATE_PUBG_INTELLIGENCE_FEATURE_READ_CONCURRENCY = 4;

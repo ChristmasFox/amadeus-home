@@ -335,7 +335,7 @@ provides the tenant/team scope; tool arguments cannot select either.
 The tool reads at most 30 matches in a requested 7- or 30-day window and fetches
 at most four team-scoped current-version feature records concurrently through
 `PostgresPubgRepository`. It performs no API refresh and writes no database
-state. The versioned pure API is `@agent/pubg-intelligence` 1.0.0
+state. The versioned pure Gate API is `@agent/pubg-intelligence/gate` 1.0.0
 (`gate-compact-facts-v1`). PostgreSQL stores compact review facts with the raw
 event stream removed, so the output is limited to integrity-checked fight
 outcomes and explicitly phased directed friendly-damage aggregates. Missing or

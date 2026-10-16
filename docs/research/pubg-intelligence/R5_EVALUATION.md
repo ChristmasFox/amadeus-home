@@ -2,12 +2,12 @@
 
 Updated: 2026-10-17
 Branch: `research/pubg-intelligence`
-Gate API: `@agent/pubg-intelligence` `1.0.0`
+Gate API: `@agent/pubg-intelligence/gate` `1.0.0`
 Gate compact-facts rule: `gate-compact-facts-v1`
 
 ## SOURCE_FIXED
 
-`packages/pubg-intelligence` now exports a semver `1.0.0` pure API for the compact Domain telemetry facts that Gate actually persists. The API validates match identity, current parser/feature versions, the authorized roster, evidence shape, the feature cap, and that the persisted fact's raw event array is empty. It reports integrity-checked fight outcomes and explicitly in-match directed teammate damage; it excludes pre-match damage and marks unknown phase, missing/current-version cache gaps, and invalid fight-integrity results as incomplete or unavailable. It emits response-local evidence aliases rather than raw account, match, or event IDs.
+`packages/pubg-intelligence` now exports a dedicated Gate subpath, `@agent/pubg-intelligence/gate`, at semver `1.0.0` for the compact Domain telemetry facts that Gate actually persists. The dedicated entrypoint does not import Lab experiment storage or SQLite modules. The API validates match identity, current parser/feature versions, the authorized roster, evidence shape, the feature cap, and that the persisted fact's raw event array is empty. It reports integrity-checked fight outcomes and explicitly in-match directed teammate damage; it excludes pre-match damage and marks unknown phase, missing/current-version cache gaps, and invalid fight-integrity results as incomplete or unavailable. It emits response-local evidence aliases rather than raw account, match, or event IDs.
 
 The Gate adapter takes only the `AuthorizedPublicQuery` created by the existing KOOK authorizer. It rejects any repository whose storage provenance is not `postgres`, reads only `listMatches` and exact-version feature `get` calls on that scoped repository, uses a 7- or 30-day window, caps reads at 30 matches, and limits feature-read concurrency to four. It never refreshes PUBG data or writes to Gate PostgreSQL. The existing PostgreSQL repository continues to enforce tenant/team membership and team-scoped feature keys. Gate does not import, configure, or connect to the Lab SQLite store.
 
