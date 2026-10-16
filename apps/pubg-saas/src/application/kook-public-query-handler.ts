@@ -528,6 +528,8 @@ async function naturalLanguageReply(
     const context = buildGateWorkingContext(window, currentMessage);
     const currentContext = context.currentQuoteContext ? `${context.currentQuoteContext}\n` : '';
     const messages: ModelMessage[] = [
+      ...(context.episodicSummaryContext
+        ? [{ role: 'user', content: context.episodicSummaryContext } as ModelMessage] : []),
       ...context.turns.map(turn => ({ role: turn.role, content: turn.content }) as ModelMessage),
       { role: 'user', content: `${window.currentSpeakerLabel}说：${currentContext}${context.currentMessage}` },
     ];

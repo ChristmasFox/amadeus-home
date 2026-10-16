@@ -47,8 +47,8 @@ Do not copy Lab's SQLite, sessions, Owner allowlists or provider API keys.
 ## Further milestones
 
 1. The source now replaces the unbounded prompt-history load with a bounded
-   working window and a same-scope lookup for the current quote. Add scoped
-   rolling summaries/checkpoints and citation-aware historical retrieval;
+   working window, a same-scope lookup for the current quote, and a small
+   extractive rolling checkpoint. Add citation-aware historical retrieval;
    keep the full PostgreSQL history and preserve meaningful reply relations.
 2. Add a Gate-only Embedding adapter with an explicit key and routing policy,
    dimension/model-index contract, timeouts, cost caps and rate limits. The
@@ -101,10 +101,10 @@ Source follow-up: `fix(gate-memory): audit authorization, lexical recall and lif
 ### Explicitly unfinished
 
 - The `GateMemoryStore` is **not wired to AI SDK prompt assembly**. Ordinary
-  chat now receives bounded recent transcript turns and the current quote;
-  there is still no memory recall, rolling summary, autonomous conversation
-  summary, or semantic embedding/vector index. Existing full message archives
-  remain.
+  chat receives bounded recent transcript turns, the current quote, and a
+  deterministic extractive checkpoint. There is still no semantic memory
+  recall, autonomous conversation summarization, or embedding/vector index.
+  Existing full message archives remain.
 - There is no automatic deletion of inaccessible **old channel generations**.
   Their isolation is intentional; implement a reviewed retention/erasure
   policy, safe cleanup preview, and protected Gate backup before scheduling
@@ -119,9 +119,10 @@ Source follow-up: `fix(gate-memory): audit authorization, lexical recall and lif
   transcript or historical backups; holistic privacy erasure needs a separate
   retention and recovery design.
 
-Next: scoped summaries, hybrid semantic recall with **Gate-owned** Embedding
-credentials, private scoped indexes and consent-aware consolidation. No runtime
-migration or Gate-Local deployment is implied by a source merge.
+Next: citation-aware historical retrieval, hybrid semantic recall with
+**Gate-owned** Embedding credentials, private scoped indexes and consent-aware
+consolidation. No runtime migration or Gate-Local deployment is implied by a
+source merge.
 
 ## Follow-up lexical audit — 2026-10-16
 
@@ -180,8 +181,9 @@ migration or Gate-Local deployment is implied by a source merge.
    and passes the current user message separately without clipping. The
    estimate is `conservative_unicode_char_v1` (ASCII code point = one-third
    token; other code point = one token), not the configured provider's actual
-   tokenizer. Policy slots of 1,000 each for episodic summary and long-term
-   recall are reserved in the budget type but are not populated or spent yet.
+   tokenizer. A scoped extractive checkpoint can fill the 1,000-token
+   episodic-summary slot; the separate 1,000-token long-term-recall slot stays
+   reserved and unused.
 5. On completion, the ingress queue revalidates the active lease and current
    binding before writing the assistant transcript and transactional outbox.
    Provider diagnostics retain usage totals and status only, not prompt or
@@ -244,8 +246,9 @@ migration or Gate-Local deployment is implied by a source merge.
   `PUBG_SAAS_EGRESS_PROXY` and requires it, so application requests use the
   guarded egress proxy. The public agent has a 300,000 ms total timeout,
   including a 270,000 ms tool-loop and 30,000 ms finalization budget. Token
-  usage is recorded when the provider returns it, but there is no application
-  monetary cost cap or Gate-owned embedding-provider configuration yet.
+  usage is recorded when the provider returns it, and the tool loop is capped
+  at 12 steps. There is no application monetary cost cap or Gate-owned
+  embedding-provider configuration yet.
 
 ### Exact source and fixture changes in this audit
 
@@ -264,3 +267,57 @@ migration or Gate-Local deployment is implied by a source merge.
 This closes the source-level cross-binding regression and bounded ordinary
 chat context baseline. It does not close Gate M2, deploy Gate-Local, implement
 semantic memory retrieval, or complete P1–P6 of the active Goal.
+
+## P1 bounded-context follow-up — 2026-10-16
+
+- Migration `0023_kook_conversation_checkpoints.sql` adds a scope-digested
+  checkpoint row with binding provenance, generation, coverage timestamps and
+  count, selected source event IDs, a digest of the source transcript slice,
+  and a rebuildable flag. Raw transcript rows remain authoritative.
+- `KookIngressQueue.complete` rebuilds a deterministic, extractive checkpoint
+  in the same completion transaction. Its boundary query skips only the fixed
+  80-message working window and reads at most 100 older rows through the
+  scoped conversation index. It stores at most 1,000 estimated tokens from
+  source-backed excerpts. No extra model call or autonomous fact inference is
+  involved. Identical source rows retain the same generation; changed source
+  slices increment it. When no usable scoped checkpoint row exists, ordinary
+  chat proceeds with recent history alone.
+- The authorizer returns a checkpoint only after the same fresh channel
+  membership, current binding revision, durable ingress lease, and actor/bot
+  checks used for history. The handler injects it as a labeled **user-role**
+  context item, never as system instructions. It is low-trust history, not a
+  factual authority or semantic memory.
+- Context planning uses a 24,000-token engineering envelope, with estimated
+  reserves of 4,000 for system/tool definitions, 5,000 for tool results,
+  2,000 for the final answer, and 1,000 for future long-term recall. Recent
+  turns, quote, and checkpoint each keep their 4,000/1,000/1,000 initial
+  budgets; the current message remains separate and intact. These are
+  conservative estimates, not the configured provider tokenizer or a claim
+  about every provider's model context size. The AI SDK tool loop now stops
+  after 12 steps as well as retaining its existing timeouts.
+- An isolated PostgreSQL test seeds 1,000 synthetic turns, verifies the
+  80-row recent cap and scope index plan, resolves a quote outside the recent
+  window, observes the scoped checkpoint, checks rebuild idempotency and
+  verifies a team rebind returns no old-generation history or checkpoint. The
+  measured synthetic read completed below the 2,000 ms test ceiling. The
+  focused suite passed 20/20 with no skips; SaaS typecheck passed. The
+  migration remains source-only and was not applied to Gate-Local.
+
+Exact P1 source and fixture changes:
+
+- `apps/pubg-saas/src/application/gate-context-builder.ts`
+- `apps/pubg-saas/src/application/gate-conversation-checkpoints.ts`
+- `apps/pubg-saas/src/application/kook-conversation-agent.ts`
+- `apps/pubg-saas/src/application/kook-ingress-queue.ts`
+- `apps/pubg-saas/src/application/kook-public-query-handler.ts`
+- `apps/pubg-saas/src/application/public-query-authorizer.ts`
+- `apps/pubg-saas/src/index.ts`
+- `apps/pubg-saas/src/infrastructure/postgres/migrate.ts`
+- `apps/pubg-saas/src/infrastructure/postgres/migrations/0023_kook_conversation_checkpoints.sql`
+- `apps/pubg-saas/tests/gate-context-builder.test.ts`
+- `apps/pubg-saas/tests/public-query-authorizer.test.ts`
+- `docs/GATE_MEMORY_ARCHITECTURE.md`
+
+P1 source acceptance is ready for its committed phase gate. P1 does not add
+semantic recall, Gate-owned embeddings, model-generated summaries, or a real
+Gate-Local deployment.

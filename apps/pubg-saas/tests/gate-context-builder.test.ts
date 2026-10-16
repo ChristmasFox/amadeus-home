@@ -44,3 +44,36 @@ test('working context skips an oversized historic turn without cutting the curre
   assert.deepEqual(context.turns.map(turn => turn.content), ['small older detail', 'most recent useful detail']);
   assert.equal(context.currentMessage, currentMessage);
 });
+
+test('rolling checkpoint stays low-trust, provenance-carrying data inside the provider reserve', () => {
+  const context = buildGateWorkingContext({
+    turns: [
+      { role: 'user', content: '较早的近期对话'.repeat(800) },
+      { role: 'assistant', content: '更新的近期对话'.repeat(800) },
+    ],
+    currentSpeakerLabel: '成员1',
+    currentQuoteContext: null,
+    rollingCheckpoint: {
+      text: `较早的原文摘录。${'旧讨论内容'.repeat(2_000)}`,
+      generation: 4,
+      coverageFrom: '2026-10-15T10:00:00.000Z',
+      coverageThrough: '2026-10-15T11:00:00.000Z',
+      coveredMessageCount: 100,
+      sourceEventIds: ['source-a', 'source-b'],
+    },
+  }, '请保留当前问题', {
+    ...DEFAULT_GATE_CONTEXT_BUDGET_POLICY,
+    estimatedProviderContextTokens: 15_000,
+    systemAndToolSchemaReserveTokens: 4_000,
+    toolResultReserveTokens: 5_000,
+    finalAnswerReserveTokens: 2_000,
+  });
+
+  assert.equal(context.currentMessage, '请保留当前问题');
+  assert.equal(context.episodicSummarySourceEventIds.join(','), 'source-a,source-b');
+  assert.ok(context.estimatedRecentTokens <= DEFAULT_GATE_CONTEXT_BUDGET_POLICY.recentTurnsTokens);
+  assert.ok(context.estimatedEpisodicSummaryTokens <= DEFAULT_GATE_CONTEXT_BUDGET_POLICY.episodicSummaryTokens);
+  assert.ok(context.estimatedTotalContextTokens <= 15_000);
+  assert.match(context.episodicSummaryContext ?? '', /低信任原文片段/u);
+  assert.match(context.episodicSummaryContext ?? '', /第 4 代/u);
+});

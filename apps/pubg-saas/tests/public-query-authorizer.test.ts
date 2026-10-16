@@ -1,11 +1,13 @@
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
+import { performance } from 'node:perf_hooks';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 import { Pool } from 'pg';
 import { emptyContext, type ResultSetRecord } from '@agent/pubg-domain';
 import {
   KookIngressQueue, PublicQueryAuthorizer, PostgresPubgRepository, TeamAdminService, migratePublicDatabase,
+  buildGateWorkingContext, estimateGateTokens, refreshKookConversationCheckpoint,
   parseTrustedKookGroupMessage, type AuthorizedPublicQuery, type KookIngressJob, type PublicQueryPermissionChecker,
 } from '../src/index.js';
 const databaseUrl = process.env.PUBG_SAAS_TEST_DATABASE_URL;
@@ -38,6 +40,7 @@ async function fixture() {
     const job = await admit(data), result = await auth.authorize(job, selection); assert.equal(result.kind, 'authorized'); if (result.kind !== 'authorized') throw new Error('fixture_authorization_failed'); await queue.complete(job, null); return result.query;
   }
   async function cleanup() {
+    await pool.query('DELETE FROM kook_conversation_checkpoints WHERE bot_account_id=$1', [bot]);
     await pool.query('DELETE FROM kook_conversation_messages WHERE bot_account_id=$1', [bot]);
     await pool.query('DELETE FROM usage_records WHERE bot_account_id=$1', [bot]);
     for (const table of ['session_contexts', 'result_sets', 'kook_ingress_events', 'message_outbox', 'channel_binding_versions', 'channel_identities', 'tenants']) await pool.query(`DELETE FROM ${table} WHERE bot_account_id=$1`, [bot]);
@@ -81,7 +84,104 @@ test('agent conversation history is fenced to the current binding generation and
     const removedMemberWindow = await f.auth.loadAgentConversation(removedMemberJob);
     assert.deepEqual(removedMemberWindow.turns, []);
     assert.equal(removedMemberWindow.currentQuoteContext, null);
+    assert.equal(removedMemberWindow.rollingCheckpoint, null);
     await f.queue.complete(removedMemberJob, null);
+  } finally { await f.cleanup(); }
+});
+
+test('1000+ transcript rows use bounded history and a rebuildable scoped rolling checkpoint', { skip: !databaseUrl }, async () => {
+  const f = await fixture(); try {
+    const oldQuoteId = `bulk-history-0-${f.bot.slice(-8)}`;
+    const event = group(f.bot, f.guild, f.channel, f.user);
+    event.content = '请按很早的那条消息继续';
+    Object.assign(event.extra, { quote: { msg_id: oldQuoteId } });
+    const job = await f.admit(event);
+    assert.ok(job.boundTeam);
+    await f.pool.query(
+      `INSERT INTO kook_conversation_messages(
+         bot_account_id,channel_id,message_id,speaker_kind,speaker_id,source_event_id,content,created_at,expires_at,
+         context_scope_kind,context_tenant_id,context_team_id,context_binding_revision
+       ) SELECT $1,$2,'bulk-history-'||idx||'-'||$7,'human',$3,'bulk-event-'||idx,
+          '合成早期事实-'||idx||' '||repeat('这段较长的历史讨论内容。',8),
+          now()-interval '12 hours'+(idx*interval '1 millisecond'),'infinity'::timestamptz,
+          'group',$4,$5,$6::BIGINT
+         FROM generate_series(0,999) AS idx`,
+      [f.bot, f.channel, f.user, job.boundTeam.tenantId, job.boundTeam.teamId, job.bindingRevision, f.bot.slice(-8)],
+    );
+
+    const recentPlan = await f.pool.query(
+      `EXPLAIN SELECT message_id FROM kook_conversation_messages
+       WHERE bot_account_id=$1::TEXT AND channel_id=$2::TEXT AND context_scope_kind='group'
+         AND context_tenant_id=$3::TEXT AND context_team_id=$4::TEXT
+         AND context_binding_revision=$5::BIGINT
+       ORDER BY created_at DESC,message_id DESC LIMIT 80`,
+      [f.bot, f.channel, job.boundTeam.tenantId, job.boundTeam.teamId, job.bindingRevision],
+    );
+    assert.match(recentPlan.rows.map(row => String(row['QUERY PLAN'])).join('\n'), /idx_kook_conversation_scope_recent/u);
+
+    const readStarted = performance.now();
+    const window = await f.auth.loadAgentConversation(job);
+    const readMs = performance.now() - readStarted;
+    assert.ok(readMs < 2_000, `bounded 1000-row history lookup took ${readMs.toFixed(1)}ms`);
+    assert.equal(window.turns.length, 80);
+    assert.match(window.currentQuoteContext ?? '', new RegExp(`${oldQuoteId}.*合成早期事实-0`, 'u'));
+    await f.queue.complete(job, null);
+
+    const checkpoint = (await f.pool.query(
+      `SELECT generation,covered_message_count,source_event_ids,checkpoint_text,source_digest,rebuildable
+       FROM kook_conversation_checkpoints WHERE bot_account_id=$1 AND channel_id=$2`, [f.bot, f.channel],
+    )).rows[0];
+    assert.ok(checkpoint);
+    assert.equal(Number(checkpoint.generation), 1);
+    assert.equal(Number(checkpoint.covered_message_count), 100);
+    assert.equal(checkpoint.rebuildable, true);
+    assert.match(String(checkpoint.source_digest), /^[a-f0-9]{64}$/u);
+    assert.ok(Array.isArray(checkpoint.source_event_ids) && checkpoint.source_event_ids.length > 0);
+    assert.ok(estimateGateTokens(String(checkpoint.checkpoint_text)) <= 1_000);
+
+    const client = await f.pool.connect();
+    try {
+      await client.query('BEGIN');
+      await refreshKookConversationCheckpoint(client, {
+        botAccountId: f.bot, channelId: f.channel, kind: 'group',
+        tenantId: job.boundTeam.tenantId, teamId: job.boundTeam.teamId,
+        bindingRevision: job.bindingRevision,
+      });
+      await client.query('COMMIT');
+    } catch (error) {
+      await client.query('ROLLBACK').catch(() => undefined);
+      throw error;
+    } finally { client.release(); }
+    assert.equal(Number((await f.pool.query(
+      'SELECT generation FROM kook_conversation_checkpoints WHERE bot_account_id=$1 AND channel_id=$2', [f.bot, f.channel],
+    )).rows[0]?.generation), 1, 'rebuilding identical sources is idempotent');
+
+    const followup = group(f.bot, f.guild, f.channel, f.user);
+    followup.content = '继续刚才的讨论';
+    const followupJob = await f.admit(followup);
+    const followupWindow = await f.auth.loadAgentConversation(followupJob);
+    assert.equal(followupWindow.rollingCheckpoint?.generation, 1);
+    assert.equal(followupWindow.rollingCheckpoint?.coveredMessageCount, 100);
+    assert.ok((followupWindow.rollingCheckpoint?.sourceEventIds.length ?? 0) > 0);
+    const built = buildGateWorkingContext(followupWindow, followup.content);
+    assert.equal(built.currentMessage, followup.content);
+    assert.ok(built.estimatedRecentTokens <= 4_000);
+    assert.ok(built.estimatedEpisodicSummaryTokens <= 1_000);
+    assert.ok(built.estimatedTotalContextTokens <= 24_000);
+    assert.match(built.episodicSummaryContext ?? '', /合成早期事实/u);
+    await f.queue.complete(followupJob, null);
+
+    const replacement = await f.teams.createSquad(f.event(f.guild, `replacement-${f.channel}`), {
+      label: 'Checkpoint replacement', pubgShard: 'steam', pubgAccountIds: [`account.player_${randomUUID().replaceAll('-', '')}`],
+    });
+    const pending = await f.teams.prepareTeamAction(f.event(), { kind: 'unbind_channel' });
+    await f.teams.confirmTeamAction(f.event(), pending.confirmationToken);
+    await f.teams.bindExistingSquad(f.event(), replacement.teamId);
+    const afterRebind = await f.admit(group(f.bot, f.guild, f.channel, f.user));
+    const reboundWindow = await f.auth.loadAgentConversation(afterRebind);
+    assert.deepEqual(reboundWindow.turns, []);
+    assert.equal(reboundWindow.rollingCheckpoint, null);
+    await f.queue.complete(afterRebind, null);
   } finally { await f.cleanup(); }
 });
 

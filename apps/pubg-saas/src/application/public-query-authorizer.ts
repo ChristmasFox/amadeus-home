@@ -8,6 +8,7 @@ import { PostgresPubgRepository, type TrustedConversationScope } from '../infras
 import type { KookIngressJob } from './kook-ingress-queue.js';
 import { MAX_TEAM_ROSTER_SIZE } from '../contracts/team-roster.js';
 import type { GateMemoryScope } from './gate-memory-store.js';
+import { kookConversationCheckpointScopeDigest, MAX_AGENT_CONVERSATION_ROWS } from './gate-conversation-checkpoints.js';
 import { KOOK_CHANNEL_BINDING_FILTER, KOOK_CHANNEL_BINDING_JOIN, KOOK_CHANNEL_VERSION_JOIN } from './kook-channel-binding-sql.js';
 
 type MessageEvent = TrustedKookGroupMessage | TrustedKookDirectMessage;
@@ -22,6 +23,14 @@ export interface KookAgentConversationWindow {
   turns: KookAgentConversationTurn[];
   currentSpeakerLabel: string;
   currentQuoteContext: string | null;
+  rollingCheckpoint?: {
+    text: string;
+    generation: number;
+    coverageFrom: string;
+    coverageThrough: string;
+    coveredMessageCount: number;
+    sourceEventIds: string[];
+  } | null;
 }
 export interface KookAgentRunRecord {
   modelId: string | null;
@@ -35,7 +44,6 @@ export interface PublicQueryAuthorizerOptions {
   botAccountId: string;
   maxTeamChoices?: number;
 }
-const MAX_AGENT_CONVERSATION_ROWS = 80;
 const authorizedQuery = Symbol('authorized-public-pubg-query');
 export interface AuthorizedPublicQuery {
   readonly [authorizedQuery]: true;
@@ -253,10 +261,10 @@ export class PublicQueryAuthorizer {
    * IDs stay in PostgreSQL and are used only to resolve quoted-message links. */
   async loadAgentConversation(jobInput: KookIngressJob): Promise<KookAgentConversationWindow> {
     const job = await this.storedJob(this.pool, jobInput);
-    if (job.request.kind !== 'group' && job.request.kind !== 'direct') return { turns: [], currentSpeakerLabel: '成员1', currentQuoteContext: null };
+    if (job.request.kind !== 'group' && job.request.kind !== 'direct') return { turns: [], currentSpeakerLabel: '成员1', currentQuoteContext: null, rollingCheckpoint: null };
     const userId = job.request.event.userId;
     const channelId = job.request.kind === 'group' ? job.request.event.channelId : `dm:${this.botId}:${userId}`;
-    const emptyWindow = (): KookAgentConversationWindow => ({ turns: [], currentSpeakerLabel: '成员1', currentQuoteContext: null });
+    const emptyWindow = (): KookAgentConversationWindow => ({ turns: [], currentSpeakerLabel: '成员1', currentQuoteContext: null, rollingCheckpoint: null });
 
     if (job.request.kind === 'group') {
       try {
@@ -273,6 +281,7 @@ export class PublicQueryAuthorizer {
     const client = await this.pool.connect();
     let rows: Array<{ messageId: string; kind: 'assistant' | 'human'; speakerId: string; replyTo: string | null; content: string }>;
     let quotedRow: { message_id: unknown; speaker_kind: unknown; speaker_id: unknown; content: unknown } | undefined;
+    let checkpointRow: QueryResultRow | undefined;
     try {
       await client.query('BEGIN');
       const current = await this.storedJob(client, jobInput, true);
@@ -355,6 +364,56 @@ export class PublicQueryAuthorizer {
         );
         quotedRow = quoteResult.rows[0];
       }
+
+      const checkpointScope = {
+        botAccountId: this.botId,
+        channelId,
+        kind: current.request.kind === 'group' ? 'group' as const : 'direct' as const,
+        tenantId: current.request.kind === 'group' ? current.boundTeam?.tenantId ?? null : null,
+        teamId: current.request.kind === 'group' ? current.boundTeam?.teamId ?? null : null,
+        bindingRevision: current.request.kind === 'group' ? current.bindingRevision : null,
+      };
+      const scopeDigest = kookConversationCheckpointScopeDigest(checkpointScope);
+      if (current.request.kind === 'group') {
+        const checkpointResult = await client.query(
+          `SELECT generation,coverage_from,coverage_through,covered_message_count,source_event_ids,checkpoint_text
+           FROM kook_conversation_checkpoints checkpoint
+           WHERE checkpoint.bot_account_id=$1 AND checkpoint.channel_id=$2 AND checkpoint.scope_digest=$3
+             AND checkpoint.context_scope_kind='group'
+             AND checkpoint.context_tenant_id IS NOT DISTINCT FROM $4::TEXT
+             AND checkpoint.context_team_id IS NOT DISTINCT FROM $5::TEXT
+             AND checkpoint.context_binding_revision=$6::BIGINT AND checkpoint.rebuildable=true
+             AND EXISTS (SELECT 1 FROM channel_binding_versions version
+               WHERE version.bot_account_id=$1 AND version.channel_id=$2 AND version.revision=$6::BIGINT)
+             AND EXISTS (SELECT 1 FROM kook_ingress_events ingress
+               WHERE ingress.bot_account_id=$1 AND ingress.event_id=$7 AND ingress.lease_token=$8
+                 AND ingress.status='processing' AND ingress.lease_until>now() AND ingress.expires_at>now()
+                 AND ingress.event_kind='group' AND ingress.channel_id=$2
+                 AND ingress.tenant_id IS NOT DISTINCT FROM $4::TEXT
+                 AND ingress.team_id IS NOT DISTINCT FROM $5::TEXT
+                 AND ingress.binding_revision=$6::BIGINT)
+           LIMIT 1`,
+          [this.botId, channelId, scopeDigest, checkpointScope.tenantId, checkpointScope.teamId,
+            checkpointScope.bindingRevision, current.eventId, current.leaseToken],
+        );
+        checkpointRow = checkpointResult.rows[0];
+      } else {
+        const checkpointResult = await client.query(
+          `SELECT generation,coverage_from,coverage_through,covered_message_count,source_event_ids,checkpoint_text
+           FROM kook_conversation_checkpoints checkpoint
+           WHERE checkpoint.bot_account_id=$1 AND checkpoint.channel_id=$2 AND checkpoint.scope_digest=$3
+             AND checkpoint.context_scope_kind='direct' AND checkpoint.context_tenant_id IS NULL
+             AND checkpoint.context_team_id IS NULL AND checkpoint.context_binding_revision IS NULL
+             AND checkpoint.rebuildable=true
+             AND EXISTS (SELECT 1 FROM kook_ingress_events ingress
+               WHERE ingress.bot_account_id=$1 AND ingress.event_id=$4 AND ingress.lease_token=$5
+                 AND ingress.status='processing' AND ingress.lease_until>now() AND ingress.expires_at>now()
+                 AND ingress.event_kind='direct' AND ingress.user_id=$6 AND ingress.channel_id IS NULL)
+           LIMIT 1`,
+          [this.botId, channelId, scopeDigest, current.eventId, current.leaseToken, userId],
+        );
+        checkpointRow = checkpointResult.rows[0];
+      }
       await client.query('COMMIT');
     } catch (error) {
       await client.query('ROLLBACK').catch(() => undefined);
@@ -400,7 +459,18 @@ export class PublicQueryAuthorizer {
         : sanitizeKookAssistantReplyContent(row.content);
       turns.push({ role: row.kind === 'assistant' ? 'assistant' : 'user', content });
     }
-    return { turns, currentSpeakerLabel: '成员1', currentQuoteContext };
+    const rollingCheckpoint = checkpointRow ? {
+      text: String(checkpointRow.checkpoint_text),
+      generation: Number(checkpointRow.generation),
+      coverageFrom: checkpointRow.coverage_from instanceof Date
+        ? checkpointRow.coverage_from.toISOString() : String(checkpointRow.coverage_from),
+      coverageThrough: checkpointRow.coverage_through instanceof Date
+        ? checkpointRow.coverage_through.toISOString() : String(checkpointRow.coverage_through),
+      coveredMessageCount: Number(checkpointRow.covered_message_count),
+      sourceEventIds: Array.isArray(checkpointRow.source_event_ids)
+        ? checkpointRow.source_event_ids.filter((id): id is string => typeof id === 'string') : [],
+    } : null;
+    return { turns, currentSpeakerLabel: '成员1', currentQuoteContext, rollingCheckpoint };
   }
 
   private async verifyConversationBinding(client: Pool | PoolClient, job: KookIngressJob): Promise<void> {

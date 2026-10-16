@@ -6,6 +6,7 @@ import {isVerifiedKookWelcomeTarget,type VerifiedKookWelcomeTarget,type KookGuil
 import type { TrustedKookGroupMessage } from '../channels/kook/trusted-group-event.js';
 import { sanitizeKookMentionMarkup } from '../channels/kook/trusted-group-event.js';
 import type { TrustedKookGuildJoin } from '../channels/kook/guild-welcome.js';
+import { refreshKookConversationCheckpoint } from './gate-conversation-checkpoints.js';
 export interface KookIngressJob {
   botAccountId: string;
   eventId: string;
@@ -340,6 +341,17 @@ export class KookIngressQueue {
             parsed.request.kind === 'group' ? row.binding_revision : null,
           ]);
         }
+      }
+      if (parsed.request.kind === 'group' || parsed.request.kind === 'direct') {
+        await refreshKookConversationCheckpoint(client, {
+          botAccountId: this.botId,
+          channelId: parsed.channelId ?? `dm:${this.botId}:${parsed.userId}`,
+          kind: parsed.request.kind === 'group' ? 'group' : 'direct',
+          tenantId: parsed.request.kind === 'group' && typeof row.tenant_id === 'string' ? row.tenant_id : null,
+          teamId: parsed.request.kind === 'group' && typeof row.team_id === 'string' ? row.team_id : null,
+          bindingRevision: parsed.request.kind === 'group' && row.binding_revision !== null
+            ? String(row.binding_revision) : null,
+        });
       }
       await client.query(`UPDATE kook_ingress_events SET status='done',event_json=NULL,lease_token=NULL,lease_until=NULL,
          next_attempt_at=NULL,last_error_code=NULL,finished_at=now() WHERE bot_account_id=$1 AND event_id=$2`, [this.botId, job.eventId]);
