@@ -60,11 +60,11 @@ Branch: `research/pubg-intelligence`
 
 **SOURCE_FIXED** — Added versioned package API `@agent/pubg-intelligence` 1.0.0 (`gate-compact-facts-v1`) and a Gate-only, tenant-authorized PostgreSQL adapter with bounded reads, typed AI SDK tool registration, default-off canary allowlist, KOOK rendering, redacted evidence aliases, and fail-closed SQLite/config checks. No migration, new service, Lab database access, or Gate data write was added. Compact persisted facts do not contain raw event streams, so R5 intentionally does not claim R1 episode or first-knock reconstruction. Full contract and limitations are in [`R5_EVALUATION.md`](R5_EVALUATION.md).
 
-**BUILD_VERIFIED** — Intelligence: 32 tests passed. Lab typecheck, 2 tests, and build passed. Gate typecheck and build passed; 4 focused adoption tests passed; Gate suite reported 193 total / 152 passed / 41 PostgreSQL/provider-backed tests skipped because no dedicated database URL is configured. `typecheck:pubg`, `test:pubg`, architecture, secrets, and diff checks passed. `bash scripts/release-gate.sh verify` stopped before the database suite with `GATE_TEST_DATABASE=BLOCKED reason=missing`; remote CI must execute the isolated PostgreSQL fixtures before merge.
+**BUILD_VERIFIED** — Intelligence: 32 tests passed. Lab typecheck, 2 tests, and build passed. Gate typecheck and build passed; 4 focused adoption tests passed; Gate suite reported 193 total / 152 passed / 41 PostgreSQL/provider-backed tests skipped locally because no dedicated database URL is configured. `typecheck:pubg`, `test:pubg`, architecture, secrets, diff checks, and an arm64 Gate OCI build/import passed. GitHub Actions at R5 source `f9dc68d` passed all six checks, including isolated PostgreSQL tests, pgvector safety fixture, and amd64/arm64 OCI build. The first CI run exposed a missing package build/copy step, which was fixed before this green run.
 
 **LIVE_VERIFIED** — Not verified against Gate runtime or data. Tests used a mock AI model and fake PostgreSQL repository; no Lab SQLite or Gate-Local database was accessed and no deployment occurred.
 
-**RELEASED** — Not released. Main merge, green CI, host-local one-time authorization, explicit PostgreSQL backup, health checks, and runtime canary verification remain pending. There is no schema migration. M2 remains paused.
+**RELEASED** — Not released. The current R5 PR CI is green, but main merge and final merge CI remain pending while PR #12 is open and the combined heads conflict in Gate package/config/handler files. The owner-only Gate-Local opt-in file exists; guarded target preflight, explicit PostgreSQL backup, image health checks, and runtime canary verification remain pending. There is no schema migration. M2 remains paused.
 
 ## Runtime note
 

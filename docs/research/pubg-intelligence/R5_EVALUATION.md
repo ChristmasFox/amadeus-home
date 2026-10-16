@@ -28,10 +28,11 @@ No SQL migration or additional service was added: the current Gate sync already 
 - `pnpm typecheck:pubg` and `pnpm test:pubg` — passed.
 - `pnpm check:architecture`, `pnpm check:secrets`, and `git diff --check` — passed.
 - `pnpm install --lockfile-only` — passed.
+- Gate OCI image package check: `docker build --platform linux/arm64 ...` passed; importing `@agent/pubg-intelligence/gate` from the built runtime image confirmed API `1.0.0` loads without `node:sqlite`.
 
 Local tests verify default-off and exact-tenant canary selection, no reads for a non-canary tenant, the typed AI SDK tool loop, response rendering through the KOOK adapter, bounded PostgreSQL adapter calls, stale/partial states, compact-facts validation, out-of-roster rejection, and evidence alias stability. The existing PostgreSQL repository integration test now checks that Tenant A cannot read Tenant B's match-scoped feature record; the KOOK integration test exercises the canary tool against a real disposable Gate PostgreSQL fixture when the CI database is available.
 
-The full local Gate release verification did not run its database-backed suite. `bash scripts/release-gate.sh verify` stopped before tests with `GATE_TEST_DATABASE=BLOCKED reason=missing` because `PUBG_SAAS_TEST_DATABASE_URL` is not configured. Do not treat the 41 skipped checks as passes. Remote CI must run the isolated PostgreSQL fixtures before merge.
+The full local Gate release verification did not run its database-backed suite. `bash scripts/release-gate.sh verify` stopped before tests with `GATE_TEST_DATABASE=BLOCKED reason=missing` because `PUBG_SAAS_TEST_DATABASE_URL` is not configured. Do not treat the 41 skipped local checks as passes. GitHub Actions for PR #13 at source SHA `f9dc68d958ed68b0f4e69701f7835a5f5a47dc2c` passed all six checks, including the isolated Gate PostgreSQL tests, the pgvector safety fixture, and the amd64/arm64 OCI build. The initial CI run exposed a missing workspace-package build/copy step; the fix is covered by this passing run.
 
 ## LIVE_VERIFIED
 
@@ -39,7 +40,7 @@ No Gate PostgreSQL runtime was queried for this source-stage verification and no
 
 ## RELEASED
 
-Not released. R5 source is not yet merged into `main`; remote CI, the required Gate-Local operator opt-in, the explicit pre-deployment PostgreSQL backup, image health checks, and runtime canary verification remain pending. No migration is required by this source change. M2 remains paused.
+Not released. R5 source is not yet merged into `main`; the required Gate-Local operator opt-in file is present with owner-only permissions, but guarded target preflight, an explicit pre-deployment PostgreSQL backup, image health checks, and runtime canary verification remain pending. PR #12 remains open; merging both branches together has conflicts in Gate package/config/handler files, so R5 is held until PR #12 can be preserved and the final merge CI is green. No migration is required by this source change. M2 remains paused.
 
 ## Rollback
 
