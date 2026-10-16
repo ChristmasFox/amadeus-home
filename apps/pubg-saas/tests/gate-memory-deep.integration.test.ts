@@ -233,7 +233,18 @@ test('Deep consolidates repeated DM evidence, respects use signals, corrections,
         'my favorite map is Erangel.', 'injected_map');
       const riskRun = await worker.processDeep();
       assert.equal(riskRun.status, 'processed');
-      if (riskRun.status === 'processed') assert.ok(riskRun.rejected >= 3);
+      if (riskRun.status === 'processed') {
+        const riskStates = await pool.query<{ category: string; status: string }>(
+          `SELECT CASE actor_id WHEN $3 THEN 'sensitive' WHEN $4 THEN 'third_party'
+               WHEN $5 THEN 'prompt_injection' END AS category,status
+           FROM gate_memory_consolidation_candidates
+           WHERE bot_account_id=$1 AND actor_id=ANY($2::TEXT[])`,
+          [bot, [actors.unsafe, actors.thirdParty, actors.injection],
+            actors.unsafe, actors.thirdParty, actors.injection],
+        );
+        assert.ok(riskRun.rejected >= 3,
+          JSON.stringify({ riskRun, riskStates: riskStates.rows }));
+      }
       assert.equal((await pool.query(
         `SELECT COUNT(*)::INTEGER AS count FROM gate_memory_entries
          WHERE bot_account_id=$1 AND actor_id=ANY($2::TEXT[]) AND source_kind='trusted_ingress'`,
