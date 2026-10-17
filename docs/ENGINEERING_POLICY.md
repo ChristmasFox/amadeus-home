@@ -1,5 +1,10 @@
 # Engineering Policy — Autonomous Goal Workflow V2
 
+## Current personal-workflow override (2026-10-17)
+
+This section supersedes the historical release/phase rules below for Lab, the private research page, and Gate-Local. PRs and green GitHub CI are not required for commits or routine deployment. Actions run manually only when useful. devctl phase completion tracks progress rather than requiring full test suites or deploying Gate as a side effect of Lab. Lab auto-releases relevant main changes with small runtime health checks and no full per-deploy data backup, while preserving existing files and rollback image/configuration. Gate-Local runs independently, never as a Lab prerequisite. Staging/production and destructive database migrations remain separate operations.
+
+
 ## Gate-Local deploy behavior (2026-10-16 simplification)
 
 Gate-Local is a development/test instance. Arthur has granted standing

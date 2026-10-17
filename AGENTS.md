@@ -1,5 +1,14 @@
 # Agent Bootstrap — Lab / Gate
 
+## 2026-10-17: solo-development rule (overrides old gates below)
+
+Lab, Gate-Local and Intelligence Lab are maintained by one developer. GitHub PRs, required CI checks, staged candidates, per-phase approvals and full per-deploy data backups are NOT prerequisites for ordinary development. Commit finished source directly to main. GitHub Actions are optional manual diagnostics. Focused testing is developer-initiated rather than a deployment gate. Goal phase completion records progress only.
+
+Lab runs its own main-change deployment without waiting for CI. The automatic path retains minimal Compose configuration for reverting to the previous image, not full SQLite, session, secrets or telemetry copies. Existing data and historical backups must never be erased. Lab work must not trigger Gate checks, candidate deployments, or PostgreSQL backups. Gate-Local changes can be deployed independently when Gate itself is being worked on; do not promote to staging/production automatically. Handle destructive SQL migrations separately rather than adding gates to unrelated code.
+
+Do not rebuild a PR/CI/approval/backup gate framework in future Goals.
+
+
 ## Gate-Local automatic deployment invariant
 
 For Gate-Local, **the job is to finish deployment, not to manufacture approval

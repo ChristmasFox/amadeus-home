@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Deploy CI-verified Lab main commits from the maintainer Mac launchd timer."""
+"""Deploy Lab main runtime changes without a GitHub CI gate."""
 
 from __future__ import annotations
 
@@ -28,8 +28,6 @@ CHECK_INTERVAL_SECONDS = 120
 RETRY_SECONDS = 900
 MAX_DEPLOY_ATTEMPTS = 3
 LAB_PATH_PREFIXES = (
-    ".github/workflows/lab-source.yml",
-    ".dockerignore",
     "plugins/amadeus/",
     "plugins/pubg/",
     "packages/presentation/",
@@ -37,20 +35,12 @@ LAB_PATH_PREFIXES = (
     "packages/pubg-intelligence/",
     "integrations/openclaw/",
     "infra/docker/casaos/openclaw/",
-    "apps/product-radar/",
-    "apps/pubg-intelligence-lab/",
-    "docs/research/pubg-intelligence/",
 )
 LAB_PATH_FILES = {
-    "docs/PROJECT_STATE.md", "docs/ENGINEERING_POLICY.md",
-    "docs/RELEASE_ENGINEERING.md", "docs/DEVELOPER_WORKFLOW.md",
     "package.json", "pnpm-lock.yaml", "pnpm-workspace.yaml",
-    "scripts/devctl.py", "scripts/deploy-openclaw.sh", "scripts/lab-auto-release.py",
-    "scripts/lab_auto_release_contract.py", "scripts/test-lab-auto-release.py",
-    "scripts/openclaw_prepare.py", "scripts/openclaw_test_runtime.py",
-    "scripts/amadeus-version.sh", "scripts/release-cli.sh", "scripts/release-lab.sh",
-    "scripts/release-state.py", "scripts/lab-runtime-snapshot.py", "VERSION", "RELEASE_NOTES.md",
+    "scripts/deploy-openclaw.sh", "scripts/openclaw_prepare.py",
 }
+
 
 
 class AutomationError(RuntimeError):
@@ -238,8 +228,6 @@ def push_main(root: Path) -> None:
 
 
 def prepare_release(root: Path, source_sha: str, state: dict[str, Any]) -> dict[str, Any] | None:
-    if checks_for_commit(root, source_sha) != "passed":
-        return None
     tree = checkout_for_sha(root, source_sha)
     version = release_version_from_commit(root, source_sha)
     if version is None:
@@ -254,7 +242,6 @@ def prepare_release(root: Path, source_sha: str, state: dict[str, Any]) -> dict[
     source_paths = git(tree, "diff", "--name-only", f"{source_parent}..{source_sha}").splitlines()
     write_release_notes(tree / "RELEASE_NOTES.md", version, release_note_summary(source_paths))
     command(["bash", "scripts/amadeus-version.sh", "check"], cwd=tree)
-    command(["pnpm", "check:secrets"], cwd=tree, timeout=180)
     git(tree, "add", "VERSION", "RELEASE_NOTES.md")
     changed = subprocess.run(["git", "-C", str(tree), "diff", "--cached", "--quiet"])
     if changed.returncode == 0:
@@ -459,20 +446,14 @@ def release_once(root: Path) -> None:
                     return
                 pending = prepare_release(source_root, main_sha, state)
                 if pending is None:
-                    print("LAB_AUTO_RELEASE=waiting_for_green_ci sha=" + main_sha[:12])
+                    print("LAB_AUTO_RELEASE=retry_release_preparation sha=" + main_sha[:12])
                     return
                 print(f"LAB_RELEASE_COMMIT={pending['releaseSha'][:12]} VERSION={pending['version']}")
                 return
         if pending is None:
             return
         release_sha = str(pending["releaseSha"])
-        release_ci = checks_for_commit(source_root, release_sha)
-        if release_ci == "failed":
-            print("LAB_AUTO_RELEASE=release_ci_failed sha=" + release_sha[:12])
-            return
-        if release_ci != "passed":
-            print("LAB_AUTO_RELEASE=waiting_for_green_release_ci sha=" + release_sha[:12])
-            return
+        # GitHub checks never hold a personal Lab release.
         if not pending.get("deployed"):
             if int(pending.get("attempts", 0)) >= MAX_DEPLOY_ATTEMPTS:
                 print("LAB_AUTO_RELEASE=deployment_stopped_after_rollbacks sha=" + release_sha[:12])

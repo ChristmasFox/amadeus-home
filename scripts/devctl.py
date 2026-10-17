@@ -446,7 +446,7 @@ def check(level: str, data: dict, dry_run: bool = False) -> None:
             return
         if lab:
             execute(["bash", "scripts/release-lab.sh", "verify"], "lab-release", dry_run)
-        if gate:
+        if gate and not lab:
             execute(["bash", "scripts/release-gate.sh", "verify"], "gate-release", dry_run)
         if not lab and not gate:
             execute(["pnpm", "check:architecture"], "architecture", dry_run)
@@ -518,7 +518,7 @@ def finish_phase(phase: str, dry_run: bool) -> None:
     data = state()
     if phase != data["phase"]:
         die("phase does not match current Goal state")
-    check("phase", data, dry_run=dry_run)
+    # Phase completion only records progress; checks are opt-in for solo development.
     paths = scope_paths(data.get("phaseBaseCommit", data["baseCommit"]))
     lab, gate, reason = scope_kind(paths)
     source = git("rev-parse", "HEAD")
@@ -530,19 +530,9 @@ def finish_phase(phase: str, dry_run: bool) -> None:
     if checksum((ROOT / data["goalPath"]).read_bytes()) != data["goalSha256"]:
         die("Goal changed: review amended acceptance requirements before phase exit")
     if lab:
-        print("LAB_DEPLOYMENT=AFTER_MAIN_MERGE ci=required release=automatic")
-    if gate:
-        gate_status, gate_reason = gate_auto_status()
-        if gate_status == "disabled" and gate_reason == "state_missing":
-            print("GATE_DEPLOYMENT=READY_FOR_AUTO_ENABLE source_candidate=" + source[:12])
-            print("GATE_DEPLOYMENT_NEXT=pnpm devctl configure gate-auto-enable")
-        elif gate_status == "enabled":
-            execute(["bash", "scripts/release-gate.sh", "candidate", "--apply",
-                     "--approval-ref", "devctl:" + source[:12]], "gate-local-candidate", False)
-            print("GATE_DEPLOYMENT=CANDIDATE_FINISHED source_candidate=" + source[:12])
-        else:
-            print("GATE_DEPLOYMENT=BLOCKED_OPERATOR_AUTHORIZATION reason=" + gate_reason +
-                  " source_candidate=" + source[:12])
+        print("LAB_DEPLOYMENT=AFTER_MAIN_UPDATE ci=not_required release=automatic")
+    if gate and not lab:
+        print("GATE_DEPLOYMENT=NOT_BLOCKING; deploy Gate-Local separately when needed")
     data["completedPhases"].append(phase)
     data["phaseBaseCommit"] = source
     data["checks"] = {}

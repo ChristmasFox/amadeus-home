@@ -522,13 +522,17 @@ if ((BUILD_ONLY)); then
 fi
 
 CHECKPOINT_ID="amadeus-openclaw-$STAMP"
-CHECKPOINT_DIR="$SKULD_BACKUP_ROOT/deploy/$CHECKPOINT_ID"
+if ((AUTO_RELEASE)); then
+  CHECKPOINT_DIR="$OPENCLAW_DATA_DIR/data/deploy-recovery/$CHECKPOINT_ID"
+else
+  CHECKPOINT_DIR="$SKULD_BACKUP_ROOT/deploy/$CHECKPOINT_ID"
+fi
 OPENCLAW_COMPOSE_FILE="$OPENCLAW_APP_DIR/docker-compose.yml"
 RADAR_COMPOSE_FILE="$RADAR_APP_DIR/docker-compose.yml"
 RADAR_ENV_FILE="$RADAR_APP_DIR/.env"
 MEDIA_COMPOSE_FILE="$MEDIA_ADAPTER_APP_DIR/docker-compose.yml"
 
-if ((OPENCLAW_ONLY)); then
+if ((OPENCLAW_ONLY && AUTO_RELEASE == 0)); then
   STORAGE_PREFLIGHT_LIB_ONLY=1
   # shellcheck disable=SC1091
   source "$ROOT_DIR/scripts/storage-preflight.sh"
@@ -559,7 +563,7 @@ for source in \
   [[ -f "$source" ]] || fail "Missing deployment source: $source"
 done
 
-if ((OPENCLAW_ONLY)); then
+if ((OPENCLAW_ONLY && AUTO_RELEASE == 0)); then
   orb -m "$MACHINE" -u root python3 - "$PUBG_TELEMETRY_ARCHIVE_HOST_DIR" <<'PY'
 import sys
 from pathlib import Path
@@ -611,6 +615,15 @@ if ((OPENCLAW_ONLY == 0)); then
 else
   CHECKPOINT_ARGS+=(
     "$PUBG_TELEMETRY_ARCHIVE_HOST_DIR" pubg-telemetry-archive.before
+  )
+fi
+# Automatic deploys preserve only tiny Compose rollback metadata.
+# They never copy SQLite, sessions, secrets, or complete telemetry archives.
+if ((AUTO_RELEASE)); then
+  CHECKPOINT_ARGS=(
+    "$CHECKPOINT_DIR"
+    "$OPENCLAW_COMPOSE_FILE" openclaw-compose.before.yml
+    "$OPENCLAW_APP_DIR/.env" openclaw-compose.env.before
   )
 fi
 orb -m "$MACHINE" -u root python3 - "${CHECKPOINT_ARGS[@]}" <<'PY'
@@ -672,7 +685,7 @@ for name in ('backup-manifest.json', 'checkpoint.json'):
 print('CHECKPOINT=' + str(checkpoint))
 PY
 
-if ((OPENCLAW_ONLY)); then
+if ((OPENCLAW_ONLY && AUTO_RELEASE == 0)); then
   orb -m "$MACHINE" -u root test -s "$CHECKPOINT_DIR/openclaw-compose.before.yml"
   orb -m "$MACHINE" -u root test -s "$CHECKPOINT_DIR/openclaw-agent.sqlite.before"
   orb -m "$MACHINE" -u root test -d "$CHECKPOINT_DIR/openclaw-workspace.before"
@@ -1280,8 +1293,12 @@ for attempt in $(seq 1 30); do
 done
 [[ "$owner_notification_status" == sent ]] || fail 'Owner deployment notification remained pending after 30 seconds.'
 
-POST_DEPLOY_EVIDENCE_DIR="$SKULD_BACKUP_ROOT/deploy/$CHECKPOINT_ID"
-[[ "$POST_DEPLOY_EVIDENCE_DIR" == "$EXTERNAL_STORAGE_ROOT/"* ]] || fail 'post-deploy evidence must be stored on the verified external volume.'
+if ((AUTO_RELEASE)); then
+  POST_DEPLOY_EVIDENCE_DIR="$HOME/.local/state/amadeus/lab-auto-release/evidence/$CHECKPOINT_ID"
+else
+  POST_DEPLOY_EVIDENCE_DIR="$SKULD_BACKUP_ROOT/deploy/$CHECKPOINT_ID"
+  [[ "$POST_DEPLOY_EVIDENCE_DIR" == "$EXTERNAL_STORAGE_ROOT/"* ]] || fail 'post-deploy evidence must be stored on the verified external volume.'
+fi
 mkdir -p "$POST_DEPLOY_EVIDENCE_DIR"
 chmod 700 "$POST_DEPLOY_EVIDENCE_DIR"
 if ((CANDIDATE || AUTO_RELEASE)); then

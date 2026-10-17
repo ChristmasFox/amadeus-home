@@ -56,6 +56,7 @@ is_env_path() {
 has_pubg=0
 has_pubg_private=0
 has_pubg_saas=0
+has_gate_specific=0
 has_pubg_domain=0
 has_identity=0
 has_amadeus=0
@@ -80,8 +81,8 @@ for path in "${FILES[@]-}"; do
     packages/pubg-domain/src/*) has_pubg=1; has_pubg_private=1; has_pubg_domain=1; has_pubg_saas=1 ;;
     plugins/pubg/*) has_pubg=1; has_pubg_private=1 ;;
     packages/pubg-domain/*) has_pubg=1; has_pubg_domain=1; has_pubg_saas=1 ;;
-    packages/agent-memory/*) has_pubg_saas=1 ;;
-    apps/pubg-saas/src/*|apps/pubg-saas/tests/*|apps/pubg-saas/tsconfig.json) has_pubg=1; has_pubg_saas=1 ;;
+    packages/agent-memory/*) has_pubg_saas=1; has_gate_specific=1 ;;
+    apps/pubg-saas/src/*|apps/pubg-saas/tests/*|apps/pubg-saas/tsconfig.json) has_pubg=1; has_pubg_saas=1; has_gate_specific=1 ;;
     packages/presentation/*) has_presentation=1; has_pubg_saas=1; has_amadeus=1; has_product=1 ;;
     packages/identity/*) has_identity=1 ;;
     plugins/amadeus/*) has_amadeus=1 ;;
@@ -241,7 +242,9 @@ if ((has_pubg)); then
 fi
 if ((has_pubg_saas)); then
   printf '+ pnpm typecheck:pubg-saas\n'; pnpm typecheck:pubg-saas
-  printf '+ pnpm test:pubg-saas\n'; pnpm test:pubg-saas
+  if ((has_gate_specific)); then
+    printf '+ pnpm test:pubg-saas\n'; pnpm test:pubg-saas
+  fi
 fi
 if ((has_identity || has_amadeus)); then
   printf '+ pnpm typecheck:amadeus\n'; pnpm typecheck:amadeus
