@@ -18,6 +18,22 @@ The page binds to `http://127.0.0.1:4179` by default. To allow access from the s
 
 Date inputs use Asia/Shanghai calendar days. SQLite timestamps remain stored as UTC instants.
 
+## Keep the page running
+
+The page reads a read-only snapshot, so two LaunchAgents keep it current without touching Lab:
+
+```sh
+infra/macos/manage-intelligence-lab.sh --dry-run     # show the plan
+infra/macos/manage-intelligence-lab.sh --apply       # install and start both agents
+infra/macos/manage-intelligence-lab.sh --status
+infra/macos/manage-intelligence-lab.sh --stop --apply
+scripts/refresh-intelligence-snapshot.sh --apply     # refresh once by hand
+```
+
+- `com.amadeus.pubg-intelligence-lab` keeps the page on port 4179 (`KeepAlive`). `scripts/run-intelligence-lab.sh` rebuilds the two packages and picks the first private LAN IPv4 (en0, en1) at every start, so a changed address needs no edit; `BIND` and `PORT` live in `~/Library/Application Support/Amadeus/PubgIntelligenceLab/config.env`.
+- `com.amadeus.pubg-intelligence-lab-refresh` runs at minute 20 of every hour, after the Lab prefetch at minute 5. `scripts/refresh-intelligence-snapshot.sh` opens the live database inside the OrbStack machine read-only, copies it with the SQLite backup API, verifies integrity and the SHA-256 of the transfer, compares match, latest-match and feature counts with the snapshot in use and swaps it atomically only when something changed; only then is the page restarted. The previous snapshot is kept as `snapshot.prev.sqlite`; the live database and the telemetry archive are never written.
+- State is in `~/Library/Application Support/Amadeus/PubgIntelligenceLab` (`snapshot.sqlite`, `refresh.json`), logs in `~/Library/Logs/Amadeus/PubgIntelligenceLab`.
+
 ## Optional research model
 
 Without model settings, a deterministic local answer is shown with a clear degraded-mode notice. If the base URL and API key below are set, the app uses Vercel AI SDK for bounded intent planning, read-only scoped tool calls, and a typed fact/inference/hypothesis presentation. Gemini Flash is the default model ID for an OpenAI-compatible router; `PUBG_INTELLIGENCE_AI_MODEL` can select another configured model such as the local 9router `arthur-combo` route. Only aliases and aggregate facts are sent in tool results; raw match/event references and player labels are resolved locally. Phone-like values, credentials, known squad names, and local file paths are redacted or aliased before model calls.
@@ -67,6 +83,8 @@ All algorithms are deterministic and live in `packages/pubg-intelligence/src`; t
 | Landing preference | `LogParachuteLanding` on a 1 km grid; main cell per match; top-10 rate and early-wipe rate (squad's longest survival under 7 minutes) per cell | `landing.ts` | Raw archive |
 | Combat quality | First-knock share, lead retention, follow-up delay, revive and finish rates, third-party candidates from reconstructed battles | `combat-quality.ts`, `battle.ts` | Raw archive |
 | Death analysis | Stage from teams alive at the member's death (opening ≥ 20, mid 10–19, late 5–9, final ≤ 4), killer weapon, killed-after-knock rate, squad-wipe stage | `combat-quality.ts` | Raw archive |
+| Long-run combat | Per match, each member's damage, kills, knocks and assists divided by the fair split among the members present; summed over every Match Store match in scope, so the lobby's strength cancels out. The composite is the geometric mean of damage, kills and knocks; the interval comes from seeded bootstrap over matches (stable: interval excludes 1 and |ratio| ≥ 1.1) | `combat-long.ts` | Match Store |
+| Lobby percentile | The whole lobby is rebuilt from one raw payload (gun damage to other teams and knocks per player, time on the ground from landing to death); each member's damage and knocks per minute alive are placed among every real player who stayed at least two minutes; 0.50 is the lobby median, the interval is a seeded bootstrap over matches | `lobby.ts` | Raw archive |
 | Fight win rate | Per battle group: win when more opponents than squad members were knocked or killed, draw when equal, unscored without a knock; split by initiator (first effective damage), stage, third-party flag, duration; initiator and third-party gaps use the Newcombe interval | `fights.ts` | Raw archive |
 | Engagement distance | Gun damage with both coordinates by distance band (<25, 25–75, 75–150, ≥150 m), dealt versus taken, headshot damage share per band and the main band per weapon | `field.ts` | Raw archive |
 | Zone pressure | Per circle (integer part of `isGame`): share of the squad's position samples inside the blue zone, position relative to the safe-zone centre (centre / middle / edge / outside), blue-zone damage | `field.ts` | Raw archive |

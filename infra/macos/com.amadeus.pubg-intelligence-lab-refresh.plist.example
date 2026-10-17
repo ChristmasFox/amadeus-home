@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>com.amadeus.pubg-intelligence-lab-refresh</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/bash</string>
+    <string>__ROOT__/scripts/refresh-intelligence-snapshot.sh</string>
+    <string>--apply</string>
+    <string>--restart</string>
+  </array>
+  <key>WorkingDirectory</key><string>__ROOT__</string>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key><string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+  </dict>
+  <!-- The hourly Lab prefetch runs at minute 5; refresh the snapshot after it has had time to finish. -->
+  <key>StartCalendarInterval</key><dict><key>Minute</key><integer>20</integer></dict>
+  <key>StandardOutPath</key><string>__LOG__/refresh.log</string>
+  <key>StandardErrorPath</key><string>__LOG__/refresh.log</string>
+</dict>
+</plist>

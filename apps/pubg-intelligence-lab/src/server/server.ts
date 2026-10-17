@@ -28,6 +28,10 @@ import {
   analyzeTacticalMatch,
   analyzeCombatQuality,
   analyzeFieldTelemetry,
+  analyzeLobby,
+  buildLongRunCombat,
+  summarizeLobby,
+  type LobbyMatchStats,
   analyzeStyleTelemetry,
   buildSquadStyle,
   emptyFights,
@@ -288,6 +292,7 @@ interface MatchTelemetryAnalysis {
   field: FieldMatchStats;
   fights: FightMatchStats;
   style: Record<string, PlayerStyleMatch>;
+  lobby: Record<string, LobbyMatchStats>;
 }
 
 /**
@@ -323,6 +328,7 @@ function analyzeMatchTelemetry(snapshot: Snapshot, squad: ResearchSquad, match: 
         field: analyzeFieldTelemetry(payload, new Set(trackedPlayerIds)),
         fights: fightStats,
         style,
+        lobby: analyzeLobby(payload, new Set(trackedPlayerIds)),
       };
     } catch {
       return 'failed';
@@ -382,6 +388,15 @@ async function computeTelemetryAnalytics(snapshot: Snapshot, query: TelemetryAna
   const distance = summarizeDistance(analyzed.map((item) => item.result.field));
   const zone = summarizeZone(analyzed.map((item) => item.result.field));
   const style = buildSquadStyle({ matches: analyzed.map((item) => ({ matchId: item.match.matchId, players: item.result.style })), names });
+  const lobby = summarizeLobby(analyzed.map((item) => item.result.lobby), names);
+  // The Match Store needs no telemetry, so the long-run comparison uses every match in scope, not only archived ones.
+  const longRun = buildLongRunCombat({
+    matches: snapshot.matches.filter((match) => inSquad(match, squad) && inMode(match, mode)
+      && (!query.archived || query.archived.has(match.matchId))
+      && (fromMs === undefined || match.timestamp >= fromMs)
+      && (toMs === undefined || match.timestamp < toMs)),
+    memberIds: squad.memberIds,
+  });
   const dates = analyzed.map((item) => item.match.timestamp);
   return {
     scope: {
@@ -402,6 +417,8 @@ async function computeTelemetryAnalytics(snapshot: Snapshot, query: TelemetryAna
     distance,
     zone,
     style,
+    lobby,
+    longRun,
     highlights: rankInsights([...buildCombatInsights({ combat, deaths, landing }), ...buildFieldInsights({ fights, distance, zone, landing, roles })], FIELD_INSIGHT_MAX),
   };
 }

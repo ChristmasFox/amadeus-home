@@ -626,7 +626,7 @@ function clip(value: number, limit = 1.2): number {
   return Math.max(-limit, Math.min(limit, value));
 }
 
-function mulberry32(seed: number): () => number {
+export function mulberry32(seed: number): () => number {
   let state = seed >>> 0;
   return () => {
     state = (state + 0x6D2B79F5) >>> 0;
@@ -637,7 +637,7 @@ function mulberry32(seed: number): () => number {
   };
 }
 
-function percentile(sorted: readonly number[], fraction: number): number {
+export function percentile(sorted: readonly number[], fraction: number): number {
   return sorted[Math.min(sorted.length - 1, Math.max(0, Math.floor(fraction * (sorted.length - 1))))]!;
 }
 
@@ -662,7 +662,7 @@ function ratioOf(own: number | null, base: number | null): number | null {
   return own !== null && base !== null && base > 0 ? own / base : null;
 }
 
-function tierFor(ratio: number | null, low: number | null, high: number | null, confidence: number | null): { tier: StyleTier; direction: 'high' | 'low' | null } {
+export function tierFor(ratio: number | null, low: number | null, high: number | null, confidence: number | null): { tier: StyleTier; direction: 'high' | 'low' | null } {
   if (ratio === null) return { tier: 'unknown', direction: null };
   const direction = ratio >= 1 ? 'high' : 'low';
   const notable = ratio >= STYLE_NOTABLE_RATIO || ratio <= 1 / STYLE_NOTABLE_RATIO;

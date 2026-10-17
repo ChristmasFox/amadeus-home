@@ -86,8 +86,26 @@ export interface SquadStyle {
 }
 
 export interface FightBucket { key: string; label: string; fights: number; wins: number; losses: number; draws: number; winRate: Rate }
+export interface LongRunReading { ratio: number | null; low: number | null; high: number | null; confidence: number | null; tier: StyleTier; direction: 'high' | 'low' | null }
+export interface LongRunCombat {
+  matches: number;
+  verdict: string;
+  notes: string[];
+  entries: Array<{ accountId: string; name: string; matches: number; rank: number; composite: LongRunReading; metrics: Array<{ key: string; label: string } & LongRunReading> }>;
+}
+export interface LobbyInterval { mean: number | null; low: number | null; high: number | null }
+export interface LobbyCombat {
+  matches: number;
+  lobbySize: number | null;
+  verdict: string;
+  notes: string[];
+  entries: Array<{ accountId: string; name: string; matches: number; rank: number; damage: LobbyInterval; knocks: LobbyInterval; composite: LobbyInterval; tier: 'above' | 'below' | 'even' | 'unknown'; medianDamagePerMinute: number | null }>;
+}
+
 export interface TelemetryAnalytics {
   highlights: Insight[];
+  longRun: LongRunCombat;
+  lobby: LobbyCombat;
   style: SquadStyle;
   fights: { fights: number; overall: FightBucket; byInitiator: FightBucket[]; byStage: FightBucket[]; byThirdParty: FightBucket[]; byDuration: FightBucket[]; notes: string[] };
   roles: Array<{
@@ -637,7 +655,59 @@ function Radar({ axes }: { axes: StyleAxisReading[] }) {
   );
 }
 
-function CombatPanel({ style }: { style: SquadStyle }) {
+function LongRunBoard({ data }: { data: LongRunCombat }) {
+  const maxRatio = Math.max(1.5, ...data.entries.map((entry) => entry.composite.ratio ?? 0));
+  return (
+    <div>
+      <h4>长期战绩（{data.matches} 场 · 比队友公平份额多拿多少）</h4>
+      <p className="av-verdict small">{data.verdict}</p>
+      {data.entries.map((entry) => <div className="av-combat-row" key={entry.accountId}>
+        <span className="rank">{entry.rank}</span>
+        <b>{entry.name}</b>
+        <span className="av-bar-wrap"><Bar value={entry.composite.ratio ?? 0} max={maxRatio} tone={(entry.composite.ratio ?? 0) >= 1 ? 'mint' : 'amber'} /></span>
+        <span className={`ratio ${entry.composite.tier === 'stable' || entry.composite.tier === 'lean' ? ((entry.composite.ratio ?? 1) >= 1 ? 'up' : 'down') : ''}`}>{entry.composite.ratio === null ? '—' : `×${entry.composite.ratio.toFixed(2)}`}</span>
+        <small>{entry.composite.tier === 'stable' ? '稳定' : entry.composite.tier === 'lean' ? `倾向 ${entry.composite.confidence === null ? '' : `${(entry.composite.confidence * 100).toFixed(0)}%`}` : '接近公平份额'}{entry.composite.low !== null && entry.composite.high !== null ? ` · ${entry.composite.low.toFixed(2)}–${entry.composite.high.toFixed(2)}` : ''}</small>
+      </div>)}
+      <div className="av-table longrun">
+        <div className="av-row head"><span>队员</span>{data.entries[0]?.metrics.map((metric) => <span key={metric.key}>{metric.label}</span>)}</div>
+        {data.entries.map((entry) => <div className="av-row" key={entry.accountId}>
+          <b>{entry.name}</b>
+          {entry.metrics.map((metric) => <span key={metric.key} className={metric.tier === 'stable' || metric.tier === 'lean' ? (metric.direction === 'high' ? 'up' : 'down') : ''}>{metric.ratio === null ? '—' : `×${metric.ratio.toFixed(2)}`}{metric.tier === 'stable' ? ' ●' : metric.tier === 'lean' ? ' ◐' : ''}</span>)}
+        </div>)}
+      </div>
+      <p className="av-note">{data.notes.join(' ')}</p>
+    </div>
+  );
+}
+
+function LobbyBoard({ data }: { data: LobbyCombat }) {
+  return (
+    <div>
+      <h4>相对全场玩家（{data.matches} 场遥测 · 全场约 {data.lobbySize === null ? '—' : Math.round(data.lobbySize)} 人）</h4>
+      <p className="av-verdict small">{data.verdict}</p>
+      {data.entries.map((entry) => <div className="av-combat-row" key={entry.accountId}>
+        <span className="rank">{entry.rank}</span>
+        <b>{entry.name}</b>
+        <span className="av-bar-wrap"><Bar value={entry.composite.mean ?? 0} max={1} tone={(entry.composite.mean ?? 0) >= 0.5 ? 'mint' : 'amber'} /></span>
+        <span className={`ratio ${entry.tier === 'above' ? 'up' : entry.tier === 'below' ? 'down' : ''}`}>{entry.composite.mean === null ? '—' : `${(entry.composite.mean * 100).toFixed(0)} 分位`}</span>
+        <small>{entry.tier === 'above' ? '明显高于全场中位' : entry.tier === 'below' ? '明显低于全场中位' : '接近全场中位'}{entry.composite.low !== null && entry.composite.high !== null ? ` · ${(entry.composite.low * 100).toFixed(0)}–${(entry.composite.high * 100).toFixed(0)}` : ''}</small>
+      </div>)}
+      <div className="av-table longrun">
+        <div className="av-row head"><span>队员</span><span>伤害分位</span><span>击倒分位</span><span>中位 每分钟伤害</span><span>场次</span></div>
+        {data.entries.map((entry) => <div className="av-row" key={entry.accountId}>
+          <b>{entry.name}</b>
+          <span>{entry.damage.mean === null ? '—' : `${(entry.damage.mean * 100).toFixed(0)}`}</span>
+          <span>{entry.knocks.mean === null ? '—' : `${(entry.knocks.mean * 100).toFixed(0)}`}</span>
+          <span>{entry.medianDamagePerMinute === null ? '—' : entry.medianDamagePerMinute.toFixed(0)}</span>
+          <span>{entry.matches}</span>
+        </div>)}
+      </div>
+      <p className="av-note">{data.notes.join(' ')}</p>
+    </div>
+  );
+}
+
+function CombatPanel({ style, data }: { style: SquadStyle; data: TelemetryAnalytics }) {
   const bestOf = (pick: (entry: SquadStyle['funnel'][number]) => number | null, higherIsBetter = true) => {
     const values = style.funnel.map(pick).filter((value): value is number => value !== null);
     return values.length ? (higherIsBetter ? Math.max(...values) : Math.min(...values)) : null;
@@ -647,10 +717,18 @@ function CombatPanel({ style }: { style: SquadStyle }) {
   const maxRatio = Math.max(1.5, ...style.combat.map((entry) => entry.ratio ?? 0));
   return (
     <Panel title="谁更能打" hint="战斗力指数 = 每分钟伤害、命中率、交战击倒率、击倒转化率、爆头率的综合，比的是相对队友">
-      <p className="av-verdict">{style.combatVerdict}</p>
+      <ul className="av-verdicts">
+        <li><b>战绩口径</b><span>{data.longRun.verdict}</span></li>
+        <li><b>全场口径</b><span>{data.lobby.verdict}</span></li>
+        <li><b>交战口径</b><span>{style.combatVerdict}</span></li>
+      </ul>
       {style.combatHighlights.length > 0 && <div className="av-chips av-strengths">{style.combatHighlights.map((entry) => <span key={`${entry.name}-${entry.label}`} className={`av-chip ${entry.ratio >= 1 ? 'form-hot' : 'weak'}`} title={entry.tier === 'lean' && entry.confidence !== null ? `倾向，方向把握 ${(entry.confidence * 100).toFixed(0)}%` : '稳定'}>
         {entry.name} · {entry.label} ×{entry.ratio.toFixed(2)} {entry.tier === 'stable' ? '●' : '◐'}
       </span>)}</div>}
+      <div className="av-two even">
+        <LongRunBoard data={data.longRun} />
+        <LobbyBoard data={data.lobby} />
+      </div>
       <div className="av-two even stacked">
         <div>
           <h4>战斗力榜（×1.00 = 与队友持平）</h4>
@@ -733,7 +811,7 @@ export function StyleView({ data, loading, error, onReload }: { data: TelemetryA
   return (
     <div className="av-stack">
       <p className="av-scope">基于 <b>{style.matches}</b> 场有归档遥测的比赛。每个维度都是「个人值 ÷ 队友合计值（不含自己）」：×1.00 即与队友持平。<b>● 稳定</b> = 95% 重抽样区间不含 1；<b>◐ 倾向</b> = 方向在 85% 以上的重抽样中一致，但区间跨过 1，只能说「更可能」。</p>
-      <CombatPanel style={style} />
+      <CombatPanel style={style} data={data} />
       <StyleMatrix style={style} />
       <div className="av-style-cards">
         {style.players.map((player) => <section className="av-panel av-style-card" key={player.accountId}>
