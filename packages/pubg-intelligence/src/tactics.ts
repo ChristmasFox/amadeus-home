@@ -3,14 +3,15 @@ import type { NormalizedMatch } from '@agent/pubg-domain';
 import {
   battlePlayerRef,
   battleTeamRef,
+  type BattleGroup,
   type BattleEpisode,
   type BattleReconstructionResult,
   type BattleSourceEvent,
   type BattleTelemetryDocument,
 } from './battle.js';
 
-export const TACTICAL_ANALYSIS_SCHEMA_VERSION = 1 as const;
-export const TACTICAL_RULE_VERSION = 'tactical-social-rules-v1' as const;
+export const TACTICAL_ANALYSIS_SCHEMA_VERSION = 2 as const;
+export const TACTICAL_RULE_VERSION = 'tactical-social-rules-v2' as const;
 export const TACTICAL_FOLLOW_UP_WINDOW_SECONDS = 30;
 export const TACTICAL_RESPONSE_WINDOW_SECONDS = 30;
 export const TACTICAL_POSITION_BUCKET_SECONDS = 15;
@@ -78,6 +79,10 @@ export interface TacticalMatchAnalysis {
   diagnostics: {
     trackedPlayerCount: number;
     episodeCount: number;
+    battleGroupCount: number;
+    multiTeamBattleCount: number;
+    advantageWindowCount: number;
+    observedRosterOnlyBattleCount: number;
     positionEventCount: number;
     incompleteTeamEventCount: number;
     unknownTimestampEventCount: number;
@@ -341,6 +346,106 @@ function analyzeFirstKnocks(
     reasons: unmatched ? [`另有 ${unmatched} 个首个 knock 缺少可识别攻击者，未计入分母。`] : undefined,
     assumptions: ['只统计 R1 重建且首个 knock 攻击者可归属到当前小队或对手的交战；无 knock 的交战不在分母。'],
   });
+}
+
+function analyzeBattleDynamics(
+  matchId: string,
+  battles: readonly BattleGroup[],
+  events: readonly BattleSourceEvent[],
+  trackedTeamIds: ReadonlySet<string>,
+): TacticalInsightCandidate[] {
+  const trackedRefs = new Set([...trackedTeamIds].map((teamId) => battleTeamRef(matchId, teamId)));
+  const relevant = battles.filter((battle) => battle.teamRefs.some((teamRef) => trackedRefs.has(teamRef)));
+  const eventById = new Map(events.map((event) => [event.sourceEventId, event]));
+  const firstKnockWindows = relevant.flatMap((battle) => {
+    const window = battle.firstKnockAdvantage;
+    if (!window) return [];
+    return [{ battle, window }];
+  });
+  const advantageChanges = relevant.flatMap((battle) => battle.advantageChanges.map((change) => ({ battle, change })));
+  const reversals = advantageChanges.filter(({ change }) => change.classification === 'reversed');
+  const reversalOpportunityCount = advantageChanges.filter(({ change }) => change.previousLeadTeamRef !== null).length;
+  const responseOpportunities = relevant.flatMap((battle) => {
+    const first = battle.postKnockResponse.firstKnockEventId ? eventById.get(battle.postKnockResponse.firstKnockEventId) : undefined;
+    if (!first?.actorTeamId || !trackedTeamIds.has(first.actorTeamId)) return [];
+    return [{ battle, first, response: battle.postKnockResponse.responseEventId ? eventById.get(battle.postKnockResponse.responseEventId) : undefined }];
+  });
+  const thirdParty = relevant.flatMap((battle) => battle.possibleThirdParty.map((candidate) => ({ battle, candidate })));
+  const thirdPartyGroups = relevant.filter((battle) => battle.possibleThirdParty.length > 0);
+  const thirdPartyOpportunities = relevant.filter((battle) => battle.teamRefs.length >= 3);
+  const firstKnockCandidate = makeCandidate({
+    matchId,
+    ruleId: 'combat.first-knock-observed-advantage-duration',
+    category: 'combat',
+    title: '首个 knock 后的观测减员差持续时间',
+    statement: firstKnockWindows.length
+      ? `${firstKnockWindows.length} 个当前小队相关 battle group 有可计算的首个 knock 观测差；平均持续 ${mean(firstKnockWindows.map((item) => item.window.durationSeconds)).toFixed(1)} 秒。`
+      : '没有同时具备首个 knock、双方队伍引用和后续状态证据的 battle group。',
+    numerator: firstKnockWindows.length ? sum(firstKnockWindows.map((item) => item.window.durationSeconds)) : null,
+    denominator: firstKnockWindows.length || null,
+    sampleSize: firstKnockWindows.length,
+    value: firstKnockWindows.length ? mean(firstKnockWindows.map((item) => item.window.durationSeconds)) : null,
+    unit: '秒 / 首个 knock 观测窗口',
+    support: firstKnockWindows.flatMap(({ window }) => window.evidenceEventIds.map((id) => eventRef(matchId, eventById.get(id), 'observed-knock-advantage'))),
+    counterexamples: firstKnockWindows.filter(({ window }) => window.durationSeconds === 0)
+      .flatMap(({ window }) => window.evidenceEventIds.map((id) => eventRef(matchId, eventById.get(id), 'immediate-equalization'))),
+    complete: false,
+    statusOverride: firstKnockWindows.length ? 'incomplete' : 'insufficient_data',
+    reasons: ['只统计当前事件中可确认的击倒/救援状态；敌队完整名单与全员状态未知，不表示整队人数优势。'],
+    assumptions: ['优势持续时间描述的是双方已观测成员的 knock 状态差，平局或反向时结束；当前 group 结束仍未平局时按最后交战秒数截断。'],
+  });
+  const reversalCandidate = makeCandidate({
+    matchId,
+    ruleId: 'combat.observed-knock-advantage-reversal',
+    category: 'combat',
+    title: '观测 knock 平衡反转',
+    statement: `${reversals.length}/${reversalOpportunityCount} 个当前小队相关 knock 优势窗口，在另一侧已观测击倒数更低时发生反转；这不是整队战力判断。`,
+    numerator: reversals.length,
+    denominator: reversalOpportunityCount,
+    sampleSize: advantageChanges.length,
+    support: reversals.map(({ change }) => eventRef(matchId, eventById.get(change.sourceEventId), 'observed-knock-balance-reversal')),
+    counterexamples: advantageChanges.filter(({ change }) => change.classification === 'equalized')
+      .map(({ change }) => eventRef(matchId, eventById.get(change.sourceEventId), 'observed-knock-balance-equalized')),
+    complete: false,
+    statusOverride: advantageChanges.length ? 'incomplete' : 'insufficient_data',
+    reasons: ['成员范围只覆盖本场交战中被遥测明确观测到的玩家；未观测成员不按存活或淘汰计算。'],
+    assumptions: ['KNOCK/KILL 使该名观察成员计为被击倒或淘汰；REVIVE 清除击倒标记；每名成员只计一次。'],
+  });
+  const responseCandidate = makeCandidate({
+    matchId,
+    ruleId: 'combat.subsequent-contact-after-first-knock',
+    category: 'combat',
+    title: '首个 knock 后继续有效接触',
+    statement: `${responseOpportunities.filter((item) => item.response).length}/${responseOpportunities.length} 个当前小队先 knock 的 battle group，在 30 秒内对同一对手队观察到有效命中、击倒或淘汰。`,
+    numerator: responseOpportunities.filter((item) => item.response).length,
+    denominator: responseOpportunities.length,
+    sampleSize: responseOpportunities.length,
+    support: responseOpportunities.filter((item) => item.response).flatMap((item) => [
+      eventRef(matchId, item.first, 'first-knock'), eventRef(matchId, item.response, 'subsequent-effective-contact'),
+    ]),
+    counterexamples: responseOpportunities.filter((item) => !item.response).map((item) => eventRef(matchId, item.first, 'no-subsequent-effective-contact-in-window')),
+    complete: responseOpportunities.length > 0 && responseOpportunities.every((item) => item.battle.postKnockResponse.status !== 'incomplete'),
+    reasons: responseOpportunities.length ? undefined : ['当前小队没有队伍归属明确的首个 knock 作为响应机会。'],
+    assumptions: ['响应须在首个 knock 后 30 秒内由同一攻击队对同一受击队产生有效 DAMAGE、KNOCK 或 KILL；不推断战术意图。'],
+  });
+  const thirdPartyCandidate = makeCandidate({
+    matchId,
+    ruleId: 'combat.possible-third-party-contact',
+    category: 'combat',
+    title: '重叠交战中的可能第三队接触',
+    statement: `${thirdPartyGroups.length}/${thirdPartyOpportunities.length} 个当前小队相关多队 battle group 同时出现第三队接触证据；这只标记时间重叠，不证明第三方意图或因果。`,
+    numerator: thirdPartyGroups.length,
+    denominator: thirdPartyOpportunities.length,
+    sampleSize: thirdPartyOpportunities.length,
+    support: thirdParty.flatMap(({ candidate }) => candidate.evidenceEventIds.map((id) => eventRef(matchId, eventById.get(id), 'overlapping-third-team-contact'))),
+    counterexamples: relevant.filter((battle) => battle.teamRefs.length === 2)
+      .flatMap((battle) => battle.bridgeEvidenceEventIds.map((id) => eventRef(matchId, eventById.get(id), 'two-team-overlap'))),
+    complete: relevant.length > 0,
+    ...(relevant.length ? {} : { statusOverride: 'insufficient_data' as const }),
+    reasons: relevant.length ? undefined : ['没有当前小队参与且队伍关联可识别的 battle group。'],
+    assumptions: ['仅在 pair episode 时间相交、共享已知队伍引用且各自有接触事件时成组；第三队标签是可能介入，不推断战术行为。'],
+  });
+  return [firstKnockCandidate, reversalCandidate, responseCandidate, thirdPartyCandidate];
 }
 
 function analyzeFollowUps(
@@ -857,6 +962,7 @@ export function analyzeTacticalMatch(input: AnalyzeTacticalMatchInput): Tactical
   const social = analyzeSocial(matchId, input.match, events, episodes, trackedPlayerIds, trackedTeamIds, sourceComplete);
   const candidates = [
     analyzeFirstKnocks(matchId, episodes, trackedPlayerRefs, eventById, trackedTeamRefs),
+    ...analyzeBattleDynamics(matchId, input.reconstruction.battles, events, trackedTeamIds),
     analyzeFollowUps(matchId, episodes, events, trackedPlayerRefs, trackedPlayerIds, trackedTeamIds, eventById),
     analyzeAdvantageConversion(matchId, episodes, trackedPlayerRefs),
     distances.sampled,
@@ -882,6 +988,10 @@ export function analyzeTacticalMatch(input: AnalyzeTacticalMatchInput): Tactical
     diagnostics: {
       trackedPlayerCount: trackedPlayerIds.size,
       episodeCount: episodes.length,
+      battleGroupCount: input.reconstruction.battles.length,
+      multiTeamBattleCount: input.reconstruction.battles.filter((battle) => battle.teamRefs.length >= 3).length,
+      advantageWindowCount: input.reconstruction.battles.reduce((sum, battle) => sum + battle.advantageWindows.length, 0),
+      observedRosterOnlyBattleCount: input.reconstruction.battles.length,
       positionEventCount: positions.points.length,
       incompleteTeamEventCount,
       unknownTimestampEventCount: input.telemetry.events.filter((event) => event.phase === 'in_match' && event.timeSeconds === null).length,

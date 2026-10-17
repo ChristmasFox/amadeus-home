@@ -250,16 +250,16 @@ function eventPhase(event: RawObject, match: NormalizedMatch): TelemetryEventPha
   return relative === undefined ? 'unknown' : 'in_match';
 }
 
-/** PUBG's common.isGame is a phase signal, not a game-clock value. */
+/** PUBG's common.isGame is the blue-zone/safe-zone phase, not a clock. */
 function commonGamePhase(event: RawObject): TelemetryEventPhase | null {
   const raw = objectValue(event.common).isGame;
   if (typeof raw === 'boolean') return raw ? 'in_match' : 'pre_match';
   const value = numberValue(raw);
   if (value === null) return null;
   if (value >= 0 && value < 1) return 'pre_match';
-  if (value >= 1 && value < 2) return 'in_match';
-  // 2+ is post-match/unknown for this two-phase model. Do not relabel it as
-  // an in-match event without a separate game-clock signal.
+  // PUBG documents 1.0 as the first safe zone and each 0.5 step thereafter
+  // as a blue-zone transition. All values >=1 are in-match phases.
+  if (value >= 1) return 'in_match';
   return null;
 }
 

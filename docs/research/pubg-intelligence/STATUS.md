@@ -6,14 +6,24 @@ Active development branch: `main` (former `research/pubg-intelligence` retained 
 | Stage | Source | Build | Live / data evidence |
 | --- | --- | --- | --- |
 | R0 — Dataset audit and local workbench | Complete; report at [`docs/reports/PUBG_INTELLIGENCE_R0_DATA_AUDIT.md`](../../reports/PUBG_INTELLIGENCE_R0_DATA_AUDIT.md) | Previously verified | Read-only snapshot and local page established before R1 |
-| R1 — Battle & match reconstruction | Implemented; stable intermediate schema `1`, parser `battle-reconstruction-v1` | Focused package tests, typechecks, and app build verified; final ledger updated with commit | Real read-only snapshot returned 71 episodes, 167 circle samples, 114 circle transitions; eight episodes manually reviewed; see [`R1_EVALUATION.md`](R1_EVALUATION.md) |
-| R2 — Tactical and social algorithms | Complete; schema `1`, rules `tactical-social-rules-v1` | Focused package/app tests, typechecks, builds, secrets scan, and diff check verified | Real read-only snapshot: 30/30 matches analyzed; rule coverage and limits at [`R2_EVALUATION.md`](R2_EVALUATION.md) |
+| R1 — Battle & match reconstruction | V2 candidate on main; schema `2`, parser `battle-reconstruction-v2`; retains the V1 pair Episodes | Domain 41, Intelligence 41, and Lab 4 focused tests; typechecks/builds and source gates verified after commit | Read-only comparison over 100 archived matches; real example and unknown-phase correction at [`R1_EVALUATION.md`](R1_EVALUATION.md). No Lab runtime deployment in this change. |
+| R2 — Tactical and social algorithms | V2 combat dynamics added to existing rules; schema `2`, rules `tactical-social-rules-v2` | Intelligence 41 and Lab 4 focused tests; typechecks/builds and source gates verified after commit | Archive-wide opportunity/count comparison and rule limits at [`R2_EVALUATION.md`](R2_EVALUATION.md); no independent FP/FN labels. |
 | R3 — Natural language assistant and presentations | Complete; `research-assistant-v1`, scoped read-only AI SDK tools, typed evidence claims, three templates, real local 9Router path | 39 intelligence tests, 4 Lab API tests, package/app builds and typechecks verified | Current local page returned a real AI SDK answer with linked evidence against the 543-match snapshot; see [`R3_EVALUATION.md`](R3_EVALUATION.md) |
 | R4 — Experiment/evaluation loop | Complete; versioned replay engine, deterministic fixture corpus, baseline/candidate comparison, counterexamples, local review registry | 29 intelligence tests, 2 Lab API tests, builds/typecheck/secrets scan passed | Live replay and bounded review write returned 201; snapshot unchanged; see [`R4_EVALUATION.md`](R4_EVALUATION.md). Promotion gate remains closed without historical holdout. |
 | R5 — Controlled Gate adoption | Versioned Gate API, tenant-authorized PostgreSQL adapter, repo-wide Gate-Local auto-candidate authorization, full-backup/rollback flow, and exact-single-tenant canary selection; see [`R5_EVALUATION.md`](R5_EVALUATION.md) | PR #14, #15, and #16 checks green; PR #15/#16 merged only after all checks passed; 38 local Gate autopilot tests passed | Gate-Local candidate `e90b36f` is live and healthy; one exact tenant allowlist enabled; full encrypted backup verified; M2 remains paused |
 | Persistent raw Telemetry archive | `pubg-raw-telemetry-archive-v1`; full response capture, permanent retention, top-100 historical backfill, and persistent OpenClaw mount | Domain 40, Intelligence 39, plugin 14, Lab 4; archive-mount/deploy tests 7; PR #21 CI green; formal Lab `lab/v1.10.7` release | Live `node` user read and hash-verified 100 archive entries; OpenClaw healthy, WhatsApp linked, real stats query passed. Live prefetch found no new match, so a post-deploy new-match write was not observed; see [`RAW_TELEMETRY_ARCHIVE_EVALUATION.md`](RAW_TELEMETRY_ARCHIVE_EVALUATION.md) |
 
-## R1 acceptance evidence
+## Current R1/R2 V2 candidate evidence
+
+**SOURCE_FIXED** — Corrected PUBG `common.isGame` handling using the documented zone-phase semantics; preserved `unknown` and pre-match exclusions with diagnostics. V2 adds overlap-and-team-evidence battle grouping while retaining pair Episodes, observed-member state timelines, knock-balance windows/reversals, post-knock response, and possible-third-party tags. The Lab drilldown displays these results and allows four human review labels in a separate local experiment store. No PUBG Domain logic was copied into the intelligence package.
+
+**BUILD_VERIFIED** — `@agent/pubg-domain` tests: 41 passed; `@agent/pubg-intelligence` tests: 41 passed; `@agent/pubg-intelligence-lab` tests: 4 passed. Affected typechecks and builds passed, as did `pnpm check:secrets` and `git diff --check` at the source commit boundary.
+
+**ARCHIVE_VERIFIED** — The read-only snapshot matched all 100 archived telemetry payloads. V1 counted 313,128 archive-wide contacts as unknown phase; V2 counted 0 while preserving separate unknown/missing-state diagnostics. Pair Episodes changed from 1,763 to 6,478; 27,886 additional contact sources were assigned, 1,709 episode signatures were unchanged, 4,769 were new, and 54 V1 signatures were absent. These are structural deltas, not true/false positives. Historical false-positive and missed-engagement rates remain unknown without independent labels. See [`R1_EVALUATION.md`](R1_EVALUATION.md) and [`R2_EVALUATION.md`](R2_EVALUATION.md).
+
+No Lab or Gate deployment was performed for this source change.
+
+## R1 V1 acceptance evidence (historical)
 
 **SOURCE_FIXED** — Added versioned, deterministic battle reconstruction to `packages/pubg-intelligence`; exposed a match→episode→event drilldown; kept the Lab database open read-only and the signed asset URL/results in memory. The episodes API enforces the selected squad and date range.
 
@@ -27,7 +37,7 @@ Active development branch: `main` (former `research/pubg-intelligence` retained 
 - The API validates the selected squad and date range before returning episode data. Production Lab SQLite remains read-only; fetched telemetry and reconstructed data stay in process memory.
 - Manual review counts and limits are published in [`R1_EVALUATION.md`](R1_EVALUATION.md).
 
-## R2 acceptance evidence
+## R2 V1 acceptance evidence (historical)
 
 **SOURCE_FIXED** — Added deterministic combat, coordination, social, and rotation candidates to `packages/pubg-intelligence`; connected per-match evidence and scope-limited recurrent-pair analysis to the Lab UI/API. Candidates expose rule/schema versions, explicit metrics and denominators, sample size, quality grade, assumptions, support evidence, and counterexamples. The source SQLite was copied via read-only snapshot and its before/after fingerprints matched; experiment writes remained in a separate temporary database. No Gate/Lab production deployment or source-data mutation was performed.
 

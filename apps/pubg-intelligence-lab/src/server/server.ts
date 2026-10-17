@@ -11,7 +11,6 @@ import {
   DEFAULT_TIMEZONE,
   extractMatchReviewFacts,
   localDateLabel,
-  PubgApiTelemetryDownloader,
   SqlitePubgRepository,
   type MatchReviewFacts,
   type NormalizedMatch,
@@ -41,6 +40,7 @@ import {
   type ResearchAssistantToolset,
   type TacticalMatchAnalysis,
   type EvaluationReviewLabel,
+  type BattleReviewLabel,
 } from '@agent/pubg-intelligence';
 import { RawTelemetryArchive } from '@agent/pubg-intelligence/archive';
 import { assertArchiveOutsideRepository } from '@agent/pubg-intelligence/backfill';
@@ -187,14 +187,10 @@ function isAllowedTelemetryUrl(value: string): boolean {
 async function loadBattleTelemetry(snapshot: Snapshot, match: NormalizedMatch): Promise<BattleTelemetryDocument> {
   const cached = snapshot.battleTelemetry.get(match.matchId);
   if (cached) return cached;
-  const telemetryUrl = snapshot.telemetryUrls.get(match.matchId);
-  if (!telemetryUrl) throw new Error('telemetry_asset_missing');
-  const request = new PubgApiTelemetryDownloader({
-    apiKey: '',
-    timeoutMs: 30_000,
-    archive: snapshot.rawTelemetryArchive,
-    fetchImpl: (input, init) => fetch(input, { ...init, redirect: 'error' }),
-  }).download({ ...match, telemetryUrl }).then((payload) => normalizeBattleTelemetry(payload, match));
+  const request = snapshot.rawTelemetryArchive.read(match.matchId).then((payload) => {
+    if (!payload) throw new Error('telemetry_archive_missing');
+    return normalizeBattleTelemetry(payload, match);
+  });
   snapshot.battleTelemetry.set(match.matchId, request);
   try {
     return await request;
@@ -753,6 +749,54 @@ async function handleApi(request: IncomingMessage, response: ServerResponse, sna
     }
     return;
   }
+  const battleReviewRoute = request.method === 'POST'
+    ? url.pathname.match(/^\/api\/matches\/([^/]+)\/battles\/(battle-[a-f0-9]{12})\/review$/u)
+    : null;
+  if (battleReviewRoute) {
+    let matchId: string;
+    try { matchId = decodeURIComponent(battleReviewRoute[1] ?? ''); }
+    catch { send(response, 400, { error: 'invalid_battle_review' }); return; }
+    const match = snapshot.byId.get(matchId);
+    if (!match) { send(response, 404, { error: 'match_not_found' }); return; }
+    const scopeBounds = safeDateBounds(url.searchParams.get('from'), url.searchParams.get('to'));
+    if (!scopeBounds) { send(response, 400, { error: 'invalid_date_range' }); return; }
+    const squad = selectSquad(snapshot, url.searchParams.get('squadId'));
+    if (!inSquad(match, squad)
+      || (scopeBounds.fromMs !== undefined && match.timestamp < scopeBounds.fromMs)
+      || (scopeBounds.toMs !== undefined && match.timestamp >= scopeBounds.toMs)) {
+      send(response, 404, { error: 'match_outside_scope' });
+      return;
+    }
+    let body: Record<string, unknown>;
+    try {
+      const value = await requestBody(request);
+      if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('invalid_json');
+      body = value as Record<string, unknown>;
+    } catch {
+      send(response, 400, { error: 'invalid_battle_review' });
+      return;
+    }
+    const labels: BattleReviewLabel[] = ['correct', 'insufficient_inference', 'wrong', 'unknown'];
+    if (!labels.includes(body.label as BattleReviewLabel)) {
+      send(response, 400, { error: 'invalid_battle_review' });
+      return;
+    }
+    try {
+      const telemetry = await loadBattleTelemetry(snapshot, match);
+      const trackedPlayerIds = match.players.filter((player) => squad.memberIds.includes(player.accountId)).map((player) => player.accountId);
+      const result = reconstructBattleEpisodes({ match, telemetry, trackedPlayerIds });
+      const battleId = battleReviewRoute[2]!;
+      if (!result.battles.some((battle) => battle.id === battleId)) {
+        send(response, 404, { error: 'battle_not_found' });
+        return;
+      }
+      const review = snapshot.experimentStore.saveBattleReview({ matchId, battleId, label: body.label as BattleReviewLabel });
+      send(response, 201, { review, reviews: snapshot.experimentStore.listBattleReviews(matchId) });
+    } catch {
+      send(response, 409, { error: 'battle_archive_unavailable' });
+    }
+    return;
+  }
   if (request.method === 'GET' && url.pathname === '/api/bootstrap') {
     const dates = snapshot.matches.map((match) => localDateLabel(match.timestamp, DEFAULT_TIMEZONE)).sort();
     send(response, 200, {
@@ -848,7 +892,7 @@ async function handleApi(request: IncomingMessage, response: ServerResponse, sna
     }
     send(response, 200, {
       status: analyses.length ? 'available' : 'insufficient_data',
-      ruleVersion: 'tactical-social-rules-v1',
+      ruleVersion: 'tactical-social-rules-v2',
       requestedMatches: selected.length,
       analyzedMatches: analyses.length,
       unavailableMatches,
@@ -915,6 +959,8 @@ async function handleApi(request: IncomingMessage, response: ServerResponse, sna
         schemaVersion: result.schemaVersion,
         parserVersion: result.parserVersion,
         episodes: result.episodes,
+        battles: result.battles,
+        battleReviews: snapshot.experimentStore.listBattleReviews(matchId),
         circleSamples: result.circleSamples,
         circleTransitions: result.circleTransitions,
         labels: {

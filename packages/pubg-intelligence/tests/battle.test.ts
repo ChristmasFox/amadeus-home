@@ -115,6 +115,42 @@ test('overlapping team-pair episodes stay distinct and contact evidence is assig
   assert.equal(overlap.episodes.every((episode) => episode.diagnostics.ambiguousContextEvents === 1), true);
 });
 
+test('V2 groups only overlapping known-team pair episodes and preserves a three-team state timeline', () => {
+  const grouped = reconstructBattleMatch({ match, telemetry: [
+    event('LogPlayerMakeGroggy', 10, A('tracked-1'), B('enemy-1'), { dBNOId: 'triad-first' }),
+    event('LogPlayerMakeGroggy', 11, B('enemy-1'), A('third-player', 'team-c'), { dBNOId: 'triad-third' }),
+    event('LogPlayerMakeGroggy', 12, B('enemy-2'), A('tracked-1'), { dBNOId: 'triad-equalize' }),
+    event('LogPlayerMakeGroggy', 13, B('enemy-2'), A('tracked-2'), { dBNOId: 'triad-reverse' }),
+    event('LogPlayerTakeDamage', 15, A('tracked-2'), B('enemy-2'), { damage: 10 }),
+  ], trackedPlayerIds: ['tracked-1', 'tracked-2'] });
+  assert.equal(grouped.episodes.length, 2);
+  assert.equal(grouped.battles.length, 1);
+  const battle = grouped.battles[0]!;
+  assert.equal(battle.teamRefs.length, 3);
+  assert.equal(battle.episodeIds.length, 2);
+  assert.equal(battle.bridgeEvidenceEventIds.length, 2);
+  assert.equal(battle.possibleThirdParty.length, 1);
+  assert.equal(battle.possibleThirdParty[0]?.status, 'possible_third_party_contact');
+  assert.equal(battle.firstKnockAdvantage?.durationSeconds, 2);
+  assert.equal(battle.firstKnockAdvantage?.resolution, 'equalized');
+  assert.equal(battle.postKnockResponse.status, 'observed');
+  assert.equal(battle.postKnockResponse.elapsedSeconds, 5);
+  assert.equal(battle.advantageChanges.some((change) => change.classification === 'reversed'), true);
+  assert.equal(battle.rosterCompleteness, 'observed-members-only');
+  assert.equal(battle.stateTimeline.every((item) => item.states.every((state) => state.completeness === 'observed-members-only')), true);
+  assert.equal(grouped.diagnostics.multiTeamBattleCount, 1);
+});
+
+test('V2 does not merge team-pair episodes based on time proximity without overlap', () => {
+  const result = reconstructBattleMatch({ match, telemetry: [
+    event('LogPlayerTakeDamage', 10, A('tracked-1'), B('enemy-1'), { damage: 5 }),
+    event('LogPlayerTakeDamage', 20, B('enemy-2'), A('third-player', 'team-c'), { damage: 5 }),
+  ] });
+  assert.equal(result.episodes.length, 2);
+  assert.equal(result.battles.length, 2);
+  assert.equal(result.battles.every((battle) => battle.episodeIds.length === 1 && battle.bridgeEvidenceEventIds.length === 0), true);
+});
+
 test('semantic duplicate, conflicting team, unknown time and circle normalization are explicit', () => {
   const payload = [
     event('LogPlayerMakeGroggy', 20, A('tracked-1'), B('enemy-1'), { dBNOId: 'duplicate-dbno' }),
@@ -154,16 +190,25 @@ test('timestamps retain absolute, clock, elapsed and unknown provenance', () => 
   assert.equal(telemetry.circleSamples[0]?.timeSeconds, 25);
 });
 
-test('post-match/unknown phase signals do not become engagement contacts or circle context', () => {
-  const postMatchContact = event('LogPlayerMakeGroggy', 40, A('tracked-1'), B('enemy-1'), { dBNOId: 'post-match' });
-  postMatchContact.common = { isGame: 2 };
-  const postMatchCircle = event('LogGameStatePeriodic', 45, A('tracked-1'), undefined, { gameState: { elapsedTime: 45, numAlivePlayers: 0, numAliveTeams: 0, safetyZoneRadius: 500 } });
-  postMatchCircle.common = { isGame: 2 };
-  const telemetry = normalizeBattleTelemetry([postMatchContact, postMatchCircle], match);
+test('numeric safe-zone phases 1+ stay in-match while missing phase and time remain unknown', () => {
+  const secondZoneContact = event('LogPlayerMakeGroggy', 40, A('tracked-1'), B('enemy-1'), { dBNOId: 'phase-two' });
+  secondZoneContact.common = { isGame: 2 };
+  const laterZoneContact = event('LogPlayerTakeDamage', 45, B('enemy-1'), A('tracked-1'), { damage: 10 });
+  laterZoneContact.common = { isGame: 4.5 };
+  const preMatchContact = event('LogPlayerTakeDamage', 50, A('tracked-1'), B('enemy-2'), { damage: 10 });
+  preMatchContact.common = { isGame: 0.5 };
+  const unknownContact = event('LogPlayerTakeDamage', null, A('tracked-1'), B('enemy-3'), { damage: 10 });
+  unknownContact.common = {};
+  const secondZoneCircle = event('LogGameStatePeriodic', 45, A('tracked-1'), undefined, { gameState: { elapsedTime: 45, numAlivePlayers: 20, numAliveTeams: 6, safetyZoneRadius: 500 } });
+  secondZoneCircle.common = { isGame: 2 };
+  const telemetry = normalizeBattleTelemetry([secondZoneContact, laterZoneContact, preMatchContact, unknownContact, secondZoneCircle], match);
   const result = reconstructBattleEpisodes({ match, telemetry });
-  assert.equal(telemetry.events[0]?.phase, 'unknown');
-  assert.equal(telemetry.circleSamples[0]?.phase, 'unknown');
-  assert.equal(result.status, 'no_contact_events');
+  assert.equal(telemetry.events.find((item) => item.rawType === 'LogPlayerMakeGroggy')?.phase, 'in_match');
+  assert.equal(telemetry.events.find((item) => item.sourceEventId === 'telemetry-2')?.phase, 'in_match');
+  assert.equal(telemetry.circleSamples[0]?.phase, 'in_match');
+  assert.equal(result.episodes.length, 1);
+  assert.equal(telemetry.diagnostics.excludedPreMatchEventCount, 1);
+  assert.equal(telemetry.diagnostics.excludedPreMatchContactEventCount, 1);
+  assert.equal(result.diagnostics.preMatchContactEventCount, 1);
   assert.equal(result.diagnostics.unknownPhaseContactEventCount, 1);
-  assert.equal(result.diagnostics.unknownPhaseCircleSampleCount, 1);
 });

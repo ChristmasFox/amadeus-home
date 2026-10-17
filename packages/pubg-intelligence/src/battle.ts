@@ -9,10 +9,11 @@ import {
   type TelemetryLocation,
 } from '@agent/pubg-domain';
 
-export const BATTLE_RECONSTRUCTION_SCHEMA_VERSION = 1 as const;
-export const BATTLE_RECONSTRUCTION_PARSER_VERSION = 'battle-reconstruction-v1' as const;
+export const BATTLE_RECONSTRUCTION_SCHEMA_VERSION = 2 as const;
+export const BATTLE_RECONSTRUCTION_PARSER_VERSION = 'battle-reconstruction-v2' as const;
 export const BATTLE_CONTACT_GAP_SECONDS = 28;
 export const BATTLE_KNOCK_OUTCOME_WINDOW_SECONDS = 120;
+export const BATTLE_POST_KNOCK_RESPONSE_WINDOW_SECONDS = 30;
 export const BATTLE_CONTEXT_BEFORE_SECONDS = 5;
 export const BATTLE_CONTEXT_AFTER_SECONDS = 28;
 export const BATTLE_POSITION_SAMPLE_INTERVAL_SECONDS = 15;
@@ -92,6 +93,7 @@ export interface BattleTelemetryDocument {
   diagnostics: {
     unrecognizedDomainEventCount: number;
     excludedPreMatchEventCount: number;
+    excludedPreMatchContactEventCount: number;
     untimedBattleEventCount: number;
   };
 }
@@ -180,11 +182,85 @@ export interface BattleEpisode {
   };
 }
 
+export interface BattleObservedTeamState {
+  teamRef: string;
+  memberCountObserved: number;
+  activeObserved: number;
+  knockedObserved: number;
+  deadObserved: number;
+  unknownObserved: number;
+  completeness: 'observed-members-only';
+}
+
+export interface BattleStateTimelineEntry {
+  sourceEventId: string;
+  timeSeconds: number;
+  type: 'KNOCK' | 'REVIVE' | 'KILL';
+  actorRef: string | null;
+  victimRef: string | null;
+  actorTeamRef: string | null;
+  victimTeamRef: string | null;
+  states: BattleObservedTeamState[];
+}
+
+export interface BattleAdvantageWindow {
+  teamRefs: [string, string];
+  observedLeadTeamRef: string;
+  startedAtSeconds: number;
+  endedAtSeconds: number;
+  durationSeconds: number;
+  resolution: 'equalized' | 'reversed' | 'ongoing';
+  startEventId: string;
+  endEventId: string | null;
+  evidenceEventIds: string[];
+  assessment: 'observed-knock-balance-only';
+  rosterCompleteness: 'observed-members-only';
+}
+
+export interface BattleAdvantageChange {
+  teamRefs: [string, string];
+  timeSeconds: number;
+  previousLeadTeamRef: string | null;
+  nextLeadTeamRef: string | null;
+  classification: 'lead' | 'equalized' | 'reversed';
+  sourceEventId: string;
+}
+
+export interface BattleGroup {
+  id: string;
+  startSeconds: number;
+  endSeconds: number;
+  durationSeconds: number;
+  episodeIds: string[];
+  teamRefs: string[];
+  bridgeEvidenceEventIds: string[];
+  timeline: BattleTimelineEvent[];
+  stateTimeline: BattleStateTimelineEntry[];
+  advantageWindows: BattleAdvantageWindow[];
+  advantageChanges: BattleAdvantageChange[];
+  firstKnockAdvantage: BattleAdvantageWindow | null;
+  postKnockResponse: {
+    status: 'observed' | 'not_observed_in_window' | 'incomplete';
+    firstKnockEventId: string | null;
+    responseEventId: string | null;
+    elapsedSeconds: number | null;
+    windowSeconds: 30;
+  };
+  possibleThirdParty: Array<{
+    teamRef: string;
+    episodeId: string;
+    evidenceEventIds: string[];
+    status: 'possible_third_party_contact';
+  }>;
+  rosterCompleteness: 'observed-members-only';
+}
+
 export interface BattleReconstructionResult {
   schemaVersion: typeof BATTLE_RECONSTRUCTION_SCHEMA_VERSION;
   parserVersion: typeof BATTLE_RECONSTRUCTION_PARSER_VERSION;
   status: 'available' | 'no_contact_events';
   episodes: BattleEpisode[];
+  battles: BattleGroup[];
   circleSamples: BattleCircleSample[];
   circleTransitions: BattleCircleTransition[];
   diagnostics: {
@@ -193,6 +269,9 @@ export interface BattleReconstructionResult {
     battleEventCount: number;
     contactEventCount: number;
     episodeCount: number;
+    battleGroupCount: number;
+    multiTeamBattleCount: number;
+    groupedEpisodeCount: number;
     duplicateSourceEventCount: number;
     duplicateTimelineAssignmentCount: number;
     unassignedContactEventCount: number;
@@ -334,7 +413,7 @@ function normalizeCircle(rawValue: unknown, rawIndex: number, match: NormalizedM
     ? common.isGame ? 'in_match' : 'pre_match'
     : phaseValue !== null && phaseValue >= 0 && phaseValue < 1
       ? 'pre_match'
-      : phaseValue !== null && phaseValue >= 1 && phaseValue < 2 ? 'in_match' : 'unknown';
+      : phaseValue !== null && phaseValue >= 1 ? 'in_match' : 'unknown';
   const sourceEventId = `telemetry-${rawIndex + 1}`;
   return {
     id: `circle-${idDigest(`${match.matchId}\u001f${sourceEventId}`)}`,
@@ -397,7 +476,7 @@ function explicitPhase(raw: Record<string, unknown>): TelemetryEventPhase | null
   const phase = numberValue(value);
   if (phase === null) return null;
   if (phase >= 0 && phase < 1) return 'pre_match';
-  if (phase >= 1 && phase < 2) return 'in_match';
+  if (phase >= 1) return 'in_match';
   return 'unknown';
 }
 
@@ -408,6 +487,7 @@ export function normalizeBattleTelemetry(payload: unknown, match: NormalizedMatc
   const events: BattleSourceEvent[] = [];
   const circleSamples: BattleCircleSample[] = [];
   let excludedPreMatchEventCount = 0;
+  let excludedPreMatchContactEventCount = 0;
   let untimedBattleEventCount = 0;
 
   for (const event of normalized) {
@@ -415,6 +495,7 @@ export function normalizeBattleTelemetry(payload: unknown, match: NormalizedMatc
     if (!converted) continue;
     if (converted.phase === 'pre_match') {
       excludedPreMatchEventCount += 1;
+      if (COMBAT_CONTACT_TYPES.has(converted.type)) excludedPreMatchContactEventCount += 1;
       continue;
     }
     if (converted.timeSeconds === null) untimedBattleEventCount += 1;
@@ -437,6 +518,7 @@ export function normalizeBattleTelemetry(payload: unknown, match: NormalizedMatc
     diagnostics: {
       unrecognizedDomainEventCount: Math.max(0, rawEvents.length - recognized.size),
       excludedPreMatchEventCount,
+      excludedPreMatchContactEventCount,
       untimedBattleEventCount,
     },
   };
@@ -943,6 +1025,248 @@ function episodeForSession(
   };
 }
 
+function episodeContactEventIds(episode: BattleEpisode): string[] {
+  return episode.timeline.filter((event) => COMBAT_CONTACT_TYPES.has(event.type)).map((event) => event.sourceEventId);
+}
+
+function battleGroupsFor(matchId: string, episodes: readonly BattleEpisode[], events: readonly BattleSourceEvent[]): BattleGroup[] {
+  const parent = episodes.map((_, index) => index);
+  const find = (index: number): number => {
+    if (parent[index] !== index) parent[index] = find(parent[index]!);
+    return parent[index]!;
+  };
+  const bridgeEdges: Array<{ left: number; right: number; eventIds: string[] }> = [];
+  for (let left = 0; left < episodes.length; left += 1) {
+    for (let right = left + 1; right < episodes.length; right += 1) {
+      const a = episodes[left]!;
+      const b = episodes[right]!;
+      const startsOverlap = Math.max(a.startSeconds, b.startSeconds);
+      const endsOverlap = Math.min(a.endSeconds, b.endSeconds);
+      if (startsOverlap > endsOverlap) continue;
+      const aTeams = new Set(a.teams.map((team) => team.teamRef).filter((value): value is string => Boolean(value)));
+      const bTeams = new Set(b.teams.map((team) => team.teamRef).filter((value): value is string => Boolean(value)));
+      if (![...aTeams].some((teamRef) => bTeams.has(teamRef))) continue;
+      const nearestContactEvidence = (episode: BattleEpisode) => episode.timeline
+        .filter((event) => COMBAT_CONTACT_TYPES.has(event.type))
+        .sort((first, second) => {
+          const distance = (time: number) => time < startsOverlap ? startsOverlap - time : time > endsOverlap ? time - endsOverlap : 0;
+          return distance(first.timeSeconds) - distance(second.timeSeconds)
+            || first.timeSeconds - second.timeSeconds || first.sourceEventId.localeCompare(second.sourceEventId);
+        })
+        .slice(0, 1)
+        .map((event) => event.sourceEventId);
+      const evidenceEventIds = [...new Set([...nearestContactEvidence(a), ...nearestContactEvidence(b)])];
+      if (evidenceEventIds.length < 2) continue;
+      const leftRoot = find(left);
+      const rightRoot = find(right);
+      if (leftRoot !== rightRoot) parent[rightRoot] = leftRoot;
+      bridgeEdges.push({ left, right, eventIds: evidenceEventIds });
+    }
+  }
+
+  const indicesByRoot = new Map<number, number[]>();
+  episodes.forEach((_, index) => {
+    const root = find(index);
+    indicesByRoot.set(root, [...(indicesByRoot.get(root) ?? []), index]);
+  });
+  const eventById = new Map(events.map((event) => [event.sourceEventId, event]));
+  const groups: BattleGroup[] = [...indicesByRoot.values()].map((indices): BattleGroup => {
+    const groupEpisodes = indices.map((index) => episodes[index]!).sort((left, right) => left.startSeconds - right.startSeconds || left.id.localeCompare(right.id));
+    const episodeIds = groupEpisodes.map((episode) => episode.id).sort();
+    const indexSet = new Set(indices);
+    const bridgeEvidenceEventIds = [...new Set(bridgeEdges
+      .filter((edge) => indexSet.has(edge.left) && indexSet.has(edge.right))
+      .flatMap((edge) => edge.eventIds))].sort();
+    const timelineBySource = new Map<string, BattleTimelineEvent>();
+    for (const episode of groupEpisodes) {
+      for (const event of episode.timeline) timelineBySource.set(event.sourceEventId, event);
+    }
+    const timeline = [...timelineBySource.values()].sort((left, right) => left.timeSeconds - right.timeSeconds
+      || left.sourceEventId.localeCompare(right.sourceEventId));
+    const teamRefs = [...new Set(groupEpisodes.flatMap((episode) => episode.teams.map((team) => team.teamRef)
+      .filter((value): value is string => Boolean(value))))].sort();
+    const startSeconds = Math.min(...groupEpisodes.map((episode) => episode.startSeconds));
+    const endSeconds = Math.max(...groupEpisodes.map((episode) => episode.endSeconds));
+    const groupId = `battle-${idDigest(`${matchId}\u001f${BATTLE_RECONSTRUCTION_PARSER_VERSION}\u001f${episodeIds.join('\u001f')}`)}`;
+    const playerStates = new Map<string, ObservedPlayerState>();
+    const playerTeams = new Map<string, string>();
+    const membersByTeam = new Map<string, Set<string>>();
+    for (const episode of groupEpisodes) {
+      for (const team of episode.teams) {
+        if (!team.teamRef) continue;
+        const members = membersByTeam.get(team.teamRef) ?? new Set<string>();
+        for (const ref of team.memberRefs) {
+          members.add(ref);
+          playerTeams.set(ref, team.teamRef);
+        }
+        membersByTeam.set(team.teamRef, members);
+      }
+    }
+    const stateEvents = timeline.flatMap((timelineEvent) => {
+      const event = eventById.get(timelineEvent.sourceEventId);
+      if (!event || (event.type !== 'KNOCK' && event.type !== 'KILL' && event.type !== 'REVIVE')) return [];
+      return [{ timelineEvent, event }];
+    });
+    const countStates = (): BattleObservedTeamState[] => teamRefs.map((teamRef) => {
+      const members = membersByTeam.get(teamRef) ?? new Set<string>();
+      let activeObserved = 0;
+      let knockedObserved = 0;
+      let deadObserved = 0;
+      let unknownObserved = 0;
+      for (const member of members) {
+        const state = playerStates.get(member) ?? 'UNKNOWN';
+        if (state === 'ACTIVE_OBSERVED') activeObserved += 1;
+        else if (state === 'KNOCKED') knockedObserved += 1;
+        else if (state === 'DEAD') deadObserved += 1;
+        else unknownObserved += 1;
+      }
+      return { teamRef, memberCountObserved: members.size, activeObserved, knockedObserved, deadObserved, unknownObserved, completeness: 'observed-members-only' };
+    });
+    const stateTimeline: BattleStateTimelineEntry[] = [];
+    for (const { timelineEvent, event } of stateEvents) {
+      const actorRef = timelineEvent.actorRef;
+      const victimRef = timelineEvent.victimRef;
+      if (actorRef && !playerStates.has(actorRef)) playerStates.set(actorRef, 'ACTIVE_OBSERVED');
+      if (victimRef && !playerStates.has(victimRef)) playerStates.set(victimRef, 'ACTIVE_OBSERVED');
+      if (victimRef) {
+        const previous = playerStates.get(victimRef) ?? 'UNKNOWN';
+        if (event.type === 'KNOCK' && previous !== 'DEAD') playerStates.set(victimRef, 'KNOCKED');
+        if (event.type === 'KILL') playerStates.set(victimRef, 'DEAD');
+        if (event.type === 'REVIVE' && previous !== 'DEAD') playerStates.set(victimRef, 'ACTIVE_OBSERVED');
+      }
+      stateTimeline.push({
+        sourceEventId: event.sourceEventId,
+        timeSeconds: event.timeSeconds ?? timelineEvent.timeSeconds,
+        type: event.type as BattleStateTimelineEntry['type'],
+        actorRef: timelineEvent.actorRef,
+        victimRef: timelineEvent.victimRef,
+        actorTeamRef: timelineEvent.actorTeamRef,
+        victimTeamRef: timelineEvent.victimTeamRef,
+        states: countStates(),
+      });
+    }
+
+    const advantageWindows: BattleAdvantageWindow[] = [];
+    const advantageChanges: BattleAdvantageChange[] = [];
+    for (let leftIndex = 0; leftIndex < teamRefs.length; leftIndex += 1) {
+      for (let rightIndex = leftIndex + 1; rightIndex < teamRefs.length; rightIndex += 1) {
+        const pair: [string, string] = [teamRefs[leftIndex]!, teamRefs[rightIndex]!];
+        const downByPlayer = new Map<string, boolean>();
+        let previousLead: string | null = null;
+        let priorNonNullLead: string | null = null;
+        let open: { leader: string; start: number; sourceEventId: string } | null = null;
+        const close = (at: number, sourceEventId: string | null, resolution: BattleAdvantageWindow['resolution']) => {
+          if (!open) return;
+          advantageWindows.push({
+            teamRefs: pair,
+            observedLeadTeamRef: open.leader,
+            startedAtSeconds: open.start,
+            endedAtSeconds: at,
+            durationSeconds: Math.max(0, at - open.start),
+            resolution,
+            startEventId: open.sourceEventId,
+            endEventId: sourceEventId,
+            evidenceEventIds: [...new Set([open.sourceEventId, ...(sourceEventId ? [sourceEventId] : [])])],
+            assessment: 'observed-knock-balance-only',
+            rosterCompleteness: 'observed-members-only',
+          });
+          open = null;
+        };
+        for (const { event } of stateEvents) {
+          if (!event.victimId || !event.victimTeamId || !pair.includes(battleTeamRef(matchId, event.victimTeamId)) || event.timeSeconds === null) continue;
+          if (event.type === 'KNOCK' || event.type === 'KILL') downByPlayer.set(event.victimId, true);
+          if (event.type === 'REVIVE') downByPlayer.set(event.victimId, false);
+          const downCount = (teamRef: string) => [...downByPlayer.entries()].filter(([playerId, down]) => down && playerTeams.get(battlePlayerRef(matchId, playerId)) === teamRef).length;
+          const [leftDown, rightDown] = pair.map(downCount) as [number, number];
+          const nextLead = leftDown < rightDown ? pair[0] : rightDown < leftDown ? pair[1] : null;
+          if (nextLead !== previousLead) {
+            const classification: BattleAdvantageChange['classification'] = previousLead && !nextLead
+              ? 'equalized'
+              : nextLead && priorNonNullLead && nextLead !== priorNonNullLead
+                ? 'reversed'
+                : nextLead ? 'lead' : 'equalized';
+            advantageChanges.push({
+              teamRefs: pair,
+              timeSeconds: event.timeSeconds,
+              previousLeadTeamRef: previousLead,
+              nextLeadTeamRef: nextLead,
+              classification,
+              sourceEventId: event.sourceEventId,
+            });
+            close(event.timeSeconds, event.sourceEventId, nextLead ? 'reversed' : 'equalized');
+            if (nextLead) open = { leader: nextLead, start: event.timeSeconds, sourceEventId: event.sourceEventId };
+            previousLead = nextLead;
+            if (nextLead) priorNonNullLead = nextLead;
+          }
+        }
+        if (open) close(endSeconds, null, 'ongoing');
+      }
+    }
+    advantageWindows.sort((left, right) => left.startedAtSeconds - right.startedAtSeconds
+      || left.teamRefs.join('\u001f').localeCompare(right.teamRefs.join('\u001f')));
+    const firstKnockEvent = stateEvents.find(({ event }) => event.type === 'KNOCK');
+    const firstKnock = firstKnockEvent?.event;
+    const groupEvents = timeline.flatMap((timelineEvent) => {
+      const event = eventById.get(timelineEvent.sourceEventId);
+      return event ? [event] : [];
+    });
+    const response = firstKnock?.actorTeamId && firstKnock.victimTeamId && firstKnock.timeSeconds !== null
+      ? groupEvents.filter((event) => event.sourceEventId !== firstKnock.sourceEventId
+        && event.timeSeconds !== null && event.timeSeconds > firstKnock.timeSeconds!
+        && event.timeSeconds <= firstKnock.timeSeconds! + BATTLE_POST_KNOCK_RESPONSE_WINDOW_SECONDS
+        && event.actorTeamId === firstKnock.actorTeamId && event.victimTeamId === firstKnock.victimTeamId
+        && (event.type === 'KNOCK' || event.type === 'KILL' || event.type === 'DAMAGE' && event.hit && event.damage > 0))
+        .sort((left, right) => left.timeSeconds! - right.timeSeconds! || left.sourceEventId.localeCompare(right.sourceEventId))[0]
+      : undefined;
+    const firstKnockPair = firstKnock?.actorTeamId && firstKnock.victimTeamId
+      ? [battleTeamRef(matchId, firstKnock.actorTeamId), battleTeamRef(matchId, firstKnock.victimTeamId)].sort()
+      : [];
+    const firstKnockAdvantage = firstKnock
+      ? advantageWindows.find((window) => window.startEventId === firstKnock.sourceEventId
+        && (!firstKnockPair.length || window.teamRefs.every((teamRef, index) => teamRef === firstKnockPair[index]))) ?? null
+      : null;
+    const firstEpisode = groupEpisodes[0]!;
+    const firstPairTeams = new Set(firstEpisode.teams.map((team) => team.teamRef).filter((value): value is string => Boolean(value)));
+    const possibleThirdParty = groupEpisodes.flatMap((episode) => {
+      if (episode.id === firstEpisode.id || episode.startSeconds > firstEpisode.endSeconds || episode.endSeconds < firstEpisode.startSeconds) return [];
+      const addedTeams = episode.teams.map((team) => team.teamRef).filter((value): value is string => value !== null && !firstPairTeams.has(value));
+      if (!episode.teams.some((team) => team.teamRef && firstPairTeams.has(team.teamRef))) return [];
+      return addedTeams.map((teamRef) => ({
+        teamRef,
+        episodeId: episode.id,
+        evidenceEventIds: episodeContactEventIds(episode).slice(0, 4),
+        status: 'possible_third_party_contact' as const,
+      }));
+    });
+
+    return {
+      id: groupId,
+      startSeconds,
+      endSeconds,
+      durationSeconds: Math.max(0, endSeconds - startSeconds),
+      episodeIds,
+      teamRefs,
+      bridgeEvidenceEventIds,
+      timeline,
+      stateTimeline,
+      advantageWindows,
+      advantageChanges,
+      firstKnockAdvantage,
+      postKnockResponse: {
+        status: response ? 'observed' : firstKnock?.actorTeamId && firstKnock.victimTeamId ? 'not_observed_in_window' : 'incomplete',
+        firstKnockEventId: firstKnock?.sourceEventId ?? null,
+        responseEventId: response?.sourceEventId ?? null,
+        elapsedSeconds: response && firstKnock?.timeSeconds !== null && firstKnock?.timeSeconds !== undefined
+          ? response.timeSeconds! - firstKnock.timeSeconds : null,
+        windowSeconds: BATTLE_POST_KNOCK_RESPONSE_WINDOW_SECONDS,
+      },
+      possibleThirdParty,
+      rosterCompleteness: 'observed-members-only',
+    };
+  }).sort((left, right) => left.startSeconds - right.startSeconds || left.id.localeCompare(right.id));
+  return groups;
+}
+
 export interface ReconstructBattleOptions {
   match: Pick<NormalizedMatch, 'matchId'>;
   telemetry: BattleTelemetryDocument;
@@ -962,6 +1286,7 @@ export function reconstructBattleEpisodes(input: ReconstructBattleOptions): Batt
   const transitions = circleTransitions(circleSamples.filter((sample) => sample.phase === 'in_match'), matchId);
   const stateConflictEventIds = new Set<string>();
   const episodes = sessions.map((session) => episodeForSession(session, events, circleSamples, transitions, teamMembers, playerTeam, trackedPlayerIds, matchId, stateConflictEventIds));
+  const battles = battleGroupsFor(matchId, episodes, events);
   const assignedTimelineIds = sessions.flatMap((session) => session.assigned.map((event) => event.sourceEventId));
   const countById = new Map<string, number>();
   for (const id of assignedTimelineIds) countById.set(id, (countById.get(id) ?? 0) + 1);
@@ -991,6 +1316,7 @@ export function reconstructBattleEpisodes(input: ReconstructBattleOptions): Batt
     parserVersion: BATTLE_RECONSTRUCTION_PARSER_VERSION,
     status: episodes.length ? 'available' : 'no_contact_events',
     episodes,
+    battles,
     circleSamples,
     circleTransitions: transitions,
     diagnostics: {
@@ -999,11 +1325,14 @@ export function reconstructBattleEpisodes(input: ReconstructBattleOptions): Batt
       battleEventCount: events.length,
       contactEventCount: events.filter((event) => COMBAT_CONTACT_TYPES.has(event.type)).length,
       episodeCount: episodes.length,
+      battleGroupCount: battles.length,
+      multiTeamBattleCount: battles.filter((battle) => battle.teamRefs.length >= 3).length,
+      groupedEpisodeCount: battles.filter((battle) => battle.episodeIds.length > 1).reduce((sum, battle) => sum + battle.episodeIds.length, 0),
       duplicateSourceEventCount: segmented.counters.duplicateSourceEventCount,
       duplicateTimelineAssignmentCount,
       unassignedContactEventCount,
       untimedContactEventCount: segmented.counters.untimedContactEventCount,
-      preMatchContactEventCount: segmented.counters.preMatchContactEventCount,
+      preMatchContactEventCount: input.telemetry.diagnostics.excludedPreMatchContactEventCount + segmented.counters.preMatchContactEventCount,
       noParticipantContactEventCount: segmented.counters.noParticipantContactEventCount,
       sameTeamContactEventCount: segmented.counters.sameTeamContactEventCount,
       ineffectiveContactEventCount: segmented.counters.ineffectiveContactEventCount,

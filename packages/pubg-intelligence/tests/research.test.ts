@@ -117,10 +117,19 @@ test('experiment results persist in a private database separate from the source 
     const store = new ExperimentRunStore(path);
     const runId = store.save({ question: 'damage trend', intent: { action: 'trend' }, source: 'local-rule', report: { count: 2 } });
     assert.ok(runId.length > 10);
+    store.saveBattleReview({ matchId: 'match-1', battleId: 'battle-0123456789ab', label: 'correct' });
+    store.saveBattleReview({ matchId: 'match-1', battleId: 'battle-0123456789ab', label: 'insufficient_inference' });
+    assert.deepEqual(store.listBattleReviews('match-1').map((review) => [review.battleId, review.label]), [
+      ['battle-0123456789ab', 'insufficient_inference'],
+    ]);
     store.close();
     const database = new DatabaseSync(path);
     assert.equal(database.prepare('SELECT COUNT(*) AS count FROM research_runs').get().count, 1);
+    assert.equal(database.prepare('SELECT COUNT(*) AS count FROM battle_reviews').get().count, 1);
     database.close();
+    const reopened = new ExperimentRunStore(path);
+    assert.equal(reopened.listBattleReviews('match-1')[0]?.label, 'insufficient_inference');
+    reopened.close();
     assert.equal(statSync(path).mode & 0o777, 0o600);
   } finally {
     rmSync(root, { recursive: true, force: true });

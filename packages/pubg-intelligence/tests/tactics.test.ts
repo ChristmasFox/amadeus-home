@@ -110,13 +110,17 @@ test('R2 fixed fixture is deterministic, sanitized, cited and reports every rule
   const first = analyze(payload);
   const second = analyze(payload);
   assert.deepEqual(first, second);
-  assert.equal(first.schemaVersion, 1);
-  assert.equal(first.ruleVersion, 'tactical-social-rules-v1');
+  assert.equal(first.schemaVersion, 2);
+  assert.equal(first.ruleVersion, 'tactical-social-rules-v2');
 
   const requiredRules = [
     'combat.first-knock-share',
     'combat.follow-up-hit-window',
     'combat.knock-kill-conversion',
+    'combat.first-knock-observed-advantage-duration',
+    'combat.observed-knock-advantage-reversal',
+    'combat.subsequent-contact-after-first-knock',
+    'combat.possible-third-party-contact',
     'coordination.sampled-teammate-distance',
     'coordination.combat-onset-separation',
     'coordination.sampled-isolation-candidate',
@@ -145,6 +149,11 @@ test('R2 fixed fixture is deterministic, sanitized, cited and reports every rule
 
   assert.equal(candidate(first, 'combat.follow-up-hit-window').metric.numerator, 1);
   assert.equal(candidate(first, 'combat.knock-kill-conversion').metric.numerator, 1);
+  assert.equal(candidate(first, 'combat.first-knock-observed-advantage-duration').status, 'incomplete');
+  assert.match(candidate(first, 'combat.first-knock-observed-advantage-duration').quality.reasons.join(' '), /敌队完整名单/u);
+  assert.equal(candidate(first, 'combat.subsequent-contact-after-first-knock').metric.numerator, 1);
+  assert.ok((candidate(first, 'combat.possible-third-party-contact').metric.numerator ?? 0)
+    <= (candidate(first, 'combat.possible-third-party-contact').metric.denominator ?? 0));
   assert.equal(candidate(first, 'coordination.sampled-teammate-distance').metric.sampleSize > 0, true);
   assert.equal(candidate(first, 'coordination.sampled-isolation-candidate').metric.numerator, 1);
   assert.equal(candidate(first, 'coordination.response-after-ally-knock').metric.numerator, 1);
@@ -170,6 +179,8 @@ test('empty and incomplete telemetry fixtures keep unknown distinct from zero fo
   const incomplete = analyze(partialPayload);
   const expectedRules = [
     'combat.first-knock-share', 'combat.follow-up-hit-window', 'combat.knock-kill-conversion',
+    'combat.first-knock-observed-advantage-duration', 'combat.observed-knock-advantage-reversal',
+    'combat.subsequent-contact-after-first-knock', 'combat.possible-third-party-contact',
     'coordination.sampled-teammate-distance', 'coordination.combat-onset-separation', 'coordination.sampled-isolation-candidate',
     'coordination.response-after-ally-knock', 'social.directed-friendly-damage', 'social.directed-rescue',
     'social.shared-engagement-pair', 'social.friendly-fire-followed-by-rescue',

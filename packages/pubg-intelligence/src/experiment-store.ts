@@ -29,6 +29,7 @@ export interface StoredResearchRun {
 }
 
 export type EvaluationReviewLabel = 'confirm' | 'reject' | 'unresolved' | 'wrong_evidence';
+export type BattleReviewLabel = 'correct' | 'insufficient_inference' | 'wrong' | 'unknown';
 
 export interface EvaluationRunSummary {
   runId: string;
@@ -45,6 +46,13 @@ export interface EvaluationReview {
   caseId: string;
   ruleId: string;
   label: EvaluationReviewLabel;
+  createdAt: string;
+}
+
+export interface BattleReview {
+  matchId: string;
+  battleId: string;
+  label: BattleReviewLabel;
   createdAt: string;
 }
 
@@ -73,6 +81,13 @@ export class ExperimentRunStore {
         report_json TEXT NOT NULL
       );
       CREATE INDEX IF NOT EXISTS idx_research_runs_created ON research_runs(created_at DESC);
+      CREATE TABLE IF NOT EXISTS battle_reviews (
+        match_id TEXT NOT NULL,
+        battle_id TEXT NOT NULL,
+        label TEXT NOT NULL CHECK (label IN ('correct', 'insufficient_inference', 'wrong', 'unknown')),
+        created_at TEXT NOT NULL,
+        PRIMARY KEY (match_id, battle_id)
+      );
       CREATE TABLE IF NOT EXISTS evaluation_experiments (
         run_id TEXT PRIMARY KEY,
         created_at TEXT NOT NULL,
@@ -163,6 +178,23 @@ export class ExperimentRunStore {
       SELECT case_id, rule_id, label, created_at FROM evaluation_reviews WHERE run_id = ? ORDER BY case_id, rule_id
     `).all(runId) as Array<{ case_id: string; rule_id: string; label: EvaluationReviewLabel; created_at: string }>).map((row) => ({
       caseId: row.case_id, ruleId: row.rule_id, label: row.label, createdAt: row.created_at,
+    }));
+  }
+
+  saveBattleReview(input: { matchId: string; battleId: string; label: BattleReviewLabel }): BattleReview {
+    const createdAt = new Date().toISOString();
+    this.db.prepare(`
+      INSERT INTO battle_reviews(match_id, battle_id, label, created_at) VALUES (?, ?, ?, ?)
+      ON CONFLICT(match_id, battle_id) DO UPDATE SET label = excluded.label, created_at = excluded.created_at
+    `).run(input.matchId, input.battleId, input.label, createdAt);
+    return { ...input, createdAt };
+  }
+
+  listBattleReviews(matchId: string): BattleReview[] {
+    return (this.db.prepare(`
+      SELECT match_id, battle_id, label, created_at FROM battle_reviews WHERE match_id = ? ORDER BY battle_id
+    `).all(matchId) as Array<{ match_id: string; battle_id: string; label: BattleReviewLabel; created_at: string }>).map((row) => ({
+      matchId: row.match_id, battleId: row.battle_id, label: row.label, createdAt: row.created_at,
     }));
   }
 

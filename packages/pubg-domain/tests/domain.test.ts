@@ -21,6 +21,7 @@ import {
   extractMatchReviewFacts,
   importLegacyPubgData,
   normalizeRecords,
+  normalizeTelemetryEvents,
   resolveSelector,
   resolvePreviousPeriodSelector,
   selectMatchReviewFactCategories,
@@ -60,6 +61,22 @@ const SHARED_DOMAIN_GOLDEN = JSON.parse(readFileSync(new URL('./fixtures/shared-
 };
 const SOURCE = SHARED_DOMAIN_GOLDEN.source;
 const COVERAGE = SHARED_DOMAIN_GOLDEN.coverage;
+
+test('PUBG common.isGame phase values follow safe-zone stages: below 1 is pre-match and 1+ is in-match', () => {
+  const phaseMatch = normalizeRecords([rawMatch('phase-test', '2026-10-12T12:00:00.000Z', [
+    { accountId: 'p1', playerName: 'Alice' },
+  ])])[0]!;
+  const events = normalizeTelemetryEvents([
+    { _T: 'LogPlayerAttack', timeSeconds: 10, common: { isGame: 0.5 } },
+    { _T: 'LogPlayerAttack', timeSeconds: 20, common: { isGame: 1 } },
+    { _T: 'LogPlayerAttack', timeSeconds: 30, common: { isGame: 1.5 } },
+    { _T: 'LogPlayerAttack', timeSeconds: 40, common: { isGame: 2 } },
+    { _T: 'LogPlayerAttack', timeSeconds: 50, common: { isGame: 4.5 } },
+  ], phaseMatch);
+  assert.deepEqual(events.map((event) => event.phase), [
+    'pre_match', 'in_match', 'in_match', 'in_match', 'in_match',
+  ]);
+});
 
 function rawMatch(
   matchId: string,

@@ -1,67 +1,72 @@
-# R1 Battle & Match Reconstruction — evaluation
+# R1 Battle & Match Reconstruction — V2 evaluation
 
-Updated: 2026-10-16
-Branch: `research/pubg-intelligence`
-Schema/parser: `1` / `battle-reconstruction-v1`
+Updated: 2026-10-17
+Branch: `main`
+Schema/parser: `2` / `battle-reconstruction-v2`
+Tactical rules: `tactical-social-rules-v2`
 
-## Scope and method
+## Phase diagnosis from the raw archive
 
-R1 reads a read-only Lab snapshot. It uses the existing PUBG Domain telemetry normalizer and `combatEventKey`; raw source rows are not written back. A match is fetched only after the operator opens its reconstruction, and only from an HTTPS `telemetry-cdn.pubg.com` asset URL already stored in the snapshot. Redirects are rejected. The source snapshot’s SHA-256 was identical before and after the real-data run; the digest is intentionally not recorded here.
+PUBG defines `common.isGame` as the blue-zone/safe-zone phase. `0` means before lift off, `0.1` means on the airplane, `0.5` means before a zone appears, `1.0` is the first safe zone, and each later `0.5` value is a subsequent zone transition. Values `2.0` and above therefore describe later in-match zone phases, not post-match events ([PUBG telemetry objects](https://documentation.pubg.com/en/telemetry-objects.html)).
 
-Engagement candidates are effective `DAMAGE`, `KNOCK`, and `KILL` records with known participants. Known team IDs form a team-pair key; if a team is unknown, the participant ID is used as that side’s fallback key. Same-team records are excluded. A new contact joins the active pair episode when the gap from the last contact is at most 28 seconds. A matching kill may extend a pending knock episode for up to 120 seconds. Context events are assigned only to one nearest episode within −5/+28 seconds; ties are left unassigned and counted. Positions retain the first valid sample per player per 15-second bucket. Knock outcomes and team states are based on observed events; missing evidence stays unknown. Explicit post-match `common.isGame` signals stay unknown and are excluded from engagement/circle context. Circle transitions mean a change between consecutive in-match periodic circle samples, not an inferred server-side phase boundary.
+R1 V1 incorrectly treated numeric `common.isGame >= 2` as post-match/unknown. V2 follows the documented phase signal: numeric values below `1` are `pre_match`, values `1` and above are `in_match`, and missing or invalid values stay `unknown` unless a separate reliable event-time signal resolves the phase. Pre-match contacts are excluded and counted; unknown-phase contacts remain excluded and counted separately from untimed, same-team, ineffective, and unknown-team contacts.
 
-Episode IDs are deterministic hashes of the match, team/player pair, parser/schema versions, and source contact IDs. Source timeline references remain `telemetry-N`; player/team references returned to the UI are match-scoped hashes. Each event and circle transition points back to its underlying telemetry source event.
+The read-only audit covered all 100 locally archived telemetry payloads. Every archive entry had a matching Lab match row and readable payload.
 
-## Fixed sanitized fixture
-
-The fixture has three manually annotated A/B engagements (10–28s, 60–80s, and a later single-contact episode), plus one same-team damage negative example. It also exercises revive and kill outcomes, zone changes, position sampling, overlap, ambiguous context, duplicate DBNOs, missing timestamps, explicit post-match phase, team conflicts, and exact boundary values.
-
-| Measure | Result |
+| Archive-wide phase evidence | Count |
 | --- | ---: |
-| Annotated fixture episodes | 3 |
-| Matched episodes (TP) | 3 |
-| Unsupported episodes (FP) | 0 |
-| Missed annotated episodes (FN) | 0 |
-| Fixture precision / recall | 3/3 / 3/3 (100% / 100%, fixture only) |
-| Same-team negative example excluded | 1/1 |
-| Duplicate timeline assignment | 0 |
+| Raw telemetry rows | 3,316,224 |
+| `ATTACK` / `DAMAGE` / `KNOCK` / `KILL` records | 976,882 |
+| Records with numeric `common.isGame >= 2` | 598,792 |
+| `>= 2` records normalized as `in_match` by PUBG Domain | 598,792 |
+| `>= 2` records at or before match duration + 30 seconds | 598,790 |
+| Remaining timestamp outliers | 2 `LogPlayerAttack` records |
 
-These fixture scores describe only this small deterministic corpus; they are not a historical-data accuracy claim. Boundary tests prove that 28 seconds and 120 seconds are inclusive, while one second beyond each threshold splits/does not attach. The overlap fixture retains both team-pair episodes, drops a tied context event, and reports zero duplicate event assignments.
+The two timestamp outliers are attack records, not the effective `DAMAGE`/`KNOCK`/`KILL` episode anchors. The phase field still identifies them as in-match zone phases; the outlier timing remains a separate audit observation. In the archive-wide V1/V2 comparison below, unknown-phase contact counts fell from 313,128 to 0. Missing or malformed phase and time are still represented as unknown, not as an inferred post-match phase.
 
-## Real snapshot check
+## Method and comparison
 
-The local API was exercised against one actual snapshot match with a stored telemetry asset. The browser/API response returned HTTP 200 and `available` with parser `battle-reconstruction-v1`.
+The reconstruction comparison used all teams and the same 100 archived matches for both versions. Tactical rule metrics use the first squad returned by the existing local squad builder. The baseline implementation was copied from main commit `07b48340caa8e489272120620107adcef6e2105a`; V2 runs the existing `battle.ts` and `tactics.ts` pipeline. SQLite was opened read-only and raw telemetry was read from the verified local archive; there was no CDN fallback or source-cache write.
 
-| Measure | Observed |
-| --- | ---: |
-| Raw telemetry rows | 39,373 |
-| PUBG Domain normalized events | 35,202 |
-| Battle-normalized events | 16,177 |
-| Contact events | 5,684 |
-| Reconstructed episodes | 10 |
-| Circle samples / changed samples | 167 / 24 |
-| Contact events assigned to episodes | 173 |
-| Unassigned contact events | 5,511 |
-| Duplicate source records / duplicate timeline assignments | 0 / 0 |
-| Overlapping episode pairs | 9 |
-| Ambiguous context events left unassigned | 256 |
-| Positions suppressed by 15-second sampling | 100 |
-| Shared circle-sample context references | 40 |
-| Knock chains without an observed outcome in-window | 0 |
-| Revives without one unique matching knock | 24 |
-| Contacts excluded for unknown phase / circle samples with unknown phase | 4,298 / 125 |
+| Archive-wide reconstruction measure | V1 baseline | V2 candidate | Difference |
+| --- | ---: | ---: | ---: |
+| Raw telemetry rows | 3,316,224 | 3,316,224 | 0 |
+| Battle-normalized `DAMAGE` / `KNOCK` / `KILL` records before assignment | 414,015 | 414,015 | 0 |
+| Team-pair episodes | 1,763 | 6,478 | +4,715 |
+| Contact events left unassigned | 400,248 | 372,362 | −27,886 |
+| Unknown-phase contacts | 313,128 | 0 | −313,128 |
 
-The 5,511 unassigned contacts break down into 4,298 with unknown/post-match phase, 553 without both participants, 530 same-team contacts, and 130 ineffective damage records; untimed, pre-match, unknown-team, and duplicate-source contact counts were each zero in this sample. State conflict count is 10 distinct source events across episode-scoped state replays; per-episode conflict counts are also shown in the UI.
+Contact-event signatures (sorted team references plus source contact IDs) had 1,709 unchanged signatures, 4,769 new V2 signatures, and 54 V1 signatures absent from V2. These are structural differences, not true-positive, false-positive, or false-negative counts. V2 newly assigned 27,886 contact sources and removed no previously assigned source contacts in this run.
 
-Manual review covered the first eight episodes by start time. All eight had at least one damage/knock/kill anchor with two different team references, and every timeline event linked to an evidence reference. Seven episodes had a knock and their displayed first knock matched the earliest knock in that episode; one damage-only episode had no knock and remained explicitly without a first-knock claim. A same-team damage record in the in-match phase was checked as a counterexample and was excluded from all episode timelines. The reviewed window contained eight overlapping episode-pair combinations with distinct team-pair references; context ambiguity was surfaced rather than force-assigned.
+V2 produced 4,822 battle groups: 744 had at least three known team references, 743 carried a possible third-party contact tag, 7,131 observed knock-balance windows, 761 observed reversals, and 1,450 groups with a post-knock response. These are candidate counts from telemetry, not adjudicated accuracy measures.
 
-This is a one-match, eight-episode manual check. It does not estimate historical recall: the full snapshot match set has no independent episode annotation corpus yet. The exact excluded-event and ambiguity counts above are published so follow-up annotation can identify misses.
+## Real match example
 
-## Known limits
+In archived match ordinal 39 (match ID and player labels intentionally omitted), V1 produced one episode; V2 produced 79 team-pair episodes and 43 groups, including 11 groups with at least three known team references.
 
-- The real-data check covers one match, not a stratified holdout. Do not generalize the fixture score or reviewed subset to the whole cache.
-- `unassignedContactEventCount` includes non-participant, same-team, ineffective, duplicate, pre-match, and untimed source contacts; the typed counters explain these categories.
-- Position records are sparse samples; the retained point is not a continuous path. No line-of-sight or causal inference is made.
-- Team state summaries cover telemetry-observed members only. Absence of a record does not mean alive, dead, or rescued.
-- A periodic circle change is not proof of the exact gameplay phase transition time.
-- Signed asset URLs are held in server memory only and are never returned to the browser or persisted by the experiment store.
+One two-team episode ran from 505.280 to 543.800 seconds. The first observed knock was `telemetry-17617` at 511.268 seconds. The corresponding observed knock-balance lead lasted 4.994 seconds; a later reversal was recorded at 516.790 seconds by `telemetry-17865`. The UI links these times to the raw event references. This is a concrete reconstruction example, not a human-confirmed correctness label.
+
+## Rule-level comparison
+
+Across the same 100 matches, opportunity sets changed as V2 recovered more phase-valid contacts and pair episodes. Rates below describe the resulting opportunities; they do not measure algorithm accuracy.
+
+| Rule | V1 baseline | V2 candidate |
+| --- | ---: | ---: |
+| First-knock share | 62 / 82 (75.6%) | 167 / 279 (59.9%) |
+| Follow-up effective contact | 54 / 62 (87.1%) | 135 / 167 (80.8%) |
+| Knock-to-kill among uniquely resolved outcomes | 53 / 56 (94.6%) | 116 / 146 (79.5%) |
+| First-knock observed advantage duration | unavailable in V1 | 249 windows across 68 matches; mean 25.3 seconds; 32 matches had no evaluable window |
+| Observed knock-balance reversal | unavailable in V1 | 145 reversals / 517 prior-lead transitions; 1,743 observed change samples |
+| Effective contact after the tracked squad's first knock | unavailable in V1 | 102 / 124 opportunities (82.3%) |
+| Possible third-party contact | unavailable in V1 | 109 candidate groups among 109 selected-squad multi-team groups |
+
+The possible-third-party rule marks overlapping contact evidence and does not infer intent or causality. All four V2 dynamics rules retain event references; incomplete roster and phase evidence stays explicit.
+
+## Known limits and open questions
+
+- The archive has no independent per-engagement truth labels. Archive-wide false-positive count, missed-engagement count, precision, and recall are **unknown**. New or missing signatures must not be reported as errors without human labels.
+- Episode boundaries still use the established 28-second contact gap and 120-second pending-knock outcome window. Their sensitivity across maps, modes, and sparse matches is not calibrated.
+- Battle grouping requires overlapping episode time, a shared known team reference, and contact evidence from both episodes. Union-find can link a chain of pair overlaps transitively; human review must establish whether a long chain is one fight or several adjacent fights.
+- A possible third-party tag proves only overlapping, team-attributed contact evidence. Telemetry cannot establish intent, target selection, or causal effect.
+- Team states cover observed members only. The data cannot establish a complete four-player roster, missing members' alive state, line of sight, voice communication, or why a knock was not converted.
+- Positions are sparse samples, not continuous paths. Future work needs a stratified, manually reviewed holdout before tuning thresholds or claiming reliability.

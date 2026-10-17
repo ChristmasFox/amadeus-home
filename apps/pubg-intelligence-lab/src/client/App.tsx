@@ -83,6 +83,80 @@ interface BattleEpisode {
   diagnostics: { conflictingStateTransitions: number; unknownTeamContacts: number; ambiguousContextEvents: number; positionsSuppressedBySampling: number };
 }
 
+type BattleReviewLabel = 'correct' | 'insufficient_inference' | 'wrong' | 'unknown';
+
+interface BattleReview {
+  matchId: string;
+  battleId: string;
+  label: BattleReviewLabel;
+  createdAt: string;
+}
+
+interface BattleGroup {
+  id: string;
+  startSeconds: number;
+  endSeconds: number;
+  durationSeconds: number;
+  episodeIds: string[];
+  teamRefs: string[];
+  bridgeEvidenceEventIds: string[];
+  timeline: BattleTimelineEvent[];
+  stateTimeline: Array<{
+    sourceEventId: string;
+    timeSeconds: number;
+    type: 'KNOCK' | 'REVIVE' | 'KILL';
+    actorRef: string | null;
+    victimRef: string | null;
+    actorTeamRef: string | null;
+    victimTeamRef: string | null;
+    states: Array<{
+      teamRef: string;
+      memberCountObserved: number;
+      activeObserved: number;
+      knockedObserved: number;
+      deadObserved: number;
+      unknownObserved: number;
+      completeness: 'observed-members-only';
+    }>;
+  }>;
+  advantageWindows: Array<{
+    teamRefs: [string, string];
+    observedLeadTeamRef: string;
+    startedAtSeconds: number;
+    endedAtSeconds: number;
+    durationSeconds: number;
+    resolution: 'equalized' | 'reversed' | 'ongoing';
+    startEventId: string;
+    endEventId: string | null;
+    evidenceEventIds: string[];
+    assessment: 'observed-knock-balance-only';
+    rosterCompleteness: 'observed-members-only';
+  }>;
+  advantageChanges: Array<{
+    teamRefs: [string, string];
+    timeSeconds: number;
+    previousLeadTeamRef: string | null;
+    nextLeadTeamRef: string | null;
+    classification: 'lead' | 'equalized' | 'reversed';
+    sourceEventId: string;
+  }>;
+  firstKnockAdvantage: BattleGroup['advantageWindows'][number] | null;
+  postKnockResponse: {
+    status: 'observed' | 'not_observed_in_window' | 'incomplete';
+    firstKnockEventId: string | null;
+    responseEventId: string | null;
+    elapsedSeconds: number | null;
+    windowSeconds: 30;
+  };
+  possibleThirdParty: Array<{
+    teamRef: string;
+    episodeId: string;
+    evidenceEventIds: string[];
+    status: 'possible_third_party_contact';
+  }>;
+  rosterCompleteness: 'observed-members-only';
+}
+
 interface BattleCircleSample {
   id: string;
   sourceEventId: string;
@@ -111,6 +185,8 @@ interface BattleMatchResponse {
   schemaVersion?: number;
   parserVersion?: string;
   episodes?: BattleEpisode[];
+  battles?: BattleGroup[];
+  battleReviews?: BattleReview[];
   circleSamples?: BattleCircleSample[];
   circleTransitions?: BattleCircleTransition[];
   labels?: { players: Record<string, string>; teams: Record<string, string>; tacticalPlayers?: Record<string, string> };
@@ -378,6 +454,8 @@ export function App() {
   const [detail, setDetail] = useState<MatchDetail | null>(null);
   const [battleData, setBattleData] = useState<BattleMatchResponse | null>(null);
   const [selectedEpisodeId, setSelectedEpisodeId] = useState('');
+  const [selectedBattleId, setSelectedBattleId] = useState('');
+  const [battleReviewLoading, setBattleReviewLoading] = useState('');
   const [battleLoading, setBattleLoading] = useState(false);
   const [battleError, setBattleError] = useState('');
   const [frequentPairs, setFrequentPairs] = useState<FrequentPairResponse | null>(null);
@@ -460,6 +538,7 @@ export function App() {
   }, [squadId, from, to]);
 
   const selectedEpisode = battleData?.episodes?.find((episode) => episode.id === selectedEpisodeId) ?? battleData?.episodes?.[0] ?? null;
+  const selectedBattle = battleData?.battles?.find((battle) => battle.id === selectedBattleId) ?? battleData?.battles?.[0] ?? null;
   const circleSamplesById = useMemo(() => new Map((battleData?.circleSamples ?? []).map((sample) => [sample.id, sample])), [battleData]);
 
   async function loadBattleReconstruction(focusEventId?: string | null) {
@@ -468,6 +547,7 @@ export function App() {
     setBattleError('');
     setBattleData(null);
     setSelectedEpisodeId('');
+    setSelectedBattleId('');
     try {
       const scope = new URLSearchParams({ squadId });
       if (from) scope.set('from', from);
@@ -476,10 +556,34 @@ export function App() {
       setBattleData(result);
       const focused = focusEventId ? result.episodes?.find((episode) => episode.evidenceEventIds.includes(focusEventId)) : undefined;
       setSelectedEpisodeId(focused?.id ?? result.episodes?.[0]?.id ?? '');
+      const focusedBattle = focusEventId ? result.battles?.find((battle) => battle.timeline.some((event) => event.sourceEventId === focusEventId)
+        || battle.bridgeEvidenceEventIds.includes(focusEventId)) : undefined;
+      setSelectedBattleId(focusedBattle?.id ?? result.battles?.[0]?.id ?? '');
     } catch {
       setBattleError('交战重建读取失败，请稍后重试。');
     } finally {
       setBattleLoading(false);
+    }
+  }
+
+  async function reviewBattle(battleId: string, label: BattleReviewLabel) {
+    if (!selectedMatchId || battleReviewLoading) return;
+    setBattleReviewLoading(battleId);
+    setBattleError('');
+    try {
+      const scope = new URLSearchParams({ squadId });
+      if (from) scope.set('from', from);
+      if (to) scope.set('to', to);
+      const result = await json<{ reviews: BattleReview[] }>(`/api/matches/${encodeURIComponent(selectedMatchId)}/battles/${encodeURIComponent(battleId)}/review?${scope}`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ label }),
+      });
+      setBattleData((current) => current ? { ...current, battleReviews: result.reviews } : current);
+    } catch {
+      setBattleError('团战复核保存失败，请重试。');
+    } finally {
+      setBattleReviewLoading('');
     }
   }
 
@@ -693,7 +797,31 @@ export function App() {
           {battleData?.status === 'no_contact_events' && <div className="battle-empty"><b>未重建出交战片段</b><span>未发现满足启发式的对敌伤害、击倒或淘汰事件。此结果不代表没有发生交战。</span><small>{battleData.diagnostics?.sameTeamContactEventCount ?? 0} 条同队事件被排除 · {battleData.diagnostics?.untimedContactEventCount ?? 0} 条接触事件缺少时间</small></div>}
           {battleData?.status === 'available' && <section className="battle-reconstruction">
             <div className="evidence-heading"><div><span className="eyebrow">BATTLE RECONSTRUCTION</span><b>交战片段</b></div><span>v{battleData.parserVersion} · {battleData.episodes?.length ?? 0}</span></div>
-            <div className="battle-integrity">接触 {battleData.diagnostics?.contactEventCount ?? 0} · 未归属 {battleData.diagnostics?.unassignedContactEventCount ?? 0} · 同队排除 {battleData.diagnostics?.sameTeamContactEventCount ?? 0} · 无效伤害 {battleData.diagnostics?.ineffectiveContactEventCount ?? 0}<br />未知阶段 {battleData.diagnostics?.unknownPhaseContactEventCount ?? 0} · 重复来源 {battleData.diagnostics?.duplicateSourceEventCount ?? 0} · 重复分配 {battleData.diagnostics?.duplicateTimelineAssignmentCount ?? 0} · 队伍未知 {battleData.diagnostics?.unknownTeamContactEventCount ?? 0}<br />状态冲突 {battleData.diagnostics?.conflictingStateTransitionCount ?? 0} · 上下文歧义 {battleData.diagnostics?.ambiguousContextEventCount ?? 0} · 未决 knock 链 {battleData.diagnostics?.unresolvedKnockChainCount ?? 0}<br />圈变化 {battleData.circleTransitions?.length ?? 0} · 未知阶段圈样本 {battleData.diagnostics?.unknownPhaseCircleSampleCount ?? 0} · 共享圈采样 {battleData.diagnostics?.sharedCircleSampleContextCount ?? 0}</div>
+            <div className="battle-integrity">接触 {battleData.diagnostics?.contactEventCount ?? 0} · 未归属 {battleData.diagnostics?.unassignedContactEventCount ?? 0} · 同队排除 {battleData.diagnostics?.sameTeamContactEventCount ?? 0} · 无效伤害 {battleData.diagnostics?.ineffectiveContactEventCount ?? 0}<br />赛前排除 {battleData.diagnostics?.preMatchContactEventCount ?? 0} · 未知阶段 {battleData.diagnostics?.unknownPhaseContactEventCount ?? 0} · 无时间 {battleData.diagnostics?.untimedContactEventCount ?? 0}<br />重复来源 {battleData.diagnostics?.duplicateSourceEventCount ?? 0} · 重复分配 {battleData.diagnostics?.duplicateTimelineAssignmentCount ?? 0} · 队伍未知 {battleData.diagnostics?.unknownTeamContactEventCount ?? 0}<br />状态冲突 {battleData.diagnostics?.conflictingStateTransitionCount ?? 0} · 上下文歧义 {battleData.diagnostics?.ambiguousContextEventCount ?? 0} · 未决 knock 链 {battleData.diagnostics?.unresolvedKnockChainCount ?? 0}<br />圈变化 {battleData.circleTransitions?.length ?? 0} · 未知阶段圈样本 {battleData.diagnostics?.unknownPhaseCircleSampleCount ?? 0} · 共享圈采样 {battleData.diagnostics?.sharedCircleSampleContextCount ?? 0}</div>
+            {(battleData.battles?.length ?? 0) > 0 && <div className="battle-v2">
+              <div className="card-label">团战重建 V2 <span>{battleData.battles?.length ?? 0} 个 battle group</span></div>
+              <div className="battle-group-list">{battleData.battles?.map((battle, index) => <button type="button" className={`battle-group-row ${selectedBattle?.id === battle.id ? 'active' : ''}`} key={battle.id} onClick={() => setSelectedBattleId(battle.id)}>
+                <span className="battle-episode-index">{String(index + 1).padStart(2, '0')}</span>
+                <span className="battle-episode-main"><b>{battleTime(battle.startSeconds)}–{battleTime(battle.endSeconds)}</b><small>{battle.teamRefs.map((ref) => battleData.labels?.teams[ref] ?? '未知队伍').join(' · ')}</small></span>
+                <span className="battle-episode-count">{battle.episodeIds.length}<small>pair</small></span>
+              </button>)}</div>
+              {selectedBattle && <div className="battle-group-detail">
+                <div className="battle-episode-summary"><span>{battleTime(selectedBattle.startSeconds)}–{battleTime(selectedBattle.endSeconds)} · {number(selectedBattle.durationSeconds)} 秒</span><span>{selectedBattle.episodeIds.length} 个 pair · {selectedBattle.teamRefs.length} 个队伍</span></div>
+                <div className="battle-uncertainty">只显示遥测中已观测到的队员；敌队名单和全员状态未知时，不推算 4v4。归组要求事件时间重叠、共享队伍引用和双方接触证据。</div>
+                {selectedBattle.firstKnockAdvantage && <div className="battle-first-knock"><span>首个 knock 后的观测减员差</span><b>{battleData.labels?.teams[selectedBattle.firstKnockAdvantage.observedLeadTeamRef] ?? '未知队伍'} · 持续 {number(selectedBattle.firstKnockAdvantage.durationSeconds)} 秒</b><small>{selectedBattle.firstKnockAdvantage.resolution === 'equalized' ? '观测 knock 数追平' : selectedBattle.firstKnockAdvantage.resolution === 'reversed' ? '观测 knock 平衡反转' : '截至交战结束仍在'} · 证据 {selectedBattle.firstKnockAdvantage.evidenceEventIds.join(' → ')}</small></div>}
+                {!selectedBattle.firstKnockAdvantage && <div className="battle-uncertainty">首个 knock 优势：证据不足，未估算整队人数优势。</div>}
+                {selectedBattle.advantageChanges.length > 0 && <div className="battle-state-list"><div className="card-label">优势变化点 <span>{selectedBattle.advantageChanges.length}</span></div>{selectedBattle.advantageChanges.map((change) => <div className="battle-state-row" key={`${change.sourceEventId}-${change.classification}`}><b>{battleTime(change.timeSeconds)} · {change.classification === 'reversed' ? '反转' : change.classification === 'equalized' ? '追平' : '出现观测差'}</b><span>{change.previousLeadTeamRef ? battleData.labels?.teams[change.previousLeadTeamRef] ?? '未知队伍' : '—'} → {change.nextLeadTeamRef ? battleData.labels?.teams[change.nextLeadTeamRef] ?? '未知队伍' : '平'}</span><small>{change.sourceEventId}</small></div>)}</div>}
+                {selectedBattle.postKnockResponse.status !== 'incomplete' && <div className="battle-response"><b>首个 knock 后有效接触</b><span>{selectedBattle.postKnockResponse.status === 'observed' ? `观察到 · ${selectedBattle.postKnockResponse.elapsedSeconds} 秒后` : '30 秒内未观察到'}</span><small>{selectedBattle.postKnockResponse.firstKnockEventId ?? '首个 knock 未知'}{selectedBattle.postKnockResponse.responseEventId ? ` → ${selectedBattle.postKnockResponse.responseEventId}` : ''}</small></div>}
+                {selectedBattle.possibleThirdParty.length > 0 && <div className="battle-state-list"><div className="card-label">可能第三队接触 <span>不推断意图或因果</span></div>{selectedBattle.possibleThirdParty.map((item) => <div className="battle-state-row" key={`${item.episodeId}-${item.teamRef}`}><b>{battleData.labels?.teams[item.teamRef] ?? '未知队伍'} · 时间重叠</b><span>可能第三队接触</span><small>{item.evidenceEventIds.join(' · ')}</small></div>)}</div>}
+                {selectedBattle.stateTimeline.length > 0 && <div className="battle-state-list"><div className="card-label">击倒 / 救援 / 淘汰状态 <span>{selectedBattle.stateTimeline.length} 条事件</span></div>{selectedBattle.stateTimeline.map((item) => <div className="battle-state-row" key={item.sourceEventId}><b>{battleTime(item.timeSeconds)} · {battleTypeLabel(item.type)} · {item.victimRef ? battleData.labels?.players[item.victimRef] ?? '匿名对手' : '目标未知'}</b><span>{item.states.map((state) => `${battleData.labels?.teams[state.teamRef] ?? '未知队伍'}：观测 ${state.memberCountObserved} / 击倒 ${state.knockedObserved} / 淘汰 ${state.deadObserved}`).join(' · ')}</span><small>{item.sourceEventId} · 队伍统计仅含已观测成员</small></div>)}</div>}
+                <div className="battle-timeline"><div className="card-label">团战原始证据时间线 <span>{selectedBattle.timeline.length} 条 · 桥接 {selectedBattle.bridgeEvidenceEventIds.join(' · ') || '无'}</span></div>{selectedBattle.timeline.map((item) => <div className="battle-event-row" key={item.sourceEventId}><span className="battle-event-time">{battleTime(item.timeSeconds)}</span><span className={`battle-event-kind ${item.type.toLowerCase()}`}>{battleTypeLabel(item.type)}</span><span className="battle-event-description">{item.actorRef ? battleData.labels?.players[item.actorRef] ?? '匿名对手' : '未知来源'}{item.victimRef ? ` → ${battleData.labels?.players[item.victimRef] ?? '匿名对手'}` : ''}{item.damage !== null ? ` · ${number(item.damage)} 伤害` : ''}{item.weapon ? ` · ${item.weapon}` : ''}</span><small>{item.sourceEventId} · {item.timestampSource}</small></div>)}</div>
+                {(() => {
+                  const review = battleData.battleReviews?.find((item) => item.battleId === selectedBattle.id);
+                  const reviewText = review ? ({ correct: '正确', insufficient_inference: '推断不足', wrong: '错误', unknown: '未知' } as const)[review.label] : '未复核';
+                  return <div className="battle-review"><b>人工复核 · {reviewText}</b><div>{([['correct', '正确'], ['insufficient_inference', '推断不足'], ['wrong', '错误'], ['unknown', '未知']] as const).map(([label, text]) => <button type="button" key={label} disabled={battleReviewLoading === selectedBattle.id} className={review?.label === label ? 'active' : ''} onClick={() => void reviewBattle(selectedBattle.id, label)}>{text}</button>)}</div>{review && <small>保存于 {new Date(review.createdAt).toLocaleString('zh-CN')}</small>}</div>;
+                })()}
+              </div>}
+            </div>}
             <div className="battle-episode-list">
               {battleData.episodes?.map((episode, index) => <button className={`battle-episode-row ${selectedEpisode?.id === episode.id ? 'active' : ''}`} key={episode.id} onClick={() => setSelectedEpisodeId(episode.id)}>
                 <span className="battle-episode-index">{String(index + 1).padStart(2, '0')}</span>
@@ -756,7 +884,7 @@ export function App() {
               </details>
             </>}
           </section>
-          <div className="right-footer"><span>解析器版本</span><b>{bootstrap?.parserVersion} / {bootstrap?.featureVersion} · battle-reconstruction-v1</b><small>交战重建按需从快照内资产引用只读获取；实验结果不写回 Lab 数据库。</small></div>
+          <div className="right-footer"><span>解析器版本</span><b>{bootstrap?.parserVersion} / {bootstrap?.featureVersion} · battle-reconstruction-v2</b><small>团战重建只读已有归档遥测；复核结果写入独立本地实验库。</small></div>
         </aside>
       </main>
     </div>

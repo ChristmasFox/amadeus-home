@@ -82,6 +82,7 @@ test('local API serves history and research from a read-only source and stores e
     process.env.PUBG_INTELLIGENCE_DB = source;
     process.env.PUBG_INTELLIGENCE_EXPERIMENT_DB = experiments;
     process.env.PUBG_TELEMETRY_ARCHIVE_DIR = join(root, 'raw-telemetry');
+    await new RawTelemetryArchive(join(root, 'raw-telemetry')).write('app-match-2', Buffer.from(JSON.stringify(telemetryFixture)));
     process.env.PORT = '0';
     process.env.HOST = '127.0.0.1';
     process.env.PUBG_INTELLIGENCE_AI_CONFIG_FILE = join(root, 'missing-ai-config.json');
@@ -141,17 +142,31 @@ test('local API serves history and research from a read-only source and stores e
       status: string;
       parserVersion: string;
       episodes: Array<{ timeline: Array<{ sourceEventId: string }>; evidenceEventIds: string[]; knockChains: Array<{ outcome: string | null }> }>;
+      battles: Array<{ id: string; episodeIds: string[] }>;
+      battleReviews: Array<{ battleId: string; label: string }>;
       tactical: { ruleVersion: string; candidates: Array<{ ruleId: string; metric: { denominator: number | null }; supportEvents: Array<{ matchId: string; eventId: string | null }> }> };
       circleTransitions: unknown[];
     };
     assert.equal(reconstructed.status, 'available');
-    assert.equal(reconstructed.parserVersion, 'battle-reconstruction-v1');
+    assert.equal(reconstructed.parserVersion, 'battle-reconstruction-v2');
     assert.equal(reconstructed.episodes.length, 1);
     assert.equal(reconstructed.episodes[0]?.knockChains[0]?.outcome, 'REVIVE');
     assert.equal(reconstructed.episodes[0]?.timeline.every((event) => reconstructed.episodes[0]?.evidenceEventIds.includes(event.sourceEventId)), true);
-    assert.equal(reconstructed.tactical.ruleVersion, 'tactical-social-rules-v1');
+    assert.equal(reconstructed.tactical.ruleVersion, 'tactical-social-rules-v2');
     assert.ok(reconstructed.tactical.candidates.some((item) => item.ruleId === 'combat.first-knock-share'));
     assert.ok(reconstructed.tactical.candidates.every((item) => item.supportEvents.every((ref) => ref.matchId === 'app-match-2' && ref.eventId)));
+    const battleId = reconstructed.battles[0]?.id;
+    assert.ok(battleId);
+    const battleReview = await fetch(`${server.url}/api/matches/app-match-2/battles/${battleId}/review?squadId=all&from=2026-10-12&to=2026-10-12`, {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ label: 'insufficient_inference' }),
+    });
+    assert.equal(battleReview.status, 201);
+    const savedBattleReview = await battleReview.json() as { review: { label: string }; reviews: Array<{ battleId: string; label: string }> };
+    assert.equal(savedBattleReview.review.label, 'insufficient_inference');
+    assert.deepEqual(savedBattleReview.reviews.map((item) => [item.battleId, item.label]), [[battleId, 'insufficient_inference']]);
+    const replayedReview = await fetch(`${server.url}/api/matches/app-match-2/episodes?squadId=all&from=2026-10-12&to=2026-10-12`).then((response) => response.json()) as { battleReviews: Array<{ label: string }> };
+    assert.equal(replayedReview.battleReviews[0]?.label, 'insufficient_inference');
     const responseText = JSON.stringify(reconstructed);
     assert.equal(responseText.includes('private-player-1'), false);
     assert.equal(responseText.includes('opponent-fixture-1'), false);
@@ -167,7 +182,7 @@ test('local API serves history and research from a read-only source and stores e
       labels: Record<string, string>;
     };
     assert.equal(pairAnalysis.status, 'available');
-    assert.equal(pairAnalysis.ruleVersion, 'tactical-social-rules-v1');
+    assert.equal(pairAnalysis.ruleVersion, 'tactical-social-rules-v2');
     assert.equal(pairAnalysis.requestedMatches, 1);
     assert.equal(pairAnalysis.analyzedMatches, 1);
     assert.equal(pairAnalysis.unavailableMatches, 0);
@@ -178,7 +193,7 @@ test('local API serves history and research from a read-only source and stores e
     const outsidePair = await outsidePairScope.json() as Record<string, unknown>;
     assert.deepEqual(outsidePair, {
       status: 'insufficient_data',
-      ruleVersion: 'tactical-social-rules-v1',
+      ruleVersion: 'tactical-social-rules-v2',
       requestedMatches: 0,
       analyzedMatches: 0,
       unavailableMatches: 0,
@@ -231,12 +246,12 @@ test('local API serves history and research from a read-only source and stores e
     assert.equal(runRegistry.runs[0]?.runId, evaluation.runId);
     assert.equal(runRegistry.runs[0]?.reviewedLabels, 1);
     assert.equal(createHash('sha256').update(readFileSync(source)).digest('hex'), sourceHash);
-    assert.equal(telemetryRequests, 1);
+    assert.equal(telemetryRequests, 0);
     await server.close();
     server = await startServer();
     const replayedEpisodes = await fetch(`${server.url}/api/matches/app-match-2/episodes?squadId=all&from=2026-10-12&to=2026-10-12`).then((response) => response.json()) as { status: string };
     assert.equal(replayedEpisodes.status, 'available');
-    assert.equal(telemetryRequests, 1);
+    assert.equal(telemetryRequests, 0);
     const rawArchive = new RawTelemetryArchive(join(root, 'raw-telemetry'));
     assert.ok(await rawArchive.read('app-match-2'));
     assert.equal(createHash('sha256').update(readFileSync(source)).digest('hex'), sourceHash);
