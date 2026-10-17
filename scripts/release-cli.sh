@@ -6,6 +6,10 @@ PRODUCT="${1:-}"
 COMMAND="${2:-}"
 [[ "$PRODUCT" == lab || "$PRODUCT" == gate ]] || { echo 'usage: release-cli.sh lab|gate command [options]' >&2; exit 2; }
 [[ -n "$COMMAND" ]] || { echo 'missing release command' >&2; exit 2; }
+if [[ "$PRODUCT" == lab && ( "$COMMAND" == candidate || "$COMMAND" == release ) ]]; then
+  printf '%s\n' 'Lab candidate and manual promotion commands are retired; a green main merge runs the single automatic release.' >&2
+  exit 2
+fi
 shift 2
 
 APPLY=0
@@ -39,24 +43,18 @@ cleanup_temporary_files() {
 trap cleanup_temporary_files EXIT
 usage() {
   if [[ "$PRODUCT" == lab ]]; then
-    printf 'Usage: scripts/release-%s.sh plan|verify|candidate|release|status|rollback-plan [options]\n' "$PRODUCT"
+    printf 'Usage: scripts/release-%s.sh plan|verify|status|rollback-plan [options]\n' "$PRODUCT"
     cat <<'USAGE'
 
 Options:
-  --apply                         required for any release/runtime write
-  --approval-ref <non-secret-id> required with --apply
   --build-auto | --build | --build-openclaw | --no-build   Lab build selection
-  --openclaw-only                  limit Lab candidate scope to the OpenClaw service
-  --image <immutable-ref>          prebuilt Lab OpenClaw candidate image
-  --promote-live-candidate         formalize the already-live candidate without switching containers
-  --checkpoint-ref <path>          protected candidate checkpoint used for promotion
-  --candidate-manifest <path>      protected external candidate record used to verify the exact live image/config
-  --lineage-bridge                Lab-only guarded source-lineage bridge
-  --create-tag                    required with an applied formal release
   --live                          query current Lab container metadata (read-only)
   --manifest <path>               protected external release manifest
   --runtime-snapshot <path>       sanitized runtime snapshot for drift doctor
-  --memory-acceptance <path>      external LIVE_VERIFIED P1 report required for Lab release
+Lab deploys and publishes as one automatic operation after a green main merge.
+The M204 timer owns version increments, backup, OpenClaw build/switch, live
+checks, rollback, and release tag/GitHub Release creation. Manual candidate and
+promotion commands are retired.
 USAGE
   else
     printf 'Usage: scripts/release-%s.sh plan|verify|candidate|release|status|rollback-plan [options]\n' "$PRODUCT"

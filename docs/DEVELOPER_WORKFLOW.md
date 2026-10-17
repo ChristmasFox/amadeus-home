@@ -1,4 +1,4 @@
-> **Current policy:** [Autonomous Goal Workflow V2](ENGINEERING_POLICY.md). This file documents the legacy script contracts; the Goal phase entry point and automatic Lab candidate rules are defined in ENGINEERING_POLICY.md.
+> **Current policy:** [Autonomous Goal Workflow V2](ENGINEERING_POLICY.md). Lab deploys once after a green main merge; Gate-Local retains its separate policy.
 
 # Developer Workflow
 
@@ -13,10 +13,10 @@ and sentinel, and migration never uses `rsync --delete`.
 - FAST：文档、状态、脚本和纯逻辑；执行定向测试、typecheck、`git diff --check`。
 - PUBG_DOMAIN_PLUGIN：`pnpm typecheck:pubg`、`pnpm test:pubg` 和 diff check。
 - PRODUCT_RADAR：Product Radar 自己的 typecheck/tests；它不是 PUBG 依赖。
-- RELEASE_BUILD_REQUIRED：只有明确发布时，才执行 secret scan、受影响的 commit-tagged
-  ARM64 image build、传入 OrbStack ubuntu，再由 CasaOS `docker compose up -d --no-build`。
-- OPENCLAW_RELEASE_CONFIG：使用 `scripts/deploy-openclaw.sh --apply`，该脚本负责
-  checkpoint、迁移、停用旧 consumer 和 health/smoke。
+- RELEASE_BUILD_REQUIRED：Lab PR 合并且 CI 通过后，由 M204 自动完成补丁版本递增、
+  ARM64 image build、备份、切换和实时验收。
+- OPENCLAW_RELEASE_CONFIG：Lab 由同一个自动发布流程处理 checkpoint、镜像切换和
+  health/smoke；失败会恢复先前的 Compose 配置与镜像。
 - ENV_RECREATE_NO_BUILD：只重建外部配置，不构建镜像。
 
 ## Product versions and release identity
@@ -25,14 +25,13 @@ and sentinel, and migration never uses `rsync --delete`.
   `apps/pubg-saas/package.json.version` and
   `apps/pubg-saas/RELEASE_NOTES.md`. Root `package.json.version` is Monorepo
   tooling metadata only.
-- Both product versions use standard SemVer. Validate or bump them with
-  `scripts/amadeus-version.sh` (Lab compatibility name) and
-  `scripts/pubg-saas-version.sh` (Gate). Formal tags use `lab/vX.Y.Z` and
+- Both product versions use standard SemVer. Lab increments its patch version
+  automatically on M204 after a green main merge; Gate uses
+  `scripts/pubg-saas-version.sh`. Formal tags use `lab/vX.Y.Z` and
   `gate/vX.Y.Z`; existing historical tags are not renamed.
-- Git SHA plus image digest identifies a development Candidate. It is not a
-  product Release and does not advance either version source. Shared Domain or
-  Presentation changes can test/build both products without forcing a
-  synchronized version bump.
+- Gate candidates remain separate from Gate formal releases. Shared Domain or
+  Presentation changes can test/build both products without synchronizing
+  their versions.
 
 执行：
 
@@ -42,31 +41,24 @@ pnpm workflow:verify
 pnpm test:workflow
 ```
 
-Lab 正式发布使用 `scripts/deploy-openclaw.sh --apply --build-auto`；配置/workspace-only
-改动使用 `--apply --no-build`，脚本会检查 live image 是否仍覆盖当前业务 source。只有
-明确需要完整两镜像 release 时才使用 `--apply --build`；`--full-verify` 可在选择性发布时
-显式追加全量本地验证。
-
-Lab release apply 必须先通过版本门禁：根目录 `VERSION` 必须严格高于
-live OpenClaw image source commit 中的 Lab 版本；候选模式保持当前 Lab 版本且不写正式发布通知。
-Lab 正式发布完成后脚本会用
-`amadeus-release:<版本>` 写入 checkpoint 和生产 owner outbox，并等待 `.sent.json`。版本不递进
-或通知未送达时，部署返回失败。
+Lab 自动发布器会将补丁版本和当期 Release Notes 直接提交到 main，无版本专用 PR。
+它只发布 OpenClaw，并要求外部备份、容器健康、WhatsApp 连接和真实 PUBG 战绩查询都通过；
+任何切换后的验收失败都会自动回滚。版本 Tag 与 GitHub Release 在实时验收成功后创建。
 
 Gate 的独立产品级入口为 `scripts/release-gate.sh`。Gate-Local M2 仍暂停，
 Gate-Staging/Prod 目标 adapter 尚未配置；在 adapter 与环境授权就绪前，Gate `--apply`
 会 fail closed，本文不把现有 Compose 命令描述为正式 Gate Release。
 
-任何 Docker build、Compose 写入、停止服务、数据迁移都必须通过明确的 RELEASE/apply
-入口；默认 dry-run。生产目标是 OrbStack `ubuntu` 的 CasaOS，不是 macOS host Docker。
+Gate 运行时写入仍须通过它自己的授权入口。Lab 镜像构建和 Compose 写入由 M204 自动
+发布器执行；本地计划命令默认 dry-run。生产目标是 host profile 指定的 OrbStack CasaOS。
 
 ## Validation policy
 
 `pnpm workflow:plan` is authoritative at the start of each implementation phase. It emits the
 scope workflow and `DOCKER_IMAGE_SET`; storage/backup/migration shell changes use the
 storage-runtime, migration-readiness, service-aware-backup and manifest contract fixtures. A
-configuration-only OpenClaw change may use a no-build apply after explicit authorization; runtime
-source changes rebuild only the affected image when a release is explicitly approved.
+configuration-only OpenClaw change enters the next main-merge Lab release; runtime source changes
+rebuild the OpenClaw image after CI.
 
 Use `scripts/run-check.sh` for bounded command evidence. Successful checks emit one summary line,
 failed checks retain only a bounded diagnostic tail, and an unchanged cache key may reuse a passed

@@ -18,6 +18,7 @@ NO_BUILD=0
 FULL_VERIFY=0
 CANDIDATE=0
 OPENCLAW_ONLY=0
+AUTO_RELEASE=0
 BUILD_ONLY=0
 QWEN_IMAGE_BASE_URL="${AMADEUS_QWEN_IMAGE_BASE_URL:-http://host.docker.internal:18793/v1}"
 QWEN_IMAGE_LOCAL_ONLY="${AMADEUS_QWEN_IMAGE_LOCAL_ONLY:-0}"
@@ -31,37 +32,16 @@ LINEAGE_BRIDGE=0
 usage() {
   cat <<'USAGE'
 Usage:
-  ./scripts/deploy-openclaw.sh --dry-run
-  ./scripts/deploy-openclaw.sh --apply --build
-  ./scripts/deploy-openclaw.sh --apply --build-auto
-  ./scripts/deploy-openclaw.sh --apply --candidate --build-auto  # pre-release real acceptance; no release notification
-  ./scripts/deploy-openclaw.sh --apply --candidate --openclaw-only --build-openclaw
-  ./scripts/deploy-openclaw.sh --build-only --candidate --openclaw-only --build-openclaw
-  ./scripts/deploy-openclaw.sh --apply --build-openclaw
-  ./scripts/deploy-openclaw.sh --dry-run --build-radar
-  ./scripts/deploy-openclaw.sh --apply --no-build
-  ./scripts/deploy-openclaw.sh --apply --build --lineage-bridge
-  ./scripts/deploy-openclaw.sh --apply --image <openclaw-image> --radar-image <radar-image>
+  ./scripts/deploy-openclaw.sh --dry-run --build-auto
+  ./scripts/deploy-openclaw.sh --build-only --openclaw-only --build-openclaw
+  ./scripts/deploy-openclaw.sh --apply --auto-release --build-openclaw # single-step Lab main release
 
-Default is a dry-run. --build performs a full two-image release. --build-auto
-compares the current Git tree with the live image commit and builds only affected
-images. --build-openclaw and --build-radar build one image. --no-build reuses
-the live images for workspace/compose/config-only updates and rejects stale
-images when plugin or service source changed. --candidate replaces the one
-runtime for real acceptance, preserves checkpoints and skips formal release
-notification/maintenance; it is not a second runtime or release. The guarded
-OpenClaw-only candidate requires the next Lab version before its immutable
-build so image provenance matches the eventual release source.
---openclaw-only is a maintainer Lab candidate scope. It requires a fresh
-OpenClaw build and an advanced version, and never writes Product Radar,
-networks, cron, the host notification hook, or runtime secret files.
-Applying a Product Radar-only build through the Lab-default path is refused:
-that path also restarts OpenClaw. Until an isolated Product Radar apply path is
-available, review and build both images for a full Lab deployment.
---lineage-bridge is a one-time explicit release cutover for a live image whose
-Git source commit was removed by an approved history rewrite. It requires
---apply plus fresh builds of both images and reads the protected live image's
-embedded /opt/amadeus/VERSION; freshness and version checks remain active.
+Read-only planning defaults to dry-run. The M204 main-merge automation owns
+Lab image builds and all runtime writes. --build-only performs an isolated
+local image build without switching the runtime.
+--auto-release is the single-step Lab main deployment. It builds and switches
+only OpenClaw, requires a CI-verified main release commit, and rolls the prior
+Compose image back automatically if post-switch health or smoke checks fail.
 USAGE
 }
 
@@ -234,6 +214,7 @@ while (($#)); do
     --apply) APPLY=1 ;;
     --candidate) CANDIDATE=1 ;;
     --openclaw-only) OPENCLAW_ONLY=1 ;;
+    --auto-release) AUTO_RELEASE=1 ;;
     --build-only) BUILD_ONLY=1 ;;
     --lineage-bridge) LINEAGE_BRIDGE=1 ;;
     --build) BUILD=1; BUILD_OPENCLAW=1; BUILD_RADAR=1 ;;
@@ -251,22 +232,50 @@ while (($#)); do
   shift
 done
 
+if ((CANDIDATE)); then
+  fail 'Lab candidate deployment is retired; Lab runtime changes deploy once after a green main merge.'
+fi
+if ((APPLY && AUTO_RELEASE == 0)); then
+  fail 'Direct Lab runtime apply is retired; the M204 main-merge release automation owns Lab deployment.'
+fi
+
 if ((OPENCLAW_ONLY)); then
-  ((CANDIDATE == 1)) || fail '--openclaw-only requires --candidate.'
+  ((AUTO_RELEASE == 1 || BUILD_ONLY == 1)) || fail '--openclaw-only requires --auto-release or build-only.'
   ((BUILD == 0 && BUILD_RADAR == 0 && AUTO_BUILD == 0)) \
     || fail '--openclaw-only excludes full, Product Radar, and build-auto modes.'
   if ((BUILD_ONLY)); then
     ((APPLY == 0 && BUILD_OPENCLAW == 1 && NO_BUILD == 0)) \
       || fail '--build-only --openclaw-only requires --build-openclaw without --apply or --no-build.'
   elif ((APPLY)); then
-    ((BUILD_OPENCLAW == 0 && NO_BUILD == 1 && AUTO_BUILD == 0)) \
-      || fail 'OpenClaw-only apply requires a prebuilt --image and --no-build.'
-    [[ -n "$IMAGE" ]] || fail 'OpenClaw-only apply requires the prebuilt --image reference.'
+    if ((AUTO_RELEASE)); then
+      ((BUILD_OPENCLAW == 1 && NO_BUILD == 0 && AUTO_BUILD == 0)) \
+        || fail 'Automatic release must build a fresh OpenClaw image.'
+    else
+      ((BUILD_OPENCLAW == 0 && NO_BUILD == 1 && AUTO_BUILD == 0)) \
+        || fail 'OpenClaw-only apply requires a prebuilt --image and --no-build.'
+      [[ -n "$IMAGE" ]] || fail 'OpenClaw-only apply requires the prebuilt --image reference.'
+    fi
   else
     ((BUILD_OPENCLAW == 1 || NO_BUILD == 1)) || fail 'OpenClaw-only plan requires --build-openclaw or --no-build.'
   fi
   ((LINEAGE_BRIDGE == 0)) || fail '--openclaw-only does not support lineage bridge.'
   [[ -z "$RADAR_IMAGE" ]] || fail '--openclaw-only does not accept --radar-image.'
+fi
+if ((AUTO_RELEASE)); then
+  ((CANDIDATE == 0 && OPENCLAW_ONLY == 1)) || fail '--auto-release is the single OpenClaw-only Lab main release mode.'
+  if ((APPLY)); then
+    ((BUILD_OPENCLAW == 1 && NO_BUILD == 0 && BUILD == 0 && BUILD_RADAR == 0 && AUTO_BUILD == 0)) \
+      || fail '--auto-release requires a fresh --build-openclaw image.'
+  else
+    ((BUILD_OPENCLAW == 1)) || fail '--auto-release dry-run requires --build-openclaw.'
+  fi
+  if ((APPLY)); then
+    [[ "${LAB_AUTOMATION_VERIFIED_MAIN_SHA:-}" == "$(git -C "$ROOT_DIR" rev-parse HEAD)" ]] \
+      || fail '--auto-release requires LAB_AUTOMATION_VERIFIED_MAIN_SHA to match the clean, CI-verified main HEAD.'
+    if ! git -C "$ROOT_DIR" merge-base --is-ancestor HEAD origin/main 2>/dev/null; then
+      fail '--auto-release source must be reachable from origin/main.'
+    fi
+  fi
 fi
 
 if ((AUTO_BUILD && (BUILD || BUILD_OPENCLAW || BUILD_RADAR || NO_BUILD))); then
@@ -297,7 +306,9 @@ RELEASE_NOTES="$(printf '%s\n' "$RELEASE_NOTES" | sed '/^[[:space:]]*El Psy Kong
 if ((BUILD_ONLY && OPENCLAW_ONLY)); then
   IMAGE="${IMAGE:-local/openclaw-amadeus:git-$COMMIT-$STAMP}"
 elif ((APPLY)); then
-  if ((OPENCLAW_ONLY)); then
+  if ((AUTO_RELEASE)); then
+    IMAGE="local/openclaw-amadeus:git-$COMMIT-$STAMP"
+  elif ((OPENCLAW_ONLY)); then
     :
   elif ((AUTO_BUILD)); then
     [[ -z "$IMAGE" && -z "$RADAR_IMAGE" ]] || fail '--build-auto resolves both images from the live CasaOS containers; omit --image/--radar-image.'
@@ -356,7 +367,11 @@ if ((BUILD_ONLY)); then deployment_mode=build-only; elif ((APPLY)); then deploym
 printf 'MODE=%s\n' "$deployment_mode"
 printf 'BUILD_MODE=%s\n' "$BUILD_MODE"
 printf 'AMADEUS_VERSION=%s\n' "$AMADEUS_VERSION"
-printf 'DEPLOYMENT_PHASE=%s\n' "$([[ $CANDIDATE -eq 1 ]] && printf candidate || printf release)"
+if ((AUTO_RELEASE)); then
+  printf '%s\n' 'DEPLOYMENT_PHASE=automatic-release'
+else
+  printf 'DEPLOYMENT_PHASE=%s\n' "$([[ $CANDIDATE -eq 1 ]] && printf candidate || printf release)"
+fi
 printf 'DEPLOYMENT_SCOPE=%s\n' "$([[ $OPENCLAW_ONLY -eq 1 ]] && printf openclaw-only || printf lab-default)"
 printf 'QWEN_IMAGE_LOCAL_ONLY=%s\n' "$QWEN_IMAGE_LOCAL_ONLY"
 printf 'QWEN_IMAGE_FALLBACK_ENABLED=%s\n' "$QWEN_IMAGE_FALLBACK_ENABLED"
@@ -445,6 +460,7 @@ if ((OPENCLAW_ONLY == 0 && BUILD_RADAR == 0)); then assert_image_fresh "$RADAR_I
   pnpm check:secrets
 )
 
+build_images_and_preflight() {
 if ((BUILD_OPENCLAW)); then
   docker buildx build --platform linux/arm64 --load --progress=plain "${DOCKER_BUILD_PROXY_ARGS[@]}" \
     --build-arg "OCI_SOURCE_REVISION=$SOURCE_REVISION" \
@@ -490,6 +506,14 @@ if ((BUILD_RADAR)); then
   docker --context orbstack save "$RADAR_IMAGE" | orb -m "$MACHINE" -u root docker load
 elif ((OPENCLAW_ONLY == 0)); then
   orb -m "$MACHINE" -u root docker image inspect "$RADAR_IMAGE" >/dev/null 2>&1 || fail "Product Radar image not found: $RADAR_IMAGE"
+fi
+
+}
+
+# The automatic Lab main release verifies its checkpoint before compiling the
+# immutable image. The legacy build-only command remains checkpoint-free.
+if ((BUILD_ONLY || AUTO_RELEASE == 0)); then
+  build_images_and_preflight
 fi
 
 if ((BUILD_ONLY)); then
@@ -679,13 +703,21 @@ print(f'PUBG_TELEMETRY_ARCHIVE_BACKUP=verified files={len(source_tree[1])}')
 PY
 fi
 
+if ((AUTO_RELEASE)); then
+  build_images_and_preflight
+fi
+
 OPENCLAW_SWITCHED=0
 rollback_openclaw_candidate() {
   local status=$? restore_status=0
   if ((OPENCLAW_ONLY && OPENCLAW_SWITCHED && status != 0)); then
     trap - EXIT
     set +e
-    printf 'CANDIDATE_FAILURE=rollback_started checkpoint=%s\n' "$CHECKPOINT_DIR" >&2
+    if ((AUTO_RELEASE)); then
+      printf 'AUTO_RELEASE_FAILURE=rollback_started checkpoint=%s\n' "$CHECKPOINT_DIR" >&2
+    else
+      printf 'CANDIDATE_FAILURE=rollback_started checkpoint=%s\n' "$CHECKPOINT_DIR" >&2
+    fi
     orb -m "$MACHINE" -u root python3 - \
       "$CHECKPOINT_DIR/openclaw-compose.before.yml" "$OPENCLAW_COMPOSE_FILE" \
       "$CHECKPOINT_DIR/openclaw-compose.env.before" "$OPENCLAW_APP_DIR/.env" <<'PY'
@@ -723,11 +755,23 @@ PY
       done
       orb -m "$MACHINE" -u root curl --fail --silent --show-error --max-time 5 http://127.0.0.1:18789/healthz >/dev/null
       restore_status=$?
+      if ((restore_status == 0 && AUTO_RELEASE)); then
+        restored_health="$(orb -m "$MACHINE" -u root docker inspect openclaw --format '{{.State.Health.Status}}' 2>/dev/null || true)"
+        [[ "$restored_health" == healthy ]] || restore_status=1
+      fi
     fi
     if ((restore_status == 0)); then
-      printf 'CANDIDATE_ROLLBACK=passed checkpoint=%s persisted_data=preserved\n' "$CHECKPOINT_DIR" >&2
+      if ((AUTO_RELEASE)); then
+        printf 'AUTO_RELEASE_ROLLBACK=passed checkpoint=%s persisted_data=preserved\n' "$CHECKPOINT_DIR" >&2
+      else
+        printf 'CANDIDATE_ROLLBACK=passed checkpoint=%s persisted_data=preserved\n' "$CHECKPOINT_DIR" >&2
+      fi
     else
-      printf 'CANDIDATE_ROLLBACK=failed checkpoint=%s inspect_before_any_restore=true\n' "$CHECKPOINT_DIR" >&2
+      if ((AUTO_RELEASE)); then
+        printf 'AUTO_RELEASE_ROLLBACK=failed checkpoint=%s inspect_before_any_restore=true\n' "$CHECKPOINT_DIR" >&2
+      else
+        printf 'CANDIDATE_ROLLBACK=failed checkpoint=%s inspect_before_any_restore=true\n' "$CHECKPOINT_DIR" >&2
+      fi
     fi
     exit "$status"
   fi
@@ -1027,10 +1071,22 @@ else
 fi
 
 for attempt in $(seq 1 40); do
-  if orb -m "$MACHINE" -u root curl --fail --silent --show-error --max-time 3 http://127.0.0.1:18789/healthz >/dev/null 2>&1; then break; fi
+  if orb -m "$MACHINE" -u root curl --fail --silent --show-error --max-time 3 http://127.0.0.1:18789/healthz >/dev/null 2>&1; then
+    if ((AUTO_RELEASE)); then
+      container_health="$(orb -m "$MACHINE" -u root docker inspect openclaw --format '{{.State.Health.Status}}' 2>/dev/null || true)"
+      [[ "$container_health" == healthy ]] && break
+    else
+      break
+    fi
+  fi
   sleep 2
 done
 orb -m "$MACHINE" -u root curl --fail --silent --show-error --max-time 5 http://127.0.0.1:18789/healthz >/dev/null
+if ((AUTO_RELEASE)); then
+  container_health="$(orb -m "$MACHINE" -u root docker inspect openclaw --format '{{.State.Health.Status}}')"
+  [[ "$container_health" == healthy ]] || fail "OpenClaw container health is $container_health after automatic release."
+  printf '%s\n' 'OPENCLAW_CONTAINER_HEALTH=healthy'
+fi
 if ((OPENCLAW_ONLY)); then
   archive_mount="$(orb -m "$MACHINE" -u root docker inspect openclaw \
     --format '{{range .Mounts}}{{if eq .Destination "/var/lib/amadeus/pubg-telemetry-archive"}}{{.Source}}|{{.RW}}{{end}}{{end}}')"
@@ -1056,6 +1112,41 @@ elif ((OPENCLAW_ONLY == 0)); then
 fi
 if ((OPENCLAW_ONLY == 0)); then orb -m "$MACHINE" -u root docker exec openclaw sh -lc "ssh -i /run/secrets/mac_ssh_key -o BatchMode=yes -o ConnectTimeout=8 -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null '$MAC_CONTROL_USER@$MAC_CONTROL_HOST' nas.status" >/dev/null; fi
 orb -m "$MACHINE" -u root bash -lc "docker exec openclaw node dist/index.js channels status --json > '$CHECKPOINT_DIR/channels-status.json'"
+if ((AUTO_RELEASE)); then
+  orb -m "$MACHINE" -u root python3 - "$CHECKPOINT_DIR/channels-status.json" <<'PY'
+import json, sys
+from pathlib import Path
+channels = json.loads(Path(sys.argv[1]).read_text()).get('channels', {})
+whatsapp = channels.get('whatsapp', {})
+if not all(whatsapp.get(key) is True for key in ('linked', 'running', 'connected')):
+    raise SystemExit('WhatsApp is not linked, running and connected after automatic release')
+print('WHATSAPP_HEALTH=linked,running,connected')
+PY
+  smoke_key="lab-release-$(git -C "$ROOT_DIR" rev-parse --short=12 HEAD)-$STAMP"
+  python3 - "$MACHINE" "$smoke_key" "$ROOT_DIR/scripts" <<'PY'
+import json, subprocess, sys
+sys.path.insert(0, sys.argv[3])
+from lab_auto_release_contract import valid_pubg_stats_smoke
+prompt = ('Use the native pubg_query_stats tool with team=true, selector={"type":"last_n_matches","count":5}, '
+          'metrics=["matches","kills","damage"], and refresh=false. Do not guess or use memory. '
+          'If the tool returns status ok or partial, reply LAB_STATS_QUERY_OK. Otherwise reply '
+          'LAB_STATS_QUERY_FAILED. Do not include player names, identifiers, or statistics in the reply.')
+try:
+    response = subprocess.run(
+        ['orb', '-m', sys.argv[1], '-u', 'root', 'docker', 'exec', 'openclaw', 'node', 'dist/index.js',
+         'agent', '--agent', 'main', '--session-key', 'agent:main:' + sys.argv[2], '--message', prompt,
+         '--json', '--timeout', '180'], capture_output=True, text=True, check=False, timeout=200)
+except subprocess.TimeoutExpired as exc:
+    raise SystemExit('PUBG stats query timed out; automatic rollback will restore the prior image') from exc
+try:
+    payload = json.loads(response.stdout)
+except json.JSONDecodeError as exc:
+    raise SystemExit('PUBG stats query returned invalid structured output; automatic rollback will restore the prior image') from exc
+if response.returncode != 0 or not valid_pubg_stats_smoke(payload):
+    raise SystemExit('PUBG stats query was not verified; automatic rollback will restore the prior image')
+print('PUBG_STATS_QUERY=passed')
+PY
+fi
 
 ensure_cron() {
   local name="$1" expression="$2" message="$3" tools="$4" timezone="${5:-Asia/Shanghai}"
@@ -1193,7 +1284,7 @@ POST_DEPLOY_EVIDENCE_DIR="$SKULD_BACKUP_ROOT/deploy/$CHECKPOINT_ID"
 [[ "$POST_DEPLOY_EVIDENCE_DIR" == "$EXTERNAL_STORAGE_ROOT/"* ]] || fail 'post-deploy evidence must be stored on the verified external volume.'
 mkdir -p "$POST_DEPLOY_EVIDENCE_DIR"
 chmod 700 "$POST_DEPLOY_EVIDENCE_DIR"
-if ((CANDIDATE)); then
+if ((CANDIDATE || AUTO_RELEASE)); then
   post_deploy_maintenance='skipped-candidate'
   log_policy_status='skipped-candidate'
 else
@@ -1243,6 +1334,8 @@ printf '%s\n' "POST_DEPLOY_MAINTENANCE=$post_deploy_maintenance"
 printf '%s\n' "AMADEUS_NETWORK=$AMADEUS_NETWORK_NAME"
 if ((CANDIDATE)); then
   printf '%s\n' 'Single OpenClaw candidate runtime ready for real acceptance; not a release.'
+elif ((AUTO_RELEASE)); then
+  printf '%s\n' "Lab $AMADEUS_VERSION automatic main deployment passed its live health checks."
 else
   printf '%s\n' "Amadeus $AMADEUS_VERSION migration completed."
 fi

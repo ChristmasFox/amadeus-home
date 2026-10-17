@@ -12,8 +12,12 @@ on:
       - "integrations/openclaw/**"
       - "infra/docker/casaos/openclaw/**"
       - "docs/PROJECT_STATE.md"
+      - "docs/ENGINEERING_POLICY.md"
+      - "docs/RELEASE_ENGINEERING.md"
+      - "docs/DEVELOPER_WORKFLOW.md"
       - "docs/research/pubg-intelligence/**"
       - "apps/product-radar/**"
+      - "apps/pubg-intelligence-lab/**"
       - "scripts/openclaw_prepare.py"
       - "scripts/openclaw_test_runtime.py"
       - "scripts/patch-openclaw-*.mjs"
@@ -25,7 +29,11 @@ on:
       - "scripts/test-image-impact.py"
       - "scripts/developer-workflow.sh"
       - "scripts/test-developer-workflow.sh"
+      - "scripts/devctl.py"
       - "scripts/deploy-openclaw.sh"
+      - "scripts/lab-auto-release.py"
+      - "scripts/lab_auto_release_contract.py"
+      - "scripts/test-lab-auto-release.py"
       - "scripts/openclaw_telemetry_mount.py"
       - "scripts/tests/test_openclaw_telemetry_mount.py"
       - "scripts/test-deploy-radar-only-apply.py"
@@ -42,6 +50,7 @@ on:
       - "scripts/verify-9router-image-reference.py"
       - "scripts/verify-pubg-saas-oci.py"
       - "scripts/test-release-tooling.py"
+      - "scripts/test-openclaw-candidate-deploy.sh"
       - "scripts/validate-lab-memory-acceptance.py"
       - "scripts/test-lab-memory-acceptance.py"
       - "package.json"
@@ -59,8 +68,12 @@ on:
       - "integrations/openclaw/**"
       - "infra/docker/casaos/openclaw/**"
       - "docs/PROJECT_STATE.md"
+      - "docs/ENGINEERING_POLICY.md"
+      - "docs/RELEASE_ENGINEERING.md"
+      - "docs/DEVELOPER_WORKFLOW.md"
       - "docs/research/pubg-intelligence/**"
       - "apps/product-radar/**"
+      - "apps/pubg-intelligence-lab/**"
       - "scripts/openclaw_prepare.py"
       - "scripts/openclaw_test_runtime.py"
       - "scripts/patch-openclaw-*.mjs"
@@ -72,7 +85,11 @@ on:
       - "scripts/test-image-impact.py"
       - "scripts/developer-workflow.sh"
       - "scripts/test-developer-workflow.sh"
+      - "scripts/devctl.py"
       - "scripts/deploy-openclaw.sh"
+      - "scripts/lab-auto-release.py"
+      - "scripts/lab_auto_release_contract.py"
+      - "scripts/test-lab-auto-release.py"
       - "scripts/openclaw_telemetry_mount.py"
       - "scripts/tests/test_openclaw_telemetry_mount.py"
       - "scripts/test-deploy-radar-only-apply.py"
@@ -88,6 +105,7 @@ on:
       - "scripts/verify-image-provenance.py"
       - "scripts/verify-pubg-saas-oci.py"
       - "scripts/test-release-tooling.py"
+      - "scripts/test-openclaw-candidate-deploy.sh"
       - "scripts/validate-lab-memory-acceptance.py"
       - "scripts/test-lab-memory-acceptance.py"
       - "package.json"
@@ -142,6 +160,8 @@ jobs:
           python3 scripts/test-image-impact.py
           python3 scripts/test-lab-runtime-snapshot.py
           python3 scripts/test-release-tooling.py
+          python3 scripts/test-lab-auto-release.py
+          python3 -m py_compile scripts/lab-auto-release.py scripts/lab_auto_release_contract.py scripts/test-lab-auto-release.py scripts/devctl.py
           python3 scripts/test-lab-memory-acceptance.py
           bash scripts/test-developer-workflow.sh
           bash scripts/test-openclaw-lineage-compatibility.sh
