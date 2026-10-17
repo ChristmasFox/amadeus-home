@@ -409,7 +409,7 @@ credential_ref = invoke(
     "bash", str(ROOT / "scripts/release-lab.sh"), "candidate", "--apply",
     "--approval-ref", "deployment-token-123",
 )
-assert credential_ref.returncode != 0 and "--approval-ref must be a non-secret identifier" in credential_ref.stderr
+assert credential_ref.returncode != 0 and "commands are retired" in credential_ref.stderr
 credential_ref_dry_run = invoke(
     "bash", str(ROOT / "scripts/release-lab.sh"), "candidate",
     "--approval-ref", "deployment-secret-123",
@@ -422,12 +422,12 @@ credential_actor = invoke(
     "--approval-ref", "review-123",
     env={**os.environ, "RELEASE_ACTOR_ID": "operator-api-key"},
 )
-assert credential_actor.returncode != 0 and "RELEASE_ACTOR_ID" in credential_actor.stderr
+assert credential_actor.returncode != 0 and "commands are retired" in credential_actor.stderr
 memory_on_candidate = invoke(
     "bash", str(ROOT / "scripts/release-lab.sh"), "candidate",
     "--memory-acceptance", "/tmp/acceptance.json",
 )
-assert memory_on_candidate.returncode != 0 and "formal Lab release" in memory_on_candidate.stderr
+assert memory_on_candidate.returncode != 0 and "commands are retired" in memory_on_candidate.stderr
 memory_on_gate = invoke(
     "bash", str(ROOT / "scripts/release-gate.sh"), "release",
     "--memory-acceptance", "/tmp/acceptance.json",
@@ -441,15 +441,15 @@ promotion_missing_manifest = invoke(
     "--checkpoint-ref", "/tmp/protected-checkpoint",
     "--memory-acceptance", "/tmp/acceptance.json",
 )
-assert promotion_missing_manifest.returncode != 0 and "requires --candidate-manifest" in promotion_missing_manifest.stderr
+assert promotion_missing_manifest.returncode != 0 and "commands are retired" in promotion_missing_manifest.stderr
 for wrapper in ("release-lab.sh", "release-gate.sh"):
     help_output = invoke("bash", str(ROOT / "scripts" / wrapper), "--help")
     assert help_output.returncode == 0 and "rollback-plan" in help_output.stdout
     assert help_output.stderr == "", f"{wrapper} help must not execute shell substitutions: {help_output.stderr}"
 lab_help = invoke("bash", str(ROOT / "scripts/release-lab.sh"), "--help").stdout
 gate_help = invoke("bash", str(ROOT / "scripts/release-gate.sh"), "--help").stdout
-assert "Lab build selection" in lab_help and "--memory-acceptance" in lab_help
-assert "--candidate-manifest" in lab_help
+assert "Lab build selection" in lab_help and "automatic operation" in lab_help
+assert "--memory-acceptance" not in lab_help and "--candidate-manifest" not in lab_help
 assert "--environment" not in lab_help and "Gate" not in lab_help
 assert "gate-local|gate-staging|gate-prod" in gate_help
 assert "M2 may remain paused" in gate_help and "does not clear or resume M2" in gate_help
@@ -481,9 +481,9 @@ with tempfile.TemporaryDirectory(prefix="release-cli-dry-run-") as temporary:
     )
     orb_stub.chmod(0o755)
     env = {**os.environ, "PATH": f"{bin_dir}:{os.environ['PATH']}", "AMADEUS_HOST_PROFILE": str(profile), "ORB_LOG": str(log)}
-    plan = invoke("bash", str(ROOT / "scripts/release-lab.sh"), "candidate", "--build-auto", env=env)
+    plan = invoke("bash", str(ROOT / "scripts/release-lab.sh"), "plan", "--build-auto", env=env)
     assert plan.returncode == 0, plan.stderr
-    assert "MODE=dry-run" in plan.stdout and "DEPLOYMENT_PHASE=candidate" in plan.stdout
+    assert "MODE=dry-run" in plan.stdout and "DEPLOYMENT_PHASE=release" in plan.stdout
     full_commit = subprocess.run(["git", "-C", str(ROOT), "rev-parse", "HEAD"], check=True, capture_output=True, text=True).stdout.strip()
     changed_paths = impact.git_names(ROOT, full_commit, "HEAD")
     expected_openclaw = "build" if impact.classify(ROOT, "openclaw", changed_paths)[0] != "REUSE" else "reuse"

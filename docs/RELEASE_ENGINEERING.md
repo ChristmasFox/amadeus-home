@@ -1,8 +1,8 @@
 # Lab / Gate release engineering
 
-This runbook describes source and runtime release controls. It does not declare
-Gate M2 accepted or authorize an apply, tag, registry push, production migration,
-or container switch.
+This runbook describes source and runtime release controls. Lab publication is
+the automatic one-stage main-merge path below. Gate M2 remains paused, and this
+runbook does not authorize Gate-Staging/Prod promotion.
 
 ## Product identities
 
@@ -11,10 +11,11 @@ or container switch.
 | Lab | Root `VERSION` | Root `RELEASE_NOTES.md` | `lab/vX.Y.Z` | External Lab maintenance profile |
 | Gate | `apps/pubg-saas/package.json.version` | `apps/pubg-saas/RELEASE_NOTES.md` | `gate/vX.Y.Z` | Separate environment; M2 remains paused |
 
-Root `package.json.version` is Monorepo metadata. Ordinary commits do not bump
-either product. Candidate identity combines the full Git source revision with
-each built image digest. The Docker tag is a locator; the recorded image digest
-is the artifact identity.
+Root `package.json.version` is Monorepo metadata. Lab feature PRs do not carry a
+separate version-only PR: after a green main merge, the M204 deploy timer adds
+the next patch version and one release note as a bot commit. Gate versions
+remain independent. The recorded image digest is the artifact identity; the
+Docker tag is a locator.
 
 New image builds carry OCI labels for source revision, product version, and
 build timestamp, plus
@@ -31,92 +32,43 @@ checks.
 
 ## Lab command flow
 
-All commands default to read-only or local verification:
+The normal Lab release is one automatic operation after a PR is merged to
+`main` and the `lab-regression` check passes. A short M204 launchd timer reads
+GitHub's check status; it does not expose the private Lab host to GitHub Actions
+and does not run on Gate.
 
 ```sh
 scripts/release-lab.sh --help
 scripts/release-lab.sh plan
 scripts/release-lab.sh verify
-scripts/release-lab.sh candidate
 scripts/release-lab.sh status --live
 scripts/release-lab.sh rollback-plan
+python3 scripts/lab-auto-release.py status
 ```
 
-The Lab help shows its image build, lineage bridge, live snapshot, and Memory
-Core evidence options. Gate help shows its environment, tag, manifest, and
-runtime-snapshot options, and states that Gate-Local is paused and the
-Staging/Prod adapters are absent.
+The read-only `release-lab.sh` commands remain useful for planning, local
+verification and runtime inspection. Manual Lab `candidate` and `release`
+promotion commands have been retired. The M204 timer increments the root
+`VERSION` patch, writes the matching single-release note, commits both files to
+`main` without a separate version PR, waits for that commit's CI, and then:
 
-`plan` wraps the existing `deploy-openclaw.sh` dry-run and image-impact
-analysis. It reads live image references to show which images would rebuild;
-it does not build or restart containers. `verify` runs the product's local
-tests, typechecks, architecture and secret checks. `status --live` reads only
-container/image identifiers, health, Compose file SHA-256 values, and a
-SHA-256 fingerprint of the OpenClaw runtime config. It does not print config
-contents or secrets.
+1. Creates and verifies a protected external Lab checkpoint.
+2. Builds an immutable OpenClaw image from the versioned main commit.
+3. Switches only the OpenClaw Compose image.
+4. Requires OpenClaw container health, WhatsApp linked/running/connected, and
+   a real native PUBG stats query.
+5. On any failed post-switch check, restores the prior Compose image/config and
+   verifies the prior container health and health endpoint. Persistent user
+   data is preserved.
+6. On success, records the released runtime manifest, pushes `lab/vX.Y.Z`, and
+   creates the GitHub Release from `RELEASE_NOTES.md`.
 
-Before a candidate apply, commit the reviewed source and create an external
-state directory owned by the operator with mode `0700`. Its parent must also
-remain outside Git. The CLI writes each completed manifest with mode `0600`:
-
-```sh
-scripts/release-lab.sh candidate --apply --approval-ref <review-id>
-scripts/release-lab.sh status --live
-```
-
-The general candidate flow uses the existing one-instance OpenClaw deploy
-path, preserves the current product version, records the checkpoint, source
-revision, image identities, runtime config/Compose fingerprints, approval and
-validation references, and reminds the operator after 48 hours. That reminder
-never stops the service. Candidate mode skips formal release notification
-and release maintenance steps.
-
-For an explicitly authorized OpenClaw-only Lab candidate that must match a
-future release version, bump the Lab patch version and replace the single
-release note before committing the source. Build with
-`deploy-openclaw.sh --build-only --candidate --openclaw-only --build-openclaw`,
-then apply the immutable image with
-`release-lab.sh candidate --apply --openclaw-only --no-build --image <image> --approval-ref <review-id>`.
-This guarded path checkpoints the Lab OpenClaw data and changes only the
-OpenClaw Compose image; it records an OpenClaw-only manifest and sends the
-candidate owner notification. It does not publish an image or create a
-release tag. `status --live` uses the service set recorded in that manifest.
-
-After candidate validation, prepare Lab's single-release notes and use the
-version helper. A formal release requires the authorized apply invocation,
-protected external P1 Memory Core evidence, and an explicit product tag. For a
-no-switch Lab candidate promotion, pass the candidate deployment checkpoint
-and its protected external candidate manifest:
-
-```sh
-bash scripts/amadeus-version.sh check
-scripts/release-lab.sh release --apply \
-  --approval-ref <review-id> \
-  --promote-live-candidate --openclaw-only --no-build \
-  --checkpoint-ref <protected-candidate-checkpoint> \
-  --candidate-manifest <protected-external-candidate-manifest> \
-  --memory-acceptance /secure/external/lab-memory-acceptance.json \
-  --create-tag
-```
-
-The memory evidence must report `LIVE_VERIFIED`, a runtime image digest, and
-all required checks: plugin load, real Embedding, keyword FTS, semantic KNN,
-hybrid search, incremental refresh, restart persistence, an actual Dreaming
-run and persistence, and session isolation. Its accepted source must be an
-ancestor of the proposed release and the Memory Core runtime files must be
-unchanged since that accepted source. The candidate manifest independently
-binds a promotion to the exact healthy OpenClaw image and runtime config; the
-CLI rejects a version, source, image, Compose/config digest, or checkpoint
-mismatch. A later product candidate therefore does not reuse an older P1 image
-digest as if it described that candidate. Promotion records the formal
-manifest and tag without building or switching containers. The CLI never
-pushes the tag. A failed external manifest write or owner notification removes
-the newly created unpushed tag/manifest and preserves the live candidate.
-
-Formal release remains blocked while P1 lacks real acceptance evidence. The
-Lab 1.10.5 release manifest records the accepted external P1 live evidence;
-later release candidates must still pass the P1 source-lineage check and use
-their own candidate manifest for exact live image/config verification.
+The timer stores only its small control state under
+`~/.local/state/amadeus/lab-auto-release` (mode `0700`); deployment logs and
+release manifests stay outside Git with mode `0600`. It retries a rolled-back
+deployment after a short cooldown. Remove the scheduled job with
+`python3 scripts/lab-auto-release.py uninstall`; protected backups and release
+records remain available for recovery.
 
 ## Gate candidate and promotion flow
 

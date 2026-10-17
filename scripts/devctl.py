@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Small, dependency-free Goal executor: state, affected validation and candidate handoff.
+"""Small, dependency-free Goal executor: state and affected validation.
 
 Gate-Local's protected host approval is repo-wide across linked worktrees.
 Runtime changes still go through the guarded release adapters.
@@ -30,7 +30,6 @@ from gate_autopilot import (  # noqa: E402
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 STATE = ROOT / ".agent" / "runtime" / "goal-state.json"
-LOCAL_POLICY = pathlib.Path.home() / ".config" / "amadeus" / "lab-auto-approval.json"
 GATE_LOCAL_POLICY = pathlib.Path.home() / ".config" / "amadeus" / "gate-local-auto-approval.json"
 GATE_M2_CLEARANCE = pathlib.Path.home() / ".config" / "amadeus" / "gate-local-m2-clearance.json"
 GATE_AUTO_ENABLE_FIELDS = (
@@ -166,11 +165,7 @@ def fingerprint(paths: list[str], level: str, base: str) -> str:
 
 
 def goal_blocks_deploy(data: dict) -> bool:
-    """Honor explicit restrictions in historical Goals until reviewed.
-
-    This deliberately errs toward a false positive: a Goal should no longer
-    embed runtime authorization paragraphs in the first place.
-    """
+    """Preserve explicit runtime stops embedded in historical Goals."""
     path = ROOT / data.get("goalPath", "")
     if not path.is_file() or path.is_symlink():
         return True
@@ -182,16 +177,6 @@ def goal_blocks_deploy(data: dict) -> bool:
                 r"no (?:production |live )?(?:deploy|apply) without",
                 r"separate (?:explicit )?authorization.*(?:deploy|restart)")
     return any(re.search(pattern, content, re.IGNORECASE) for pattern in blockers)
-
-
-def approval_active() -> bool:
-    if not LOCAL_POLICY.exists():
-        return False
-    try:
-        doc = safe_read(LOCAL_POLICY)
-        return doc.get("repo") == str(ROOT) and doc.get("labCandidateAuto") is True
-    except (ValueError, SystemExit, OSError):
-        return False
 
 
 def gate_policy() -> tuple[dict | None, str]:
@@ -447,27 +432,6 @@ def typechecks_for_task(paths: list[str]) -> list[tuple[str, list[str]]]:
             for name in packages]
 
 
-def live_lab_matches(source: str, paths: list[str]) -> bool:
-    # Optional safe read: failure is unknown, never silently treated as healthy.
-    services = ["openclaw"]
-    if any(p.startswith("packages/presentation/") for p in paths):
-        services.append("product-radar")
-    try:
-        p = subprocess.run(["python3", "scripts/lab-runtime-snapshot.py",
-                            *[arg for service in services for arg in ("--service", service)]],
-                           cwd=ROOT, capture_output=True, timeout=30)
-        if p.returncode:
-            return False
-        actual = json.loads(p.stdout).get("services", [])
-        return len(actual) == len(services) and all(
-            row.get("service") in services and row.get("gitSha") == source
-            and row.get("state") == "running" and row.get("health") == "healthy"
-            for row in actual
-        )
-    except (OSError, ValueError, subprocess.TimeoutExpired):
-        return False
-
-
 def check(level: str, data: dict, dry_run: bool = False) -> None:
     base = data["baseCommit"] if level == "release" else data.get("phaseBaseCommit", data["baseCommit"])
     paths = scope_paths(base)
@@ -557,8 +521,6 @@ def finish_phase(phase: str, dry_run: bool) -> None:
     check("phase", data, dry_run=dry_run)
     paths = scope_paths(data.get("phaseBaseCommit", data["baseCommit"]))
     lab, gate, reason = scope_kind(paths)
-    if reason == "eligible" and goal_blocks_deploy(data):
-        reason = "legacy-goal-runtime-restriction"
     source = git("rev-parse", "HEAD")
     if dry_run:
         print("PHASE_PLAN=lab:" + reason + " gate:" + str(gate))
@@ -567,24 +529,8 @@ def finish_phase(phase: str, dry_run: bool) -> None:
         die("commit verified source before completing phase; no deployment attempted")
     if checksum((ROOT / data["goalPath"]).read_bytes()) != data["goalSha256"]:
         die("Goal changed: review amended acceptance requirements before phase exit")
-    if lab and reason == "eligible" and data.get("deployments", {}).get("lab") != source:
-        if approval_active():
-            if live_lab_matches(source, paths):
-                print("LAB_CANDIDATE=ALREADY_CURRENT source=" + source[:12])
-            else:
-                # Never mint tags, alter Gate or bypass the existing
-                # release/checkpoint/health/rollback and owner notification path.
-                execute(["bash", "scripts/release-lab.sh", "candidate", "--apply",
-                         "--approval-ref", "devctl:" + source[:12]], "lab-candidate", False)
-                print("LAB_CANDIDATE=DEPLOYED_AND_NOTIFIED source=" + source[:12])
-            data.setdefault("deployments", {})["lab"] = source
-            # Persist successful deployment before any later phase bookkeeping;
-            # a crash must not reapply the same known-good source.
-            protected_write(STATE, data)
-        else:
-            print("LAB_CANDIDATE=PENDING_ONE_TIME_LOCAL_APPROVAL; no runtime change")
-    elif lab:
-        print("LAB_CANDIDATE=SKIPPED reason=" + reason)
+    if lab:
+        print("LAB_DEPLOYMENT=AFTER_MAIN_MERGE ci=required release=automatic")
     if gate:
         gate_status, gate_reason = gate_auto_status()
         if gate_status == "disabled" and gate_reason == "state_missing":
@@ -624,7 +570,7 @@ def main() -> None:
     check_p.add_argument("--dry-run", action="store_true")
     configure = sub.add_parser("configure")
     configure.add_argument("option", choices=[
-        "lab-auto-enable", "lab-auto-disable", "gate-auto-enable", "gate-auto-disable",
+        "gate-auto-enable", "gate-auto-disable",
         "gate-m2-clear", "gate-m2-revoke", "status",
     ])
     args = p.parse_args()
@@ -644,7 +590,7 @@ def main() -> None:
         check(args.level, state(), args.dry_run)
     else:
         if args.option == "status":
-            print("LAB_AUTO_ENABLED=" + str(approval_active()).lower())
+            print("LAB_AUTO_RELEASE_POLICY=after-main-merge-ci")
             gate_state, gate_reason = gate_auto_status()
             print("GATE_AUTO_STATUS=" + gate_state)
             print("GATE_AUTO_REASON=" + gate_reason)
@@ -657,20 +603,8 @@ def main() -> None:
             gate_m2_clear()
         elif args.option == "gate-m2-revoke":
             gate_m2_revoke()
-        elif args.option == "lab-auto-disable":
-            if LOCAL_POLICY.exists():
-                LOCAL_POLICY.unlink()
-            print("LAB_AUTO_ENABLED=false")
         else:
-            if not sys.stdin.isatty():
-                die("one-time Lab approval requires an interactive local terminal")
-            print("One-time authorization: automatically deploy reversible Lab candidates after phase checks.")
-            print("This may restart OpenClaw; database migrations, network, secrets, Gate and formal tags stay excluded.")
-            if input("Type ENABLE LAB AUTO to authorize: ") != "ENABLE LAB AUTO":
-                die("operator declined Lab auto approval")
-            protected_write(LOCAL_POLICY, {"repo": str(ROOT), "labCandidateAuto": True,
-                                           "approvedAt": now()})
-            print("LAB_AUTO_ENABLED=true")
+            die("unsupported configuration option")
 
 
 if __name__ == "__main__":

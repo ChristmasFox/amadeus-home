@@ -9,24 +9,34 @@ else
   printf '%s\n' 'VPS_ACCOUNT_MAP_PERMISSION_SMOKE=skipped_missing_image'
 fi
 bash scripts/test-openclaw-lineage-compatibility.sh
-candidate="$(scripts/deploy-openclaw.sh --dry-run --candidate --build-auto)"
 release="$(scripts/deploy-openclaw.sh --dry-run --build-auto)"
-scoped="$(scripts/deploy-openclaw.sh --dry-run --candidate --openclaw-only --build-openclaw)"
+scoped="$(scripts/deploy-openclaw.sh --dry-run --auto-release --openclaw-only --build-openclaw)"
+if scripts/deploy-openclaw.sh --dry-run --candidate --build-auto >/dev/null 2>&1; then
+  echo 'retired Lab candidate deployment unexpectedly remained available' >&2
+  exit 1
+fi
+if scripts/deploy-openclaw.sh --apply --build-auto >/dev/null 2>&1; then
+  echo 'direct Lab runtime apply unexpectedly remained available' >&2
+  exit 1
+fi
 if scripts/deploy-openclaw.sh --dry-run --lineage-bridge >/dev/null 2>&1; then
   echo 'lineage bridge unexpectedly allowed without --apply' >&2
   exit 1
 fi
-grep -Fxq 'DEPLOYMENT_PHASE=candidate' <<<"$candidate"
 grep -Fxq 'DEPLOYMENT_PHASE=release' <<<"$release"
-grep -Fxq 'MODE=dry-run' <<<"$candidate"
+grep -Fxq 'MODE=dry-run' <<<"$release"
+grep -Fxq 'DEPLOYMENT_PHASE=automatic-release' <<<"$scoped"
 grep -Fxq 'DEPLOYMENT_SCOPE=openclaw-only' <<<"$scoped"
 grep -Fxq 'BUILD_MODE=openclaw-only-scoped' <<<"$scoped"
 python3 - <<'PY'
 from pathlib import Path
 s=Path('scripts/deploy-openclaw.sh').read_text()
 assert 'if ((CANDIDATE && OPENCLAW_ONLY == 0)); then assert_candidate_version_unchanged; else assert_release_version_advanced; fi' in s
-assert 'next Lab version before its immutable' in s
-assert "--openclaw-only requires --candidate." in s
+assert "Lab candidate deployment is retired" in s
+assert "Direct Lab runtime apply is retired" in s
+assert "--auto-release is the single OpenClaw-only Lab main release mode." in s
+assert "build_images_and_preflight" in s
+assert "if ((BUILD_ONLY || AUTO_RELEASE == 0)); then" in s
 assert "--build-only --openclaw-only requires --build-openclaw" in s
 assert "OpenClaw-only apply requires a prebuilt --image and --no-build." in s
 assert "docker compose up -d --no-build --no-deps openclaw" in s
@@ -70,7 +80,7 @@ assert '--lineage-bridge requires fresh OpenClaw and Product Radar builds' in s
 assert 'IMAGE_LINEAGE_MISSING' in s
 assert 'validate_vps_account_map_source' in s
 assert 'if ((OPENCLAW_ONLY == 0)); then' in s
-assert 'OPENCLAW_COMPOSE_IMAGE=updated' in s
+assert 'OPENCLAW_COMPOSE=installed' in s
 assert 'OPENCLAW_VPS_ACCOUNT_MAP_PREFLIGHT=passed' in s
 assert 'OPENCLAW_VPS_ACCOUNT_MAP_NODE_READ=passed' in s
 assert 'OPENCLAW_VPS_ACCOUNT_MAP_HOST_FILE' in s
@@ -93,4 +103,4 @@ assert 'KREA2_IMAGE_TOKEN_HOST_FILE="${' not in s
 assert 'KREA2_IMAGE_TOKEN_GUEST_FILE' not in s
 assert 'vps_account_map.json' in compose
 PY
-printf '%s\n' 'OPENCLAW_CANDIDATE_MODE_FIXTURE=passed'
+printf '%s\n' 'OPENCLAW_RELEASE_MODE_FIXTURE=passed'
