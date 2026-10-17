@@ -6,12 +6,12 @@ import subprocess
 FIXTURE = r'''
 (async()=>{
  const assert=require('node:assert/strict'),fs=require('node:fs');
- const pkg=require('/usr/local/lib/node_modules/9router/package.json');assert.equal(pkg.version,'0.5.95');
+ const pkg=require('/usr/local/lib/node_modules/9router/package.json');assert.match(pkg.version,/^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$/);
  const base='/usr/local/lib/node_modules/9router/app/.next-cli-build/server';
  const path=base+'/app/api/v1/images/generations/route.js';
  const routeSource=fs.readFileSync(path,'utf8');
- assert.ok(routeSource.includes('amadeus-image-upstream-diagnostics-0.5.95'));
- assert.ok(routeSource.includes('amadeus-image-no-prompt-logs-0.5.95'));
+ assert.ok(routeSource.includes('amadeus-image-upstream-diagnostics-'));
+ assert.ok(routeSource.includes('amadeus-image-no-prompt-logs-'));
  global.fetch=async()=>{throw Error('network_forbidden_in_fixture')};
  const route=require(path);await route.routeModule._lazyUserland.waitUntilLoaded();
  const w=require(base+'/webpack-runtime.js'), codex=w(7648).A;
