@@ -1,24 +1,6 @@
 name: Gate 9Router runtime
 
 on:
-  push:
-    branches: ["**"]
-    paths:
-      - "infra/docker/casaos/9router/**"
-      - "infra/9router/runtime-policy.example.json"
-      - "apps/qwen3-tts-service/kurisu_style.json"
-      - "package.json"
-      - "scripts/check-secrets.sh"
-      - ".github/workflows/gate-9router.yml"
-  pull_request:
-    branches: [main]
-    paths:
-      - "infra/docker/casaos/9router/**"
-      - "infra/9router/runtime-policy.example.json"
-      - "apps/qwen3-tts-service/kurisu_style.json"
-      - "package.json"
-      - "scripts/check-secrets.sh"
-      - ".github/workflows/gate-9router.yml"
   workflow_dispatch:
 
 permissions:

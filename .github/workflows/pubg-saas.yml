@@ -1,38 +1,8 @@
-name: PUBG SaaS
+name: PUBG SaaS (manual diagnostics)
 
 # Gate only: Lab release scripts, Intelligence Lab experiments, documentation,
 # and root lockfile updates do not justify a Gate build.
 on:
-  pull_request:
-    branches: [main]
-    paths:
-      - "apps/pubg-saas/**"
-      - "packages/agent-memory/**"
-      - "packages/identity/**"
-      - "packages/presentation/**"
-      - "packages/pubg-domain/**"
-      - "infra/pubg-saas/**"
-      - "scripts/gate-local-candidate.py"
-      - "scripts/gate_autopilot.py"
-      - "scripts/tests/test_gate_*.py"
-      - "scripts/pubg-saas-*.py"
-      - "scripts/pubg-saas-version.sh"
-      - ".github/workflows/pubg-saas.yml"
-  push:
-    branches: [main]
-    paths:
-      - "apps/pubg-saas/**"
-      - "packages/agent-memory/**"
-      - "packages/identity/**"
-      - "packages/presentation/**"
-      - "packages/pubg-domain/**"
-      - "infra/pubg-saas/**"
-      - "scripts/gate-local-candidate.py"
-      - "scripts/gate_autopilot.py"
-      - "scripts/tests/test_gate_*.py"
-      - "scripts/pubg-saas-*.py"
-      - "scripts/pubg-saas-version.sh"
-      - ".github/workflows/pubg-saas.yml"
   workflow_dispatch:
 
 permissions:

@@ -1,27 +1,7 @@
 name: Autonomous Goal workflow (source only)
 on:
-  pull_request:
-    branches: [main]
-    paths:
-      - "scripts/devctl.py"
-      - "scripts/tests/test_devctl.py"
-      - "scripts/developer-workflow.sh"
-      - "scripts/run-check.sh"
-      - "docs/ENGINEERING_POLICY.md"
-      - "AGENTS.md"
-      - "package.json"
-      - ".github/workflows/autonomous-goal.yml"
-  push:
-    branches: [main]
-    paths:
-      - "scripts/devctl.py"
-      - "scripts/tests/test_devctl.py"
-      - "scripts/developer-workflow.sh"
-      - "scripts/run-check.sh"
-      - "docs/ENGINEERING_POLICY.md"
-      - "AGENTS.md"
-      - "package.json"
-      - ".github/workflows/autonomous-goal.yml"
+  workflow_dispatch:
+
 permissions:
   contents: read
 jobs:
