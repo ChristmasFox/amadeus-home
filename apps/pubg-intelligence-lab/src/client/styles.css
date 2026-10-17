@@ -179,7 +179,7 @@ body{height:100vh;height:100dvh;min-height:0;overflow:hidden}
 .evaluation-review-actions button:disabled{opacity:.5;cursor:wait}
 
 /* Research page readability: use wide displays without turning the transcript into long lines. */
-.dashboard{max-width:2160px;grid-template-columns:clamp(280px,16vw,330px) minmax(0,1fr) clamp(320px,18vw,360px)}
+.dashboard{width:100%;max-width:none;margin:0;grid-template-columns:clamp(280px,16vw,330px) minmax(0,1fr) clamp(320px,18vw,360px)}
 .center-panel{padding:clamp(20px,2vw,30px) clamp(22px,2.4vw,40px) 24px}
 .chat-panel{padding:28px 4px 22px}
 .chat-welcome{max-width:620px}
