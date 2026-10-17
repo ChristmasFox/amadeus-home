@@ -164,6 +164,21 @@ def fingerprint(paths: list[str], level: str, base: str) -> str:
     return checksum(json.dumps([level, base, git("rev-parse", "HEAD"), sys.version, entries]).encode())
 
 
+def goal_blocks_deploy(data: dict) -> bool:
+    """Preserve explicit runtime stops embedded in historical Goals."""
+    path = ROOT / data.get("goalPath", "")
+    if not path.is_file() or path.is_symlink():
+        return True
+    content = path.read_text(encoding="utf-8")
+    blockers = (r"RUNTIME_APPLY_NOT_AUTHORIZED", r"runtime.apply.not.authorized",
+                r"未经.{0,32}授权.{0,50}(?:部署|重启|--apply)",
+                r"不得.{0,32}(?:部署|重启|--apply)",
+                r"不执行.{0,32}(?:部署|发布)",
+                r"no (?:production |live )?(?:deploy|apply) without",
+                r"separate (?:explicit )?authorization.*(?:deploy|restart)")
+    return any(re.search(pattern, content, re.IGNORECASE) for pattern in blockers)
+
+
 def gate_policy() -> tuple[dict | None, str]:
     return validate_gate_private_state(GATE_LOCAL_POLICY, ROOT)
 
