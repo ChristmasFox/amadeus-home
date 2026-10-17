@@ -35,6 +35,7 @@ on:
       - "scripts/lab-runtime-snapshot.py"
       - "scripts/test-lab-runtime-snapshot.py"
       - "scripts/verify-image-provenance.py"
+      - "scripts/verify-9router-image-reference.py"
       - "scripts/verify-pubg-saas-oci.py"
       - "scripts/test-release-tooling.py"
       - "scripts/validate-lab-memory-acceptance.py"
