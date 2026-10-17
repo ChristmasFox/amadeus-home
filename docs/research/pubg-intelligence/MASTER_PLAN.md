@@ -1,7 +1,7 @@
 # PUBG Intelligence Lab — Research & Delivery Plan
 
-Status: R4 complete; R5 in progress — see [`STATUS.md`](STATUS.md) and the stage evaluation reports.
-Branch: `research/pubg-intelligence`  
+Status: Initial R0–R5 engineering implemented; real-data evaluation and algorithm improvement are ongoing — see [`STATUS.md`](STATUS.md) and stage reports.
+Active development branch: `main` (former research branch is historical)  
 Scope: Lab historical PUBG telemetry research; Gate consumes only validated, versioned insights.  
 Owner of execution: Codex via /goal, with stage-by-stage acceptance.
 
@@ -33,7 +33,7 @@ Proposed new paths (adapt only after inspecting actual workspace dependencies):
 4. Distinguish fact, inference, hypothesis and narrative. No invented confidence probabilities, claims of causal certainty, or ungrounded social intent. Position/event sampling constraints must be explicit.
 5. AI can ask questions and select authorized **read-only** research tools; never change validated algorithms, production configuration or data by natural-language request.
 6. Evaluate false positives, missing telemetry, squad-composition variation, bots, map/mode, survivorship bias and confounding factors. Maintain counterexample set, reproducible fixtures, regression tests, version comparison.
-7. Only merge stable generic algorithms to main via review and existing CI; no automatic production deploy or Lab/Gate cross-instance DB integration.
+7. Maintain algorithm evidence and regression testing on `main`; avoid automatic production deploy or Lab/Gate cross-instance DB integration. No PR/CI gate is required for ordinary private research work.
 
 ## 3. Delivery stages and acceptance gates
 

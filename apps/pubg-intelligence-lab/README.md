@@ -1,5 +1,7 @@
 # PUBG Intelligence Lab
 
+**Active development branch: `main`.** The original `research/pubg-intelligence` branch is historical; do not create new algorithm work there. This is an independent local/LAN React app within the same monorepo. Changes to this page do not require deploying Gate or rebuilding OpenClaw. Run the page independently using the instructions below.
+
 Local React research workspace for browsing Lab PUBG match history, selecting a discovered squad and date range, asking natural-language questions, and following analysis back to match evidence.
 
 ## Run locally

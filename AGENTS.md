@@ -6,6 +6,8 @@ Lab, Gate-Local and Intelligence Lab are maintained by one developer. GitHub PRs
 
 Lab runs its own main-change deployment without waiting for CI. The automatic path retains minimal Compose configuration for reverting to the previous image, not full SQLite, session, secrets or telemetry copies. Existing data and historical backups must never be erased. Lab work must not trigger Gate checks, candidate deployments, or PostgreSQL backups. Gate-Local changes can be deployed independently when Gate itself is being worked on; do not promote to staging/production automatically. Handle destructive SQL migrations separately rather than adding gates to unrelated code.
 
+PUBG Intelligence Lab source (`apps/pubg-intelligence-lab`, `packages/pubg-intelligence`) is already in `main`. All future PUBG algorithm and private research-page development happens directly on `main`, not on the retired `research/pubg-intelligence` branch. The page remains a separately launched local/LAN research app; edits to it do not warrant a Gate deployment or OpenClaw image rebuild.
+
 Do not rebuild a PR/CI/approval/backup gate framework in future Goals.
 
 

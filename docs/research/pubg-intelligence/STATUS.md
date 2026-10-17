@@ -1,7 +1,7 @@
 # PUBG Intelligence Lab status ledger
 
 Updated: 2026-10-17
-Branch: `research/pubg-intelligence`
+Active development branch: `main` (former `research/pubg-intelligence` retained only for history)
 
 | Stage | Source | Build | Live / data evidence |
 | --- | --- | --- | --- |
