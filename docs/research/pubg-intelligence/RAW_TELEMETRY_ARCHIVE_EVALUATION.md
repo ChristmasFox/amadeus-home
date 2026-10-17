@@ -59,7 +59,7 @@ The real AI end-to-end run made five 9Router calls against the snapshot. The pla
 
 ## RELEASED
 
-Source changes are prepared for `research/pubg-intelligence`; this is not a Lab product deployment. The running OpenClaw production collector was not switched. Once this branch is accepted and deployed through the existing Lab candidate path, future telemetry bodies seen by the existing prefetch/download process will be retained permanently. The local snapshot page and the 100-match historical backfill are live-verified; future production ingestion is source-verified but not runtime-verified.
+Implementation commit `4f35ad97` is pushed to `research/pubg-intelligence`; this is not a Lab product deployment. The running OpenClaw production collector was not switched. Once this branch is accepted and deployed through the existing Lab candidate path, future telemetry bodies seen by the existing prefetch/download process will be retained permanently. The local snapshot page and the 100-match historical backfill are live-verified; future production ingestion is source-verified but not runtime-verified.
 
 ## Limits and follow-up
 

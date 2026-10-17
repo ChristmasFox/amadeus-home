@@ -55,7 +55,7 @@ Branch: `research/pubg-intelligence`
 
 **LIVE_VERIFIED** — The 543-match read-only snapshot's newest 100 all had allowed assets. Backfill archived 100, failed 0; repeat selected 100 existing captures with no new fetch; 100/100 archive entries passed hash verification. Aggregate raw size was 2,101,398,745 bytes and gzip size 152,437,525 bytes. The snapshot fingerprint stayed stable. Local archive replay returned HTTP 200/`available` with zero CDN calls. The restarted page returned HTTP 200, bootstrap reported the model enabled and 543 matches, and an actual scoped 9Router research call answered through the AI SDK with five claims and four evidence references.
 
-**RELEASED** — Source is prepared for this research branch; no Lab production candidate was deployed. The OpenClaw plugin and persistent volume integration are source-verified. Future production ingestion remains pending the existing Lab candidate path; only local snapshot replay and historical backfill were live-verified here.
+**RELEASED** — Implementation commit `4f35ad97` is pushed to this research branch; no Lab production candidate was deployed. The OpenClaw plugin and persistent volume integration are source-verified. Future production ingestion remains pending the existing Lab candidate path; only local snapshot replay and historical backfill were live-verified here.
 
 ## R4 — Experiment/evaluation loop
 
