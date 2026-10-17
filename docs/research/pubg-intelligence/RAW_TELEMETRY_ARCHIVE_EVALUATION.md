@@ -59,11 +59,11 @@ The real AI end-to-end run made five 9Router calls against the snapshot. The pla
 
 ## RELEASED
 
-Implementation commit `4f35ad97` is pushed to `research/pubg-intelligence`; this is not a Lab product deployment. The running OpenClaw production collector was not switched. Once this branch is accepted and deployed through the existing Lab candidate path, future telemetry bodies seen by the existing prefetch/download process will be retained permanently. The local snapshot page and the 100-match historical backfill are live-verified; future production ingestion is source-verified but not runtime-verified.
+PR #21 merged after all checks passed at `51d9f8bf86d5b830922d749a4278afc7e042c417`; Lab OpenClaw 1.10.7 now runs `local/openclaw-amadeus:git-51d9f8bf86d5-20261017064054`. The protected external checkpoint `amadeus-openclaw-20261017064609` contains prior OpenClaw config/data and a SHA-verified copy of all 200 existing archive files. The container is healthy, WhatsApp is connected, the archive is mounted read/write, and the live `node` user verified all 100 stored raw captures. A real recent-period stats query passed. One live team prefetch completed successfully and reported zero new matches, so no newly discovered match was available to observe as a new archive write. The deployed archive mount and reader are live-verified; a future newly discovered match remains the outstanding live capture check. This was a candidate deployment, not a formal Lab release or tag.
 
 ## Limits and follow-up
 
 - Historical backfill intentionally covers only the newest 100 matches. Older matches are not fetched as substitutes.
 - Permanent retention is unbounded by design; the current archive uses about 146 MiB on disk for these 100 matches. Host capacity must be monitored as more matches are collected.
-- Future production auto-archival still requires a Lab candidate deployment; production collection was not changed in this task.
+- The production candidate is deployed, but its live prefetch found zero new matches. Observe the next new match to confirm a newly written production capture end to end.
 - Real-provider verification proves connectivity and a valid cited answer for the tested question, not general answer quality or latency.
