@@ -1,8 +1,4 @@
 FROM node:22-bookworm-slim@sha256:c3de60bf2f9dd0ac6370e6117950ff62d6e339527e7472301c9c78a017978392 AS build
-ARG OCI_SOURCE_REVISION=unknown
-ARG OCI_PRODUCT_VERSION=unknown
-ARG OCI_BUILD_TIMESTAMP=unknown
-
 WORKDIR /workspace
 ENV COREPACK_ENABLE_DOWNLOAD_PROMPT=0
 
@@ -42,6 +38,11 @@ RUN pnpm --filter @agent/memory build \
   && cp -a packages/presentation/dist /prod/node_modules/@agent/presentation/dist
 
 FROM node:22-bookworm-slim@sha256:c3de60bf2f9dd0ac6370e6117950ff62d6e339527e7472301c9c78a017978392 AS runtime
+WORKDIR /app
+ENV NODE_ENV=production
+COPY --from=build --chown=node:node /prod/ ./
+COPY --chown=root:root --chmod=0555 infra/pubg-saas/container-entrypoint.sh /usr/local/bin/pubg-saas-entrypoint
+# Per-build provenance goes last so it never invalidates the layer cache above.
 ARG OCI_SOURCE_REVISION=unknown
 ARG OCI_PRODUCT_VERSION=unknown
 ARG OCI_BUILD_TIMESTAMP=unknown
@@ -50,10 +51,5 @@ LABEL org.opencontainers.image.title="Gate PUBG SaaS" \
       org.opencontainers.image.revision="${OCI_SOURCE_REVISION}" \
       org.opencontainers.image.created="${OCI_BUILD_TIMESTAMP}" \
       com.amadeus.release.provenance="amadeus-product-release-v1"
-
-WORKDIR /app
-ENV NODE_ENV=production
-COPY --from=build --chown=node:node /prod/ ./
-COPY --chown=root:root --chmod=0555 infra/pubg-saas/container-entrypoint.sh /usr/local/bin/pubg-saas-entrypoint
 USER node
 ENTRYPOINT ["/usr/local/bin/pubg-saas-entrypoint"]

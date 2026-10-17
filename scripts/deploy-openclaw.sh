@@ -294,6 +294,25 @@ STAMP="$(date -u +%Y%m%d%H%M%S)"
 COMMIT="$(git -C "$ROOT_DIR" rev-parse --short=12 HEAD)"
 SOURCE_REVISION="$(git -C "$ROOT_DIR" rev-parse HEAD)"
 BUILD_TIMESTAMP="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+# Stage timing goes to stderr so machine-read stdout keys stay unchanged.
+DEPLOY_STARTED_AT="$(date +%s)"
+DEPLOY_STAGE_NAME=''
+DEPLOY_STAGE_STARTED_AT="$DEPLOY_STARTED_AT"
+deploy_stage() {
+  local now
+  now="$(date +%s)"
+  if [[ -n "$DEPLOY_STAGE_NAME" ]]; then
+    printf 'DEPLOY_STAGE=%s seconds=%s\n' "$DEPLOY_STAGE_NAME" "$((now - DEPLOY_STAGE_STARTED_AT))" >&2
+  fi
+  if [[ "$1" == done ]]; then
+    printf 'DEPLOY_STAGE_TOTAL seconds=%s\n' "$((now - DEPLOY_STARTED_AT))" >&2
+    DEPLOY_STAGE_NAME=''
+  else
+    DEPLOY_STAGE_NAME="$1"
+  fi
+  DEPLOY_STAGE_STARTED_AT="$now"
+}
+deploy_stage prepare
 AMADEUS_VERSION="$(bash "$VERSION_TOOL" show)"
 bash "$VERSION_TOOL" check >/dev/null
 RELEASE_NOTES="$(bash "$VERSION_TOOL" notes)"
@@ -411,6 +430,7 @@ if ((BUILD_OPENCLAW == 0)); then
 fi
 if ((OPENCLAW_ONLY == 0 && BUILD_RADAR == 0)); then assert_image_fresh "$RADAR_IMAGE" radar; fi
 
+deploy_stage verify
 (
   cd "$ROOT_DIR"
   if [[ -s "${NVM_DIR:-$HOME/.nvm}/nvm.sh" ]]; then
@@ -462,6 +482,7 @@ if ((OPENCLAW_ONLY == 0 && BUILD_RADAR == 0)); then assert_image_fresh "$RADAR_I
 
 build_images_and_preflight() {
 if ((BUILD_OPENCLAW)); then
+  deploy_stage image-build
   docker buildx build --platform linux/arm64 --load --progress=plain "${DOCKER_BUILD_PROXY_ARGS[@]}" \
     --build-arg "OCI_SOURCE_REVISION=$SOURCE_REVISION" \
     --build-arg "OCI_PRODUCT_VERSION=$AMADEUS_VERSION" \
@@ -469,10 +490,12 @@ if ((BUILD_OPENCLAW)); then
     --file "$ROOT_DIR/infra/docker/casaos/openclaw/Dockerfile" --tag "$IMAGE" "$ROOT_DIR"
   docker image inspect --format '{{json .Config.Labels}}' "$IMAGE" | python3 "$ROOT_DIR/scripts/verify-image-provenance.py" \
     --revision "$SOURCE_REVISION" --version "$AMADEUS_VERSION" --build-time "$BUILD_TIMESTAMP"
+  deploy_stage image-transfer
   docker --context orbstack save "$IMAGE" | orb -m "$MACHINE" -u root docker load
 else
   orb -m "$MACHINE" -u root docker image inspect "$IMAGE" >/dev/null 2>&1 || fail "OpenClaw image not found: $IMAGE"
 fi
+deploy_stage image-preflight
 if ((BUILD_OPENCLAW || OPENCLAW_ONLY)); then
   # Immutable-image preflight before any checkpoint-backed runtime write. The
   # container runs as node, so root-readable-only bundles must fail here.
@@ -495,6 +518,7 @@ else
   validate_vps_account_map_source
   run_vps_account_map_node_preflight
 fi
+deploy_stage radar-build
 if ((BUILD_RADAR)); then
   docker buildx build --platform linux/arm64 --load --progress=plain "${DOCKER_BUILD_PROXY_ARGS[@]}" \
     --build-arg "OCI_SOURCE_REVISION=$SOURCE_REVISION" \
@@ -517,10 +541,12 @@ if ((BUILD_ONLY || AUTO_RELEASE == 0)); then
 fi
 
 if ((BUILD_ONLY)); then
+  deploy_stage done
   printf 'BUILD_VERIFIED=passed\nOPENCLAW_IMAGE=%s\nSOURCE_REVISION=%s\nVERSION=%s\n' "$IMAGE" "$SOURCE_REVISION" "$AMADEUS_VERSION"
   exit 0
 fi
 
+deploy_stage checkpoint
 CHECKPOINT_ID="amadeus-openclaw-$STAMP"
 if ((AUTO_RELEASE)); then
   CHECKPOINT_DIR="$OPENCLAW_DATA_DIR/data/deploy-recovery/$CHECKPOINT_ID"
@@ -720,6 +746,7 @@ if ((AUTO_RELEASE)); then
   build_images_and_preflight
 fi
 
+deploy_stage prepare-runtime
 OPENCLAW_SWITCHED=0
 rollback_openclaw_candidate() {
   local status=$? restore_status=0
@@ -982,6 +1009,7 @@ elif ((OPENCLAW_ONLY == 0)); then
   printf '%s\n' 'MEDIA_ADAPTER=absent (external service was not restored; media tool acceptance remains pending)' >&2
 fi
 if ((OPENCLAW_ONLY == 0)); then orb -m "$MACHINE" -u root docker compose --project-directory "$RADAR_APP_DIR" -f "$RADAR_COMPOSE_FILE" config >/dev/null; fi
+deploy_stage openclaw-cli-preflight
 # Rebuild the pinned host's persisted plugin index from the candidate image
 # after a consistent state SQLite backup, but before any plugin/Skill preflight
 # or container switch. A stale index can omit a healthy Amadeus bundle.
@@ -1074,6 +1102,7 @@ print('GROUP_CAPABILITY_TOOL_POLICY=scoped')
 print('DM_SESSION_SCOPE=per-account-channel-peer')
 PY
 
+deploy_stage switch
 if ((OPENCLAW_ONLY)); then
   orb -m "$MACHINE" -u root bash -lc "cd '$OPENCLAW_APP_DIR' && docker compose up -d --no-build --no-deps openclaw >/dev/null"
 else
@@ -1083,6 +1112,7 @@ else
   # leave the Node process running with the old media agent; restart loads it.
 fi
 
+deploy_stage health
 for attempt in $(seq 1 40); do
   if orb -m "$MACHINE" -u root curl --fail --silent --show-error --max-time 3 http://127.0.0.1:18789/healthz >/dev/null 2>&1; then
     if ((AUTO_RELEASE)); then
@@ -1100,6 +1130,7 @@ if ((AUTO_RELEASE)); then
   [[ "$container_health" == healthy ]] || fail "OpenClaw container health is $container_health after automatic release."
   printf '%s\n' 'OPENCLAW_CONTAINER_HEALTH=healthy'
 fi
+deploy_stage smoke
 if ((OPENCLAW_ONLY)); then
   archive_mount="$(orb -m "$MACHINE" -u root docker inspect openclaw \
     --format '{{range .Mounts}}{{if eq .Destination "/var/lib/amadeus/pubg-telemetry-archive"}}{{.Source}}|{{.RW}}{{end}}{{end}}')"
@@ -1261,6 +1292,7 @@ else
   NOTIFICATION_SIGNIFICANCE='major'
   NOTIFICATION_THEME='worldline_convergence'
 fi
+deploy_stage owner-notify
 for owner_outbox in "$CHECKPOINT_DIR/owner-smoke" "$OPENCLAW_DATA_DIR/notifications"; do
   "$ROOT_DIR/scripts/notify-owner.sh" \
     --remote-machine "$MACHINE" \
@@ -1293,6 +1325,7 @@ for attempt in $(seq 1 30); do
 done
 [[ "$owner_notification_status" == sent ]] || fail 'Owner deployment notification remained pending after 30 seconds.'
 
+deploy_stage post-deploy
 if ((AUTO_RELEASE)); then
   POST_DEPLOY_EVIDENCE_DIR="$HOME/.local/state/amadeus/lab-auto-release/evidence/$CHECKPOINT_ID"
 else
@@ -1336,6 +1369,7 @@ fi
 
 fi
 
+deploy_stage done
 printf 'CHECKPOINT=%s\n' "$CHECKPOINT_DIR"
 printf 'POST_DEPLOY_EVIDENCE=%s\n' "$POST_DEPLOY_EVIDENCE_DIR"
 printf 'OPENCLAW_IMAGE=%s\n' "$IMAGE"
