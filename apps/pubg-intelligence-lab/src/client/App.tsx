@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
-import { FieldView, OverviewView, type PerformanceAnalytics, type TelemetryAnalytics } from './analytics-views.js';
+import { FieldView, OverviewView, StyleView, type PerformanceAnalytics, type TelemetryAnalytics } from './analytics-views.js';
 
 interface SquadOption {
   id: string;
@@ -454,8 +454,8 @@ function ResultBlock({ result, onEvidence }: { result: ResearchResponse; onEvide
   );
 }
 
-type WorkspaceTab = 'overview' | 'field' | 'match' | 'chat' | 'lab';
-const WORKSPACE_TABS: readonly WorkspaceTab[] = ['overview', 'field', 'match', 'chat', 'lab'];
+type WorkspaceTab = 'overview' | 'field' | 'style' | 'match' | 'chat' | 'lab';
+const WORKSPACE_TABS: readonly WorkspaceTab[] = ['overview', 'field', 'style', 'match', 'chat', 'lab'];
 
 function initialTab(): WorkspaceTab {
   const requested = new URLSearchParams(window.location.search).get('tab');
@@ -667,7 +667,7 @@ export function App() {
   }
 
   useEffect(() => {
-    if (tab === 'field' && !telemetryData && !telemetryLoading && !telemetryError && squadId) void loadTelemetryAnalytics();
+    if ((tab === 'field' || tab === 'style') && !telemetryData && !telemetryLoading && !telemetryError && squadId) void loadTelemetryAnalytics();
   }, [tab, telemetryData, telemetryLoading, telemetryError, squadId]);
 
   async function loadFrequentPairs() {
@@ -812,11 +812,12 @@ export function App() {
 
         <section className="workspace">
           <nav className="workspace-tabs" aria-label="分析视图">
-            {([['overview', '总览', '战绩与队员状态'], ['field', '落点与交战', '遥测分析'], ['match', '单局复盘', detail ? '已选 1 场' : '先选比赛'], ['chat', '研究对话', 'AI 助手'], ['lab', '评估实验', '开发']] as const).map(([key, label, hint]) => <button type="button" key={key} className={tab === key ? 'active' : ''} onClick={() => { setTab(key); window.history.replaceState(null, '', key === 'overview' ? window.location.pathname : `?tab=${key}`); }}><b>{label}</b><small>{hint}</small></button>)}
+            {([['overview', '总览', '战绩与队员状态'], ['field', '落点与交战', '遥测分析'], ['style', '打法风格', '每个人的特点'], ['match', '单局复盘', detail ? '已选 1 场' : '先选比赛'], ['chat', '研究对话', 'AI 助手'], ['lab', '评估实验', '开发']] as const).map(([key, label, hint]) => <button type="button" key={key} className={tab === key ? 'active' : ''} onClick={() => { setTab(key); window.history.replaceState(null, '', key === 'overview' ? window.location.pathname : `?tab=${key}`); }}><b>{label}</b><small>{hint}</small></button>)}
           </nav>
           {error && <div className="inline-error workspace-error">{error}</div>}
           {tab === 'overview' && <div className="workspace-body"><OverviewView data={analytics} loading={analyticsLoading} /></div>}
           {tab === 'field' && <div className="workspace-body"><FieldView data={telemetryData} loading={telemetryLoading} error={telemetryError} onReload={() => void loadTelemetryAnalytics()} /></div>}
+          {tab === 'style' && <div className="workspace-body"><StyleView data={telemetryData} loading={telemetryLoading} error={telemetryError} onReload={() => void loadTelemetryAnalytics()} /></div>}
           {tab === 'match' && <div className="workspace-body match-tab"><div className="flow-columns">
             {!detail && !detailLoading && <div className="av-empty">从左侧选择一场比赛，查看单局分析、交战时间线和证据链。</div>}
           {detailLoading && <div className="skeleton-card"><span /><span /><span /></div>}

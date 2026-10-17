@@ -48,8 +48,61 @@ export interface PerformanceAnalytics {
   }>;
 }
 
+export type StyleTier = 'stable' | 'lean' | 'even' | 'unknown';
+export interface StyleAxisReading {
+  key: string; group: string; label: string; value: number | null; matesValue: number | null; ratio: number | null;
+  low: number | null; high: number | null; confidence: number | null; tier: StyleTier; direction: 'high' | 'low' | null; stable: boolean;
+}
+export interface SquadStyle {
+  matches: number;
+  players: Array<{
+    accountId: string; name: string; matches: number; minutes: number; axes: StyleAxisReading[];
+    traits: Array<{ key: string; text: string; ratio: number; tier: 'stable' | 'lean'; confidence: number | null }>;
+    archetypes: Array<{ id: string; label: string; score: number; tier: 'stable' | 'lean' | 'slight' | 'balanced' }>;
+    classShares: Array<{ weaponClass: string; share: number }>;
+    weapons: Array<{ weapon: string; share: number }>;
+    landingSpread: number | null; summary: string;
+  }>;
+  combatVerdict: string;
+  combatHighlights: Array<{ name: string; label: string; ratio: number; tier: 'stable' | 'lean'; confidence: number | null }>;
+  combat: Array<{
+    accountId: string; name: string; rank: number; ratio: number | null; low: number | null; high: number | null; confidence: number | null; tier: StyleTier;
+    components: Array<{ key: string; label: string; ratio: number | null; tier: StyleTier }>;
+  }>;
+  funnel: Array<{
+    accountId: string; name: string; fights: number; minutes: number; shots: number; hits: number; hitRate: number | null; hitDamage: number; damagePerShot: number | null;
+    damagePerMinute: number | null; knocks: number; hitsPerKnock: number | null; kills: number; knockFights: number; knockRate: number | null;
+    chainsDealt: number; chainsFinished: number; conversion: number | null;
+  }>;
+  spreads: Array<{
+    key: string; group: string; label: string;
+    highest: { name: string; value: number; ratio: number | null; tier: StyleTier };
+    lowest: { name: string; value: number; ratio: number | null; tier: StyleTier };
+    spread: number; supported: boolean;
+  }>;
+  overlaps: Array<{ accountIds: [string, string]; names: [string, string]; similarity: number; sharedTraits: string[] }>;
+  gaps: string[];
+  notes: string[];
+}
+
+export interface FightBucket { key: string; label: string; fights: number; wins: number; losses: number; draws: number; winRate: Rate }
 export interface TelemetryAnalytics {
   highlights: Insight[];
+  style: SquadStyle;
+  fights: { fights: number; overall: FightBucket; byInitiator: FightBucket[]; byStage: FightBucket[]; byThirdParty: FightBucket[]; byDuration: FightBucket[]; notes: string[] };
+  roles: Array<{
+    accountId: string; name: string; fights: number; firstKnockShare: number | null; firstDownedShare: number | null; reviveShare: number | null; killShare: number | null;
+    counts: { fights: number; firstKnocks: number; firstDowned: number; knocksDealt: number; timesDowned: number; kills: number; revives: number }; titles: string[];
+  }>;
+  distance: {
+    matches: number; totalDealt: number; totalTaken: number; longRangeGap: number | null;
+    bands: Array<{ id: string; label: string; dealt: number; taken: number; dealtShare: number | null; takenShare: number | null; headshotShare: number | null }>;
+    weapons: Array<{ weapon: string; damage: number; shares: number[]; mainBand: string }>;
+  };
+  zone: {
+    matches: number; blueDamagePerMatch: number | null; blueDamageShare: number | null;
+    phases: Array<{ phase: number; samples: number; outsideRate: Rate; binShares: [number, number, number, number] | null; blueDamage: number }>;
+  };
   scope: { squadLabel: string; eligibleMatches: number; analyzedMatches: number; missingArchiveMatches: number; unavailableMatches: number; limit: number; from: string | null; to: string | null };
   combat: {
     matches: number; groups: number;
@@ -72,9 +125,14 @@ export interface TelemetryAnalytics {
   landing: {
     maps: Array<{
       mapName: string; label: string; sizeKm: number | null; matches: number; matchesWithLanding: number;
-      cells: Array<{ cell: string; matches: number; share: number; top10: Rate; medianPlacement: number | null; earlyWipeRate: number | null; averageDamage: number }>;
+      cells: Array<{ cell: string; region: string | null; matches: number; share: number; top10: Rate; medianPlacement: number | null; earlyWipeRate: number | null; averageDamage: number }>;
       topCellRepeatRate: number | null; medianSpreadMeters: number | null; points: Array<{ x: number; y: number }>;
     }>;
+    contest: {
+      matches: number;
+      buckets: Array<{ key: string; label: string; matches: number; top10: Rate; earlyWipe: Rate; medianPlacement: number | null }>;
+      earlyWipeEdge: DifferenceEstimate; top10Edge: DifferenceEstimate;
+    };
     notes: string[];
   };
 }
@@ -415,6 +473,331 @@ function DeathPanel({ deaths }: { deaths: TelemetryAnalytics['deaths'] }) {
   );
 }
 
+const regionName = (region: string | null): string => (region ? region.charAt(0).toUpperCase() + region.slice(1) : '');
+
+function FightPanel({ data }: { data: TelemetryAnalytics['fights'] }) {
+  if (data.fights < 20) return null;
+  const groups: Array<[string, FightBucket[]]> = [['谁先开火', data.byInitiator], ['交战阶段（剩余队伍数）', data.byStage], ['有无第三方', data.byThirdParty], ['持续时间', data.byDuration]];
+  return (
+    <Panel title="交战环境与胜率" hint={`${data.fights} 场分出倒地的交战 · 胜 ${data.overall.wins} / 负 ${data.overall.losses} / 平 ${data.overall.draws}`}>
+      <div className="av-fight-groups">
+        {groups.map(([title, buckets]) => <div key={title}>
+          <h4>{title}</h4>
+          {buckets.filter((bucket) => bucket.wins + bucket.losses > 0).map((bucket) => <div className="av-bar-row wide" key={bucket.key} title={`95% ${ci(bucket.winRate)}`}>
+            <span>{bucket.label}</span><Bar value={bucket.winRate.rate ?? 0} max={1} tone={(bucket.winRate.rate ?? 0) >= 0.5 ? 'mint' : 'amber'} /><b>{pct(bucket.winRate.rate)}</b><small>{bucket.wins}胜 {bucket.losses}负 {bucket.draws}平</small>
+          </div>)}
+        </div>)}
+      </div>
+      <p className="av-note">{data.notes.join(' ')}</p>
+    </Panel>
+  );
+}
+
+function DistancePanel({ data }: { data: TelemetryAnalytics['distance'] }) {
+  if (data.totalDealt < 600) return null;
+  const maxShare = Math.max(0.01, ...data.bands.flatMap((band) => [band.dealtShare ?? 0, band.takenShare ?? 0]));
+  return (
+    <Panel title="交战距离画像" hint={`枪械伤害：打出 ${int(data.totalDealt)} · 承受 ${int(data.totalTaken)}`}>
+      <div className="av-two even">
+        <div>
+          <h4>在多远打出 / 承受伤害</h4>
+          <div className="av-table distance">
+            <div className="av-row head"><span>距离</span><span>打出</span><span>承受</span><span>爆头占比</span></div>
+            {data.bands.map((band) => <div className="av-row" key={band.id}>
+              <b>{band.label}</b>
+              <span className="av-share"><Bar value={band.dealtShare ?? 0} max={maxShare} />{pct(band.dealtShare)}</span>
+              <span className="av-share"><Bar value={band.takenShare ?? 0} max={maxShare} tone="amber" />{pct(band.takenShare)}</span>
+              <span>{pct(band.headshotShare)}</span>
+            </div>)}
+          </div>
+          <p className="av-note">{data.longRangeGap === null ? '远距离输出与承伤没有明显差距。' : data.longRangeGap > 0.05 ? `承受的 ≥75m 伤害比打出的多 ${(data.longRangeGap * 100).toFixed(0)}pt。` : data.longRangeGap < -0.05 ? `打出的 ≥75m 伤害比承受的多 ${(-data.longRangeGap * 100).toFixed(0)}pt。` : '远距离输出与承伤基本持平。'}</p>
+        </div>
+        <div>
+          <h4>各武器的主战距离</h4>
+          <div className="av-weapon-dist">
+            {data.weapons.map((weapon) => <div className="av-weapon-row" key={weapon.weapon}>
+              <b>{weapon.weapon}</b>
+              <i className="av-stack-bar">{weapon.shares.map((share, index) => <u key={index} className={`band${index}`} style={{ width: `${share * 100}%` }} title={`${data.bands[index]!.label} ${pct(share)}`} />)}</i>
+              <small>{weapon.mainBand.split(' ')[0]} · {int(weapon.damage)}</small>
+            </div>)}
+          </div>
+          <div className="av-legend">{data.bands.map((band, index) => <span key={band.id}><i className={`band${index}`} />{band.label}</span>)}</div>
+        </div>
+      </div>
+    </Panel>
+  );
+}
+
+function ZonePanel({ data }: { data: TelemetryAnalytics['zone'] }) {
+  const phases = data.phases.filter((phase) => phase.samples >= 40);
+  if (!phases.length) return null;
+  const maxOutside = Math.max(0.05, ...phases.map((phase) => phase.outsideRate.rate ?? 0));
+  return (
+    <Panel title="圈位压力" hint={`${data.matches} 场 · 每场吃毒 ${int(data.blueDamagePerMatch)} · 毒伤占承伤 ${pct(data.blueDamageShare)}`}>
+      <div className="av-table zone">
+        <div className="av-row head"><span>圈数</span><span>样本</span><span>在毒圈里的时间</span><span>相对安全区中心的位置</span><span>毒伤</span></div>
+        {phases.map((phase) => <div className="av-row" key={phase.phase}>
+          <b>第 {phase.phase} 圈</b><span>{int(phase.samples)}</span>
+          <span className="av-share" title={`95% ${ci(phase.outsideRate)}`}><Bar value={phase.outsideRate.rate ?? 0} max={maxOutside} tone="amber" />{pct(phase.outsideRate.rate, 1)}</span>
+          <span>{phase.binShares ? <i className="av-stack-bar">{phase.binShares.map((share, index) => <u key={index} className={`zone${index}`} style={{ width: `${share * 100}%` }} title={`${['圈中心 <50%', '中间 50–85%', '圈边 85–100%', '圈外'][index]} ${pct(share)}`} />)}</i> : '—'}</span>
+          <span>{int(phase.blueDamage)}</span>
+        </div>)}
+      </div>
+      <div className="av-legend"><span><i className="zone0" />圈中心</span><span><i className="zone1" />中间</span><span><i className="zone2" />圈边</span><span><i className="zone3" />圈外</span></div>
+      <p className="av-note">圈数 = 遥测里 isGame 的整数部分。位置样本按小队成员每约 10 秒一次；「圈外」指离安全区中心超过其半径。</p>
+    </Panel>
+  );
+}
+
+function RolePanel({ roles }: { roles: TelemetryAnalytics['roles'] }) {
+  if (roles.length < 2 || roles.every((role) => role.fights < 20)) return null;
+  return (
+    <Panel title="队内分工" hint="按交战事件统计；占比 ≥ 40% 才授予称号">
+      <div className="av-table roles">
+        <div className="av-row head"><span>队员</span><span>参与交战</span><span>先手击倒</span><span>最先被倒</span><span>救援</span><span>人头</span><span>称号</span></div>
+        {roles.map((role) => <div className="av-row" key={role.accountId}>
+          <b>{role.name}</b><span>{role.fights}</span>
+          <span>{role.counts.firstKnocks}<small>{pct(role.firstKnockShare)}</small></span>
+          <span>{role.counts.firstDowned}<small>{pct(role.firstDownedShare)}</small></span>
+          <span>{role.counts.revives}<small>{pct(role.reviveShare)}</small></span>
+          <span>{role.counts.kills}<small>{pct(role.killShare)}</small></span>
+          <span className="av-chips">{role.titles.length ? role.titles.map((title) => <span className="av-chip form-hot" key={title}>{title}</span>) : <span className="av-note">—</span>}</span>
+        </div>)}
+      </div>
+    </Panel>
+  );
+}
+
+function ContestPanel({ contest }: { contest: TelemetryAnalytics['landing']['contest'] }) {
+  if (contest.matches < 16) return null;
+  return (
+    <div className="av-contest">
+      <h4>落点被争抢的代价（500m 内有其他队降落）</h4>
+      <div className="av-table contest">
+        <div className="av-row head"><span>情况</span><span>场次</span><span>早崩率</span><span>前十率</span><span>中位名次</span></div>
+        {contest.buckets.map((bucket) => <div className="av-row" key={bucket.key}>
+          <b>{bucket.label}</b><span>{bucket.matches}</span>
+          <span title={`95% ${ci(bucket.earlyWipe)}`}>{pct(bucket.earlyWipe.rate)}</span>
+          <span title={`95% ${ci(bucket.top10)}`}>{pct(bucket.top10.rate)}</span>
+          <span>{bucket.medianPlacement === null ? '—' : `#${bucket.medianPlacement}`}</span>
+        </div>)}
+      </div>
+      {contest.earlyWipeEdge.delta !== null && <p className="av-note">有争抢相对无争抢：早崩率 {contest.earlyWipeEdge.delta >= 0 ? '+' : ''}{(contest.earlyWipeEdge.delta * 100).toFixed(0)}pt{contest.earlyWipeEdge.significant ? '（显著）' : '（不显著）'}；前十率 {contest.top10Edge.delta === null ? '—' : `${contest.top10Edge.delta >= 0 ? '+' : ''}${(contest.top10Edge.delta * 100).toFixed(0)}pt${contest.top10Edge.significant ? '（显著）' : '（不显著）'}`}。</p>}
+    </div>
+  );
+}
+
+const CLASS_LABEL: Record<string, string> = { AR: '突击步枪', SMG: '冲锋枪', DMR: '射手步枪', SR: '狙击枪', LMG: '机枪', SG: '霰弹枪', Pistol: '手枪', other: '其他' };
+const GROUPS = ['战斗效率', '射击', '节奏', '协作与补给', '位置与风险'];
+/** Axes drawn on each player's radar: three or four from every group, ratio to teammates. */
+const RADAR_KEYS = ['combat', 'hitRate', 'conversion', 'range', 'farShare', 'precision', 'tempo', 'initiative', 'revive', 'supplies', 'isolation', 'risk'];
+/** log2(1.5): the teammate ratio that reaches the outer ring (and its inverse reaches the centre). */
+const RADAR_LOG_SPAN = Math.log2(1.5);
+const TIER_MARK: Record<StyleTier, string> = { stable: '●', lean: '◐', even: '', unknown: '' };
+const TIER_TEXT: Record<StyleTier, string> = { stable: '稳定', lean: '倾向', even: '持平', unknown: '样本不足' };
+
+function ratioText(reading: StyleAxisReading): string {
+  return reading.ratio === null ? '—' : `×${reading.ratio.toFixed(2)}`;
+}
+
+function cellColor(reading: StyleAxisReading): string | undefined {
+  if (reading.ratio === null || reading.tier === 'unknown') return undefined;
+  const strength = Math.min(1, Math.abs(Math.log2(reading.ratio)) / 0.8);
+  const alpha = (reading.tier === 'stable' ? 0.15 + 0.5 * strength : reading.tier === 'lean' ? 0.08 + 0.3 * strength : 0.03 + 0.08 * strength).toFixed(2);
+  return reading.ratio >= 1 ? `rgba(184,242,119,${alpha})` : `rgba(238,185,106,${alpha})`;
+}
+
+function axisTitle(reading: StyleAxisReading): string {
+  const range = reading.low !== null && reading.high !== null ? `，95% 区间 ${reading.low.toFixed(2)}–${reading.high.toFixed(2)}` : '';
+  const confidence = reading.confidence !== null ? `，方向把握 ${(reading.confidence * 100).toFixed(0)}%` : '';
+  return `${reading.label}：个人 ${reading.value === null ? '—' : formatAxis(reading.key, reading.value)}，队友 ${reading.matesValue === null ? '—' : formatAxis(reading.key, reading.matesValue)}${range}${confidence}（${TIER_TEXT[reading.tier]}）`;
+}
+
+function archetypeLabel(entry: SquadStyle['players'][number]['archetypes'][number]): string {
+  return entry.tier === 'slight' ? `偏${entry.label}` : entry.tier === 'lean' ? `${entry.label}（倾向）` : entry.label;
+}
+
+function Radar({ axes }: { axes: StyleAxisReading[] }) {
+  const size = 240;
+  const center = size / 2;
+  const radius = 82;
+  const ordered = RADAR_KEYS.map((key) => axes.find((axis) => axis.key === key)).filter((axis): axis is StyleAxisReading => axis !== undefined);
+  const angle = (index: number) => -Math.PI / 2 + (index / ordered.length) * Math.PI * 2;
+  const scale = (ratio: number | null) => Math.max(0, Math.min(1, 0.5 + 0.5 * Math.log2(ratio ?? 1) / RADAR_LOG_SPAN));
+  const at = (index: number, fraction: number) => [center + Math.cos(angle(index)) * radius * fraction, center + Math.sin(angle(index)) * radius * fraction] as const;
+  const polygon = ordered.map((axis, index) => at(index, axis.ratio === null ? 0.5 : scale(axis.ratio)).join(',')).join(' ');
+  return (
+    <svg viewBox={`-60 -8 ${size + 120} ${size + 16}`} className="av-radar" role="img" aria-label="打法雷达图">
+      {[0.5, 1].map((ring) => <polygon key={ring} points={ordered.map((_, index) => at(index, ring).join(',')).join(' ')} className={ring === 0.5 ? 'ring avg' : 'ring'} />)}
+      {ordered.map((_, index) => { const [x, y] = at(index, 1); return <line key={index} x1={center} y1={center} x2={x} y2={y} className="spoke" />; })}
+      <polygon points={polygon} className="shape" />
+      {ordered.map((axis, index) => { const [x, y] = at(index, axis.ratio === null ? 0.5 : scale(axis.ratio)); return <circle key={axis.key} cx={x} cy={y} r={3.2} className={`dot ${axis.tier}`}><title>{axisTitle(axis)}</title></circle>; })}
+      {ordered.map((axis, index) => { const [x, y] = at(index, 1.17); return <text key={axis.key} x={x} y={y} textAnchor={x < center - 6 ? 'end' : x > center + 6 ? 'start' : 'middle'} dominantBaseline="middle" className={`label ${axis.tier === 'stable' || axis.tier === 'lean' ? axis.direction ?? '' : ''}`}>{axis.label}</text>; })}
+    </svg>
+  );
+}
+
+function CombatPanel({ style }: { style: SquadStyle }) {
+  const bestOf = (pick: (entry: SquadStyle['funnel'][number]) => number | null, higherIsBetter = true) => {
+    const values = style.funnel.map(pick).filter((value): value is number => value !== null);
+    return values.length ? (higherIsBetter ? Math.max(...values) : Math.min(...values)) : null;
+  };
+  const top = { hit: bestOf((entry) => entry.hitRate), dps: bestOf((entry) => entry.damagePerShot), hpk: bestOf((entry) => entry.hitsPerKnock, false), conv: bestOf((entry) => entry.conversion), knock: bestOf((entry) => entry.knockRate), dpm: bestOf((entry) => entry.damagePerMinute) };
+  const mark = (value: number | null, best: number | null) => (value !== null && best !== null && Math.abs(value - best) < 1e-9 ? 'best' : '');
+  const maxRatio = Math.max(1.5, ...style.combat.map((entry) => entry.ratio ?? 0));
+  return (
+    <Panel title="谁更能打" hint="战斗力指数 = 每分钟伤害、命中率、交战击倒率、击倒转化率、爆头率的综合，比的是相对队友">
+      <p className="av-verdict">{style.combatVerdict}</p>
+      {style.combatHighlights.length > 0 && <div className="av-chips av-strengths">{style.combatHighlights.map((entry) => <span key={`${entry.name}-${entry.label}`} className={`av-chip ${entry.ratio >= 1 ? 'form-hot' : 'weak'}`} title={entry.tier === 'lean' && entry.confidence !== null ? `倾向，方向把握 ${(entry.confidence * 100).toFixed(0)}%` : '稳定'}>
+        {entry.name} · {entry.label} ×{entry.ratio.toFixed(2)} {entry.tier === 'stable' ? '●' : '◐'}
+      </span>)}</div>}
+      <div className="av-two even stacked">
+        <div>
+          <h4>战斗力榜（×1.00 = 与队友持平）</h4>
+          {style.combat.map((entry) => <div className="av-combat-row" key={entry.accountId}>
+            <span className="rank">{entry.rank}</span>
+            <b>{entry.name}</b>
+            <span className="av-bar-wrap"><Bar value={entry.ratio ?? 0} max={maxRatio} tone={(entry.ratio ?? 0) >= 1 ? 'mint' : 'amber'} /></span>
+            <span className={`ratio ${entry.tier === 'stable' || entry.tier === 'lean' ? ((entry.ratio ?? 1) >= 1 ? 'up' : 'down') : ''}`}>{entry.ratio === null ? '—' : `×${entry.ratio.toFixed(2)}`}</span>
+            <small>{entry.tier === 'stable' ? '稳定' : entry.tier === 'lean' ? `倾向 ${entry.confidence === null ? '' : `${(entry.confidence * 100).toFixed(0)}%`}` : '差距不显著'}{entry.low !== null && entry.high !== null ? ` · ${entry.low.toFixed(2)}–${entry.high.toFixed(2)}` : ''}</small>
+          </div>)}
+          <p className="av-note">排名只表示点估计的高低；差距不显著时，前几名之间不能说谁一定更强。</p>
+        </div>
+        <div>
+          <h4>输出转化漏斗（射击 → 命中 → 击倒 → 击杀）</h4>
+          <div className="av-table funnel">
+            <div className="av-row head"><span>队员</span><span>射击</span><span>命中率</span><span>每发伤害</span><span>命中/击倒</span><span>交战击倒率</span><span>击倒转化</span></div>
+            {style.funnel.map((entry) => <div className="av-row" key={entry.accountId}>
+              <b>{entry.name}</b>
+              <span>{int(entry.shots)}</span>
+              <span className={mark(entry.hitRate, top.hit)}>{pct(entry.hitRate, 1)}</span>
+              <span className={mark(entry.damagePerShot, top.dps)}>{entry.damagePerShot === null ? '—' : entry.damagePerShot.toFixed(1)}</span>
+              <span className={mark(entry.hitsPerKnock, top.hpk)}>{entry.hitsPerKnock === null ? '—' : entry.hitsPerKnock.toFixed(1)}</span>
+              <span className={mark(entry.knockRate, top.knock)}>{pct(entry.knockRate)}</span>
+              <span className={mark(entry.conversion, top.conv)} title={`${entry.chainsFinished}/${entry.chainsDealt}`}>{pct(entry.conversion)}</span>
+            </div>)}
+          </div>
+          <p className="av-note">命中/击倒越低说明每个击倒需要的命中越少；击倒转化 = 自己打倒的人最终被小队终结的比例（其余被救起或未观察到结果）；交战击倒率 = 参与的交战里至少打倒一人的比例。高亮为队内最优。命中率按「开火事件 ÷ 对敌命中事件」计算，绝对值（约 6–8%）和游戏内准确率不是一回事，只用来在队友之间比较。</p>
+        </div>
+      </div>
+    </Panel>
+  );
+}
+
+function StyleMatrix({ style }: { style: SquadStyle }) {
+  const readings = (key: string) => style.players.map((player) => player.axes.find((axis) => axis.key === key)!);
+  const keys = style.players[0]!.axes.map((axis) => ({ key: axis.key, label: axis.label, group: axis.group }));
+  return (
+    <Panel title="风格对比矩阵" hint="每格 = 该队员 ÷ 队友合计；● 稳定 ◐ 倾向；绿色偏高、橙色偏低，悬停看数值">
+      <div className="av-matrix" style={{ gridTemplateColumns: `minmax(150px,1.4fr) repeat(${style.players.length}, minmax(96px,1fr))` }}>
+        <span className="head" />
+        {style.players.map((player) => <span className="head" key={player.accountId}>{player.name}</span>)}
+        {GROUPS.map((group) => <div className="av-matrix-group" key={group} style={{ display: 'contents' }}>
+          <span className="group" style={{ gridColumn: `1 / span ${style.players.length + 1}` }}>{group}</span>
+          {keys.filter((item) => item.group === group).map((item) => <div key={item.key} style={{ display: 'contents' }}>
+            <span className="axis">{item.label}</span>
+            {readings(item.key).map((reading, index) => <span key={style.players[index]!.accountId} className={`cell ${reading.tier}`} style={{ background: cellColor(reading) }} title={axisTitle(reading)}>
+              {ratioText(reading)}<i>{TIER_MARK[reading.tier]}</i>
+            </span>)}
+          </div>)}
+        </div>)}
+      </div>
+    </Panel>
+  );
+}
+
+function SpreadPanel({ spreads }: { spreads: SquadStyle['spreads'] }) {
+  const items = spreads.filter((item) => item.supported).slice(0, 8);
+  if (!items.length) return null;
+  return (
+    <Panel title="队内差异最大的维度" hint="同一维度上，最高和最低的人差几倍；只列至少一端有稳定或倾向差异的">
+      <div className="av-table spreads">
+        <div className="av-row head"><span>维度</span><span>最高</span><span>最低</span><span>相差</span></div>
+        {items.map((item) => <div className="av-row" key={item.key}>
+          <b>{item.label}<small>{item.group}</small></b>
+          <span>{item.highest.name} <em>{formatAxis(item.key, item.highest.value)}</em> {TIER_MARK[item.highest.tier]}</span>
+          <span>{item.lowest.name} <em>{formatAxis(item.key, item.lowest.value)}</em> {TIER_MARK[item.lowest.tier]}</span>
+          <span>{item.spread.toFixed(2)}×</span>
+        </div>)}
+      </div>
+    </Panel>
+  );
+}
+
+export function StyleView({ data, loading, error, onReload }: { data: TelemetryAnalytics | null; loading: boolean; error: string; onReload: () => void }) {
+  if (loading && !data) return <div className="av-empty"><div className="av-spinner" />正在读取归档遥测并计算每个人的打法…首次约需一分钟，之后会缓存。</div>;
+  if (error && !data) return <div className="av-empty">{error}<button type="button" className="av-link" onClick={onReload}>重试</button></div>;
+  if (!data) return <div className="av-empty">暂无风格分析。</div>;
+  const { style } = data;
+  if (style.players.length === 0) return <div className="av-empty">当前范围没有可用于风格分析的遥测数据。</div>;
+  return (
+    <div className="av-stack">
+      <p className="av-scope">基于 <b>{style.matches}</b> 场有归档遥测的比赛。每个维度都是「个人值 ÷ 队友合计值（不含自己）」：×1.00 即与队友持平。<b>● 稳定</b> = 95% 重抽样区间不含 1；<b>◐ 倾向</b> = 方向在 85% 以上的重抽样中一致，但区间跨过 1，只能说「更可能」。</p>
+      <CombatPanel style={style} />
+      <StyleMatrix style={style} />
+      <div className="av-style-cards">
+        {style.players.map((player) => <section className="av-panel av-style-card" key={player.accountId}>
+          <header>
+            <h3>{player.name}</h3>
+            <span className="av-chips">{player.archetypes.map((entry) => <span key={entry.id} className={`av-chip ${entry.tier === 'stable' ? 'form-hot' : ''}`}>{archetypeLabel(entry)}</span>)}</span>
+          </header>
+          <p className="av-style-summary">{player.summary}</p>
+          <div className="av-style-body">
+            <div className="av-radar-wrap"><Radar axes={player.axes} /><small>虚线圈 = 队友平均 ×1.00；外圈 ×1.5，中心 ×0.67；实心点 = 稳定，半透明 = 倾向</small></div>
+            <div>
+              <h4>最突出的特点</h4>
+              {player.traits.length ? <ul className="av-traits">{player.traits.map((trait) => <li key={trait.key}>
+                <b className={trait.ratio >= 1 ? 'up' : 'down'}>×{trait.ratio.toFixed(2)}</b>
+                <span>{trait.text}</span>
+                <small className={`tier ${trait.tier}`}>{trait.tier === 'stable' ? '稳定' : `倾向 ${trait.confidence === null ? '' : `${(trait.confidence * 100).toFixed(0)}%`}`}</small>
+              </li>)}</ul> : <p className="av-note">与队友相比没有明显偏离的维度。</p>}
+            </div>
+            <div>
+              <h4>武器偏好</h4>
+              <div className="av-chips">{player.weapons.map((weapon) => <span className="av-chip" key={weapon.weapon}>{weapon.weapon} {pct(weapon.share)}</span>)}</div>
+              <div className="av-chips" style={{ marginTop: 6 }}>{player.classShares.map((entry) => <span className="av-chip" key={entry.weaponClass}>{CLASS_LABEL[entry.weaponClass] ?? entry.weaponClass} {pct(entry.share)}</span>)}</div>
+              <p className="av-note">{player.matches} 场 · 存活 {Math.round(player.minutes)} 分钟{player.landingSpread !== null ? ` · 落地离队友中心平均 ${Math.round(player.landingSpread)}m` : ''}</p>
+            </div>
+          </div>
+          <details className="av-axis-detail"><summary>全部维度的数值</summary>
+            <div className="av-table style-axes">
+              <div className="av-row head"><span>维度</span><span>个人</span><span>队友</span><span>比值</span><span>95% 区间</span><span>判定</span></div>
+              {player.axes.map((axis) => <div className="av-row" key={axis.key} title={axisTitle(axis)}>
+                <b>{axis.label}</b>
+                <span>{axis.value === null ? '—' : formatAxis(axis.key, axis.value)}</span>
+                <span>{axis.matesValue === null ? '—' : formatAxis(axis.key, axis.matesValue)}</span>
+                <span className={axis.tier === 'stable' || axis.tier === 'lean' ? (axis.direction === 'high' ? 'up' : 'down') : ''}>{ratioText(axis)}</span>
+                <span>{axis.low === null || axis.high === null ? '—' : `${axis.low.toFixed(2)}–${axis.high.toFixed(2)}`}</span>
+                <span>{TIER_TEXT[axis.tier]}{TIER_MARK[axis.tier] ? ` ${TIER_MARK[axis.tier]}` : ''}</span>
+              </div>)}
+            </div>
+          </details>
+        </section>)}
+      </div>
+      <SpreadPanel spreads={style.spreads} />
+      <Panel title="小队搭配" hint="风格重叠与缺口">
+        {style.overlaps.length > 0 && <div><h4>风格相近的搭档</h4>{style.overlaps.map((overlap) => <p className="av-pair" key={overlap.accountIds.join('|')}><b>{overlap.names.join(' × ')}</b>相似度 {overlap.similarity.toFixed(2)}，都表现为：{overlap.sharedTraits.join('；')}。</p>)}</div>}
+        {style.gaps.length > 0 && <div><h4>小队缺口</h4><ul className="av-traits">{style.gaps.map((gap) => <li key={gap}>{gap}</li>)}</ul></div>}
+        {style.overlaps.length === 0 && style.gaps.length === 0 && <p className="av-note">没有发现明显的风格重叠或缺口。</p>}
+        <p className="av-note">{style.notes.join(' ')}</p>
+      </Panel>
+    </div>
+  );
+}
+
+const PERCENT_AXES = new Set(['farShare', 'closeShare', 'marksman', 'closeGun', 'precision', 'initiative', 'lateGame', 'isolation', 'zoneEdge', 'hitRate', 'knockRate', 'conversion']);
+
+function formatAxis(key: string, value: number): string {
+  if (key === 'range') return `${Math.round(value)}m`;
+  if (key === 'earlyLoot') return `${value.toFixed(0)} 件`;
+  if (key === 'foot') return `${Math.round(value)}m/分`;
+  if (key === 'dpm') return `${value.toFixed(0)}/分`;
+  if (key === 'combat') return `×${value.toFixed(2)}`;
+  if (key === 'dmgPerShot') return value.toFixed(1);
+  if (PERCENT_AXES.has(key)) return `${(value * 100).toFixed(0)}%`;
+  return value.toFixed(2);
+}
+
 export function FieldView({ data, loading, error, onReload }: { data: TelemetryAnalytics | null; loading: boolean; error: string; onReload: () => void }) {
   const maps = useMemo(() => (data?.landing.maps ?? []).filter((map) => map.matchesWithLanding > 0), [data]);
   const [mapName, setMapName] = useState('');
@@ -449,7 +832,13 @@ export function FieldView({ data, loading, error, onReload }: { data: TelemetryA
         </div>
       </Panel>
 
+      <FightPanel data={data.fights} />
+
       <DeathPanel deaths={data.deaths} />
+
+      <DistancePanel data={data.distance} />
+
+      <ZonePanel data={data.zone} />
 
       <Panel title="落点偏好" hint="1km 方格；点 = 单人落点，数字 = 该格作为小队主落点的场数">
         {!map && <p className="av-note">这些比赛没有可读取的落地事件。</p>}
@@ -463,17 +852,20 @@ export function FieldView({ data, loading, error, onReload }: { data: TelemetryA
                 <Kpi label="队内分散" value={map.medianSpreadMeters === null ? '—' : `${Math.round(map.medianSpreadMeters)}m`} sub="成员距小队中心中位" />
               </div>
               <div className="av-table cells">
-                <div className="av-row head"><span>方格</span><span>场次</span><span>前十率</span><span>早崩率</span><span>人均伤害</span></div>
+                <div className="av-row head"><span>方格 · 地名</span><span>场次</span><span>前十率</span><span>早崩率</span><span>人均伤害</span></div>
                 {map.cells.slice(0, 8).map((item) => <button type="button" className={`av-row ${item.cell === cell?.cell ? 'active' : ''}`} key={item.cell} onClick={() => setSelectedCell(item.cell)}>
-                  <b>{item.cell}</b><span>{item.matches}</span><span>{pct(item.top10.rate)}</span><span className={(item.earlyWipeRate ?? 0) >= 0.4 ? 'down' : ''}>{pct(item.earlyWipeRate)}</span><span>{int(item.averageDamage)}</span>
+                  <b>{item.cell}{item.region && <small>{regionName(item.region)}</small>}</b><span>{item.matches}</span><span>{pct(item.top10.rate)}</span><span className={(item.earlyWipeRate ?? 0) >= 0.4 ? 'down' : ''}>{pct(item.earlyWipeRate)}</span><span>{int(item.averageDamage)}</span>
                 </button>)}
               </div>
               {cell && <p className="av-note">{cell.cell} 格：{cell.matches} 场，中位名次 {cell.medianPlacement === null ? '未知' : `#${cell.medianPlacement}`}，前十率区间 {ci(cell.top10)}。</p>}
             </div>
           </div>
         </>}
+        <ContestPanel contest={data.landing.contest} />
         <p className="av-note">{data.landing.notes.join(' ')}</p>
       </Panel>
+
+      <RolePanel roles={data.roles} />
       <p className="av-note">{combat.notes.join(' ')}</p>
     </div>
   );

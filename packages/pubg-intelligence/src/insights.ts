@@ -3,6 +3,8 @@ import {
 } from './analytics.js';
 import type { CombatQualitySummary, DeathSummary } from './combat-quality.js';
 import type { LandingPreference } from './landing.js';
+import { DISTANCE_GAP_POINTS, ZONE_MIN_SAMPLES, type DistanceSummary, type ZoneSummary } from './field.js';
+import { FIGHT_MIN_GROUP, type FightSummary, type RoleShare } from './fights.js';
 
 export const INSIGHT_RULE_VERSION = 'highlight-rules-v1' as const;
 export const INSIGHT_MAX = 6;
@@ -26,9 +28,9 @@ const pct = (value: number | null, digits = 0): string => (value === null ? '—
 const interval = (rate: RateEstimate): string => (rate.low === null || rate.high === null ? '区间不足' : `95% 区间 ${pct(rate.low)}–${pct(rate.high)}`);
 
 /** Orders warnings first, then good news, then context, and keeps the list short enough to read. */
-export function rankInsights(insights: Insight[]): Insight[] {
+export function rankInsights(insights: Insight[], max: number = INSIGHT_MAX): Insight[] {
   const weight: Record<InsightTone, number> = { warn: 0, good: 1, info: 2 };
-  return insights.sort((left, right) => weight[left.tone] - weight[right.tone] || left.id.localeCompare(right.id)).slice(0, INSIGHT_MAX);
+  return insights.sort((left, right) => weight[left.tone] - weight[right.tone] || left.id.localeCompare(right.id)).slice(0, max);
 }
 
 export interface PerformanceInsightInput {
@@ -177,3 +179,132 @@ export function buildCombatInsights(input: CombatInsightInput): Insight[] {
   }
   return rankInsights(insights);
 }
+
+export const FIELD_INSIGHT_MAX = 10;
+
+export interface FieldInsightInput {
+  fights: FightSummary;
+  distance: DistanceSummary;
+  zone: ZoneSummary;
+  landing: LandingPreference;
+  roles: readonly RoleShare[];
+}
+
+const points = (value: number): string => `${value >= 0 ? '+' : ''}${(value * 100).toFixed(0)}pt`;
+
+export function buildFieldInsights(input: FieldInsightInput): Insight[] {
+  const { fights, distance, zone, landing, roles } = input;
+  const insights: Insight[] = [];
+  const decided = (bucket: { wins: number; losses: number }) => bucket.wins + bucket.losses;
+
+  const initiative = fights.initiatorEdge;
+  if (initiative.significant && initiative.delta !== null) {
+    const us = fights.byInitiator[0]!;
+    const them = fights.byInitiator[1]!;
+    insights.push({
+      id: 'fight-initiator',
+      tone: initiative.delta > 0 ? 'good' : 'warn',
+      title: initiative.delta > 0 ? `先手开火的交战胜率明显更高：${pct(us.winRate.rate)} 对 ${pct(them.winRate.rate)}` : `先手开火反而更吃亏：${pct(us.winRate.rate)} 对 ${pct(them.winRate.rate)}`,
+      detail: `我方先手 ${decided(us)} 场分出胜负，对方先手 ${decided(them)} 场；先手 = 交战中第一次有效伤害的发起方。`,
+      evidence: `差 ${points(initiative.delta)}，区间 ${(initiative.low! * 100).toFixed(0)} 到 ${(initiative.high! * 100).toFixed(0)}pt`,
+    });
+  }
+  const third = fights.thirdPartyEdge;
+  if (third.significant && third.delta !== null) {
+    const withThird = fights.byThirdParty[0]!;
+    const duel = fights.byThirdParty[1]!;
+    insights.push({
+      id: 'fight-third-party',
+      tone: third.delta > 0 ? 'good' : 'warn',
+      title: third.delta < 0 ? `有第三方介入时胜率降到 ${pct(withThird.winRate.rate)}（两队对战 ${pct(duel.winRate.rate)}）` : `有第三方介入时胜率反而更高 ${pct(withThird.winRate.rate)}`,
+      detail: `${decided(withThird)} 场有第三方候选、${decided(duel)} 场两队对战。第三方只是时间重叠的候选。`,
+      evidence: `差 ${points(third.delta)}，区间 ${(third.low! * 100).toFixed(0)} 到 ${(third.high! * 100).toFixed(0)}pt`,
+    });
+  }
+  for (const stage of fights.byStage) {
+    if (decided(stage) < FIGHT_MIN_GROUP || stage.key === '未知') continue;
+    const restWins = fights.overall.wins - stage.wins;
+    const restLosses = fights.overall.losses - stage.losses;
+    if (restWins + restLosses < FIGHT_MIN_GROUP) continue;
+    const difference = newcombeDifference(stage.winRate, wilsonInterval(restWins, restWins + restLosses));
+    if (!difference.significant || difference.delta === null) continue;
+    insights.push({
+      id: `fight-stage-${stage.key}`,
+      tone: difference.delta > 0 ? 'good' : 'warn',
+      title: `${stage.label}阶段的交战胜率${difference.delta > 0 ? '明显偏高' : '明显偏低'}：${pct(stage.winRate.rate)}`,
+      detail: `该阶段 ${decided(stage)} 场分出胜负，其余阶段合计 ${pct(wilsonInterval(restWins, restWins + restLosses).rate)}。`,
+      evidence: `差 ${points(difference.delta)}，区间 ${(difference.low! * 100).toFixed(0)} 到 ${(difference.high! * 100).toFixed(0)}pt`,
+    });
+  }
+
+  if (distance.longRangeGap !== null && Math.abs(distance.longRangeGap) >= DISTANCE_GAP_POINTS) {
+    const dealt = distance.bands.slice(2).reduce((sum, band) => sum + (band.dealtShare ?? 0), 0);
+    const taken = distance.bands.slice(2).reduce((sum, band) => sum + (band.takenShare ?? 0), 0);
+    insights.push({
+      id: 'distance-gap',
+      tone: distance.longRangeGap > 0 ? 'warn' : 'good',
+      title: distance.longRangeGap > 0 ? `承受的远距离伤害（≥75m）占 ${pct(taken)}，而我们打出的只占 ${pct(dealt)}` : `我们的远距离输出（≥75m）占 ${pct(dealt)}，高于承受的 ${pct(taken)}`,
+      detail: distance.longRangeGap > 0 ? '对手更常在远处消耗我们，这说明我们的交战距离偏近或缺少远程火力/掩体。' : '我们更常占据远距离优势，近距离被动挨打的比例较低。',
+      evidence: `按枪械伤害统计，打出 ${Math.round(distance.totalDealt)}、承受 ${Math.round(distance.totalTaken)}；差值需 ≥ ${DISTANCE_GAP_POINTS * 100}pt`,
+    });
+  }
+
+  const outside = [...zone.phases].filter((phase) => phase.samples >= ZONE_MIN_SAMPLES && phase.outsideRate.low !== null && phase.outsideRate.low > 0.15)
+    .sort((left, right) => (right.outsideRate.rate ?? 0) - (left.outsideRate.rate ?? 0))[0];
+  if (outside) {
+    insights.push({
+      id: `zone-outside-${outside.phase}`,
+      tone: 'warn',
+      title: `第 ${outside.phase} 圈有 ${pct(outside.outsideRate.rate)} 的时间在毒圈里`,
+      detail: `该圈共 ${outside.samples} 个位置样本，毒圈伤害合计 ${Math.round(outside.blueDamage)}。转圈偏晚会白白损血并被迫在不利位置交战。`,
+      evidence: interval(outside.outsideRate),
+    });
+  }
+  const lateEdge = zone.phases.filter((phase) => phase.phase >= 6 && phase.samples >= ZONE_MIN_SAMPLES && phase.binShares && phase.binShares[2] + phase.binShares[3] >= 0.6)[0];
+  if (lateEdge?.binShares) {
+    insights.push({
+      id: 'zone-late-edge',
+      tone: 'info',
+      title: `第 ${lateEdge.phase} 圈有 ${pct(lateEdge.binShares[2] + lateEdge.binShares[3])} 的时间贴着圈边或在圈外`,
+      detail: '决赛圈靠边更容易被两面夹击、也更容易被压缩空间；靠近圈中心通常有更多回旋余地。',
+      evidence: `样本 ${lateEdge.samples} 个位置点；圈边 = 距安全区中心 ≥ 85% 半径`,
+    });
+  }
+  if (zone.blueDamageShare !== null && zone.blueDamageShare >= 0.15 && zone.matches >= 20) {
+    insights.push({
+      id: 'zone-blue-damage',
+      tone: 'info',
+      title: `毒圈伤害占全部承伤的 ${pct(zone.blueDamageShare)}`,
+      detail: `${zone.matches} 场平均每场吃毒 ${Math.round(zone.blueDamagePerMatch ?? 0)} 点；这部分伤害本可以通过更早转圈或用载具避免。`,
+      evidence: `样本 ${zone.matches} 场`,
+    });
+  }
+
+  if (landing.contest.earlyWipeEdge.significant && (landing.contest.earlyWipeEdge.delta ?? 0) > 0) {
+    const [calm, , crowded] = landing.contest.buckets;
+    const top10 = landing.contest.top10Edge;
+    insights.push({
+      id: 'landing-contest',
+      tone: 'warn',
+      title: `落点附近有队伍争抢时，早崩率高出 ${points(landing.contest.earlyWipeEdge.delta!)}`,
+      detail: `无争抢 ${calm!.matches} 场早崩 ${pct(calm!.earlyWipe.rate)}；有争抢的场次更高${crowded!.matches ? `（2 队及以上 ${crowded!.matches} 场 ${pct(crowded!.earlyWipe.rate)}）` : ''}。但前十率${top10.delta === null ? '样本不足' : top10.significant ? `也有差异（${points(top10.delta)}）` : `差异不显著（${points(top10.delta)}）`}：争抢带来的主要是开局的翻车风险，不一定拉低最终名次。早崩 = 全队最长生存不足 7 分钟，争抢 = 500m 内有其他队降落。`,
+      evidence: `早崩差区间 ${(landing.contest.earlyWipeEdge.low! * 100).toFixed(0)} 到 ${(landing.contest.earlyWipeEdge.high! * 100).toFixed(0)}pt，共 ${landing.contest.matches} 场`,
+    });
+  }
+
+  for (const player of roles) {
+    for (const title of player.titles) {
+      const share = title === '开团手' ? player.firstKnockShare : title.startsWith('先锋盾') ? player.firstDownedShare : title === '救援担当' ? player.reviveShare : player.killShare;
+      insights.push({
+        id: `role-${player.accountId}-${title}`,
+        tone: 'info',
+        title: `${player.name}：${title}（占 ${pct(share)}）`,
+        detail: title === '开团手' ? '交战里第一个打倒对手的人最常是他。' : title.startsWith('先锋盾') ? '交战里第一个被打倒的人最常是他，说明他经常顶在最前面或被集火。' : title === '救援担当' ? '队内最多的救援来自他。' : '队内最多的人头由他收割。',
+        evidence: `${player.fights} 次参与交战；占比 ≥ ${ROLE_TITLE_SHARE_TEXT} 才授予称号`,
+      });
+    }
+  }
+  return rankInsights(insights, FIELD_INSIGHT_MAX);
+}
+
+const ROLE_TITLE_SHARE_TEXT = '40%';

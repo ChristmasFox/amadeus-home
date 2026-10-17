@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { parseTelemetryPayload, type NormalizedMatch, type NormalizedPlayer } from '@agent/pubg-domain';
-import { mapDisplayName, mapSizeKm, median, wilsonInterval, type RateEstimate } from './analytics.js';
+import { mapDisplayName, mapSizeKm, median, newcombeDifference, wilsonInterval, type DifferenceEstimate, type RateEstimate } from './analytics.js';
+import { CONTEST_MIN_MATCHES } from './field.js';
 
 export const LANDING_SCHEMA_VERSION = 1 as const;
 export const LANDING_EARLY_WIPE_SECONDS = 420;
@@ -66,10 +67,16 @@ export interface LandingMatchInput {
   match: NormalizedMatch;
   landings: readonly LandingSample[];
   memberIds: ReadonlySet<string>;
+  /** Other teams that landed within the contest radius of the squad; null when unknown. */
+  contestedTeams?: number | null;
+  /** Named map area reported after landing. */
+  region?: string | null;
 }
 
 export interface LandingCellStats {
   cell: string;
+  /** Most common named area for matches that used this cell. */
+  region: string | null;
   matches: number;
   share: number;
   top10: RateEstimate;
@@ -92,9 +99,27 @@ export interface LandingMapPreference {
   points: Array<{ x: number; y: number }>;
 }
 
+export interface ContestBucket {
+  key: string;
+  label: string;
+  matches: number;
+  top10: RateEstimate;
+  earlyWipe: RateEstimate;
+  medianPlacement: number | null;
+}
+
+export interface LandingContest {
+  matches: number;
+  buckets: ContestBucket[];
+  /** Early-wipe rate with at least one contesting team minus the rate with none. */
+  earlyWipeEdge: DifferenceEstimate;
+  top10Edge: DifferenceEstimate;
+}
+
 export interface LandingPreference {
   schemaVersion: typeof LANDING_SCHEMA_VERSION;
   maps: LandingMapPreference[];
+  contest: LandingContest;
   notes: string[];
 }
 
@@ -123,6 +148,7 @@ export function buildLandingPreference(inputs: readonly LandingMatchInput[]): La
       const players = item.match.players.filter((player) => item.memberIds.has(player.accountId));
       return {
         cell: modalCell(item.landings),
+        region: item.region ?? null,
         placement: placementOf(players),
         earlyWipe: players.length > 0 && Math.max(...players.map((player) => player.survivalTime)) < LANDING_EARLY_WIPE_SECONDS,
         damage: players.length ? players.reduce((sum, player) => sum + player.damage, 0) / players.length : 0,
@@ -132,8 +158,11 @@ export function buildLandingPreference(inputs: readonly LandingMatchInput[]): La
     for (const row of perMatch) if (row.cell) cells.set(row.cell, [...(cells.get(row.cell) ?? []), row]);
     const cellStats: LandingCellStats[] = [...cells.entries()].map(([cell, rows]) => {
       const ranked = rows.filter((row) => row.placement !== null);
+      const regions = new Map<string, number>();
+      for (const row of rows) if (row.region) regions.set(row.region, (regions.get(row.region) ?? 0) + 1);
       return {
         cell,
+        region: [...regions.entries()].sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0]))[0]?.[0] ?? null,
         matches: rows.length,
         share: rows.length / perMatch.length,
         top10: wilsonInterval(ranked.filter((row) => row.placement! <= 10).length, ranked.length),
@@ -160,9 +189,42 @@ export function buildLandingPreference(inputs: readonly LandingMatchInput[]): La
       points: withLanding.flatMap((item) => item.landings.map((landing) => ({ x: Math.round(landing.xMeters), y: Math.round(landing.yMeters) }))),
     };
   }).sort((left, right) => right.matches - left.matches || left.mapName.localeCompare(right.mapName));
+  const contestRows = inputs.filter((input) => input.landings.length > 0 && input.contestedTeams !== null && input.contestedTeams !== undefined).map((input) => {
+    const players = input.match.players.filter((player) => input.memberIds.has(player.accountId));
+    return {
+      contested: input.contestedTeams!,
+      placement: placementOf(players),
+      earlyWipe: players.length > 0 && Math.max(...players.map((player) => player.survivalTime)) < LANDING_EARLY_WIPE_SECONDS,
+    };
+  });
+  const bucketOf = (key: string, label: string, rows: typeof contestRows): ContestBucket => {
+    const ranked = rows.filter((row) => row.placement !== null);
+    return {
+      key,
+      label,
+      matches: rows.length,
+      top10: wilsonInterval(ranked.filter((row) => row.placement! <= 10).length, ranked.length),
+      earlyWipe: wilsonInterval(rows.filter((row) => row.earlyWipe).length, rows.length),
+      medianPlacement: median(ranked.map((row) => row.placement!)),
+    };
+  };
+  const calm = bucketOf('calm', '无队伍争抢', contestRows.filter((row) => row.contested === 0));
+  const crowded = bucketOf('crowded', '有队伍争抢', contestRows.filter((row) => row.contested >= 1));
+  const enough = calm.matches >= CONTEST_MIN_MATCHES && crowded.matches >= CONTEST_MIN_MATCHES;
+  const none = newcombeDifference(wilsonInterval(0, 0), wilsonInterval(0, 0));
+  const contest: LandingContest = {
+    matches: contestRows.length,
+    buckets: [
+      calm,
+      bucketOf('one', '1 队争抢', contestRows.filter((row) => row.contested === 1)),
+      bucketOf('many', '2 队及以上争抢', contestRows.filter((row) => row.contested >= 2)),
+    ],
+    earlyWipeEdge: enough ? newcombeDifference(crowded.earlyWipe, calm.earlyWipe) : none,
+    top10Edge: enough ? newcombeDifference(crowded.top10, calm.top10) : none,
+  };
   const notes: string[] = [];
   const missing = inputs.length - inputs.filter((item) => item.landings.length > 0).length;
   if (missing > 0) notes.push(`${missing} 场没有可读的落地事件，未计入落点统计。`);
   notes.push(`落点按 ${LANDING_CELL_KM}km 方格归类；早崩 = 全队最长生存时间不足 ${LANDING_EARLY_WIPE_SECONDS / 60} 分钟。落点与名次只是相关性，不说明因果。`);
-  return { schemaVersion: LANDING_SCHEMA_VERSION, maps, notes };
+  return { schemaVersion: LANDING_SCHEMA_VERSION, maps, contest, notes };
 }

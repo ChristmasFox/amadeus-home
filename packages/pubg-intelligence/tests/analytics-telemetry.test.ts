@@ -3,7 +3,7 @@ import test from 'node:test';
 import type { NormalizedMatch } from '@agent/pubg-domain';
 import { normalizeBattleTelemetry, reconstructBattleMatch } from '../src/battle.js';
 import {
-  analyzeCombatQuality, analyzeDeaths, buildCombatInsights, buildLandingPreference, buildPerformanceInsights, buildSquadAnalytics, emptyCombatQuality, INSIGHT_MAX, buildLineupAnalytics, buildMapAnalytics, buildMatchSeries, deathStageOf, extractLandings, gridCell,
+  analyzeCombatQuality, analyzeDeaths, analyzeFieldTelemetry, analyzeFights, buildFieldInsights, summarizeDistance, summarizeFights, summarizeRoles, summarizeZone, type FieldMatchStats, buildCombatInsights, buildLandingPreference, buildPerformanceInsights, buildSquadAnalytics, emptyCombatQuality, INSIGHT_MAX, buildLineupAnalytics, buildMapAnalytics, buildMatchSeries, deathStageOf, extractLandings, gridCell,
   mapDisplayName, modeGroupOf, newcombeDifference, summarizeCombatQuality, summarizeDeaths, wilsonInterval,
 } from '../src/index.js';
 
@@ -221,10 +221,134 @@ test('combat insights flag a weak revive rate and post-knock deaths, and stay qu
   const stats = { ...empty, groups: 40, knockedChains: 40, knockedRevived: 4, knockedKilled: 33, downedChains: 40, downedFinished: 30 };
   const combat = summarizeCombatQuality([stats]);
   const deathRecords = Array.from({ length: 40 }, (_, index) => ({ stage: '中期' as const, weapon: 'AUG', afterKnock: index < 30, squadWipe: false }));
-  const insights = buildCombatInsights({ combat, deaths: summarizeDeaths(deathRecords), landing: { schemaVersion: 1, maps: [], notes: [] } });
+  const insights = buildCombatInsights({ combat, deaths: summarizeDeaths(deathRecords), landing: buildLandingPreference([]) });
   assert.ok(insights.some((item) => item.id === 'revive-weak' && item.tone === 'warn'));
   assert.ok(insights.some((item) => item.id === 'death-after-knock'));
   assert.ok(insights.some((item) => item.id === 'death-stage'));
-  const quiet = buildCombatInsights({ combat: summarizeCombatQuality([{ ...empty, knockedChains: 3, knockedRevived: 0 }]), deaths: summarizeDeaths([]), landing: { schemaVersion: 1, maps: [], notes: [] } });
+  const quiet = buildCombatInsights({ combat: summarizeCombatQuality([{ ...empty, knockedChains: 3, knockedRevived: 0 }]), deaths: summarizeDeaths([]), landing: buildLandingPreference([]) });
   assert.equal(quiet.length, 0);
+});
+
+const geo = (x: number, y: number, z = 0) => ({ x, y, z });
+function character(accountId: string, teamId: number, location = geo(0, 0), extra: Record<string, unknown> = {}) {
+  return { accountId, teamId, location, isInBlueZone: false, zone: [], ...extra };
+}
+
+test('field telemetry measures damage by engagement distance, zone position, blue damage, contest and region', () => {
+  const day = (seconds: number) => new Date(start + seconds * 1000).toISOString();
+  const tracked = new Set(['t1', 't2']);
+  const payload = [
+    { _T: 'LogParachuteLanding', _D: day(100), common: { isGame: 0.1 }, character: character('t1', 1, geo(100_000, 100_000)) },
+    { _T: 'LogParachuteLanding', _D: day(101), common: { isGame: 0.1 }, character: character('t2', 1, geo(100_000, 100_000)) },
+    { _T: 'LogParachuteLanding', _D: day(100), common: { isGame: 0.1 }, character: character('e1', 2, geo(100_000 + 30_000, 100_000)) },
+    { _T: 'LogParachuteLanding', _D: day(100), common: { isGame: 0.1 }, character: character('e2', 3, geo(100_000 + 300_000, 100_000)) },
+    { _T: 'LogPlayerPosition', _D: day(110), common: { isGame: 1 }, character: character('t1', 1, geo(100_000, 100_000), { zone: ['school'] }) },
+    { _T: 'LogGameStatePeriodic', _D: day(200), common: { isGame: 2 }, gameState: { safetyZonePosition: geo(100_000, 100_000), safetyZoneRadius: 100_000, numAliveTeams: 10 } },
+    { _T: 'LogPlayerPosition', _D: day(210), common: { isGame: 2 }, character: character('t1', 1, geo(110_000, 100_000)) },
+    { _T: 'LogPlayerPosition', _D: day(220), common: { isGame: 2 }, character: character('t2', 1, geo(300_000, 100_000), { isInBlueZone: true }) },
+    // we hit an enemy from 50 m with a headshot, and an enemy hits us from 200 m
+    { _T: 'LogPlayerTakeDamage', _D: day(230), common: { isGame: 2 }, damage: 40, damageTypeCategory: 'Damage_Gun', damageReason: 'HeadShot', damageCauserName: 'WeapAUG_C', attacker: character('t1', 1, geo(0, 0)), victim: character('e1', 2, geo(5_000, 0)) },
+    { _T: 'LogPlayerTakeDamage', _D: day(240), common: { isGame: 2 }, damage: 30, damageTypeCategory: 'Damage_Gun', damageReason: 'TorsoShot', damageCauserName: 'WeapKar98k_C', attacker: character('e1', 2, geo(20_000, 0)), victim: character('t2', 1, geo(0, 0)) },
+    { _T: 'LogPlayerTakeDamage', _D: day(250), common: { isGame: 2 }, damage: 7, damageTypeCategory: 'Damage_BlueZone', attacker: null, victim: character('t2', 1) },
+    { _T: 'LogPlayerTakeDamage', _D: day(5), common: { isGame: 0.2 }, damage: 99, damageTypeCategory: 'Damage_Gun', attacker: character('t1', 1, geo(0, 0)), victim: character('e1', 2, geo(100, 0)) },
+  ];
+  const stats = analyzeFieldTelemetry(payload, tracked);
+  assert.deepEqual(stats.distance.dealt, [0, 40, 0, 0]);
+  assert.deepEqual(stats.distance.dealtHead, [0, 40, 0, 0]);
+  assert.deepEqual(stats.distance.taken, [0, 0, 0, 30]);
+  assert.deepEqual(stats.distance.weapons.AUG, [0, 40, 0, 0]);
+  assert.equal(stats.zone.blueDamage, 7);
+  assert.equal(stats.zone.damageTaken, 37);
+  assert.equal(stats.zone.phases[1]!.samples, 1);
+  assert.equal(stats.zone.phases[2]!.samples, 2);
+  assert.equal(stats.zone.phases[2]!.blueSamples, 1);
+  assert.deepEqual(stats.zone.phases[2]!.bins, [1, 0, 0, 1]);
+  assert.equal(stats.landing.contestedTeams, 1);
+  assert.equal(Math.round(stats.landing.nearestEnemyMeters!), 300);
+  assert.equal(stats.landing.region, 'school');
+
+  const summary = summarizeDistance([stats]);
+  assert.equal(summary.bands[1]!.dealtShare, 1);
+  assert.equal(summary.bands[3]!.takenShare, 1);
+  assert.equal(summary.bands[1]!.headshotShare, 1);
+  assert.equal(summary.longRangeGap, null, 'too little damage to call a gap');
+  const zone = summarizeZone([stats]);
+  assert.equal(zone.phases.find((phase) => phase.phase === 2)!.outsideRate.rate, 0.5);
+  assert.equal(zone.blueDamageShare, 7 / 37);
+});
+
+test('fight analysis scores wins and losses, initiator, stage and roles', () => {
+  const telemetry = [
+    raw('LogPlayerTakeDamage', 10, them('e1'), us('t1'), { damage: 10 }),
+    raw('LogPlayerTakeDamage', 12, us('t1'), them('e1'), { damage: 25 }),
+    raw('LogPlayerMakeGroggy', 20, us('t1'), them('e1'), { dBNOId: 'd1' }),
+    raw('LogPlayerKill', 30, us('t2'), them('e1'), { dBNOId: 'd1' }),
+    raw('LogPlayerTakeDamage', 300, us('t2'), them('e2', 'team-c'), { damage: 20 }),
+    raw('LogPlayerMakeGroggy', 310, them('e2', 'team-c'), us('t2'), { dBNOId: 'd2' }),
+    raw('LogPlayerMakeGroggy', 315, them('e2', 'team-c'), us('t1'), { dBNOId: 'd3' }),
+    raw('LogPlayerRevive', 330, us('t1'), us('t2')),
+    { _T: 'LogGameStatePeriodic', common: { isGame: 1 }, _D: new Date(start + 5_000).toISOString(), gameState: { elapsedTime: 5, numAlivePlayers: 80, numAliveTeams: 22 } },
+    { _T: 'LogGameStatePeriodic', common: { isGame: 3 }, _D: new Date(start + 200_000).toISOString(), gameState: { elapsedTime: 200, numAlivePlayers: 30, numAliveTeams: 8 } },
+  ];
+  const match = matchOf('fx', 'Baltic_Main', 5, 900);
+  const result = reconstructBattleMatch({ match, telemetry, trackedPlayerIds: ['t1', 't2'] });
+  const stats = analyzeFights(result, 'fx', ['t1', 't2']);
+  assert.equal(stats.fights.length, 2);
+  assert.deepEqual(stats.fights.map((fight) => [fight.outcome, fight.initiator, fight.stage]), [['win', 'them', '开局'], ['lose', 'us', '后期']]);
+  assert.equal(stats.roles.t1!.firstKnocks, 1);
+  assert.equal(stats.roles.t2!.kills, 1);
+  assert.equal(stats.roles.t2!.firstDowned, 1);
+  assert.equal(stats.roles.t1!.revives, 1);
+
+  const summary = summarizeFights(stats.fights);
+  assert.equal(summary.overall.wins, 1);
+  assert.equal(summary.byInitiator[0]!.losses, 1);
+  assert.equal(summary.initiatorEdge.delta, null, 'two fights are too few to compare initiators');
+  const roles = summarizeRoles([stats], new Map([['t1', 'T1'], ['t2', 'T2']]));
+  assert.equal(roles.find((role) => role.name === 'T1')!.counts.revives, 1);
+  assert.deepEqual(roles.flatMap((role) => role.titles), [], 'titles need at least 15 events');
+});
+
+test('landing contest compares early wipes with and without nearby landings', () => {
+  const members = new Set(['t1', 't2']);
+  const input = (index: number, contested: number, rank: number, survival: number) => ({
+    match: matchOf(`c${index}`, 'Baltic_Main', rank, survival),
+    landings: [{ playerRef: 'x', xMeters: 2100, yMeters: 4100, cell: 'C5' }],
+    memberIds: members,
+    contestedTeams: contested,
+    region: contested ? 'school' : 'pochinki',
+  });
+  const result = buildLandingPreference([
+    ...Array.from({ length: 12 }, (_, index) => input(index, 0, 4, 1200)),
+    ...Array.from({ length: 13 }, (_, index) => input(100 + index, 2, 20, 200)),
+  ]);
+  assert.equal(result.contest.matches, 25);
+  assert.equal(result.contest.buckets[0]!.earlyWipe.rate, 0);
+  assert.equal(result.contest.buckets[2]!.earlyWipe.rate, 1);
+  assert.equal(result.contest.earlyWipeEdge.significant, true);
+  assert.equal(result.contest.top10Edge.significant, true);
+  assert.equal(result.maps[0]!.cells[0]!.region, 'school');
+  const quiet = buildLandingPreference([input(1, 0, 4, 1200), input(2, 2, 20, 200)]);
+  assert.equal(quiet.contest.earlyWipeEdge.delta, null);
+});
+
+test('field insights surface significant initiative, long-range and contest effects only', () => {
+  const record = (outcome: 'win' | 'lose', initiator: 'us' | 'them') => ({ outcome, initiator, stage: '中期' as const, thirdParty: false, teams: 2, durationSeconds: 40 });
+  const records = [
+    ...Array.from({ length: 24 }, () => record('win', 'us')), ...Array.from({ length: 6 }, () => record('lose', 'us')),
+    ...Array.from({ length: 8 }, () => record('win', 'them')), ...Array.from({ length: 22 }, () => record('lose', 'them')),
+  ];
+  const fights = summarizeFights(records);
+  const longBand = (dealt: number, taken: number): FieldMatchStats => ({
+    distance: { dealt: [dealt * 2, 0, 0, dealt], dealtHead: [0, 0, 0, 0], taken: [taken, 0, taken * 2, taken * 2], takenHead: [0, 0, 0, 0], weapons: {} },
+    zone: { phases: {}, blueDamage: 0, damageTaken: 0 },
+    landing: { contestedTeams: null, nearestEnemyMeters: null, region: null },
+  });
+  const distance = summarizeDistance([longBand(500, 400)]);
+  const landing = buildLandingPreference([]);
+  const insights = buildFieldInsights({ fights, distance, zone: summarizeZone([]), landing, roles: [] });
+  assert.ok(insights.some((item) => item.id === 'fight-initiator' && item.tone === 'good'));
+  assert.ok(insights.some((item) => item.id === 'distance-gap' && item.tone === 'warn'));
+  assert.ok(insights.every((item) => item.evidence.length > 0));
+  assert.equal(buildFieldInsights({ fights: summarizeFights([]), distance: summarizeDistance([]), zone: summarizeZone([]), landing, roles: [] }).length, 0);
 });

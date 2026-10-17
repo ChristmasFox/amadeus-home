@@ -27,6 +27,20 @@ import {
   replayTacticalBenchmark,
   analyzeTacticalMatch,
   analyzeCombatQuality,
+  analyzeFieldTelemetry,
+  analyzeStyleTelemetry,
+  buildSquadStyle,
+  emptyFights,
+  type PlayerStyleMatch,
+  analyzeFights,
+  buildFieldInsights,
+  FIELD_INSIGHT_MAX,
+  summarizeDistance,
+  summarizeFights,
+  summarizeRoles,
+  summarizeZone,
+  type FieldMatchStats,
+  type FightMatchStats,
   analyzeDeaths,
   buildCombatInsights,
   buildLineupAnalytics,
@@ -271,6 +285,9 @@ interface MatchTelemetryAnalysis {
   quality: CombatQualityMatchStats;
   deaths: DeathRecord[];
   landings: LandingSample[];
+  field: FieldMatchStats;
+  fights: FightMatchStats;
+  style: Record<string, PlayerStyleMatch>;
 }
 
 /**
@@ -285,22 +302,27 @@ function analyzeMatchTelemetry(snapshot: Snapshot, squad: ResearchSquad, match: 
   const memberRefs = new Set(squad.memberIds.map(landingPlayerRef));
   const request = (async (): Promise<MatchTelemetryAnalysis | 'missing' | 'failed'> => {
     try {
-      const existing = snapshot.battleTelemetry.get(match.matchId);
-      let telemetry: BattleTelemetryDocument;
-      let landings = snapshot.landings.get(match.matchId);
-      if (existing) {
-        telemetry = await existing;
-      } else {
-        const payload = await snapshot.rawTelemetryArchive.read(match.matchId);
-        if (!payload) return 'missing';
-        landings = extractLandings(payload, match, new Set(match.players.map((player) => player.accountId)));
-        telemetry = normalizeBattleTelemetry(payload, match);
-      }
+      const payload = await snapshot.rawTelemetryArchive.read(match.matchId);
+      if (!payload) return 'missing';
+      const telemetry = await (snapshot.battleTelemetry.get(match.matchId) ?? Promise.resolve(normalizeBattleTelemetry(payload, match)));
+      const landings = extractLandings(payload, match, new Set(match.players.map((player) => player.accountId)));
       const trackedPlayerIds = match.players.filter((player) => members.has(player.accountId)).map((player) => player.accountId);
+      const reconstruction = reconstructBattleEpisodes({ match, telemetry, trackedPlayerIds });
+      const fightStats = analyzeFights(reconstruction, match.matchId, trackedPlayerIds);
+      const rawStyle = analyzeStyleTelemetry(payload, new Set(trackedPlayerIds));
+      const style: Record<string, PlayerStyleMatch> = {};
+      for (const player of match.players) {
+        const raw = rawStyle[player.accountId];
+        if (!raw || !members.has(player.accountId)) continue;
+        style[player.accountId] = { ...raw, minutes: Math.max(0, player.survivalTime) / 60, fights: fightStats.roles[player.accountId] ?? emptyFights() };
+      }
       return {
-        quality: analyzeCombatQuality(reconstructBattleEpisodes({ match, telemetry, trackedPlayerIds })),
+        quality: analyzeCombatQuality(reconstruction),
         deaths: analyzeDeaths(telemetry, trackedPlayerIds),
-        landings: (landings ?? []).filter((landing) => memberRefs.has(landing.playerRef)),
+        landings: landings.filter((landing) => memberRefs.has(landing.playerRef)),
+        field: analyzeFieldTelemetry(payload, new Set(trackedPlayerIds)),
+        fights: fightStats,
+        style,
       };
     } catch {
       return 'failed';
@@ -344,7 +366,22 @@ async function computeTelemetryAnalytics(snapshot: Snapshot, query: TelemetryAna
   const missingArchive = results.filter((result) => result === 'missing').length;
   const combat = summarizeCombatQuality(analyzed.map((item) => item.result.quality));
   const deaths = summarizeDeaths(analyzed.flatMap((item) => item.result.deaths));
-  const landing = buildLandingPreference(analyzed.map((item) => ({ match: item.match, landings: item.result.landings, memberIds: members as ReadonlySet<string> })));
+  const landing = buildLandingPreference(analyzed.map((item) => ({
+    match: item.match,
+    landings: item.result.landings,
+    memberIds: members as ReadonlySet<string>,
+    contestedTeams: item.result.field.landing.contestedTeams,
+    region: item.result.field.landing.region,
+  })));
+  const names = new Map<string, string>();
+  for (const item of [...analyzed].sort((left, right) => left.match.timestamp - right.match.timestamp)) {
+    for (const player of item.match.players) if (members.has(player.accountId)) names.set(player.accountId, player.displayName || player.playerName);
+  }
+  const fights = summarizeFights(analyzed.flatMap((item) => item.result.fights.fights));
+  const roles = summarizeRoles(analyzed.map((item) => item.result.fights), names);
+  const distance = summarizeDistance(analyzed.map((item) => item.result.field));
+  const zone = summarizeZone(analyzed.map((item) => item.result.field));
+  const style = buildSquadStyle({ matches: analyzed.map((item) => ({ matchId: item.match.matchId, players: item.result.style })), names });
   const dates = analyzed.map((item) => item.match.timestamp);
   return {
     scope: {
@@ -360,7 +397,12 @@ async function computeTelemetryAnalytics(snapshot: Snapshot, query: TelemetryAna
     combat,
     deaths,
     landing,
-    highlights: buildCombatInsights({ combat, deaths, landing }),
+    fights,
+    roles,
+    distance,
+    zone,
+    style,
+    highlights: rankInsights([...buildCombatInsights({ combat, deaths, landing }), ...buildFieldInsights({ fights, distance, zone, landing, roles })], FIELD_INSIGHT_MAX),
   };
 }
 
