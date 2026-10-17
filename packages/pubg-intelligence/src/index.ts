@@ -7,3 +7,8 @@ export * from './assistant.js';
 export * from './evaluation.js';
 export * from './evaluation-replay.js';
 export * from './gate-api.js';
+export * from './analytics.js';
+export * from './landing.js';
+export * from './combat-quality.js';
+export * from './insights.js';
+export * from './profiles.js';

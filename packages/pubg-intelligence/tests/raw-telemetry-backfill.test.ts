@@ -25,45 +25,47 @@ function match(index: number, telemetryUrl: string | null = `https://telemetry-c
   };
 }
 
-test('historical selection is capped at the newest 100 and never falls back to older matches', async () => {
+test('historical selection is capped at the newest matches and never falls back to older ones', async () => {
   const root = await mkdtemp(join(tmpdir(), 'pubg-telemetry-backfill-'));
   const archive = new RawTelemetryArchive(join(root, 'archive'));
-  const matches = Array.from({ length: 103 }, (_, index) => match(index));
+  const extra = 3;
+  const total = HISTORICAL_TELEMETRY_BACKFILL_LIMIT + extra;
+  const matches = Array.from({ length: total }, (_, index) => match(index));
   let fetchCount = 0;
   const fetchRaw = async (record: NormalizedMatch) => {
     fetchCount += 1;
     return Buffer.from(JSON.stringify([{ matchId: record.matchId }]));
   };
   try {
-    assert.equal(selectRecentTelemetryMatches(matches, 103).length, HISTORICAL_TELEMETRY_BACKFILL_LIMIT);
-    assert.equal(selectRecentTelemetryMatches(matches, 103)[0]?.matchId, 'match-102');
-    assert.equal(selectRecentTelemetryMatches(matches, 103).at(-1)?.matchId, 'match-003');
+    assert.equal(selectRecentTelemetryMatches(matches, total).length, HISTORICAL_TELEMETRY_BACKFILL_LIMIT);
+    assert.equal(selectRecentTelemetryMatches(matches, total)[0]?.matchId, `match-${String(total - 1).padStart(3, '0')}`);
+    assert.equal(selectRecentTelemetryMatches(matches, total).at(-1)?.matchId, `match-${String(extra).padStart(3, '0')}`);
     const result = await backfillRecentRawTelemetry(matches, archive, {
-      limit: 103,
+      limit: total,
       fetchRaw,
       isAllowedUrl: (value) => value.startsWith('https://telemetry-cdn.pubg.com/'),
     });
     assert.deepEqual(result, {
-      selectedMatchCount: 100,
-      eligibleMatchCount: 100,
+      selectedMatchCount: HISTORICAL_TELEMETRY_BACKFILL_LIMIT,
+      eligibleMatchCount: HISTORICAL_TELEMETRY_BACKFILL_LIMIT,
       alreadyArchivedCount: 0,
-      archivedCount: 100,
+      archivedCount: HISTORICAL_TELEMETRY_BACKFILL_LIMIT,
       missingAssetCount: 0,
       failedCount: 0,
     });
-    assert.equal(fetchCount, 100);
+    assert.equal(fetchCount, HISTORICAL_TELEMETRY_BACKFILL_LIMIT);
     const second = await backfillRecentRawTelemetry(matches, archive, { fetchRaw });
-    assert.equal(second.alreadyArchivedCount, 100);
+    assert.equal(second.alreadyArchivedCount, HISTORICAL_TELEMETRY_BACKFILL_LIMIT);
     assert.equal(second.archivedCount, 0);
-    assert.equal(fetchCount, 100);
+    assert.equal(fetchCount, HISTORICAL_TELEMETRY_BACKFILL_LIMIT);
     assert.equal(await archive.read('match-002'), null);
-    assert.equal(await archive.read('match-003') !== null, true);
+    assert.equal(await archive.read(`match-${String(extra).padStart(3, '0')}`) !== null, true);
   } finally {
     await rm(root, { recursive: true, force: true });
   }
 });
 
-test('backfill retries failures, deduplicates concurrent requests and skips missing assets within the same 100-match window', async () => {
+test('backfill retries failures, deduplicates concurrent requests and skips missing assets within the same match window', async () => {
   const root = await mkdtemp(join(tmpdir(), 'pubg-telemetry-backfill-retry-'));
   const archive = new RawTelemetryArchive(join(root, 'archive'));
   let attempts = 0;
@@ -117,6 +119,31 @@ test('private archive path guard rejects repository data paths and resolves syml
       join(canonicalOutside, 'archive'),
     );
     assert.equal(await assertArchiveOutsideRepository(join(outside, 'archive'), repository), join(canonicalOutside, 'archive'));
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test('expired CDN assets count as missing without being retried', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'pubg-telemetry-backfill-expired-'));
+  const archive = new RawTelemetryArchive(join(root, 'archive'));
+  const attempts = new Map<string, number>();
+  try {
+    const result = await backfillRecentRawTelemetry([match(7), match(8)], archive, {
+      retries: 3,
+      wait: async () => undefined,
+      isAllowedUrl: (value) => value.startsWith('https://telemetry-cdn.pubg.com/'),
+      async fetchRaw(record) {
+        attempts.set(record.matchId, (attempts.get(record.matchId) ?? 0) + 1);
+        if (record.matchId === 'match-007') throw new Error('pubg_telemetry_http_403');
+        return Buffer.from('[{"ok":true}]');
+      },
+    });
+    assert.equal(result.missingAssetCount, 1);
+    assert.equal(result.archivedCount, 1);
+    assert.equal(result.failedCount, 0);
+    assert.equal(attempts.get('match-007'), 1);
+    assert.equal(await archive.read('match-007'), null);
   } finally {
     await rm(root, { recursive: true, force: true });
   }

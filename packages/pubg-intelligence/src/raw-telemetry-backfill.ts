@@ -2,7 +2,15 @@ import type { NormalizedMatch, RawTelemetryArchivePort } from '@agent/pubg-domai
 import { realpath } from 'node:fs/promises';
 import { basename, dirname, isAbsolute, relative, resolve, sep } from 'node:path';
 
-export const HISTORICAL_TELEMETRY_BACKFILL_LIMIT = 100;
+/**
+ * PUBG's telemetry CDN only serves a match for roughly two weeks, so the useful window is whatever the CDN still
+ * answers for. The cap bounds one run; expired assets (HTTP 403/404/410) are counted as missing, not retried.
+ */
+export const HISTORICAL_TELEMETRY_BACKFILL_LIMIT = 500;
+
+export function isExpiredTelemetryAsset(error: unknown): boolean {
+  return error instanceof Error && /^pubg_telemetry_http_(403|404|410)$/u.test(error.message);
+}
 
 async function canonicalFuturePath(value: string): Promise<string> {
   let current = resolve(value);
@@ -81,7 +89,7 @@ async function mapWithConcurrency<T>(items: T[], concurrency: number, callback: 
   await Promise.all(Array.from({ length: Math.min(concurrency, items.length) }, worker));
 }
 
-/** Backfill is deliberately capped at the 100 newest source matches with no older fallback. */
+/** Backfill is capped at the newest source matches (see the limit constant) with no older fallback. */
 export async function backfillRecentRawTelemetry(
   matches: NormalizedMatch[],
   archive: RawTelemetryArchivePort,
@@ -137,7 +145,11 @@ export async function backfillRecentRawTelemetry(
         }
         counts.archivedCount += 1;
         return;
-      } catch {
+      } catch (error) {
+        if (isExpiredTelemetryAsset(error)) {
+          counts.missingAssetCount += 1;
+          return;
+        }
         if (attempt === retries) {
           counts.failedCount += 1;
           return;

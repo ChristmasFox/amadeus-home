@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { realpathSync, statSync } from 'node:fs';
 import { PubgApiTelemetryDownloader, SqlitePubgRepository } from '@agent/pubg-domain';
 import { RawTelemetryArchive } from '../src/raw-telemetry-archive.js';
-import { assertArchiveOutsideRepository, backfillRecentRawTelemetry } from '../src/raw-telemetry-backfill.js';
+import { assertArchiveOutsideRepository, backfillRecentRawTelemetry, HISTORICAL_TELEMETRY_BACKFILL_LIMIT } from '../src/raw-telemetry-backfill.js';
 
 function allowedTelemetryUrl(value: string): boolean {
   try {
@@ -31,12 +31,16 @@ async function main(): Promise<void> {
   let matches;
   try {
     // The SQL query is newest-first; this candidate window contains the latest
-    // 10,000 source rows, after which the backfill itself hard-caps at 100.
+    // 10,000 source rows, after which the backfill itself caps at the historical limit.
     matches = repository.listMatches({ limit: 10000, order: 'desc' });
   } finally {
     repository.close();
   }
 
+  const requestedLimit = Number(process.env.PUBG_TELEMETRY_BACKFILL_LIMIT);
+  const limit = Number.isFinite(requestedLimit) && requestedLimit > 0
+    ? Math.min(HISTORICAL_TELEMETRY_BACKFILL_LIMIT, Math.trunc(requestedLimit))
+    : HISTORICAL_TELEMETRY_BACKFILL_LIMIT;
   const archive = new RawTelemetryArchive(archivePath);
   const downloader = new PubgApiTelemetryDownloader({
     apiKey: '',
@@ -44,7 +48,7 @@ async function main(): Promise<void> {
     fetchImpl: (input, init) => fetch(input, { ...init, redirect: 'error' }),
   });
   const result = await backfillRecentRawTelemetry(matches, archive, {
-    limit: 100,
+    limit,
     retries: 3,
     concurrency: 2,
     isAllowedUrl: allowedTelemetryUrl,
@@ -55,7 +59,7 @@ async function main(): Promise<void> {
       throw new Error('telemetry_downloader_did_not_return_raw_bytes');
     },
   });
-  console.log(JSON.stringify({ sourceReadOnly: true, historicalLimit: 100, ...result }));
+  console.log(JSON.stringify({ sourceReadOnly: true, historicalLimit: limit, ...result }));
   if (result.failedCount > 0) process.exitCode = 1;
 }
 

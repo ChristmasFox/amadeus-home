@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
+import { FieldView, OverviewView, type PerformanceAnalytics, type TelemetryAnalytics } from './analytics-views.js';
 
 interface SquadOption {
   id: string;
@@ -16,12 +17,15 @@ interface Bootstrap {
   dateFrom: string | null;
   dateTo: string | null;
   modelEnabled: boolean;
+  modeCounts?: Record<string, number>;
+  archivedMatchCount?: number;
   selectedSquadId: string;
   squads: SquadOption[];
 }
 
 interface MatchRow {
   matchId: string;
+  mapLabel?: string;
   createdAt: string | null;
   mapName: string;
   gameMode: string;
@@ -450,9 +454,19 @@ function ResultBlock({ result, onEvidence }: { result: ResearchResponse; onEvide
   );
 }
 
+type WorkspaceTab = 'overview' | 'field' | 'match' | 'chat' | 'lab';
+const WORKSPACE_TABS: readonly WorkspaceTab[] = ['overview', 'field', 'match', 'chat', 'lab'];
+
+function initialTab(): WorkspaceTab {
+  const requested = new URLSearchParams(window.location.search).get('tab');
+  return WORKSPACE_TABS.find((tab) => tab === requested) ?? 'overview';
+}
+
 export function App() {
   const [bootstrap, setBootstrap] = useState<Bootstrap | null>(null);
   const [squadId, setSquadId] = useState('');
+  const [mode, setMode] = useState<'squad' | 'duo' | 'solo' | 'other' | 'all'>('squad');
+  const [completeOnly, setCompleteOnly] = useState(false);
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');
   const [search, setSearch] = useState('');
@@ -467,6 +481,12 @@ export function App() {
   const [battleReviewLoading, setBattleReviewLoading] = useState('');
   const [battleLoading, setBattleLoading] = useState(false);
   const [battleError, setBattleError] = useState('');
+  const [tab, setTab] = useState<WorkspaceTab>(initialTab);
+  const [analytics, setAnalytics] = useState<PerformanceAnalytics | null>(null);
+  const [analyticsLoading, setAnalyticsLoading] = useState(false);
+  const [telemetryData, setTelemetryData] = useState<TelemetryAnalytics | null>(null);
+  const [telemetryLoading, setTelemetryLoading] = useState(false);
+  const [telemetryError, setTelemetryError] = useState('');
   const [frequentPairs, setFrequentPairs] = useState<FrequentPairResponse | null>(null);
   const [frequentPairsLoading, setFrequentPairsLoading] = useState(false);
   const [frequentPairsError, setFrequentPairsError] = useState('');
@@ -510,7 +530,8 @@ export function App() {
   useEffect(() => {
     if (!bootstrap || !squadId) return;
     const controller = new AbortController();
-    const params = new URLSearchParams({ squadId, offset: String(offset) });
+    const params = new URLSearchParams({ squadId, mode, offset: String(offset) });
+    if (completeOnly) params.set('complete', '1');
     if (from) params.set('from', from);
     if (to) params.set('to', to);
     if (search.trim()) params.set('search', search.trim());
@@ -523,7 +544,23 @@ export function App() {
       })
       .catch((reason: unknown) => { if (!(reason instanceof DOMException && reason.name === 'AbortError')) setError('比赛列表读取失败。'); });
     return () => controller.abort();
-  }, [bootstrap, squadId, from, to, search, offset]);
+  }, [bootstrap, squadId, mode, completeOnly, from, to, search, offset]);
+
+  useEffect(() => {
+    if (!bootstrap || !squadId) return;
+    const controller = new AbortController();
+    const params = new URLSearchParams({ squadId, mode });
+    if (completeOnly) params.set('complete', '1');
+    if (from) params.set('from', from);
+    if (to) params.set('to', to);
+    setAnalyticsLoading(true);
+    setTelemetryData(null);
+    setTelemetryError('');
+    void json<PerformanceAnalytics>(`/api/analytics/performance?${params}`, { signal: controller.signal })
+      .then((data) => { setAnalytics(data); setAnalyticsLoading(false); })
+      .catch((reason: unknown) => { if (!(reason instanceof DOMException && reason.name === 'AbortError')) { setAnalytics(null); setAnalyticsLoading(false); } });
+    return () => controller.abort();
+  }, [bootstrap, squadId, mode, completeOnly, from, to]);
 
   useEffect(() => {
     if (!selectedMatchId || !squadId) { setDetail(null); return; }
@@ -611,6 +648,27 @@ export function App() {
     setPendingEvidence(null);
     if (focusEventId) void loadBattleReconstruction(focusEventId);
   }, [pendingEvidence, selectedMatchId, detailLoading]);
+
+  async function loadTelemetryAnalytics() {
+    if (!squadId || telemetryLoading) return;
+    setTelemetryLoading(true);
+    setTelemetryError('');
+    try {
+      const scope = new URLSearchParams({ squadId, mode });
+      if (completeOnly) scope.set('complete', '1');
+      if (from) scope.set('from', from);
+      if (to) scope.set('to', to);
+      setTelemetryData(await json<TelemetryAnalytics>(`/api/analytics/telemetry?${scope}`));
+    } catch {
+      setTelemetryError('遥测分析读取失败；归档不可用时仍可查看总览。');
+    } finally {
+      setTelemetryLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    if (tab === 'field' && !telemetryData && !telemetryLoading && !telemetryError && squadId) void loadTelemetryAnalytics();
+  }, [tab, telemetryData, telemetryLoading, telemetryError, squadId]);
 
   async function loadFrequentPairs() {
     if (!squadId || frequentPairsLoading) return;
@@ -729,13 +787,21 @@ export function App() {
             {bootstrap?.squads.map((squad) => <option value={squad.id} key={squad.id}>{squad.label} · {squad.members.length} 人</option>)}
           </select>
           <div className="selected-roster">{currentSquad?.members.map((member) => <span key={member}>{member}</span>) ?? <span>显示全部已记录队员</span>}</div>
+          <div className="mode-switch" role="group" aria-label="游戏模式">
+            {([['squad', '四排'], ['duo', '双排'], ['solo', '单排'], ['other', '其他'], ['all', '全部']] as const).map(([key, label]) => <button type="button" key={key} className={mode === key ? 'active' : ''} onClick={() => changeScope(() => setMode(key))}>{label}{key !== 'all' && bootstrap?.modeCounts?.[key] !== undefined && <small>{bootstrap.modeCounts[key]}</small>}</button>)}
+          </div>
+          <label className="complete-toggle" title="只统计有原始遥测归档（完整事件流）的比赛；关闭时统计全部战绩">
+            <input type="checkbox" checked={completeOnly} onChange={(event) => changeScope(() => setCompleteOnly(event.target.checked))} />
+            <span>仅看完整遥测</span>
+            {bootstrap?.archivedMatchCount !== undefined && <small>{bootstrap.archivedMatchCount} 场有归档</small>}
+          </label>
           <div className="date-grid"><label><span className="field-label">开始日期</span><input type="date" value={from} min={bootstrap?.dateFrom ?? undefined} max={to || undefined} onChange={(event) => changeScope(() => setFrom(event.target.value))} /></label><label><span className="field-label">结束日期</span><input type="date" value={to} min={from || undefined} max={bootstrap?.dateTo ?? undefined} onChange={(event) => changeScope(() => setTo(event.target.value))} /></label></div>
           <label className="search-box"><span>⌕</span><input type="search" placeholder="搜索地图或模式" value={search} onChange={(event) => changeScope(() => setSearch(event.target.value))} /><kbd>⌘ K</kbd></label>
           <div className="match-list-heading"><span>历史比赛</span><span>{matches.length} / {totalMatches}</span></div>
           <div className="match-list">
-            {matches.map((match, index) => <button className={`match-row ${selectedMatchId === match.matchId ? 'active' : ''}`} key={match.matchId} onClick={() => setSelectedMatchId(match.matchId)}>
+            {matches.map((match, index) => <button className={`match-row ${selectedMatchId === match.matchId ? 'active' : ''}`} key={match.matchId} onClick={() => { setSelectedMatchId(match.matchId); setTab('match'); }}>
               <div className="match-row-top"><span className="match-index">{String(totalMatches - (offset + index)).padStart(3, '0')}</span><span className="match-date">{dateLabel(match.createdAt)}</span><span className={`telemetry-dot ${match.telemetry === 'HIT' ? 'hit' : ''}`} title={match.telemetry === 'HIT' ? 'v6 特征缓存' : '无 v6 特征缓存'} /></div>
-              <div className="match-map">{match.mapName}<span>{match.placement ? `#${match.placement}` : '排名未知'}</span></div>
+              <div className="match-map">{match.mapLabel ?? match.mapName}<span>{match.placement ? `#${match.placement}` : '排名未知'}</span></div>
               <div className="match-mini-stats"><span>{match.gameMode.replace('squad-', '') || 'squad'}</span><span>{match.kills} kills</span><span>{number(match.damage)} dmg</span></div>
             </button>)}
             {!matches.length && <div className="empty-list">该筛选条件下没有比赛</div>}
@@ -744,34 +810,18 @@ export function App() {
           <div className="rail-footer"><span>数据源</span><b>Lab SQLite · 只读</b><small>事件缓存 {bootstrap?.telemetryCachedMatchCount ?? 0} 场 / v6</small></div>
         </aside>
 
-        <section className="center-panel">
-          <div className="section-title"><div><span className="eyebrow">SQUAD PERFORMANCE DESK</span><h2>研究对话</h2></div><span className="private-badge"><i /> PRIVATE LOCAL</span></div>
-          <div className="chat-panel">
-            {chat.length === 0 && <div className="chat-welcome"><div className="welcome-orbit"><span>✳</span></div><span className="eyebrow">RESEARCH ASSISTANT / READY</span><h3>从比赛数据里<br /><em>找出下一步。</em></h3><p>用自然语言探索历史对局。每项结论都带有比赛证据，Telemetry 缺失时只分析基础战绩。</p><div className="suggestion-grid">
-              {['最近比赛的平均伤害趋势', '比较队员的击杀和伤害', '按地图拆分前十率', 'Telemetry 缓存覆盖情况'].map((item) => <button key={item} onClick={() => void submitQuestion(undefined, item)}>{item}<span>↗</span></button>)}
-            </div></div>}
-            {chat.map((entry, index) => <div className={`chat-entry ${entry.role}`} key={`${entry.role}-${index}`}>
-              <div className="chat-entry-avatar">{entry.role === 'user' ? '你' : 'P'}</div>
-              <div className="chat-entry-body"><div className="chat-entry-label">{entry.role === 'user' ? '研究问题' : `LAB ANALYSIS${entry.result ? ` · ${entry.result.assistant.source === 'ai-sdk' ? 'AI SDK' : 'LOCAL'}` : ''}`}</div>{!entry.result && <p>{entry.text}</p>}{entry.result && <ResultBlock result={entry.result} onEvidence={openAssistantEvidence} />}</div>
-            </div>)}
-            {loading && <div className="thinking"><span /><span /><span />正在整理比赛证据…</div>}
-          </div>
-          <form className="composer" onSubmit={(event) => void submitQuestion(event)}>
-            <div className="composer-top"><label>研究问题 <select value={researchTemplate} onChange={(event) => setResearchTemplate(event.target.value as ResearchResponse['assistant']['template'])}>
-              <option value="tactical_coaching">战术复盘</option><option value="squad_humor">小队轻松叙事</option><option value="chronological_story">时间线故事</option>
-            </select></label><span>↵ 发送</span></div>
-            <textarea rows={2} placeholder="例如：比较最近一个月队员的伤害贡献" value={question} onChange={(event) => setQuestion(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); void submitQuestion(); } }} />
-            <div className="composer-bottom"><span><i />仅使用当前小队与时间范围</span><button type="submit" disabled={!question.trim() || loading}>分析 <b>↗</b></button></div>
-          </form>
-          <div className="ai-note">{bootstrap?.modelEnabled ? 'AI SDK 可读取当前范围内的统计、交战和证据；数值由本机确定性规则计算。' : '未配置模型时仅使用本机确定性统计，并明确标记降级。'} 对话上下文不能改变小队或日期范围。</div>
-        </section>
-
-        <aside className="right-rail">
-          <div className="rail-heading analysis-heading"><div><span className="eyebrow">MATCH INSIGHT</span><h2>{detail ? '单局分析' : '分析面板'}</h2></div><span className="spark-icon">✳</span></div>
-          {error && <div className="inline-error">{error}</div>}
+        <section className="workspace">
+          <nav className="workspace-tabs" aria-label="分析视图">
+            {([['overview', '总览', '战绩与队员状态'], ['field', '落点与交战', '遥测分析'], ['match', '单局复盘', detail ? '已选 1 场' : '先选比赛'], ['chat', '研究对话', 'AI 助手'], ['lab', '评估实验', '开发']] as const).map(([key, label, hint]) => <button type="button" key={key} className={tab === key ? 'active' : ''} onClick={() => { setTab(key); window.history.replaceState(null, '', key === 'overview' ? window.location.pathname : `?tab=${key}`); }}><b>{label}</b><small>{hint}</small></button>)}
+          </nav>
+          {error && <div className="inline-error workspace-error">{error}</div>}
+          {tab === 'overview' && <div className="workspace-body"><OverviewView data={analytics} loading={analyticsLoading} /></div>}
+          {tab === 'field' && <div className="workspace-body"><FieldView data={telemetryData} loading={telemetryLoading} error={telemetryError} onReload={() => void loadTelemetryAnalytics()} /></div>}
+          {tab === 'match' && <div className="workspace-body match-tab"><div className="flow-columns">
+            {!detail && !detailLoading && <div className="av-empty">从左侧选择一场比赛，查看单局分析、交战时间线和证据链。</div>}
           {detailLoading && <div className="skeleton-card"><span /><span /><span /></div>}
           {detail && <>
-            <div className="selected-match-card"><div className="selected-match-image"><span>{detail.match.mapName.toUpperCase()}</span><i>#{detail.match.placement ?? '—'}</i><div className="image-lines" /></div><div className="selected-match-meta"><div><b>{dateLabel(detail.match.createdAt)}</b><span>{detail.match.gameMode}</span></div><span className={`cache-tag ${detail.telemetry.status === 'HIT' ? 'cached' : 'missing'}`}>{detail.telemetry.status === 'HIT' ? 'V6 CACHED' : 'BASE FACTS'}</span></div>
+            <div className="selected-match-card"><div className="selected-match-image"><span>{(detail.match.mapLabel ?? detail.match.mapName).toUpperCase()}</span><i>#{detail.match.placement ?? '—'}</i><div className="image-lines" /></div><div className="selected-match-meta"><div><b>{dateLabel(detail.match.createdAt)}</b><span>{detail.match.gameMode}</span></div><span className={`cache-tag ${detail.telemetry.status === 'HIT' ? 'cached' : 'missing'}`}>{detail.telemetry.status === 'HIT' ? 'V6 CACHED' : 'BASE FACTS'}</span></div>
               <div className="match-metric-grid"><Metric label="击杀" value={number(detail.match.kills)} /><Metric label="伤害" value={number(detail.match.damage)} /><Metric label="队员" value={String(detail.analysis.players.length)} /></div>
               <button className="battle-load-button" onClick={() => void loadBattleReconstruction()} disabled={battleLoading}>
                 {battleLoading ? '正在读取遥测并重建…' : battleData?.matchId === selectedMatchId ? '重新读取交战时间线' : '重建交战时间线'} <span>↗</span>
@@ -798,8 +848,6 @@ export function App() {
             <div className="tactical-integrity">schema {battleData.tactical.schemaVersion} · 交战 {battleData.tactical.diagnostics.episodeCount} · 位置样本 {battleData.tactical.diagnostics.positionEventCount} · 队伍字段不完整 {battleData.tactical.diagnostics.incompleteTeamEventCount} · 未识别来源 {battleData.tactical.diagnostics.unmatchedBattleSourceCount}</div>
             {battleData.tactical.candidates.map((candidate) => <TacticalCandidateCard key={candidate.id} candidate={candidate} labels={battleData.labels?.tacticalPlayers ?? {}} />)}
           </section>}
-          {activeResearch && <div className="evidence-card"><div className="evidence-heading"><div><span className="eyebrow">EVIDENCE LEDGER</span><b>研究证据</b></div><span>{activeResearch.report.evidenceCount}</span></div><div className="evidence-list">{activeResearch.report.evidence.slice(0, 10).map((item) => <button className="evidence-row" key={item.id} onClick={() => setSelectedMatchId(item.matchId)}><div className="evidence-ref">{item.source === 'telemetry_feature' ? 'T' : 'M'}</div><div><span>{dateLabel(item.occurredAt)} · {item.mapName}</span><b>{item.value}</b><small>{item.description}</small></div><i>↗</i></button>)}</div></div>}
-          {!detail && !activeResearch && !detailLoading && <div className="right-empty"><div className="evidence-empty-icon">⌁</div><b>等待研究输入</b><p>选择一场历史比赛查看领域分析，或发起研究问题。证据会在这里展开。</p></div>}
           {detail && <div className="evidence-card detail-evidence"><div className="evidence-heading"><div><span className="eyebrow">SOURCE TRACE</span><b>单局证据链</b></div><span>{detail.evidence.length}</span></div><div className="evidence-list">{detail.evidence.slice(0, 8).map((item) => <div className="evidence-row static" key={item.id}><div className={`evidence-ref ${item.source === 'telemetry' ? 'telemetry-ref' : ''}`}>{item.id}</div><div><span>{item.source === 'telemetry' ? 'Telemetry 特征' : 'Match Store'} · {item.kind}</span><small>{item.description}</small></div></div>)}</div></div>}
           {battleError && <div className="inline-error">{battleError}</div>}
           {battleData?.status === 'unavailable' && <div className="battle-empty"><b>原始遥测不可用</b><span>{battleData.reason === 'no_telemetry_asset_in_snapshot' ? '只读快照没有保存该比赛的遥测资产引用。' : '读取或解析遥测失败；快照未被修改。'}</span></div>}
@@ -860,6 +908,32 @@ export function App() {
             </div>}
             <div className="battle-evaluation-note">启发式：对敌有效 DAMAGE / KNOCK / KILL 按队伍对聚合；相邻接触间隔 ≤28 秒合并，或 knock 后 120 秒内对应 kill 延续。位置按队员每 15 秒取首条样本；歧义事件不强行归属。圈采样仅作为时间邻近的上下文证据，可被相邻 episode 共享。</div>
           </section>}
+          </div></div>}
+          {tab === 'chat' && <div className="workspace-body chat-tab"><div className="center-panel">
+          <div className="chat-panel">
+            {chat.length === 0 && <div className="chat-welcome"><div className="welcome-orbit"><span>✳</span></div><span className="eyebrow">RESEARCH ASSISTANT / READY</span><h3>从比赛数据里<br /><em>找出下一步。</em></h3><p>用自然语言探索历史对局。每项结论都带有比赛证据，Telemetry 缺失时只分析基础战绩。</p><div className="suggestion-grid">
+              {['最近比赛的平均伤害趋势', '比较队员的击杀和伤害', '按地图拆分前十率', 'Telemetry 缓存覆盖情况'].map((item) => <button key={item} onClick={() => void submitQuestion(undefined, item)}>{item}<span>↗</span></button>)}
+            </div></div>}
+            {chat.map((entry, index) => <div className={`chat-entry ${entry.role}`} key={`${entry.role}-${index}`}>
+              <div className="chat-entry-avatar">{entry.role === 'user' ? '你' : 'P'}</div>
+              <div className="chat-entry-body"><div className="chat-entry-label">{entry.role === 'user' ? '研究问题' : `LAB ANALYSIS${entry.result ? ` · ${entry.result.assistant.source === 'ai-sdk' ? 'AI SDK' : 'LOCAL'}` : ''}`}</div>{!entry.result && <p>{entry.text}</p>}{entry.result && <ResultBlock result={entry.result} onEvidence={openAssistantEvidence} />}</div>
+            </div>)}
+            {loading && <div className="thinking"><span /><span /><span />正在整理比赛证据…</div>}
+          </div>
+          <form className="composer" onSubmit={(event) => void submitQuestion(event)}>
+            <div className="composer-top"><label>研究问题 <select value={researchTemplate} onChange={(event) => setResearchTemplate(event.target.value as ResearchResponse['assistant']['template'])}>
+              <option value="tactical_coaching">战术复盘</option><option value="squad_humor">小队轻松叙事</option><option value="chronological_story">时间线故事</option>
+            </select></label><span>↵ 发送</span></div>
+            <textarea rows={2} placeholder="例如：比较最近一个月队员的伤害贡献" value={question} onChange={(event) => setQuestion(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); void submitQuestion(); } }} />
+            <div className="composer-bottom"><span><i />仅使用当前小队与时间范围</span><button type="submit" disabled={!question.trim() || loading}>分析 <b>↗</b></button></div>
+          </form>
+          <div className="ai-note">{bootstrap?.modelEnabled ? 'AI SDK 可读取当前范围内的统计、交战和证据；数值由本机确定性规则计算。' : '未配置模型时仅使用本机确定性统计，并明确标记降级。'} 对话上下文不能改变小队或日期范围。</div>
+          </div>
+          {activeResearch ? <div className="chat-evidence">
+          {activeResearch && <div className="evidence-card"><div className="evidence-heading"><div><span className="eyebrow">EVIDENCE LEDGER</span><b>研究证据</b></div><span>{activeResearch.report.evidenceCount}</span></div><div className="evidence-list">{activeResearch.report.evidence.slice(0, 10).map((item) => <button className="evidence-row" key={item.id} onClick={() => setSelectedMatchId(item.matchId)}><div className="evidence-ref">{item.source === 'telemetry_feature' ? 'T' : 'M'}</div><div><span>{dateLabel(item.occurredAt)} · {item.mapName}</span><b>{item.value}</b><small>{item.description}</small></div><i>↗</i></button>)}</div></div>}
+          </div> : <div className="chat-evidence empty"><div className="evidence-empty-icon">⌁</div><b>研究证据</b><p>提问后，支撑结论的比赛证据会出现在这里。</p></div>}
+          </div>}
+          {tab === 'lab' && <div className="workspace-body lab-tab">
           <section className="evidence-card evaluation-panel">
             <div className="evidence-heading"><div><span className="eyebrow">OFFLINE EVALUATION</span><b>实验登记 / 反例浏览</b></div><button type="button" className="evaluation-run-button" onClick={() => void replayEvaluation()} disabled={evaluationLoading}>{evaluationLoading ? '重放中…' : '重放基准'}</button></div>
             {!evaluationReport && <p className="evaluation-empty">运行固定脱敏 fixture 的 baseline / candidate 对比；结果写入独立的本地实验库。</p>}
@@ -893,8 +967,9 @@ export function App() {
               </details>
             </>}
           </section>
-          <div className="right-footer"><span>解析器版本</span><b>{bootstrap?.parserVersion} / {bootstrap?.featureVersion} · battle-reconstruction-v2</b><small>团战重建只读已有归档遥测；复核结果写入独立本地实验库。</small></div>
-        </aside>
+            <div className="right-footer"><span>解析器版本</span><b>{bootstrap?.parserVersion} / {bootstrap?.featureVersion} · battle-reconstruction-v2</b><small>团战重建只读已有归档遥测；复核结果写入独立本地实验库。</small></div>
+          </div>}
+        </section>
       </main>
     </div>
   );

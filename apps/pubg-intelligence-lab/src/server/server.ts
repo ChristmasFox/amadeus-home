@@ -26,6 +26,30 @@ import {
   ExperimentRunStore,
   replayTacticalBenchmark,
   analyzeTacticalMatch,
+  analyzeCombatQuality,
+  analyzeDeaths,
+  buildCombatInsights,
+  buildLineupAnalytics,
+  buildPerformanceInsights,
+  buildPlayerProfiles,
+  buildProfileInsights,
+  rankInsights,
+  buildMatchSeries,
+  MODE_GROUPS,
+  modeGroupOf,
+  summarizeDeaths,
+  type DeathRecord,
+  type ModeGroup,
+  buildLandingPreference,
+  buildMapAnalytics,
+  buildSquadAnalytics,
+  extractLandings,
+  landingPlayerRef,
+  mapDisplayName,
+  summarizeCombatQuality,
+  type CombatQualityMatchStats,
+  type LandingSample,
+  buildWeaponEfficiency,
   anonymizeResearchText,
   NaturalLanguageResearchPlanner,
   ResearchTemplateSchema,
@@ -56,6 +80,8 @@ const DEFAULT_HOST = '127.0.0.1';
 const MAX_REQUEST_BYTES = 16 * 1024;
 const MAX_MATCHES_PER_PAGE = 100;
 const MAX_TACTICAL_MATCHES = 30;
+/** Analytics read only the local archive, one match at a time, and keep just the small per-match result. */
+const MAX_TELEMETRY_ANALYTICS_MATCHES = 400;
 
 interface MatchReviewFeature {
   facts: MatchReviewFacts;
@@ -67,6 +93,10 @@ interface Snapshot {
   squads: ResearchSquad[];
   defaultSquad: ResearchSquad;
   features: Map<string, MatchReviewFeature>;
+  landings: Map<string, LandingSample[]>;
+  telemetryAnalytics: Map<string, Promise<unknown>>;
+  matchTelemetry: Map<string, Promise<MatchTelemetryAnalysis | 'missing' | 'failed'>>;
+  archivedIds: { at: number; ids: ReadonlySet<string> } | null;
   telemetryUrls: Map<string, string>;
   rawTelemetryArchive: RawTelemetryArchive;
   battleTelemetry: Map<string, Promise<BattleTelemetryDocument>>;
@@ -193,6 +223,10 @@ async function openSnapshot(modelOverride?: Exclude<LanguageModel, string>): Pro
     squads,
     defaultSquad: selectedSquad,
     features,
+    landings: new Map(),
+    telemetryAnalytics: new Map(),
+    matchTelemetry: new Map(),
+    archivedIds: null,
     telemetryUrls,
     rawTelemetryArchive: new RawTelemetryArchive(telemetryArchiveDirectory),
     battleTelemetry: new Map(),
@@ -221,6 +255,7 @@ async function loadBattleTelemetry(snapshot: Snapshot, match: NormalizedMatch): 
   if (cached) return cached;
   const request = snapshot.rawTelemetryArchive.read(match.matchId).then((payload) => {
     if (!payload) throw new Error('telemetry_archive_missing');
+    snapshot.landings.set(match.matchId, extractLandings(payload, match, new Set(match.players.map((player) => player.accountId))));
     return normalizeBattleTelemetry(payload, match);
   });
   snapshot.battleTelemetry.set(match.matchId, request);
@@ -230,6 +265,103 @@ async function loadBattleTelemetry(snapshot: Snapshot, match: NormalizedMatch): 
     snapshot.battleTelemetry.delete(match.matchId);
     throw error;
   }
+}
+
+interface MatchTelemetryAnalysis {
+  quality: CombatQualityMatchStats;
+  deaths: DeathRecord[];
+  landings: LandingSample[];
+}
+
+/**
+ * Analyse one archived match for a squad without retaining the parsed telemetry document.
+ * Returns 'missing' when the archive has no entry (the CDN keeps telemetry for about 14 days) and 'failed' when it cannot be parsed.
+ */
+function analyzeMatchTelemetry(snapshot: Snapshot, squad: ResearchSquad, match: NormalizedMatch): Promise<MatchTelemetryAnalysis | 'missing' | 'failed'> {
+  const key = `${squad.id}|${match.matchId}`;
+  const cached = snapshot.matchTelemetry.get(key);
+  if (cached) return cached;
+  const members = new Set(squad.memberIds);
+  const memberRefs = new Set(squad.memberIds.map(landingPlayerRef));
+  const request = (async (): Promise<MatchTelemetryAnalysis | 'missing' | 'failed'> => {
+    try {
+      const existing = snapshot.battleTelemetry.get(match.matchId);
+      let telemetry: BattleTelemetryDocument;
+      let landings = snapshot.landings.get(match.matchId);
+      if (existing) {
+        telemetry = await existing;
+      } else {
+        const payload = await snapshot.rawTelemetryArchive.read(match.matchId);
+        if (!payload) return 'missing';
+        landings = extractLandings(payload, match, new Set(match.players.map((player) => player.accountId)));
+        telemetry = normalizeBattleTelemetry(payload, match);
+      }
+      const trackedPlayerIds = match.players.filter((player) => members.has(player.accountId)).map((player) => player.accountId);
+      return {
+        quality: analyzeCombatQuality(reconstructBattleEpisodes({ match, telemetry, trackedPlayerIds })),
+        deaths: analyzeDeaths(telemetry, trackedPlayerIds),
+        landings: (landings ?? []).filter((landing) => memberRefs.has(landing.playerRef)),
+      };
+    } catch {
+      return 'failed';
+    }
+  })();
+  snapshot.matchTelemetry.set(key, request);
+  return request;
+}
+
+interface TelemetryAnalyticsQuery {
+  squad: ResearchSquad;
+  mode: ModeGroup | 'all';
+  fromMs: number | undefined;
+  toMs: number | undefined;
+  limit: number;
+  archived?: ReadonlySet<string> | null;
+}
+
+async function computeTelemetryAnalytics(snapshot: Snapshot, query: TelemetryAnalyticsQuery) {
+  const { squad, mode, fromMs, toMs, limit } = query;
+  const eligible = snapshot.matches.filter((match) => snapshot.telemetryUrls.has(match.matchId)
+    && inSquad(match, squad) && inMode(match, mode)
+    && (!query.archived || query.archived.has(match.matchId))
+    && (fromMs === undefined || match.timestamp >= fromMs)
+    && (toMs === undefined || match.timestamp < toMs))
+    .sort((left, right) => right.timestamp - left.timestamp || right.matchId.localeCompare(left.matchId));
+  const selected = eligible.slice(0, limit);
+  const results: Array<MatchTelemetryAnalysis | 'missing' | 'failed'> = new Array(selected.length).fill('failed');
+  let nextIndex = 0;
+  await Promise.all(Array.from({ length: Math.min(3, selected.length) }, async () => {
+    while (nextIndex < selected.length) {
+      const index = nextIndex++;
+      results[index] = await analyzeMatchTelemetry(snapshot, squad, selected[index]!);
+    }
+  }));
+  const members = new Set(squad.memberIds);
+  const analyzed = selected.flatMap((match, index) => {
+    const result = results[index]!;
+    return typeof result === 'string' ? [] : [{ match, result }];
+  });
+  const missingArchive = results.filter((result) => result === 'missing').length;
+  const combat = summarizeCombatQuality(analyzed.map((item) => item.result.quality));
+  const deaths = summarizeDeaths(analyzed.flatMap((item) => item.result.deaths));
+  const landing = buildLandingPreference(analyzed.map((item) => ({ match: item.match, landings: item.result.landings, memberIds: members as ReadonlySet<string> })));
+  const dates = analyzed.map((item) => item.match.timestamp);
+  return {
+    scope: {
+      squadLabel: squad.label,
+      eligibleMatches: eligible.length,
+      analyzedMatches: analyzed.length,
+      missingArchiveMatches: missingArchive,
+      unavailableMatches: selected.length - analyzed.length - missingArchive,
+      limit,
+      from: dates.length ? new Date(Math.min(...dates)).toISOString() : null,
+      to: dates.length ? new Date(Math.max(...dates)).toISOString() : null,
+    },
+    combat,
+    deaths,
+    landing,
+    highlights: buildCombatInsights({ combat, deaths, landing }),
+  };
 }
 
 function battleLabels(
@@ -804,6 +936,28 @@ function deterministicAssistantFallback(question: string, reportAnswer: string, 
   return { answer: reportAnswer, evidenceRefs: [], citeReportEvidence: true };
 }
 
+function requestedMode(url: URL): ModeGroup | 'all' {
+  const value = url.searchParams.get('mode');
+  return value === 'all' ? 'all' : MODE_GROUPS.find((group) => group === value) ?? 'squad';
+}
+
+function inMode(match: NormalizedMatch, mode: ModeGroup | 'all'): boolean {
+  return mode === 'all' || modeGroupOf(match.gameMode) === mode;
+}
+
+/** Match IDs with a verified raw telemetry archive entry; re-read at most every 30 seconds because the hourly prefetch adds entries. */
+async function archivedIds(snapshot: Snapshot): Promise<ReadonlySet<string>> {
+  const cached = snapshot.archivedIds;
+  if (cached && Date.now() - cached.at < 30_000) return cached.ids;
+  const ids = new Set(await snapshot.rawTelemetryArchive.listMatchIds());
+  snapshot.archivedIds = { at: Date.now(), ids };
+  return ids;
+}
+
+function wantsCompleteTelemetry(url: URL): boolean {
+  return url.searchParams.get('complete') === '1';
+}
+
 function visibleMatch(match: NormalizedMatch, squad: ResearchSquad, snapshot: Snapshot) {
   const players = squad.memberIds.length
     ? match.players.filter((player) => squad.memberIds.includes(player.accountId))
@@ -814,6 +968,7 @@ function visibleMatch(match: NormalizedMatch, squad: ResearchSquad, snapshot: Sn
     matchId: match.matchId,
     createdAt: match.createdAt ?? (Number.isFinite(match.timestamp) ? new Date(match.timestamp).toISOString() : null),
     mapName: match.mapName || '未知地图',
+    mapLabel: mapDisplayName(match.mapName || '未知地图'),
     gameMode: match.gameMode,
     duration: match.duration,
     placement,
@@ -940,6 +1095,8 @@ async function handleApi(request: IncomingMessage, response: ServerResponse, sna
     send(response, 200, {
       matchCount: snapshot.matches.length,
       telemetryCachedMatchCount: snapshot.features.size,
+      archivedMatchCount: (await archivedIds(snapshot)).size,
+      modeCounts: Object.fromEntries(MODE_GROUPS.map((group) => [group, snapshot.matches.filter((match) => modeGroupOf(match.gameMode) === group).length])),
       parserVersion: PARSER_VERSION,
       featureVersion: FEATURE_VERSION,
       dateFrom: dates[0] ?? null,
@@ -957,14 +1114,16 @@ async function handleApi(request: IncomingMessage, response: ServerResponse, sna
     const bounds = safeDateBounds(from, to);
     if (!bounds) { send(response, 400, { error: 'invalid_date_range' }); return; }
     const squad = selectSquad(snapshot, url.searchParams.get('squadId'));
+    const mode = requestedMode(url);
+    const archived = wantsCompleteTelemetry(url) ? await archivedIds(snapshot) : null;
     const search = (url.searchParams.get('search') ?? '').trim().toLocaleLowerCase('zh-CN').slice(0, 100);
     const offset = Math.max(0, Math.min(10000, Number(url.searchParams.get('offset') ?? 0) || 0));
     const filtered = snapshot.matches.filter((match) => {
       const time = match.timestamp;
       if (bounds.fromMs !== undefined && time < bounds.fromMs) return false;
       if (bounds.toMs !== undefined && time >= bounds.toMs) return false;
-      if (!inSquad(match, squad)) return false;
-      return !search || match.mapName.toLocaleLowerCase('zh-CN').includes(search) || match.gameMode.toLocaleLowerCase('zh-CN').includes(search);
+      if (!inSquad(match, squad) || !inMode(match, mode) || (archived && !archived.has(match.matchId))) return false;
+      return !search || match.mapName.toLocaleLowerCase('zh-CN').includes(search) || mapDisplayName(match.mapName).includes(search) || match.gameMode.toLocaleLowerCase('zh-CN').includes(search);
     }).sort((a, b) => b.timestamp - a.timestamp || b.matchId.localeCompare(a.matchId));
     send(response, 200, {
       total: filtered.length,
@@ -972,6 +1131,64 @@ async function handleApi(request: IncomingMessage, response: ServerResponse, sna
       limit: MAX_MATCHES_PER_PAGE,
       matches: filtered.slice(offset, offset + MAX_MATCHES_PER_PAGE).map((match) => visibleMatch(match, squad, snapshot)),
     });
+    return;
+  }
+  if (request.method === 'GET' && url.pathname === '/api/analytics/performance') {
+    const scopeBounds = safeDateBounds(url.searchParams.get('from'), url.searchParams.get('to'));
+    if (!scopeBounds) { send(response, 400, { error: 'invalid_date_range' }); return; }
+    const squad = selectSquad(snapshot, url.searchParams.get('squadId'));
+    const mode = requestedMode(url);
+    const archived = await archivedIds(snapshot);
+    const completeOnly = wantsCompleteTelemetry(url);
+    const scoped = snapshot.matches.filter((match) => inSquad(match, squad) && inMode(match, mode)
+      && (!completeOnly || archived.has(match.matchId))
+      && (scopeBounds.fromMs === undefined || match.timestamp >= scopeBounds.fromMs)
+      && (scopeBounds.toMs === undefined || match.timestamp < scopeBounds.toMs));
+    const members = new Set(squad.memberIds);
+    const weaponSamples = scoped.flatMap((match) => (snapshot.features.get(match.matchId)?.facts.weapons ?? [])
+      .filter((weapon) => members.has(weapon.playerId)));
+    const telemetryMatches = scoped.filter((match) => snapshot.features.has(match.matchId)).length;
+    const squadAnalytics = buildSquadAnalytics({ matches: scoped, memberIds: squad.memberIds });
+    const maps = buildMapAnalytics({ matches: scoped, memberIds: squad.memberIds });
+    const lineups = buildLineupAnalytics({ matches: scoped, memberIds: squad.memberIds });
+    const series = buildMatchSeries({ matches: scoped, memberIds: squad.memberIds });
+    const profiles = buildPlayerProfiles({
+      matches: scoped,
+      memberIds: squad.memberIds,
+      facts: new Map(scoped.flatMap((match) => { const feature = snapshot.features.get(match.matchId); return feature ? [[match.matchId, feature.facts] as const] : []; })),
+    });
+    send(response, 200, {
+      scope: { squadLabel: squad.label, selectedMatches: scoped.length, telemetryMatches, archivedMatches: scoped.filter((match) => archived.has(match.matchId)).length, mode, completeOnly },
+      squad: squadAnalytics,
+      maps,
+      lineups,
+      series,
+      profiles,
+      highlights: rankInsights([...buildPerformanceInsights({ squad: squadAnalytics, maps, lineups, series }), ...buildProfileInsights(profiles)]),
+      weapons: buildWeaponEfficiency(weaponSamples).slice(0, 12),
+    });
+    return;
+  }
+  if (request.method === 'GET' && url.pathname === '/api/analytics/telemetry') {
+    const scopeBounds = safeDateBounds(url.searchParams.get('from'), url.searchParams.get('to'));
+    if (!scopeBounds) { send(response, 400, { error: 'invalid_date_range' }); return; }
+    const squad = selectSquad(snapshot, url.searchParams.get('squadId'));
+    const requestedLimit = Number(url.searchParams.get('limit') ?? MAX_TELEMETRY_ANALYTICS_MATCHES);
+    const limit = Number.isFinite(requestedLimit) ? Math.max(1, Math.min(MAX_TELEMETRY_ANALYTICS_MATCHES, Math.floor(requestedLimit))) : MAX_TELEMETRY_ANALYTICS_MATCHES;
+    const mode = requestedMode(url);
+    const completeOnly = wantsCompleteTelemetry(url);
+    const key = [squad.id, mode, completeOnly ? 'complete' : 'all', url.searchParams.get('from') ?? '', url.searchParams.get('to') ?? '', limit].join('|');
+    let pending = snapshot.telemetryAnalytics.get(key);
+    if (!pending) {
+      pending = computeTelemetryAnalytics(snapshot, { squad, mode, fromMs: scopeBounds.fromMs, toMs: scopeBounds.toMs, limit, archived: completeOnly ? await archivedIds(snapshot) : null });
+      snapshot.telemetryAnalytics.set(key, pending);
+      pending.catch(() => snapshot.telemetryAnalytics.delete(key));
+    }
+    try {
+      send(response, 200, await pending);
+    } catch {
+      send(response, 500, { error: 'telemetry_analytics_failed' });
+    }
     return;
   }
   if (request.method === 'GET' && url.pathname === '/api/tactics/recurrent-pairs') {
@@ -1337,6 +1554,9 @@ export async function startServer(options: { researchModel?: Exclude<LanguageMod
     server.once('error', reject);
     server.listen(port, host, () => resolveStart());
   });
+  // Warm the per-match telemetry results for the default squad so the first visit to the field tab is quick.
+  void computeTelemetryAnalytics(snapshot, { squad: snapshot.defaultSquad, mode: 'squad', fromMs: undefined, toMs: undefined, limit: MAX_TELEMETRY_ANALYTICS_MATCHES })
+    .catch(() => undefined);
   const address = server.address();
   const actualPort = typeof address === 'object' && address ? address.port : port;
   return {
