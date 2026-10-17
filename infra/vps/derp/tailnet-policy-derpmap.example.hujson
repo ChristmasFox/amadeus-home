@@ -1,0 +1,28 @@
+// Merge this top-level key into the tailnet policy file
+// (https://login.tailscale.com/admin/acls/file). Rollback: delete the key.
+//
+// OmitDefaultRegions=true forces every node to use only this relay when no
+// direct path exists. Set it to false to merely add the region: nodes then
+// pick their own lowest-latency home DERP and traffic may still use Tailscale
+// regions (relayed traffic goes through the receiver's home region).
+"derpMap": {
+	"OmitDefaultRegions": true,
+	"Regions": {
+		"900": {
+			"RegionID":   900,
+			"RegionCode": "amadeus-lax",
+			"RegionName": "Amadeus Gateway LA",
+			"Nodes": [
+				{
+					"Name":     "900a",
+					"RegionID": 900,
+					"HostName": "sub.example.com",
+					"IPv4":     "203.0.113.10",
+					"IPv6":     "none",
+					"DERPPort": 443,
+					"STUNPort": 3478,
+				},
+			],
+		},
+	},
+},

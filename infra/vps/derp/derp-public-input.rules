@@ -1,0 +1,2 @@
+# Keep derper's plain-HTTP upstream reachable only from Caddy on loopback.
+-A INPUT ! -i lo -p tcp -m tcp --dport 3340 -j DROP

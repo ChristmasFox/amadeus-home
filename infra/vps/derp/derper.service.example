@@ -1,0 +1,30 @@
+[Unit]
+Description=Tailscale DERP relay for amadeus-gateway (behind Caddy)
+After=network-online.target tailscaled.service
+Wants=network-online.target tailscaled.service
+
+[Service]
+Type=simple
+DynamicUser=yes
+# HTTP on :3340 is only for Caddy's loopback upstream; the public TCP port is
+# dropped by iptables (see derp-public-input.rules). STUN binds UDP :3478.
+StateDirectory=derper
+StateDirectoryMode=0700
+# The -c file holds derper's own node private key; it never leaves the VPS.
+ExecStart=/usr/local/bin/derper -c /var/lib/derper/derper.json -a :3340 -http-port -1 -stun-port 3478 -hostname sub.example.com -verify-clients -home blank
+Restart=on-failure
+RestartSec=5s
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+MemoryMax=192M
+TasksMax=64
+TimeoutStopSec=10s
+
+[Install]
+WantedBy=multi-user.target

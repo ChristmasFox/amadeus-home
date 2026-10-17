@@ -1,0 +1,9 @@
+# Add inside the existing `sub.example.com { ... }` (TCP 443) site block,
+# before its catch-all `handle { respond 404 }`. DERP clients always use
+# https://<HostName>/derp and the /derp/latency-check, /generate_204 probes.
+	handle /derp* {
+		reverse_proxy 127.0.0.1:3340
+	}
+	handle /generate_204 {
+		reverse_proxy 127.0.0.1:3340
+	}
