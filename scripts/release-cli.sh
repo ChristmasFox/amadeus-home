@@ -16,6 +16,7 @@ OPENCLAW_ONLY=0
 OPENCLAW_IMAGE=""
 PROMOTE_LIVE_CANDIDATE=0
 PROMOTION_CHECKPOINT_REF=""
+CANDIDATE_MANIFEST=""
 LINEAGE_BRIDGE=0
 CREATE_TAG=0
 LIVE=0
@@ -49,6 +50,7 @@ Options:
   --image <immutable-ref>          prebuilt Lab OpenClaw candidate image
   --promote-live-candidate         formalize the already-live candidate without switching containers
   --checkpoint-ref <path>          protected candidate checkpoint used for promotion
+  --candidate-manifest <path>      protected external candidate record used to verify the exact live image/config
   --lineage-bridge                Lab-only guarded source-lineage bridge
   --create-tag                    required with an applied formal release
   --live                          query current Lab container metadata (read-only)
@@ -92,6 +94,7 @@ while (($#)); do
     --image) (($# >= 2)) || fail '--image requires a value'; OPENCLAW_IMAGE="$2"; shift ;;
     --promote-live-candidate) PROMOTE_LIVE_CANDIDATE=1 ;;
     --checkpoint-ref) (($# >= 2)) || fail '--checkpoint-ref requires a value'; PROMOTION_CHECKPOINT_REF="$2"; shift ;;
+    --candidate-manifest) (($# >= 2)) || fail '--candidate-manifest requires a path'; CANDIDATE_MANIFEST="$2"; shift ;;
     --lineage-bridge) LINEAGE_BRIDGE=1 ;;
     --create-tag) CREATE_TAG=1 ;;
     --live) LIVE=1 ;;
@@ -122,6 +125,10 @@ if ((PROMOTE_LIVE_CANDIDATE)); then
   ((OPENCLAW_ONLY)) || fail '--promote-live-candidate requires --openclaw-only.'
   [[ "$BUILD_MODE" == no-build ]] || fail 'Live candidate promotion cannot build or switch containers.'
   [[ -n "$PROMOTION_CHECKPOINT_REF" ]] || fail 'Live candidate promotion requires --checkpoint-ref from the candidate deploy.'
+  [[ -n "$CANDIDATE_MANIFEST" ]] || fail 'Live candidate promotion requires --candidate-manifest from the candidate deploy.'
+fi
+if [[ -n "$CANDIDATE_MANIFEST" && "$PROMOTE_LIVE_CANDIDATE" -eq 0 ]]; then
+  fail '--candidate-manifest applies only to formal Lab live-candidate promotion.'
 fi
 if ((APPLY)); then
   [[ "$COMMAND" == candidate || "$COMMAND" == release ]] || fail "--apply is not valid for $COMMAND"
@@ -162,6 +169,16 @@ fi
 VERSION="$(if [[ "$PRODUCT" == lab ]]; then bash "$ROOT_DIR/scripts/amadeus-version.sh" show; else bash "$ROOT_DIR/scripts/pubg-saas-version.sh" show; fi)"
 printf 'PRODUCT=%s\nENVIRONMENT=%s\nCOMMAND=%s\nVERSION=%s\n' "$PRODUCT" "$ENVIRONMENT" "$COMMAND" "$VERSION"
 
+if ((PROMOTE_LIVE_CANDIDATE)); then
+  python3 "$ROOT_DIR/scripts/release-state.py" promotion-check \
+    --manifest "$CANDIDATE_MANIFEST" \
+    --version "$VERSION" \
+    --checkpoint-ref "$PROMOTION_CHECKPOINT_REF" \
+    --head "$(git -C "$ROOT_DIR" rev-parse HEAD)" \
+    --repo "$ROOT_DIR" \
+    || fail 'Protected candidate manifest does not describe a promotable Lab release candidate.'
+fi
+
 run_lab_deploy_plan() {
   local -a args=()
   if [[ "$COMMAND" == candidate ]]; then args+=(--candidate); fi
@@ -175,7 +192,7 @@ require_clean_tree() {
 }
 
 lab_apply_and_record() {
-  local phase="$1" state_root timestamp output_path temp_output temp_runtime checkpoint status tag_created=0
+  local phase="$1" state_root timestamp output_path temp_output temp_runtime checkpoint status validation_ref tag_created=0
   state_root="${AMAD_RELEASE_STATE_DIR:-${XDG_STATE_HOME:-$HOME/.local/state}/amadeus/releases}"
   python3 - "$state_root" "$ROOT_DIR" <<'PY' || fail 'Protected external Lab release-state directory must already exist with mode 0700.'
 import os
@@ -235,22 +252,14 @@ PY
   if ((OPENCLAW_ONLY)); then snapshot_args+=(--service openclaw); fi
   python3 "$ROOT_DIR/scripts/lab-runtime-snapshot.py" "${snapshot_args[@]}" > "$temp_runtime" || fail 'Deploy completed but actual runtime provenance could not be read; release manifest was not written.'
   if [[ "$phase" == release && "$PROMOTE_LIVE_CANDIDATE" -eq 1 ]]; then
-    python3 - "$MEMORY_ACCEPTANCE" "$temp_runtime" "$VERSION" <<'PY' || fail 'Live runtime does not match the accepted P1 candidate digest/source/version; no formal tag was created.'
-import json, re, sys
-from pathlib import Path
-evidence_path, runtime_path, expected_version = sys.argv[1:]
-evidence = json.loads(Path(evidence_path).read_text())
-snapshot = json.loads(Path(runtime_path).read_text())
-rows = snapshot.get('services') or []
-if len(rows) != 1 or rows[0].get('service') != 'openclaw': raise SystemExit('promotion snapshot must contain exactly the Lab OpenClaw service')
-row = rows[0]
-if row.get('state') != 'running' or row.get('health') != 'healthy': raise SystemExit('live candidate is not healthy')
-if row.get('version') != expected_version: raise SystemExit('live candidate version differs from Lab VERSION')
-if row.get('digest') != evidence.get('runtimeImageDigest'): raise SystemExit('live image digest differs from LIVE_VERIFIED evidence')
-if row.get('gitSha') != evidence.get('sourceCommit') or not re.fullmatch(r'[0-9a-f]{40}', str(row.get('gitSha', ''))):
-    raise SystemExit('live image source differs from the LIVE_VERIFIED source commit')
-print('LIVE_CANDIDATE_MATCH=passed')
-PY
+    python3 "$ROOT_DIR/scripts/release-state.py" promotion-check \
+      --manifest "$CANDIDATE_MANIFEST" \
+      --runtime "$temp_runtime" \
+      --version "$VERSION" \
+      --checkpoint-ref "$checkpoint" \
+      --head "$(git -C "$ROOT_DIR" rev-parse HEAD)" \
+      --repo "$ROOT_DIR" \
+      || fail 'Live runtime does not match the protected Lab candidate manifest; no formal tag was created.'
   fi
   if [[ "$phase" == release ]]; then
     version_tag="lab/v$VERSION"
@@ -258,13 +267,16 @@ PY
     tag_created=1
     printf 'PRODUCT_TAG_CREATED=%s\nPUSHED=0\n' "$version_tag"
   fi
+  validation_ref="$checkpoint/validation"
+  [[ -z "$MEMORY_EVIDENCE_REF" ]] || validation_ref+=";memory=$MEMORY_EVIDENCE_REF"
+  [[ -z "$CANDIDATE_MANIFEST" ]] || validation_ref+=";candidate=$(basename "$CANDIDATE_MANIFEST")"
   manifest_args=(
     python3 "$ROOT_DIR/scripts/release-state.py" compose
     --product lab --environment "$ENVIRONMENT" --status "$status"
     --version "$VERSION" --git-sha "$(git -C "$ROOT_DIR" rev-parse HEAD)"
     --runtime "$temp_runtime" --checkpoint-ref "$checkpoint"
     --actor "$ACTOR_ID" --approval-ref "$APPROVAL_REF"
-    --validation-ref "$checkpoint/validation${MEMORY_EVIDENCE_REF:+;memory=$MEMORY_EVIDENCE_REF}" --output "$output_path" --apply
+    --validation-ref "$validation_ref" --output "$output_path" --apply
   )
   if [[ "$phase" == release ]]; then manifest_args+=(--release-tag "lab/v$VERSION"); fi
   if ! "${manifest_args[@]}"; then

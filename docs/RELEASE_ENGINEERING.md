@@ -83,13 +83,18 @@ candidate owner notification. It does not publish an image or create a
 release tag. `status --live` uses the service set recorded in that manifest.
 
 After candidate validation, prepare Lab's single-release notes and use the
-version helper. A formal release requires a separate approval, a protected
-external P1 Memory Core evidence JSON, and an explicit local tag action:
+version helper. A formal release requires the authorized apply invocation,
+protected external P1 Memory Core evidence, and an explicit product tag. For a
+no-switch Lab candidate promotion, pass the candidate deployment checkpoint
+and its protected external candidate manifest:
 
 ```sh
 bash scripts/amadeus-version.sh check
 scripts/release-lab.sh release --apply \
   --approval-ref <review-id> \
+  --promote-live-candidate --openclaw-only --no-build \
+  --checkpoint-ref <protected-candidate-checkpoint> \
+  --candidate-manifest <protected-external-candidate-manifest> \
   --memory-acceptance /secure/external/lab-memory-acceptance.json \
   --create-tag
 ```
@@ -99,15 +104,19 @@ all required checks: plugin load, real Embedding, keyword FTS, semantic KNN,
 hybrid search, incremental refresh, restart persistence, an actual Dreaming
 run and persistence, and session isolation. Its accepted source must be an
 ancestor of the proposed release and the Memory Core runtime files must be
-unchanged since that accepted source. The CLI runs the guarded Lab deployment,
-waits for its health checks, creates `lab/vX.Y.Z` only after those checks, then
-records the protected manifest. It never pushes the tag. A failed external
-manifest write after a successful switch requires manual reconciliation from
-the emitted checkpoint; the wrapper does not automatically roll back.
+unchanged since that accepted source. The candidate manifest independently
+binds a promotion to the exact healthy OpenClaw image and runtime config; the
+CLI rejects a version, source, image, Compose/config digest, or checkpoint
+mismatch. A later product candidate therefore does not reuse an older P1 image
+digest as if it described that candidate. Promotion records the formal
+manifest and tag without building or switching containers. The CLI never
+pushes the tag. A failed external manifest write or owner notification removes
+the newly created unpushed tag/manifest and preserves the live candidate.
 
 Formal release remains blocked while P1 lacks real acceptance evidence. The
-current P1 report is `SOURCE_FIXED + BLOCKED_OPERATOR_AUTHORIZATION`, not
-`LIVE_VERIFIED`.
+Lab 1.10.5 release manifest records the accepted external P1 live evidence;
+later release candidates must still pass the P1 source-lineage check and use
+their own candidate manifest for exact live image/config verification.
 
 ## Gate candidate and promotion flow
 

@@ -149,6 +149,88 @@ assert state.doctor(checked, [{**runtime[0], "state": "restarting"}], now)[0] ==
 assert state.doctor(checked, [{**runtime[0], "gitSha": "d" * 40}], now)[0] == "SOURCE_DRIFT"
 assert state.doctor(checked, [{**runtime[0], "composeDigest": "sha256:" + "d" * 64}], now)[0] == "RUNTIME_DRIFT"
 
+with tempfile.TemporaryDirectory(prefix="release-promotion-test-") as temporary:
+    root = Path(temporary)
+    private = root / "private"
+    private.mkdir(mode=0o700)
+    os.chmod(private, 0o700)
+    checkpoint = private / "candidate-deploy"
+    checkpoint.mkdir(mode=0o700)
+    os.chmod(checkpoint, 0o700)
+    candidate = json.loads(json.dumps(manifest))
+    candidate.update({"gitSha": current_sha, "version": current_version, "checkpointRef": str(checkpoint)})
+    candidate["imageDigests"][0].update({"gitSha": current_sha, "version": current_version})
+    candidate_path = private / "candidate.json"
+    candidate_path.write_text(json.dumps(candidate), encoding="utf-8")
+    os.chmod(candidate_path, 0o600)
+    runtime_row = {
+        "service": "openclaw",
+        "digest": candidate["imageDigests"][0]["digest"],
+        "imageRef": candidate["imageRefs"][0]["imageRef"],
+        "composeDigest": candidate["imageRefs"][0]["composeDigest"],
+        "configDigest": candidate["imageRefs"][0]["configDigest"],
+        "state": "running",
+        "health": "healthy",
+        "version": current_version,
+        "gitSha": current_sha,
+        "builtAt": candidate["imageDigests"][0]["builtAt"],
+        "provenanceSource": "oci-label",
+        "schemaVersion": None,
+    }
+    runtime_path = root / "runtime.json"
+    runtime_path.write_text(json.dumps({
+        "runtimeSchema": state.RUNTIME_SCHEMA,
+        "product": "lab",
+        "environment": "lab-maintainer",
+        "capturedAt": "2026-10-15T07:30:00Z",
+        "services": [runtime_row],
+    }), encoding="utf-8")
+    accepted_candidate = state.validate_promotion_candidate(
+        candidate_path, current_version, str(checkpoint), current_sha, ROOT, runtime_path, now,
+    )
+    assert accepted_candidate["status"] == "candidate"
+    mismatched_runtime = json.loads(runtime_path.read_text(encoding="utf-8"))
+    mismatched_runtime["services"][0]["digest"] = "sha256:" + "c" * 64
+    mismatched_runtime_path = root / "mismatched-runtime.json"
+    mismatched_runtime_path.write_text(json.dumps(mismatched_runtime), encoding="utf-8")
+    try:
+        state.validate_promotion_candidate(
+            candidate_path, current_version, str(checkpoint), current_sha, ROOT, mismatched_runtime_path, now,
+        )
+    except state.StateError as error:
+        assert "live runtime does not match" in str(error)
+    else:
+        raise AssertionError("promotion unexpectedly accepted a live image digest mismatch")
+    try:
+        state.validate_promotion_candidate(
+            candidate_path, current_version, str(root / "wrong-checkpoint"), current_sha, ROOT, runtime_path, now,
+        )
+    except state.StateError as error:
+        assert "checkpoint differs" in str(error)
+    else:
+        raise AssertionError("promotion unexpectedly accepted a different checkpoint")
+    mismatched_source = json.loads(candidate_path.read_text(encoding="utf-8"))
+    mismatched_source["gitSha"] = "d" * 40
+    candidate_path.write_text(json.dumps(mismatched_source), encoding="utf-8")
+    try:
+        state.validate_promotion_candidate(
+            candidate_path, current_version, str(checkpoint), current_sha, ROOT,
+        )
+    except state.StateError as error:
+        assert "source differs" in str(error)
+    else:
+        raise AssertionError("promotion unexpectedly accepted a candidate source mismatch")
+    candidate_path.write_text(json.dumps(candidate), encoding="utf-8")
+    os.chmod(candidate_path, 0o644)
+    try:
+        state.validate_promotion_candidate(
+            candidate_path, current_version, str(checkpoint), current_sha, ROOT,
+        )
+    except state.StateError as error:
+        assert "mode 0600" in str(error)
+    else:
+        raise AssertionError("promotion unexpectedly accepted a public candidate manifest")
+
 with tempfile.TemporaryDirectory(prefix="release-state-test-") as temporary:
     root = Path(temporary)
     private = root / "private"
@@ -353,6 +435,13 @@ memory_on_gate = invoke(
 assert memory_on_gate.returncode != 0 and "applies only to Lab" in memory_on_gate.stderr
 lab_apply = invoke("bash", str(ROOT / "scripts/release-lab.sh"), "plan", "--apply")
 assert lab_apply.returncode != 0 and "not valid for plan" in lab_apply.stderr
+promotion_missing_manifest = invoke(
+    "bash", str(ROOT / "scripts/release-lab.sh"), "release",
+    "--promote-live-candidate", "--openclaw-only", "--no-build",
+    "--checkpoint-ref", "/tmp/protected-checkpoint",
+    "--memory-acceptance", "/tmp/acceptance.json",
+)
+assert promotion_missing_manifest.returncode != 0 and "requires --candidate-manifest" in promotion_missing_manifest.stderr
 for wrapper in ("release-lab.sh", "release-gate.sh"):
     help_output = invoke("bash", str(ROOT / "scripts" / wrapper), "--help")
     assert help_output.returncode == 0 and "rollback-plan" in help_output.stdout
@@ -360,6 +449,7 @@ for wrapper in ("release-lab.sh", "release-gate.sh"):
 lab_help = invoke("bash", str(ROOT / "scripts/release-lab.sh"), "--help").stdout
 gate_help = invoke("bash", str(ROOT / "scripts/release-gate.sh"), "--help").stdout
 assert "Lab build selection" in lab_help and "--memory-acceptance" in lab_help
+assert "--candidate-manifest" in lab_help
 assert "--environment" not in lab_help and "Gate" not in lab_help
 assert "gate-local|gate-staging|gate-prod" in gate_help
 assert "M2 may remain paused" in gate_help and "does not clear or resume M2" in gate_help
@@ -371,7 +461,8 @@ assert "PUBG_SAAS_TEST_DATABASE_URL" in gate_help
 assert "database named `test`/`testing`" in gate_help
 assert all(option not in gate_help for option in ("--build-auto", "--lineage-bridge", "--live", "--memory-acceptance"))
 release_cli = (ROOT / "scripts/release-cli.sh").read_text(encoding="utf-8")
-assert "--promote-live-candidate" in release_cli and "LIVE_CANDIDATE_MATCH=passed" in release_cli
+assert "--promote-live-candidate" in release_cli and "promotion-check" in release_cli
+assert "LIVE_CANDIDATE_MATCH=passed" in (ROOT / "scripts/release-state.py").read_text(encoding="utf-8")
 
 with tempfile.TemporaryDirectory(prefix="release-cli-dry-run-") as temporary:
     root = Path(temporary)

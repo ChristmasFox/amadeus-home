@@ -222,6 +222,70 @@ def doctor(manifest: dict[str, Any], runtime: list[dict[str, Any]], now: datetim
     return "IN_SYNC", ["runtime matches the explicitly recorded rollback state; the PostgreSQL volume was not restored by this tool"]
 
 
+def validate_promotion_candidate(
+    manifest_path: Path,
+    version: str,
+    checkpoint_ref: str,
+    head: str,
+    repo: Path = ROOT,
+    runtime_path: Path | None = None,
+    now: datetime | None = None,
+) -> dict[str, Any]:
+    """Prove that a protected Lab candidate is the exact live runtime to promote."""
+    repo = repo.resolve()
+    path = manifest_path.expanduser()
+    if path.is_symlink() or not path.is_file():
+        raise StateError("promotion candidate manifest must be a regular non-symlink file")
+    resolved_path = path.resolve(strict=True)
+    if resolved_path == repo or repo in resolved_path.parents:
+        raise StateError("promotion candidate manifest must remain outside the Git repository")
+    if stat.S_IMODE(resolved_path.parent.stat().st_mode) != 0o700:
+        raise StateError("promotion candidate manifest directory must have mode 0700")
+    if stat.S_IMODE(resolved_path.stat().st_mode) != 0o600:
+        raise StateError("promotion candidate manifest must have mode 0600")
+
+    candidate = validate_manifest(load_json(resolved_path, "promotion candidate manifest"))
+    if candidate["product"] != "lab" or candidate["environment"] != "lab-maintainer":
+        raise StateError("promotion candidate must describe Lab lab-maintainer")
+    if candidate["status"] != "candidate":
+        raise StateError("promotion candidate manifest must have candidate status")
+    if candidate["version"] != version:
+        raise StateError("promotion candidate version differs from Lab VERSION")
+    if candidate["checkpointRef"] != checkpoint_ref:
+        raise StateError("promotion candidate checkpoint differs from --checkpoint-ref")
+    checkpoint = Path(checkpoint_ref).expanduser()
+    if checkpoint.is_symlink() or not checkpoint.is_dir() or stat.S_IMODE(checkpoint.stat().st_mode) != 0o700:
+        raise StateError("promotion candidate checkpoint must be an existing protected directory with mode 0700")
+    if candidate.get("releaseTag") is not None:
+        raise StateError("unreleased candidate manifest unexpectedly has a release tag")
+    if len(candidate["imageDigests"]) != 1 or candidate["imageDigests"][0]["service"] != "openclaw":
+        raise StateError("promotion candidate must contain exactly the Lab OpenClaw image")
+
+    candidate_sha = candidate["imageDigests"][0]["gitSha"]
+    if candidate["gitSha"] != candidate_sha:
+        raise StateError("promotion candidate source differs from its OpenClaw image provenance")
+    ancestor = subprocess.run(
+        ["git", "-C", str(repo), "merge-base", "--is-ancestor", candidate_sha, head],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if ancestor.returncode:
+        raise StateError("promotion candidate source is not an ancestor of the formal release source")
+
+    if runtime_path is not None:
+        snapshot = load_json(runtime_path, "promotion runtime snapshot")
+        rows = validate_runtime(snapshot, candidate)
+        if len(rows) != 1 or not isinstance(rows[0], dict) or rows[0].get("service") != "openclaw":
+            raise StateError("promotion runtime snapshot must contain exactly the Lab OpenClaw service")
+        observed = now or datetime.now(timezone.utc)
+        status, reasons = doctor(candidate, rows, observed, repo)
+        if status != "UNRELEASED_CANDIDATE":
+            detail = "; ".join(reasons)
+            raise StateError(f"live runtime does not match protected promotion candidate: {status}: {detail}")
+    return candidate
+
+
 def write_manifest(input_path: Path, output_path: Path) -> None:
     document = validate_manifest(load_json(input_path, "input manifest"))
     destination = output_path.expanduser().absolute()
@@ -368,6 +432,14 @@ def main() -> int:
     doctor_cmd.add_argument("--runtime", type=Path, required=True)
     doctor_cmd.add_argument("--repo", type=Path, default=ROOT, help="repository to resolve formal product tags")
     doctor_cmd.add_argument("--now", help="synthetic ISO time for fixture tests")
+    promotion_cmd = sub.add_parser("promotion-check", help="validate a protected live Lab candidate before formal promotion")
+    promotion_cmd.add_argument("--manifest", type=Path, required=True, help="protected external candidate manifest")
+    promotion_cmd.add_argument("--runtime", type=Path, help="actual-runtime snapshot for the apply-time comparison")
+    promotion_cmd.add_argument("--version", required=True)
+    promotion_cmd.add_argument("--checkpoint-ref", required=True)
+    promotion_cmd.add_argument("--head", default="HEAD")
+    promotion_cmd.add_argument("--repo", type=Path, default=ROOT)
+    promotion_cmd.add_argument("--now", help="synthetic ISO time for fixture tests")
     write_cmd = sub.add_parser("write", help="write a completed manifest to protected external state")
     write_cmd.add_argument("--input", type=Path, required=True)
     write_cmd.add_argument("--output", type=Path, required=True)
@@ -399,6 +471,21 @@ def main() -> int:
                 raise StateError("external state write requires --apply")
             write_manifest(args.input, args.output)
             print(f"RELEASE_MANIFEST_WRITTEN={args.output.expanduser().absolute()}")
+            return 0
+        if args.command == "promotion-check":
+            candidate = validate_promotion_candidate(
+                args.manifest,
+                args.version,
+                args.checkpoint_ref,
+                args.head,
+                args.repo,
+                args.runtime,
+                timestamp(args.now, "now") if args.now else None,
+            )
+            if args.runtime is None:
+                print(f"PROMOTION_CANDIDATE=valid version={candidate['version']} source={candidate['gitSha']}")
+            else:
+                print("LIVE_CANDIDATE_MATCH=passed")
             return 0
         if args.command == "compose":
             if args.status == "released" and args.release_tag != f"{args.product}/v{args.version}":
