@@ -535,6 +535,20 @@ for source in \
   [[ -f "$source" ]] || fail "Missing deployment source: $source"
 done
 
+if ((OPENCLAW_ONLY)); then
+  orb -m "$MACHINE" -u root python3 - "$PUBG_TELEMETRY_ARCHIVE_HOST_DIR" <<'PY'
+import sys
+from pathlib import Path
+archive = Path(sys.argv[1])
+if not archive.is_absolute() or archive.is_symlink() or not archive.is_dir():
+    raise SystemExit('PUBG telemetry archive must be an existing non-symlink directory before checkpointing')
+for entry in archive.rglob('*'):
+    if entry.is_symlink() or not (entry.is_dir() or entry.is_file()):
+        raise SystemExit('PUBG telemetry archive contains an unsupported filesystem entry')
+print('PUBG_TELEMETRY_ARCHIVE_SOURCE=verified')
+PY
+fi
+
 OPENCLAW_COMPOSE_B64="$(base64_file "$ROOT_DIR/infra/docker/casaos/openclaw/docker-compose.example.yml")"
 RADAR_COMPOSE_B64="$(base64_file "$ROOT_DIR/infra/docker/casaos/product-radar/docker-compose.example.yml")"
 CONFIG_B64="$(base64_file "$ROOT_DIR/integrations/openclaw/openclaw.json.example")"
@@ -569,6 +583,10 @@ if ((OPENCLAW_ONLY == 0)); then
     "$RADAR_ENV_FILE" product-radar.env.before
     "$MEDIA_COMPOSE_FILE" media-organizer-compose.before.yml
     "$RADAR_DATA_DIR/product-radar.sqlite" product-radar.sqlite.before
+  )
+else
+  CHECKPOINT_ARGS+=(
+    "$PUBG_TELEMETRY_ARCHIVE_HOST_DIR" pubg-telemetry-archive.before
   )
 fi
 orb -m "$MACHINE" -u root python3 - "${CHECKPOINT_ARGS[@]}" <<'PY'
@@ -635,6 +653,30 @@ if ((OPENCLAW_ONLY)); then
   orb -m "$MACHINE" -u root test -s "$CHECKPOINT_DIR/openclaw-agent.sqlite.before"
   orb -m "$MACHINE" -u root test -d "$CHECKPOINT_DIR/openclaw-workspace.before"
   orb -m "$MACHINE" -u root test -d "$CHECKPOINT_DIR/openclaw-sessions.before"
+  orb -m "$MACHINE" -u root test -d "$CHECKPOINT_DIR/pubg-telemetry-archive.before"
+  orb -m "$MACHINE" -u root python3 - \
+    "$PUBG_TELEMETRY_ARCHIVE_HOST_DIR" "$CHECKPOINT_DIR/pubg-telemetry-archive.before" <<'PY'
+import hashlib, sys
+from pathlib import Path
+def fingerprint(root):
+    if root.is_symlink() or not root.is_dir(): raise SystemExit('archive checkpoint directory is invalid')
+    directories, files = set(), {}
+    for path in root.rglob('*'):
+        if path.is_symlink(): raise SystemExit('archive checkpoint contains a symlink')
+        relative = path.relative_to(root).as_posix()
+        if path.is_dir(): directories.add(relative)
+        elif path.is_file():
+            digest = hashlib.sha256()
+            with path.open('rb') as stream:
+                for chunk in iter(lambda: stream.read(1024 * 1024), b''): digest.update(chunk)
+            files[relative] = digest.hexdigest()
+        else: raise SystemExit('archive checkpoint contains an unsupported entry')
+    return directories, files
+source, backup = map(Path, sys.argv[1:])
+source_tree, backup_tree = fingerprint(source), fingerprint(backup)
+if source_tree != backup_tree: raise SystemExit('PUBG telemetry archive backup verification failed')
+print(f'PUBG_TELEMETRY_ARCHIVE_BACKUP=verified files={len(source_tree[1])}')
+PY
 fi
 
 OPENCLAW_SWITCHED=0
@@ -644,15 +686,30 @@ rollback_openclaw_candidate() {
     trap - EXIT
     set +e
     printf 'CANDIDATE_FAILURE=rollback_started checkpoint=%s\n' "$CHECKPOINT_DIR" >&2
-    orb -m "$MACHINE" -u root python3 - "$CHECKPOINT_DIR/openclaw-compose.before.yml" "$OPENCLAW_COMPOSE_FILE" <<'PY'
-import os, sys
+    orb -m "$MACHINE" -u root python3 - \
+      "$CHECKPOINT_DIR/openclaw-compose.before.yml" "$OPENCLAW_COMPOSE_FILE" \
+      "$CHECKPOINT_DIR/openclaw-compose.env.before" "$OPENCLAW_APP_DIR/.env" <<'PY'
+import os, sys, tempfile
 from pathlib import Path
-source, destination = map(Path, sys.argv[1:])
-if source.is_symlink() or not source.is_file(): raise SystemExit('checkpoint Compose source is unavailable')
-temporary = destination.with_name(destination.name + '.rollback-tmp')
-temporary.write_bytes(source.read_bytes())
-os.chmod(temporary, source.stat().st_mode & 0o777)
-os.replace(temporary, destination)
+compose_source, compose_destination, env_source, env_destination = map(Path, sys.argv[1:])
+def restore(source, destination, required):
+    if source.is_symlink(): raise SystemExit('checkpoint configuration source is a symlink')
+    if not source.exists():
+        if required: raise SystemExit('checkpoint Compose source is unavailable')
+        if destination.is_symlink(): raise SystemExit('runtime Compose environment is a symlink')
+        destination.unlink(missing_ok=True)
+        return
+    if not source.is_file() or destination.is_symlink(): raise SystemExit('checkpoint configuration path is invalid')
+    fd, temporary_name = tempfile.mkstemp(prefix='.' + destination.name + '.rollback-', dir=destination.parent)
+    temporary = Path(temporary_name)
+    with os.fdopen(fd, 'wb') as stream:
+        stream.write(source.read_bytes())
+        stream.flush()
+        os.fsync(stream.fileno())
+    os.chmod(temporary, source.stat().st_mode & 0o777)
+    os.replace(temporary, destination)
+restore(compose_source, compose_destination, True)
+restore(env_source, env_destination, False)
 PY
     restore_status=$?
     if ((restore_status == 0)); then
@@ -807,24 +864,12 @@ print('OPENCLAW_COMPOSE_ENV=installed')
 PY
 else
   OPENCLAW_SWITCHED=1
-  orb -m "$MACHINE" -u root python3 - "$OPENCLAW_COMPOSE_FILE" "$IMAGE" <<'PY'
-import os, re, sys
-from pathlib import Path
-compose, image = Path(sys.argv[1]), sys.argv[2]
-if compose.is_symlink() or not compose.is_file(): raise SystemExit('existing OpenClaw Compose file must be a regular file')
-if not re.fullmatch(r'[A-Za-z0-9._/@:-]+', image): raise SystemExit('invalid OpenClaw image tag')
-text = compose.read_text()
-pattern = re.compile(r'(?m)^(\s*image:\s*)\S+\s*$')
-matches = list(pattern.finditer(text))
-if len(matches) != 1: raise SystemExit('existing OpenClaw Compose must contain exactly one image reference')
-match = matches[0]
-updated = text[:match.start()] + match.group(1) + image + text[match.end():]
-temporary = compose.with_name(compose.name + '.candidate-tmp')
-temporary.write_text(updated)
-os.chmod(temporary, compose.stat().st_mode & 0o777)
-os.replace(temporary, compose)
-print('OPENCLAW_COMPOSE_IMAGE=updated')
-PY
+  orb -m "$MACHINE" -u root python3 - \
+    "$OPENCLAW_COMPOSE_FILE" "$OPENCLAW_APP_DIR/.env" "$IMAGE" "$PUBG_TELEMETRY_ARCHIVE_HOST_DIR" \
+    < "$ROOT_DIR/scripts/openclaw_telemetry_mount.py"
+  orb -m "$MACHINE" -u root docker compose --project-directory "$OPENCLAW_APP_DIR" \
+    -f "$OPENCLAW_COMPOSE_FILE" config >/dev/null \
+    || fail 'OpenClaw Compose configuration is invalid after installing the archive mount.'
 fi
 
 if ((OPENCLAW_ONLY == 0)); then
@@ -986,6 +1031,16 @@ for attempt in $(seq 1 40); do
   sleep 2
 done
 orb -m "$MACHINE" -u root curl --fail --silent --show-error --max-time 5 http://127.0.0.1:18789/healthz >/dev/null
+if ((OPENCLAW_ONLY)); then
+  archive_mount="$(orb -m "$MACHINE" -u root docker inspect openclaw \
+    --format '{{range .Mounts}}{{if eq .Destination "/var/lib/amadeus/pubg-telemetry-archive"}}{{.Source}}|{{.RW}}{{end}}{{end}}')"
+  [[ "$archive_mount" == "$PUBG_TELEMETRY_ARCHIVE_HOST_DIR|true" ]] \
+    || fail 'PUBG telemetry archive mount is missing or not writable; restore the protected checkpoint.'
+  orb -m "$MACHINE" -u root docker exec --user node openclaw node -e \
+    'const fs=require("node:fs"),p=require("node:path"),root="/var/lib/amadeus/pubg-telemetry-archive";function walk(dir){fs.accessSync(dir,fs.constants.R_OK|fs.constants.W_OK|fs.constants.X_OK);for(const name of fs.readdirSync(dir)){const child=p.join(dir,name),s=fs.lstatSync(child);if(s.isSymbolicLink())throw Error("archive symlink");if(s.isDirectory())walk(child);else fs.accessSync(child,fs.constants.R_OK)}}walk(root)' \
+    || fail 'OpenClaw node user cannot read and write the PUBG telemetry archive mount.'
+  printf 'PUBG_TELEMETRY_ARCHIVE_MOUNT=passed\n'
+fi
 runtime_amadeus_version="$(orb -m "$MACHINE" -u root docker exec openclaw cat /opt/amadeus/VERSION | tr -d '[:space:]')"
 [[ "$runtime_amadeus_version" == "$AMADEUS_VERSION" ]] || fail "Running OpenClaw reports Amadeus VERSION=$runtime_amadeus_version, expected $AMADEUS_VERSION."
 printf 'RUNTIME_AMADEUS_VERSION=%s\n' "$runtime_amadeus_version"

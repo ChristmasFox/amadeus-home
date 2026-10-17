@@ -24,6 +24,8 @@ on:
       - "scripts/developer-workflow.sh"
       - "scripts/test-developer-workflow.sh"
       - "scripts/deploy-openclaw.sh"
+      - "scripts/openclaw_telemetry_mount.py"
+      - "scripts/tests/test_openclaw_telemetry_mount.py"
       - "scripts/test-deploy-radar-only-apply.py"
       - "scripts/test-openclaw-lineage-compatibility.sh"
       - "scripts/amadeus-version.sh"
@@ -67,6 +69,8 @@ on:
       - "scripts/developer-workflow.sh"
       - "scripts/test-developer-workflow.sh"
       - "scripts/deploy-openclaw.sh"
+      - "scripts/openclaw_telemetry_mount.py"
+      - "scripts/tests/test_openclaw_telemetry_mount.py"
       - "scripts/test-deploy-radar-only-apply.py"
       - "scripts/test-openclaw-lineage-compatibility.sh"
       - "scripts/amadeus-version.sh"
@@ -138,6 +142,7 @@ jobs:
           bash scripts/test-developer-workflow.sh
           bash scripts/test-openclaw-lineage-compatibility.sh
           python3 scripts/test-deploy-radar-only-apply.py
+          python3 -m unittest scripts.tests.test_openclaw_telemetry_mount -v
       - name: Architecture and secret checks
         run: |
           pnpm check:architecture
