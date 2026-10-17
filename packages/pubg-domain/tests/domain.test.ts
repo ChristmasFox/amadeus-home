@@ -12,6 +12,7 @@ import {
   parseTeamContext,
   PubgApiClient,
   PubgApiError,
+  PubgApiTelemetryDownloader,
   PubgDomainService,
   SqlitePubgRepository,
   SqlitePubgRepositoryAdapter,
@@ -551,6 +552,61 @@ test('period searches default to chronological order while recent searches stay 
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
+});
+
+test('PUBG telemetry downloader archives the complete CDN body before parsing and replays it without a second request', async () => {
+  const raw = Buffer.from('[ {"_T":"LogPlayerTakeDamage","opaque":"retained exactly"} ]\n', 'utf8');
+  let stored: Uint8Array | null = null;
+  let requests = 0;
+  let cdnAuthorization: string | null = null;
+  const archive = {
+    async read() { return stored; },
+    async write(_matchId: string, value: Uint8Array) { stored = Buffer.from(value); },
+    async getOrFetch(_matchId: string, fetchRaw: () => Promise<Uint8Array>) {
+      if (stored) return stored;
+      const value = await fetchRaw();
+      stored = Buffer.from(value);
+      return value;
+    },
+    async refresh(_matchId: string, fetchRaw: () => Promise<Uint8Array>) {
+      const value = await fetchRaw();
+      stored = Buffer.from(value);
+      return value;
+    },
+  };
+  const downloader = new PubgApiTelemetryDownloader({
+    apiKey: 'must-not-be-forwarded',
+    archive,
+    fetchImpl: async (_input, init) => {
+      requests += 1;
+      cdnAuthorization = new Headers(init?.headers).get('authorization');
+      return new Response(raw, { status: 200, headers: { 'content-type': 'application/json' } });
+    },
+  });
+  const match: NormalizedMatch = {
+    schemaVersion: 3,
+    matchId: 'archive-downloader-fixture',
+    shard: 'steam',
+    createdAt: '2026-09-18T12:00:00.000Z',
+    timestamp: Date.parse('2026-09-18T12:00:00.000Z'),
+    matchType: 'competitive',
+    gameMode: 'squad-fpp',
+    isCompetitive: true,
+    mapName: 'Erangel',
+    duration: 1200,
+    patchVersion: 'fixture',
+    players: [],
+    telemetryUrl: 'https://telemetry-cdn.pubg.com/archive-downloader-fixture.json',
+  };
+  const first = await downloader.download(match);
+  const second = await downloader.download(match);
+  assert.ok(Buffer.isBuffer(first));
+  assert.ok(Buffer.isBuffer(second));
+  assert.deepEqual(first, raw);
+  assert.deepEqual(second, raw);
+  assert.deepEqual(stored, raw);
+  assert.equal(requests, 1);
+  assert.equal(cdnAuthorization, null);
 });
 
 test('relative-period match search uses the 06:00 business day and review requires a fresh result set', async () => {

@@ -22,6 +22,13 @@ Runtime credentials and team identity are external. Set `PUBG_TEAM_CONFIG_FILE`,
 non-secret plugin paths). The plugin never stores the API key in OpenClaw
 configuration or in the repository.
 
+Raw telemetry fetched by the existing team prefetch is archived before the
+Domain feature parser runs. `PUBG_TELEMETRY_ARCHIVE_DIR` defaults to
+`/var/lib/amadeus/pubg-telemetry-archive`; the CasaOS Compose template mounts a
+persistent host-shared directory there. Gzip payloads are keyed by Match ID and
+verified with raw and compressed SHA-256 values. Atomic archive failures remain
+in the existing prefetch retry schedule.
+
 At bootstrap the private adapter creates the sole `private` `TeamContext` from
 the protected team config and pairs it with a scope-pinned SQLite repository
 adapter. The async Domain service does not use the public SaaS database or

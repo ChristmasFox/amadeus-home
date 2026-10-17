@@ -12,14 +12,14 @@ Assistant contract: `research-assistant-v1`
 
 The model returns a typed `fact` / `inference` / `hypothesis` contract. Every claim must cite evidence, report the exact cited-evidence count, list assumptions, and state uncertainty for inferences and hypotheses. Citation aliases must have been returned by a tool, and numeric tokens must occur in tool output; invalid output uses the deterministic fallback. Three templates alter wording only. Unsupported and known evidence-gap questions abstain without attaching unrelated match-store citations. Follow-up history is bounded and remains untrusted input.
 
-The Lab model configuration is server-only: `PUBG_INTELLIGENCE_AI_BASE_URL`, `PUBG_INTELLIGENCE_AI_API_KEY`, and optional `PUBG_INTELLIGENCE_AI_MODEL`. The default model ID is Gemini Flash through an OpenAI-compatible route. No AI key is committed. The local experiment store remains separate from the read-only Match Store; its SQLite file is mode `0600`, newly created child directories are `0700`, and existing parent directory permissions are preserved.
+The Lab model configuration is server-only: `PUBG_INTELLIGENCE_AI_BASE_URL`, `PUBG_INTELLIGENCE_AI_API_KEY`, and optional `PUBG_INTELLIGENCE_AI_MODEL`, or the owner-only external `PUBG_INTELLIGENCE_AI_CONFIG_FILE` (default `~/.config/amadeus/pubg-intelligence-ai.json`). The configured local 9Router route uses `arthur-combo`; Gemini Flash remains the default model ID when no explicit model is supplied. No AI key is committed. The provider sends `stream: false` explicitly because this router returns SSE when the OpenAI-compatible field is omitted. The final structured response uses a required typed AI SDK tool call and full local schema validation; this avoids relying on JSON Schema output support from a composite router alias. The local experiment store remains separate from the read-only Match Store; its SQLite file is mode `0600`, newly created child directories are `0700`, and existing parent directory permissions are preserved.
 
 ## BUILD_VERIFIED
 
 - `pnpm --filter @agent/pubg-intelligence build`
-- `pnpm --filter @agent/pubg-intelligence test` — 26 passed (assistant schema/tool checks plus R1/R2 regressions).
+- `pnpm --filter @agent/pubg-intelligence test` — see current `STATUS.md` ledger for the expanded archive and assistant fixtures.
 - `pnpm --filter @agent/pubg-intelligence-lab typecheck`
-- `pnpm --filter @agent/pubg-intelligence-lab test` — 2 passed.
+- `pnpm --filter @agent/pubg-intelligence-lab test` — 4 passed.
 - `pnpm --filter @agent/pubg-intelligence-lab build`
 - `pnpm check:secrets` — passed.
 - `git diff --check` — passed.
@@ -28,7 +28,7 @@ Fixtures exercise the AI SDK tool loop, injection strings, typed tool bounds, ou
 
 ## LIVE_VERIFIED
 
-The local Lab UI and API at `http://192.168.5.3:4179` returned HTTP 200 after restart against the authorized read-only snapshot. Bootstrap reported 543 matches and 283 parser/feature-cache matches. Three scoped research requests returned HTTP 200 for the full snapshot date range:
+An earlier no-model fallback run against the authorized read-only snapshot returned HTTP 200 for the page and research API. Bootstrap reported 543 matches and 283 parser/feature-cache matches. Three scoped research requests returned HTTP 200 for the full snapshot date range:
 
 | Request | Selected matches | Result |
 | --- | ---: | --- |
@@ -38,11 +38,11 @@ The local Lab UI and API at `http://192.168.5.3:4179` returned HTTP 200 after re
 
 The snapshot SHA-256 was unchanged before and after the queries. Experiment results went to a separate temporary SQLite file. Production Lab and Gate deployments were not changed.
 
-The current environment has no configured AI base URL or API key, so a real external Gemini/9router call was **not** live-verified. The AI SDK path, tools, and structured output were exercised with `MockLanguageModelV4`; the UI gives an explicit degraded-mode notice until an operator configures a model.
+The current workstation has the external owner-only 9Router configuration, so a real provider call is live-verified by `pnpm --filter @agent/pubg-intelligence-lab ai:e2e`. The script opens the read-only snapshot, exercises the scoped research endpoint, and reports aggregate result shape only. It requires nonzero 9Router calls, the AI SDK planner and assistant, a validated answer, and evidence. The secret remains outside the repository.
 
 ## Limitations and next-stage entry
 
-- This proves the scoped real-data API and safe fallback behavior, not real-provider quality or latency.
+- The real call proves provider connectivity and a schema-validated, evidence-linked result for the tested question; it does not establish general answer quality or latency.
 - Circle number and wipe-cause labels are unavailable in the observed snapshot. The assistant does not infer them from distance, timing, or a generic circle transition.
 - Directed rescue claims require event-level telemetry and a configured model or an explicit local analysis request; per-player aggregate revive totals are not treated as pair evidence.
 - R4 may evaluate answer groundedness and usefulness, but no model-produced insight is promoted automatically.

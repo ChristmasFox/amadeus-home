@@ -37,6 +37,7 @@ import {
   type ToolEnvelope,
   type ToolSelectorInput,
 } from '@agent/pubg-domain';
+import { RawTelemetryArchive } from '@agent/pubg-intelligence/archive';
 
 const PLUGIN_ID = 'pubg';
 const MAX_SUBJECT_ITEMS = 12;
@@ -44,6 +45,7 @@ const MAX_CATEGORIES = 16;
 
 const PluginConfigSchema = Type.Object({
   databasePath: Type.Optional(Type.String({ maxLength: 1024 })),
+  telemetryArchiveDir: Type.Optional(Type.String({ maxLength: 1024 })),
   teamConfigFile: Type.Optional(Type.String({ maxLength: 1024 })),
   apiKeyFile: Type.Optional(Type.String({ maxLength: 1024 })),
   apiBaseUrl: Type.Optional(Type.String({ maxLength: 512 })),
@@ -359,6 +361,7 @@ function configString(config: PluginConfig, key: keyof PluginConfig, envKey: str
 
 function makeService(config: PluginConfig): PubgDomainService {
   const databasePath = configString(config, 'databasePath', 'PUBG_DATABASE_PATH') ?? '/data/pubg.sqlite';
+  const archiveDirectory = configString(config, 'telemetryArchiveDir', 'PUBG_TELEMETRY_ARCHIVE_DIR') ?? '/var/lib/amadeus/pubg-telemetry-archive';
   const teamConfigFile = configString(config, 'teamConfigFile', 'PUBG_TEAM_CONFIG_FILE');
   const team = loadTeamConfig({ path: teamConfigFile, required: true });
   const apiKeyFile = configString(config, 'apiKeyFile', 'PUBG_API_KEY_FILE');
@@ -371,6 +374,7 @@ function makeService(config: PluginConfig): PubgDomainService {
   return new PubgDomainService({
     teamContext,
     repository: new SqlitePubgRepositoryAdapter(new SqlitePubgRepository(databasePath), teamContext),
+    rawTelemetryArchive: new RawTelemetryArchive(archiveDirectory),
     ...(apiClient ? { apiClient } : {}),
     ...(configString(config, 'timezone', 'PUBG_TIMEZONE') ? { timezone: configString(config, 'timezone', 'PUBG_TIMEZONE') } : {}),
     ...(configString(config, 'businessDayStart', 'PUBG_BUSINESS_DAY_START') ? { businessDayStart: configString(config, 'businessDayStart', 'PUBG_BUSINESS_DAY_START') } : {}),
@@ -381,9 +385,10 @@ function makeService(config: PluginConfig): PubgDomainService {
 
 function serviceFor(config: PluginConfig): PubgDomainService {
   const databasePath = configString(config, 'databasePath', 'PUBG_DATABASE_PATH') ?? '/data/pubg.sqlite';
+  const archiveDirectory = configString(config, 'telemetryArchiveDir', 'PUBG_TELEMETRY_ARCHIVE_DIR') ?? '/var/lib/amadeus/pubg-telemetry-archive';
   const teamConfigFile = configString(config, 'teamConfigFile', 'PUBG_TEAM_CONFIG_FILE') ?? '';
   const apiBaseUrl = configString(config, 'apiBaseUrl', 'PUBG_API_BASE_URL') ?? '';
-  const key = JSON.stringify({ databasePath, teamConfigFile, apiBaseUrl });
+  const key = JSON.stringify({ databasePath, archiveDirectory, teamConfigFile, apiBaseUrl });
   const current = serviceCache.get(key);
   if (current) return current;
   const service = makeService(config);

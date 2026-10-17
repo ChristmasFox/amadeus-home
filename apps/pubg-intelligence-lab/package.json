@@ -7,7 +7,9 @@
     "dev": "tsx src/server.ts",
     "build": "vite build",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "tsx --test tests/**/*.test.ts"
+    "test": "tsx --test tests/**/*.test.ts",
+    "ai:e2e": "tsx scripts/real-ai-e2e.ts",
+    "archive:e2e": "tsx scripts/verify-real-archive.ts"
   },
   "dependencies": {
     "@agent/pubg-domain": "workspace:*",

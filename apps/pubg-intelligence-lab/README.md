@@ -23,6 +23,9 @@ Without model settings, a deterministic local answer is shown with a clear degra
 - `PUBG_INTELLIGENCE_AI_BASE_URL`
 - `PUBG_INTELLIGENCE_AI_API_KEY`
 - `PUBG_INTELLIGENCE_AI_MODEL` (optional; defaults to `google/gemini-2.5-flash`)
+- `PUBG_INTELLIGENCE_AI_CONFIG_FILE` (optional owner-only `0600` JSON file with `baseURL`, `apiKey`, and optional `modelId`; the default is `~/.config/amadeus/pubg-intelligence-ai.json`)
+
+For OpenAI-compatible 9Router routes, the app sends `stream: false` explicitly because this router returns SSE when the field is omitted. The assistant submits its final response through a typed AI SDK tool call, then validates the full local claim schema and evidence references.
 
 The response can use tactical coaching, squad-humor, or chronological-story wording. Templates change wording only; candidate claims are schema-validated, every claim must cite evidence returned by a read-only server tool, and unsupported numeric values or references fall back to local deterministic output. The server fixes the selected squad and date scope; model tool inputs cannot choose a tenant, file, database, or arbitrary match ID.
 
@@ -41,7 +44,10 @@ The runner compares the frozen `legacy-any-tracked-knock-v0` baseline with `tact
 - Keep the Lab production SQLite file read-only; snapshots are preferred for interactive work.
 - The server binds only to loopback unless explicitly configured with a private LAN IPv4 address; LAN mode restricts API requests to that interface's subnet and exposes no general file or shell tool.
 - It reads Match Store rows and only the current `telemetry-parser-6` / `review-features-6` cache.
-- Missing current features stay explicitly missing. Battle reconstruction runs only after an explicit match drilldown, using a telemetry asset URL already present in the read-only snapshot. The URL must be HTTPS on `telemetry-cdn.pubg.com`; redirects are rejected, the PUBG API is never queried, and fetched bytes/results remain in process memory.
+- The production PUBG plugin writes complete CDN response bodies to the host-shared archive before feature parsing. Each Match ID has one immutable archive entry, gzip payloads, a manifest with raw and compressed SHA-256 values, atomic payload/manifest publication, and no rolling retention. Unique response bodies for the same Match ID are retained as separate captures; repeated body hashes are deduplicated.
+- Historical backfill reads a read-only SQLite snapshot and considers only the 100 newest matches; an older match never replaces a selected row with a missing telemetry asset. Run it with `PUBG_INTELLIGENCE_DB=/path/to/read-only-snapshot.sqlite PUBG_TELEMETRY_ARCHIVE_DIR=/path/outside/the/repository pnpm --filter @agent/pubg-intelligence telemetry:backfill`. The runner rejects archive paths inside the repository, retries CDN failures three times, and prints aggregate counts only. New matches use the existing team prefetch and retry schedule, so an archive failure remains eligible for the normal scheduled retry.
+- The local research page reads the same archive first. Set `PUBG_TELEMETRY_ARCHIVE_DIR` when the archive is not at `~/.local/share/amadeus/pubg-telemetry-archive`; verified archived bytes are replayed without CDN requests.
+- Missing current features stay explicitly missing. Battle reconstruction runs only after an explicit match drilldown, using the local raw archive first and the telemetry asset URL already present in the read-only snapshot only when the archive has no capture. The URL must be HTTPS on `telemetry-cdn.pubg.com`; redirects are rejected, the PUBG API is never queried, and parsing can be repeated from the verified local raw body.
 - Battle reconstruction never writes to the source cache. Its intermediate schema is `1` / `battle-reconstruction-v1`; output player and team references are match-scoped hashes, with ambiguous or unavailable evidence shown explicitly.
 - Position context is sampled at most once per player per 15-second bucket. Engagements are grouped by known team pair (unknown teams fall back to player pair), a 28-second contact gap, and a matching knock-to-kill continuation window of 120 seconds.
 - Explicit post-match phase signals remain unknown and are excluded from engagement and circle context; uncertain states are counted rather than relabeled as in-match.

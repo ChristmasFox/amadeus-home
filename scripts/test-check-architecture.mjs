@@ -17,6 +17,7 @@ const copies = [
   'integrations/openclaw/workspace-seed/USER.seed.md', 'integrations/openclaw/workspace-seed/MEMORY.seed.md',
   'integrations/openclaw/workspace-seed/README.md',
   'packages/presentation/src', 'packages/presentation/package.json',
+  'packages/agent-memory/src', 'packages/agent-memory/package.json',
   'plugins/pubg/src',
   'packages/pubg-domain/src',
   'apps/pubg-saas/src',

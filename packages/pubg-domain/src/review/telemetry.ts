@@ -205,11 +205,20 @@ export interface TelemetryDownloader {
   download(match: NormalizedMatch, signal?: AbortSignal): Promise<unknown>;
 }
 
+/** Storage boundary for the complete response body; implementations live outside the Domain. */
+export interface RawTelemetryArchivePort {
+  read(matchId: string): Promise<Uint8Array | null>;
+  write(matchId: string, raw: Uint8Array): Promise<void>;
+  getOrFetch(matchId: string, fetchRaw: () => Promise<Uint8Array>): Promise<Uint8Array>;
+  refresh(matchId: string, fetchRaw: () => Promise<Uint8Array>): Promise<Uint8Array>;
+}
+
 export interface PubgApiTelemetryDownloaderOptions {
   apiKey: string;
   baseUrl?: string;
   timeoutMs?: number;
   fetchImpl?: typeof fetch;
+  archive?: RawTelemetryArchivePort;
 }
 
 function objectValue(value: unknown): Record<string, unknown> {
@@ -219,6 +228,18 @@ function objectValue(value: unknown): Record<string, unknown> {
 function authorizationValue(apiKey: string): string {
   const value = apiKey.trim();
   return /^Bearer\s+/iu.test(value) ? value : `Bearer ${value}`;
+}
+
+function telemetryBodyHasJsonShape(raw: Uint8Array): boolean {
+  try {
+    const value: unknown = JSON.parse(Buffer.from(raw).toString('utf8'));
+    if (Array.isArray(value)) return true;
+    if (!value || typeof value !== 'object') return false;
+    const object = value as Record<string, unknown>;
+    return Array.isArray(object.events) || Array.isArray(object.data) || Array.isArray(object.telemetry);
+  } catch {
+    return false;
+  }
 }
 
 export class PubgApiTelemetryDownloader implements TelemetryDownloader {
@@ -254,23 +275,34 @@ export class PubgApiTelemetryDownloader implements TelemetryDownloader {
   }
 
   async download(match: NormalizedMatch, signal?: AbortSignal): Promise<unknown> {
-    const detailResponse = match.telemetryUrl ? null : await this.get(`${this.baseUrl}/shards/${encodeURIComponent(match.shard)}/matches/${encodeURIComponent(match.matchId)}`, true, signal);
-    let telemetryUrl = match.telemetryUrl ?? null;
-    if (!telemetryUrl && detailResponse) {
-      const body = objectValue(await detailResponse.json());
-      const included = Array.isArray(body.included) ? body.included : [];
-      const relationships = objectValue(objectValue(body.data).relationships);
-      const assets = Array.isArray(objectValue(relationships.assets).data) ? objectValue(relationships.assets).data as unknown[] : [];
-      const assetIds = new Set(assets.map((asset) => String(objectValue(asset).id ?? '')));
-      const asset = included.find((item) => objectValue(item).type === 'asset' && (assetIds.size === 0 || assetIds.has(String(objectValue(item).id ?? ''))));
-      telemetryUrl = String(objectValue(objectValue(asset).attributes).URL ?? objectValue(objectValue(asset).attributes).url ?? '') || null;
+    const fetchRaw = async (): Promise<Uint8Array> => {
+      const detailResponse = match.telemetryUrl ? null : await this.get(`${this.baseUrl}/shards/${encodeURIComponent(match.shard)}/matches/${encodeURIComponent(match.matchId)}`, true, signal);
+      let telemetryUrl = match.telemetryUrl ?? null;
+      if (!telemetryUrl && detailResponse) {
+        const body = objectValue(await detailResponse.json());
+        const included = Array.isArray(body.included) ? body.included : [];
+        const relationships = objectValue(objectValue(body.data).relationships);
+        const assets = Array.isArray(objectValue(relationships.assets).data) ? objectValue(relationships.assets).data as unknown[] : [];
+        const assetIds = new Set(assets.map((asset) => String(objectValue(asset).id ?? '')));
+        const asset = included.find((item) => objectValue(item).type === 'asset' && (assetIds.size === 0 || assetIds.has(String(objectValue(item).id ?? ''))));
+        telemetryUrl = String(objectValue(objectValue(asset).attributes).URL ?? objectValue(objectValue(asset).attributes).url ?? '') || null;
+      }
+      if (!telemetryUrl) throw new Error('telemetry_asset_not_found');
+      // PUBG returns a signed asset URL; never forward the API credential to it.
+      // Save the complete body before JSON or feature parsing can discard anything.
+      const response = await this.get(telemetryUrl, false, signal);
+      return new Uint8Array(await response.arrayBuffer());
+    };
+    let raw = this.options.archive
+      ? await this.options.archive.getOrFetch(match.matchId, fetchRaw)
+      : await fetchRaw();
+    if (this.options.archive) {
+      for (let refresh = 0; !telemetryBodyHasJsonShape(raw) && refresh < 2; refresh += 1) {
+        raw = await this.options.archive.refresh(match.matchId, fetchRaw);
+      }
+      if (!telemetryBodyHasJsonShape(raw)) throw new Error('pubg_telemetry_json_invalid');
     }
-    if (!telemetryUrl) throw new Error('telemetry_asset_not_found');
-    // PUBG returns a signed asset URL; never forward the API credential to it.
-    const response = await this.get(telemetryUrl, false, signal);
-    const contentType = response.headers.get('content-type') ?? '';
-    if (contentType.includes('json')) return await response.json();
-    return Buffer.from(await response.arrayBuffer());
+    return Buffer.from(raw);
   }
 }
 

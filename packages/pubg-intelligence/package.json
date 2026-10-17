@@ -7,7 +7,8 @@
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "tsx --test tests/**/*.test.ts",
-    "evaluation:replay": "tsx scripts/replay-benchmark.ts"
+    "evaluation:replay": "tsx scripts/replay-benchmark.ts",
+    "telemetry:backfill": "tsx scripts/backfill-raw-telemetry.ts"
   },
   "exports": {
     ".": {
@@ -19,6 +20,16 @@
       "types": "./dist/src/gate.d.ts",
       "import": "./dist/src/gate.js",
       "default": "./dist/src/gate.js"
+    },
+    "./archive": {
+      "types": "./dist/src/raw-telemetry-archive.d.ts",
+      "import": "./dist/src/raw-telemetry-archive.js",
+      "default": "./dist/src/raw-telemetry-archive.js"
+    },
+    "./backfill": {
+      "types": "./dist/src/raw-telemetry-backfill.d.ts",
+      "import": "./dist/src/raw-telemetry-backfill.js",
+      "default": "./dist/src/raw-telemetry-backfill.js"
     }
   },
   "dependencies": {

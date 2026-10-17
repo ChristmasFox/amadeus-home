@@ -8,7 +8,7 @@ import type { NormalizedMatch, QueryRow, ResultSetRecord, StructuredResult } fro
 import { DeterministicQueryEngine, resultSetFromResult } from '../engine/query-engine.js';
 import { PubgApiClient, PubgApiError } from '../data/pubg-api-client.js';
 import type { PubgRepositoryPort, SyncState, TelemetryPrefetchRun } from '../storage/repository-port.js';
-import { TelemetryWorker, PubgApiTelemetryDownloader } from '../review/telemetry.js';
+import { TelemetryWorker, PubgApiTelemetryDownloader, type RawTelemetryArchivePort } from '../review/telemetry.js';
 import { emptyMatchReviewFacts, scopeMatchReviewFacts, selectMatchReviewFactCategories } from '../review/review-facts.js';
 import { analyzeMatchReview } from '../review/review-analyzer.js';
 import type { MatchReviewResult, TeamDamageFact, TeamDamageSource } from '../review/types.js';
@@ -507,6 +507,7 @@ export interface PubgDomainServiceOptions {
   repository: PubgRepositoryPort;
   apiClient?: PubgApiClient;
   telemetryWorker?: TelemetryWorker;
+  rawTelemetryArchive?: RawTelemetryArchivePort;
   timezone?: string;
   businessDayStart?: string;
   maxMatches?: number;
@@ -543,7 +544,11 @@ export class PubgDomainService {
     this.telemetryWorker = options.telemetryWorker ?? new TelemetryWorker({
       team: this.team,
       store: this.repository,
-      ...(apiClient ? { downloader: new PubgApiTelemetryDownloader({ apiKey: apiClient.apiKey, baseUrl: apiClient.baseUrl }) } : {}),
+      ...(apiClient ? { downloader: new PubgApiTelemetryDownloader({
+        apiKey: apiClient.apiKey,
+        baseUrl: apiClient.baseUrl,
+        ...(options.rawTelemetryArchive ? { archive: options.rawTelemetryArchive } : {}),
+      }) } : {}),
     });
     this.queryEngine = new DeterministicQueryEngine({
       teamContext: this.teamContext,

@@ -10,6 +10,10 @@
         "type": "string",
         "maxLength": 1024
       },
+      "telemetryArchiveDir": {
+        "type": "string",
+        "maxLength": 1024
+      },
       "teamConfigFile": {
         "type": "string",
         "maxLength": 1024
