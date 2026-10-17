@@ -446,7 +446,7 @@ def check(level: str, data: dict, dry_run: bool = False) -> None:
             return
         if lab:
             execute(["bash", "scripts/release-lab.sh", "verify"], "lab-release", dry_run)
-        if gate:
+        if gate and not lab:
             execute(["bash", "scripts/release-gate.sh", "verify"], "gate-release", dry_run)
         if not lab and not gate:
             execute(["pnpm", "check:architecture"], "architecture", dry_run)
@@ -531,7 +531,7 @@ def finish_phase(phase: str, dry_run: bool) -> None:
         die("Goal changed: review amended acceptance requirements before phase exit")
     if lab:
         print("LAB_DEPLOYMENT=AFTER_MAIN_MERGE ci=required release=automatic")
-    if gate:
+    if gate and not lab:
         gate_status, gate_reason = gate_auto_status()
         if gate_status == "disabled" and gate_reason == "state_missing":
             print("GATE_DEPLOYMENT=READY_FOR_AUTO_ENABLE source_candidate=" + source[:12])
