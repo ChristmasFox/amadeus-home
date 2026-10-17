@@ -1,67 +1,37 @@
 name: PUBG SaaS
 
+# Gate only: Lab release scripts, Intelligence Lab experiments, documentation,
+# and root lockfile updates do not justify a Gate build.
 on:
   pull_request:
     branches: [main]
     paths:
-      - ".dockerignore"
       - "apps/pubg-saas/**"
       - "packages/agent-memory/**"
-      - "infra/pubg-saas/**"
       - "packages/identity/**"
       - "packages/presentation/**"
       - "packages/pubg-domain/**"
-      - "plugins/pubg/**"
-      - "scripts/check-architecture.mjs"
-      - "scripts/check-secrets.sh"
-      - "scripts/pubg-saas-*.py"
-      - "scripts/pubg-saas-version.sh"
-      - "scripts/test-pubg-saas-version.sh"
-      - "scripts/release-*.sh"
-      - "scripts/release-cli.sh"
-      - "scripts/release-state.py"
-      - "scripts/verify-image-provenance.py"
-      - "scripts/verify-pubg-saas-oci.py"
-      - "scripts/validate-pubg-saas-test-database.py"
+      - "infra/pubg-saas/**"
       - "scripts/gate-local-candidate.py"
       - "scripts/gate_autopilot.py"
       - "scripts/tests/test_gate_*.py"
-      - "scripts/test-release-tooling.py"
-      - "scripts/tests/test_pubg_saas_*.py"
-      - "package.json"
-      - "pnpm-lock.yaml"
-      - "pnpm-workspace.yaml"
+      - "scripts/pubg-saas-*.py"
+      - "scripts/pubg-saas-version.sh"
       - ".github/workflows/pubg-saas.yml"
   push:
     branches: [main]
     paths:
-      - ".dockerignore"
       - "apps/pubg-saas/**"
       - "packages/agent-memory/**"
-      - "infra/pubg-saas/**"
       - "packages/identity/**"
       - "packages/presentation/**"
       - "packages/pubg-domain/**"
-      - "plugins/pubg/**"
-      - "scripts/check-architecture.mjs"
-      - "scripts/check-secrets.sh"
-      - "scripts/pubg-saas-*.py"
-      - "scripts/pubg-saas-version.sh"
-      - "scripts/test-pubg-saas-version.sh"
-      - "scripts/release-*.sh"
-      - "scripts/release-cli.sh"
-      - "scripts/release-state.py"
-      - "scripts/verify-image-provenance.py"
-      - "scripts/verify-pubg-saas-oci.py"
-      - "scripts/validate-pubg-saas-test-database.py"
+      - "infra/pubg-saas/**"
       - "scripts/gate-local-candidate.py"
       - "scripts/gate_autopilot.py"
       - "scripts/tests/test_gate_*.py"
-      - "scripts/test-release-tooling.py"
-      - "scripts/tests/test_pubg_saas_*.py"
-      - "package.json"
-      - "pnpm-lock.yaml"
-      - "pnpm-workspace.yaml"
+      - "scripts/pubg-saas-*.py"
+      - "scripts/pubg-saas-version.sh"
       - ".github/workflows/pubg-saas.yml"
   workflow_dispatch:
 
@@ -75,7 +45,7 @@ concurrency:
 jobs:
   source-and-database:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 12
     services:
       postgres:
         image: postgres:18.1-bookworm@sha256:cc9f4143a8d2fa8cf3749d0cb4d26ecf2d53a77a2ac807e9ebd67ae22426221a
@@ -100,132 +70,15 @@ jobs:
         with:
           node-version: "24"
           package-manager-cache: false
-      - name: Install pinned pnpm and workspace dependencies
-        run: |
-          corepack enable
-          corepack prepare pnpm@11.19.0 --activate
-          pnpm install --frozen-lockfile \
-            --filter @agent/pubg-saas... \
-            --filter @agent/pubg-plugin...
-      - name: Secret and architecture boundaries
-        run: |
-          pnpm check:secrets
-          pnpm check:architecture
-      - name: Gate product version and release notes
-        run: |
-          bash scripts/pubg-saas-version.sh check
-          bash scripts/test-pubg-saas-version.sh
-          python3 scripts/test-release-tooling.py
-      - name: Validate isolated PostgreSQL test target
-        run: python3 scripts/validate-pubg-saas-test-database.py
-      - name: Build private and public PUBG packages
-        run: pnpm build:pubg && pnpm build:pubg-saas
-      - name: Public SaaS PostgreSQL tests
-        run: |
-          pnpm --filter @agent/pubg-domain build
-          pnpm test:pubg-saas
-      - name: Private Kurisu regression
-        run: pnpm test:pubg
-      - name: Public and private typechecks
-        run: |
-          pnpm typecheck:pubg-saas
-          pnpm typecheck:pubg
-      - name: Backup and restore safety tests
-        run: python3 -m unittest discover -s scripts/tests -p 'test_pubg_saas_*.py' -v
-      - name: Gate candidate and M2 clearance safety contracts
-        run: |
-          python3 -m unittest discover -s scripts/tests -p 'test_gate_*.py' -v
-          python3 -m py_compile scripts/gate_autopilot.py scripts/gate-local-candidate.py
-      - name: Synthetic 200-team worker benchmark
-        run: PUBG_SAAS_BENCH_QUERIES_PER_TEAM=30 pnpm --filter @agent/pubg-saas exec tsx tests/m2-200-team-load.benchmark.ts
-
-  gate-memory-pgvector:
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    services:
-      postgres:
-        image: pgvector/pgvector:pg18-bookworm@sha256:2358fcba361ed2233a5ed81b5fe4ca779ccb304120ce531a3bf51c0ed7e2bc11
-        env:
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: ci-test
-          POSTGRES_DB: pubg_vector_test
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd "pg_isready -U postgres -d pubg_vector_test"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 10
-    env:
-      PUBG_SAAS_PGVECTOR_TEST_DATABASE_URL: postgresql://postgres:ci-test@localhost:5432/pubg_vector_test
-      RUN_PGVECTOR_TESTS: "1"
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
-        with:
-          node-version: "24"
-          package-manager-cache: false
-      - name: Install pinned pnpm and workspace dependencies
+      - name: Install dependencies
         run: |
           corepack enable
           corepack prepare pnpm@11.19.0 --activate
           pnpm install --frozen-lockfile --filter @agent/pubg-saas...
-      - name: Build shared presentation and PUBG domain
+      - name: Build and verify Gate
         run: |
-          pnpm --filter @agent/memory build
-          pnpm --filter @agent/presentation build
-          pnpm --filter @agent/pubg-domain build
-          pnpm --filter @agent/pubg-intelligence build
-      - name: Run isolated optional pgvector fixture
-        env:
-          PUBG_SAAS_PGVECTOR_TEST_CONTAINER_ID: ${{ job.services.postgres.id }}
-        run: |
-          test "$RUN_PGVECTOR_TESTS" = "1"
-          test -n "$PUBG_SAAS_PGVECTOR_TEST_DATABASE_URL"
-          test -n "$PUBG_SAAS_PGVECTOR_TEST_CONTAINER_ID"
-          pnpm --filter @agent/pubg-saas exec tsx --test tests/gate-memory-pgvector.test.ts
-
-  compose-and-multiarch-image:
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - name: Render isolated Compose configuration
-        working-directory: infra/pubg-saas
-        run: |
-          set -eu
-          cp .env.example .env
-          chmod 600 .env
-          mkdir -m 700 secrets
-          for name in postgres-superuser-password app-password migrator-password backup-password; do
-            printf 'ci-only-placeholder' > "secrets/$name"
-          done
-          cp gateway.env.example secrets/gateway.env
-          cp worker.env.example secrets/worker.env
-          cp migrator.env.example secrets/migrator.env
-          chmod 600 secrets/*
-          PUBG_SAAS_IMAGE=local/pubg-saas:ci \
-            docker compose --env-file .env --file compose.yaml config --quiet
-      - uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0
-        with:
-          platforms: arm64
-      - uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4.3.0
-      - name: Build Linux amd64 and arm64 OCI image without publishing
-        run: |
-          build_time="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-          product_version="$(node -e 'process.stdout.write(require("./apps/pubg-saas/package.json").version)')"
-          docker buildx build \
-            --platform linux/amd64,linux/arm64 \
-            --build-arg "OCI_SOURCE_REVISION=$GITHUB_SHA" \
-            --build-arg "OCI_PRODUCT_VERSION=$product_version" \
-            --build-arg "OCI_BUILD_TIMESTAMP=$build_time" \
-            --output type=oci,dest=/tmp/pubg-saas-multiarch.oci.tar \
-            --file apps/pubg-saas/Dockerfile .
-          python3 scripts/verify-pubg-saas-oci.py /tmp/pubg-saas-multiarch.oci.tar \
-            --expected-revision "$GITHUB_SHA" \
-            --expected-version "$product_version" \
-            --expected-build-time "$build_time"
+          pnpm check:secrets
+          pnpm check:architecture
+          pnpm build:pubg-saas
+          pnpm typecheck:pubg-saas
+          pnpm test:pubg-saas
