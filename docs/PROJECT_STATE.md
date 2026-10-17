@@ -1,24 +1,35 @@
 # Project State — 2026-10-17
 
-## Lab OpenClaw PUBG Intelligence archive candidate
+## Lab OpenClaw PUBG Intelligence archive — formal release
 
 PR #21 passed Lab regression, documentation privacy, and production-permission
 CI and merged at `51d9f8bf86d5b830922d749a4278afc7e042c417`. Lab OpenClaw
-1.10.7 runs `local/openclaw-amadeus:git-51d9f8bf86d5-20261017064054`; the
-container is healthy and its health endpoint returns HTTP 200. WhatsApp remains
-connected. A real recent-period PUBG stats query returned `ok` and used the
-existing read-only query tools.
+1.10.7 runs `local/openclaw-amadeus:git-51d9f8bf86d5-20261017064054`; its
+formal tag `lab/v1.10.7` points to `81a86da192446acad906aeba995036c1a1e13243`
+and the [GitHub Release](https://github.com/ChristmasFox/amadeus-home/releases/tag/lab/v1.10.7)
+was published from the existing release notes. Promotion reused the live
+candidate without rebuilding, switching images, or restarting OpenClaw. The
+post-promotion release doctor reports `IN_SYNC`; the container is healthy and
+its health endpoint returns HTTP 200. WhatsApp remains connected. A real
+recent-period PUBG stats query returned `ok` and used the existing read-only
+query tools.
 
 The production telemetry archive is mounted read/write at the plugin's archive
 path. The container's `node` user verified all 100 existing archive entries,
 including both compressed and raw SHA-256 values. Before the switch, the
-protected external checkpoint copied the OpenClaw Compose/environment/config,
-runtime data, and all 200 archive files; the copy was verified byte-for-byte.
-The OpenClaw-only rollback restores the previous Compose and environment files,
-restarts the previous image, and checks its health. Lab 9router and Gate were
-not changed. A live team prefetch completed successfully but found no new
-matches, so a newly discovered match has not yet been observed writing a
-production archive entry. M2 remains PAUSED.
+protected external checkpoint at
+`/Volumes/Avalon/backups/operation-skuld/deploy/amadeus-openclaw-20261017064609`
+copied the OpenClaw Compose/environment/config, runtime data, and all 200
+archive files before the candidate switch; the copy was verified byte-for-byte.
+It is also the rollback point: restore its prior Compose/environment/config,
+start the previous image, and verify health. The formal release manifest is
+stored in protected external release state. Lab 9router and Gate were not
+changed. The existing hourly prefetch was run once after release at
+`2026-10-17T07:12Z`; it completed `ok` with complete/fresh coverage, 142 known
+matches, zero new/fetched/pending/unavailable matches, and no archive writes.
+The archive still has 100 Match-ID entries / 100 captures, with its latest
+capture at `2026-10-17T05:44:51Z`. A newly discovered match has not yet been
+observed writing a production archive entry. M2 remains PAUSED.
 
 ## Gate-Local autonomous candidate and PUBG Intelligence canary
 
