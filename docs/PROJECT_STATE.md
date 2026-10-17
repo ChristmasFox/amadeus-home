@@ -1,5 +1,25 @@
 # Project State — 2026-10-17
 
+## Lab OpenClaw PUBG Intelligence archive candidate
+
+PR #21 passed Lab regression, documentation privacy, and production-permission
+CI and merged at `51d9f8bf86d5b830922d749a4278afc7e042c417`. Lab OpenClaw
+1.10.7 runs `local/openclaw-amadeus:git-51d9f8bf86d5-20261017064054`; the
+container is healthy and its health endpoint returns HTTP 200. WhatsApp remains
+connected. A real recent-period PUBG stats query returned `ok` and used the
+existing read-only query tools.
+
+The production telemetry archive is mounted read/write at the plugin's archive
+path. The container's `node` user verified all 100 existing archive entries,
+including both compressed and raw SHA-256 values. Before the switch, the
+protected external checkpoint copied the OpenClaw Compose/environment/config,
+runtime data, and all 200 archive files; the copy was verified byte-for-byte.
+The OpenClaw-only rollback restores the previous Compose and environment files,
+restarts the previous image, and checks its health. Lab 9router and Gate were
+not changed. A live team prefetch completed successfully but found no new
+matches, so a newly discovered match has not yet been observed writing a
+production archive entry. M2 remains PAUSED.
+
 ## Gate-Local autonomous candidate and PUBG Intelligence canary
 
 Gate-Local candidate authorization is shared by linked worktrees through the
