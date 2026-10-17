@@ -235,9 +235,6 @@ done
 if ((CANDIDATE)); then
   fail 'Lab candidate deployment is retired; Lab runtime changes deploy once after a green main merge.'
 fi
-if ((APPLY && AUTO_RELEASE == 0)); then
-  fail 'Direct Lab runtime apply is retired; the M204 main-merge release automation owns Lab deployment.'
-fi
 
 if ((OPENCLAW_ONLY)); then
   ((AUTO_RELEASE == 1 || BUILD_ONLY == 1)) || fail '--openclaw-only requires --auto-release or build-only.'
@@ -357,6 +354,9 @@ fi
 
 if ((APPLY == 1 && OPENCLAW_ONLY == 0 && BUILD_RADAR == 1 && BUILD_OPENCLAW == 0)); then
   fail 'Refusing Product Radar-only apply: the Lab-default deployment also restarts OpenClaw. Use --dry-run or prepare a reviewed full two-image Lab deployment.'
+fi
+if ((APPLY && AUTO_RELEASE == 0)); then
+  fail 'Direct Lab runtime apply is retired; the M204 main-merge release automation owns Lab deployment.'
 fi
 
 shown_image="$IMAGE"
