@@ -1131,16 +1131,12 @@ if ((AUTO_RELEASE)); then
   printf '%s\n' 'OPENCLAW_CONTAINER_HEALTH=healthy'
 fi
 deploy_stage smoke
-if ((OPENCLAW_ONLY)); then
-  archive_mount="$(orb -m "$MACHINE" -u root docker inspect openclaw \
-    --format '{{range .Mounts}}{{if eq .Destination "/var/lib/amadeus/pubg-telemetry-archive"}}{{.Source}}|{{.RW}}{{end}}{{end}}')"
-  [[ "$archive_mount" == "$PUBG_TELEMETRY_ARCHIVE_HOST_DIR|true" ]] \
-    || fail 'PUBG telemetry archive mount is missing or not writable; restore the protected checkpoint.'
-  orb -m "$MACHINE" -u root docker exec --user node openclaw node -e \
-    'const fs=require("node:fs"),p=require("node:path"),root="/var/lib/amadeus/pubg-telemetry-archive";function walk(dir){fs.accessSync(dir,fs.constants.R_OK|fs.constants.W_OK|fs.constants.X_OK);for(const name of fs.readdirSync(dir)){const child=p.join(dir,name),s=fs.lstatSync(child);if(s.isSymbolicLink())throw Error("archive symlink");if(s.isDirectory())walk(child);else fs.accessSync(child,fs.constants.R_OK)}}walk(root)' \
-    || fail 'OpenClaw node user cannot read and write the PUBG telemetry archive mount.'
-  printf 'PUBG_TELEMETRY_ARCHIVE_MOUNT=passed\n'
-fi
+# Every apply path (the OpenClaw-only automatic release and the full Lab deploy) must end with the archive mounted from
+# the configured host directory. A container recreated without it silently archives into an empty root-owned directory
+# and every prefetch then fails with telemetry_archive_owner_invalid while the cron job still reports ok.
+"$ROOT_DIR/scripts/check-openclaw-archive-mount.sh" --machine "$MACHINE" --expect "$PUBG_TELEMETRY_ARCHIVE_HOST_DIR" \
+  || fail 'PUBG telemetry archive mount is not the configured host directory or is not usable by the OpenClaw node user; restore the protected checkpoint.'
+printf 'PUBG_TELEMETRY_ARCHIVE_MOUNT=passed\n'
 runtime_amadeus_version="$(orb -m "$MACHINE" -u root docker exec openclaw cat /opt/amadeus/VERSION | tr -d '[:space:]')"
 [[ "$runtime_amadeus_version" == "$AMADEUS_VERSION" ]] || fail "Running OpenClaw reports Amadeus VERSION=$runtime_amadeus_version, expected $AMADEUS_VERSION."
 printf 'RUNTIME_AMADEUS_VERSION=%s\n' "$runtime_amadeus_version"
