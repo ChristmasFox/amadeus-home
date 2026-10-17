@@ -3,6 +3,7 @@ import { startServer } from '../src/server/server.js';
 interface Bootstrap {
   matchCount: number;
   modelEnabled: boolean;
+  modelId: string | null;
   selectedSquadId: string;
   dateFrom: string | null;
   dateTo: string | null;
@@ -39,6 +40,7 @@ async function main(): Promise<void> {
     if (!bootstrapResponse.ok) throw new Error('real_ai_e2e_bootstrap_failed');
     const bootstrap = await bootstrapResponse.json() as Bootstrap;
     if (!bootstrap.modelEnabled) throw new Error('real_ai_e2e_model_not_configured');
+    if (bootstrap.modelId !== 'arthur-combo') throw new Error('real_ai_e2e_wrong_model_route');
     if (!bootstrap.matchCount || !bootstrap.dateFrom || !bootstrap.dateTo) throw new Error('real_ai_e2e_source_data_missing');
 
     const response = await fetch(`${server.url}/api/research`, {
@@ -59,6 +61,7 @@ async function main(): Promise<void> {
     console.log(JSON.stringify({
       realRouterCalls: routerCalls,
       modelEnabled: bootstrap.modelEnabled,
+      modelId: bootstrap.modelId,
       matchCount: bootstrap.matchCount,
       plannerSource: result.plannerSource,
       assistantSource: result.assistant.source,

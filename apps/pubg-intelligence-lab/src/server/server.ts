@@ -37,6 +37,7 @@ import {
   type ResearchSquad,
   type ResearchTemplate,
   type ResearchAssistantEvidence,
+  type ResearchAssistantResult,
   type ResearchAssistantToolset,
   type TacticalMatchAnalysis,
   type EvaluationReviewLabel,
@@ -44,6 +45,7 @@ import {
 } from '@agent/pubg-intelligence';
 import { RawTelemetryArchive } from '@agent/pubg-intelligence/archive';
 import { assertArchiveOutsideRepository } from '@agent/pubg-intelligence/backfill';
+import { researchRecoveryMessage, shortConversationReply } from './messages.js';
 import { createResearchModel } from './model.js';
 
 const PARSER_VERSION = 'telemetry-parser-6';
@@ -71,6 +73,7 @@ interface Snapshot {
   planner: NaturalLanguageResearchPlanner;
   researchModel?: Exclude<LanguageModel, string>;
   modelEnabled: boolean;
+  modelId: string | null;
 }
 
 function safePlayerName(value: string, index: number): string {
@@ -169,6 +172,7 @@ async function openSnapshot(modelOverride?: Exclude<LanguageModel, string>): Pro
     planner: new NaturalLanguageResearchPlanner(model),
     ...(model ? { researchModel: model } : {}),
     modelEnabled: Boolean(model),
+    modelId: model?.modelId ?? null,
   };
 }
 
@@ -662,6 +666,13 @@ function deterministicAssistantFallback(question: string, reportAnswer: string, 
       citeReportEvidence: false,
     };
   }
+  if (action === 'unsupported') {
+    return {
+      answer: '我目前只研究当前选定小队的 PUBG 对局。可以问最近伤害趋势、队员对比、地图表现，或指定一场比赛复盘团战。',
+      evidenceRefs: [],
+      citeReportEvidence: false,
+    };
+  }
   if (action === 'unsupported' || action === 'telemetry_coverage') return { answer: reportAnswer, evidenceRefs: [], citeReportEvidence: false };
   return { answer: reportAnswer, evidenceRefs: [], citeReportEvidence: true };
 }
@@ -807,6 +818,7 @@ async function handleApi(request: IncomingMessage, response: ServerResponse, sna
       dateFrom: dates[0] ?? null,
       dateTo: dates.at(-1) ?? null,
       modelEnabled: snapshot.modelEnabled,
+      modelId: snapshot.modelId,
       selectedSquadId: snapshot.defaultSquad.id,
       squads: snapshot.squads.map(({ id, label, members, matchCount }) => ({ id, label, members: members.map((member) => member.name), matchCount })),
     });
@@ -1075,43 +1087,63 @@ async function handleApi(request: IncomingMessage, response: ServerResponse, sna
       if ((row.role !== 'user' && row.role !== 'assistant') || typeof row.text !== 'string') return [];
       return [{ role: row.role as 'user' | 'assistant', text: anonymizeResearchText(redactSensitiveText(row.text), promptPlayerAliases, privateIdentifiers) }];
     }).slice(-6);
-    const plan = await snapshot.planner.plan(modelQuestion);
+    const conversationReply = shortConversationReply(question);
+    const plan = conversationReply
+      ? { intent: { action: 'unsupported', metric: null, groupBy: null } as const, source: 'local-rule' as const }
+      : await snapshot.planner.plan(modelQuestion);
     const report = buildResearchReport({
       matches: scopedMatches,
       squad,
       intent: plan.intent,
       telemetryMatchIds: new Set(snapshot.features.keys()),
     });
-    const assistantContext = createScopedAssistantContext({
-      snapshot,
-      matches: scopedMatches,
-      squad,
-      telemetryMatchIds: new Set(snapshot.features.keys()),
-    });
-    const fallbackMetrics = await assistantContext.tools.getScopedMetrics({
-      metric: plan.intent.metric ?? 'damage',
-      groupBy: plan.intent.groupBy ?? 'none',
-    }) as { evidenceRefs?: string[] };
-    const deterministicFallback = deterministicAssistantFallback(question, report.answer, plan.intent.action);
-    const assistant = await runResearchAssistant({
-      ...(snapshot.researchModel ? { model: snapshot.researchModel } : {}),
-      message: modelQuestion,
-      priorTurns,
-      template,
-      scopeDescription: `${from ?? 'start'} through ${to ?? 'latest'}, selected squad, ${scopedMatches.length} eligible matches`,
-      fallbackAnswer: deterministicFallback.answer,
-      fallbackEvidenceRefs: deterministicFallback.citeReportEvidence ? fallbackMetrics.evidenceRefs ?? [] : deterministicFallback.evidenceRefs,
-      tools: assistantContext.tools,
-      evidenceByAlias: assistantContext.evidenceByAlias,
-      signal: AbortSignal.timeout(45_000),
-    });
+    let assistantLabels: Record<string, string> = {};
+    let assistant: ResearchAssistantResult;
+    if (conversationReply) {
+      assistant = {
+        version: 'research-assistant-v1',
+        status: 'abstained',
+        source: 'deterministic-fallback',
+        template,
+        answer: conversationReply,
+        claims: [],
+        evidence: [],
+        toolNames: [],
+        degradedReason: null,
+      };
+    } else {
+      const assistantContext = createScopedAssistantContext({
+        snapshot,
+        matches: scopedMatches,
+        squad,
+        telemetryMatchIds: new Set(snapshot.features.keys()),
+      });
+      assistantLabels = assistantContext.labels;
+      const fallbackMetrics = await assistantContext.tools.getScopedMetrics({
+        metric: plan.intent.metric ?? 'damage',
+        groupBy: plan.intent.groupBy ?? 'none',
+      }) as { evidenceRefs?: string[] };
+      const deterministicFallback = deterministicAssistantFallback(question, report.answer, plan.intent.action);
+      assistant = await runResearchAssistant({
+        ...(snapshot.researchModel ? { model: snapshot.researchModel } : {}),
+        message: modelQuestion,
+        priorTurns,
+        template,
+        scopeDescription: `${from ?? 'start'} through ${to ?? 'latest'}, selected squad, ${scopedMatches.length} eligible matches`,
+        fallbackAnswer: deterministicFallback.answer,
+        fallbackEvidenceRefs: deterministicFallback.citeReportEvidence ? fallbackMetrics.evidenceRefs ?? [] : deterministicFallback.evidenceRefs,
+        tools: assistantContext.tools,
+        evidenceByAlias: assistantContext.evidenceByAlias,
+        signal: AbortSignal.timeout(45_000),
+      });
+    }
     const runId = snapshot.experimentStore.save({ question, intent: plan.intent, source: plan.source, report, assistant });
     send(response, 200, {
       runId,
       intent: plan.intent,
       plannerSource: plan.source,
       report,
-      assistant: { ...assistant, labels: assistantContext.labels },
+      assistant: { ...assistant, labels: assistantLabels, recoveryMessage: researchRecoveryMessage(assistant.degradedReason) },
     });
     return;
   }

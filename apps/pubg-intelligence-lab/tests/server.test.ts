@@ -96,10 +96,11 @@ test('local API serves history and research from a read-only source and stores e
     const mainModule = await fetch(`${server.url}/src/client/main.tsx`).then((response) => response.text());
     assert.match(mainModule, /\/node_modules\/\.vite\/deps\/react-dom_client\.js/u);
     assert.match(mainModule, /const createRoot = __vite__cjsImport\d+_reactDom_client\["createRoot"\]/u);
-    const bootstrap = await fetch(`${server.url}/api/bootstrap`).then((response) => response.json()) as { matchCount: number; telemetryCachedMatchCount: number; modelEnabled: boolean };
+    const bootstrap = await fetch(`${server.url}/api/bootstrap`).then((response) => response.json()) as { matchCount: number; telemetryCachedMatchCount: number; modelEnabled: boolean; modelId: string | null };
     assert.equal(bootstrap.matchCount, 2);
     assert.equal(bootstrap.telemetryCachedMatchCount, 0);
     assert.equal(bootstrap.modelEnabled, false);
+    assert.equal(bootstrap.modelId, null);
 
     const matches = await fetch(`${server.url}/api/matches`).then((response) => response.json()) as { total: number; matches: Array<{ matchId: string }> };
     assert.equal(matches.total, 2);
@@ -318,6 +319,29 @@ test('AI research keeps malicious follow-up text inside the selected squad/date 
       }) }], 'tool-calls') as never,
     ] });
     server = await startServer({ researchModel: model });
+    const configuredBootstrap = await fetch(`${server.url}/api/bootstrap`).then((response) => response.json()) as { modelEnabled: boolean; modelId: string | null };
+    assert.equal(configuredBootstrap.modelEnabled, true);
+    assert.equal(configuredBootstrap.modelId, model.modelId);
+
+    const greeting = await fetch(`${server.url}/api/research`, {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ question: '你好！', squadId: 'all', from: '2026-10-12', to: '2026-10-12' }),
+    });
+    assert.equal(greeting.status, 200);
+    const greetingPayload = await greeting.json() as {
+      plannerSource: string;
+      report: { action: string };
+      assistant: { status: string; source: string; answer: string; claims: unknown[]; evidence: unknown[]; degradedReason: string | null };
+    };
+    assert.equal(greetingPayload.plannerSource, 'local-rule');
+    assert.equal(greetingPayload.report.action, 'unsupported');
+    assert.equal(greetingPayload.assistant.status, 'abstained');
+    assert.equal(greetingPayload.assistant.source, 'deterministic-fallback');
+    assert.match(greetingPayload.assistant.answer, /可以帮你复盘当前小队的 PUBG 对局/u);
+    assert.deepEqual(greetingPayload.assistant.claims, []);
+    assert.deepEqual(greetingPayload.assistant.evidence, []);
+    assert.equal(greetingPayload.assistant.degradedReason, null);
+    assert.equal(model.doGenerateCalls.length, 0);
 
     const outOfScope = await fetch(`${server.url}/api/research`, {
       method: 'POST', headers: { 'content-type': 'application/json' },

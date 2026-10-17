@@ -12,6 +12,7 @@ interface Bootstrap {
   telemetryCachedMatchCount: number;
   parserVersion: string;
   featureVersion: string;
+  modelId: string | null;
   dateFrom: string | null;
   dateTo: string | null;
   modelEnabled: boolean;
@@ -269,6 +270,7 @@ interface ResearchResponse {
     evidence: Array<{ ref: string; matchId: string; eventId: string | null; timeSeconds: number | null; kind: string }>;
     toolNames: string[];
     degradedReason: string | null;
+    recoveryMessage: string | null;
     labels: Record<string, string>;
   };
 }
@@ -400,14 +402,22 @@ function resolveMemberAliases(value: string, labels: Record<string, string>): st
 
 function ResultBlock({ result, onEvidence }: { result: ResearchResponse; onEvidence: (evidence: ResearchResponse['assistant']['evidence'][number]) => void }) {
   const { report } = result;
+  const isConversationReply = report.action === 'unsupported'
+    && result.assistant.status === 'abstained'
+    && result.assistant.claims.length === 0;
+  if (isConversationReply) {
+    return <div className="result-block conversation-result">
+      <div className="result-heading"><span className="result-dot" />可以继续问</div>
+      <p className="result-answer">{resolveMemberAliases(result.assistant.answer, result.assistant.labels)}</p>
+      {result.assistant.recoveryMessage && <div className="assistant-degraded">{result.assistant.recoveryMessage}</div>}
+    </div>;
+  }
   const maxBar = Math.max(1, ...report.breakdown.map((item) => item.average));
   return (
     <div className="result-block">
       <div className="result-heading"><span className="result-dot" />研究结果 <span className="result-scope">{report.scope.squadLabel} · {report.scope.selectedMatches} 场 · {result.assistant.source === 'ai-sdk' ? 'AI SDK' : '本地降级'}</span></div>
       <p className="result-answer">{resolveMemberAliases(result.assistant.answer, result.assistant.labels)}</p>
-      {result.assistant.degradedReason && <div className="assistant-degraded">{result.assistant.degradedReason === 'model_unavailable'
-        ? '未配置可用 AI 模型；本次展示本机确定性统计。可设置 PUBG_INTELLIGENCE_AI_BASE_URL、PUBG_INTELLIGENCE_AI_API_KEY，并将模型留空以优先尝试 Gemini。'
-        : 'AI 输出未通过证据校验；已回退到本机确定性统计。'}</div>}
+      {result.assistant.recoveryMessage && <div className="assistant-degraded">{result.assistant.recoveryMessage}</div>}
       {result.assistant.claims.length > 0 && <div className="assistant-claims">{result.assistant.claims.map((claim, index) => <div className="assistant-claim" key={`${claim.kind}-${index}`}>
         <span className={`claim-kind ${claim.kind}`}>{claim.kind === 'fact' ? '事实' : claim.kind === 'inference' ? '推断' : '假设'}</span>
         <p>{resolveMemberAliases(claim.text, result.assistant.labels)}</p>
@@ -708,7 +718,7 @@ export function App() {
     <div className="app-shell">
       <header className="topbar">
         <div className="brand-lockup"><div className="brand-mark">P<span>•</span></div><div><strong>PUBG INTELLIGENCE LAB</strong><small>LOCAL RESEARCH / R1</small></div></div>
-        <div className="topbar-right"><div className="source-pill"><span className="pulse" />只读快照 <b>{number(bootstrap?.matchCount ?? 0)} 场</b></div><div className="model-pill"><i>{bootstrap?.modelEnabled ? '✦' : '⌁'}</i>{bootstrap?.modelEnabled ? 'AI SDK 已配置' : '本地语义解析'}</div><div className="avatar">IL</div></div>
+        <div className="topbar-right"><div className="source-pill"><span className="pulse" />只读快照 <b>{number(bootstrap?.matchCount ?? 0)} 场</b></div><div className="model-pill"><i>{bootstrap?.modelEnabled ? '✦' : '⌁'}</i>{bootstrap?.modelEnabled ? `9Router · ${bootstrap.modelId ?? '已配置'}` : '本地语义解析'}</div><div className="avatar">IL</div></div>
       </header>
 
       <main className="dashboard">
@@ -743,7 +753,7 @@ export function App() {
             </div></div>}
             {chat.map((entry, index) => <div className={`chat-entry ${entry.role}`} key={`${entry.role}-${index}`}>
               <div className="chat-entry-avatar">{entry.role === 'user' ? '你' : 'P'}</div>
-              <div className="chat-entry-body"><div className="chat-entry-label">{entry.role === 'user' ? '研究问题' : `LAB ANALYSIS${entry.result ? ` · ${entry.result.assistant.source === 'ai-sdk' ? 'AI SDK' : 'LOCAL'}` : ''}`}</div><p>{entry.text}</p>{entry.result && <ResultBlock result={entry.result} onEvidence={openAssistantEvidence} />}</div>
+              <div className="chat-entry-body"><div className="chat-entry-label">{entry.role === 'user' ? '研究问题' : `LAB ANALYSIS${entry.result ? ` · ${entry.result.assistant.source === 'ai-sdk' ? 'AI SDK' : 'LOCAL'}` : ''}`}</div>{!entry.result && <p>{entry.text}</p>}{entry.result && <ResultBlock result={entry.result} onEvidence={openAssistantEvidence} />}</div>
             </div>)}
             {loading && <div className="thinking"><span /><span /><span />正在整理比赛证据…</div>}
           </div>

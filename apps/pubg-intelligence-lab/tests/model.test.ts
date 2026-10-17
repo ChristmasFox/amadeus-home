@@ -18,12 +18,19 @@ test('research model loads an owner-only external 9Router config and honors expl
     assert.equal(model.modelId, 'arthur-combo');
     const overridden = createResearchModel({
       PUBG_INTELLIGENCE_AI_CONFIG_FILE: configPath,
-      PUBG_INTELLIGENCE_AI_BASE_URL: 'http://127.0.0.1:20129/v1',
+      PUBG_INTELLIGENCE_AI_BASE_URL: 'http://192.168.5.4:20128/v1',
       PUBG_INTELLIGENCE_AI_API_KEY: 'override-key-not-real',
       PUBG_INTELLIGENCE_AI_MODEL: 'google/gemini-2.5-flash',
     });
     assert.ok(overridden);
     assert.equal(overridden.modelId, 'google/gemini-2.5-flash');
+    const lanOverride = createResearchModel({
+      PUBG_INTELLIGENCE_AI_CONFIG_FILE: configPath,
+      PUBG_INTELLIGENCE_AI_BASE_URL: 'http://192.168.5.4:20128/v1',
+      PUBG_INTELLIGENCE_AI_API_KEY: 'override-key-not-real',
+    });
+    assert.ok(lanOverride);
+    assert.equal(lanOverride.modelId, 'arthur-combo');
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

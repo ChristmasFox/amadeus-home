@@ -34,8 +34,7 @@ export function createResearchModel(environment: NodeJS.ProcessEnv = process.env
   let apiKey = environment.PUBG_INTELLIGENCE_AI_API_KEY?.trim();
   const externalPath = environment.PUBG_INTELLIGENCE_AI_CONFIG_FILE?.trim()
     || resolve(homedir(), '.config', 'amadeus', 'pubg-intelligence-ai.json');
-  let external: ExternalResearchModelConfig | undefined;
-  if (!baseURL || !apiKey) external = safeExternalConfig(externalPath);
+  const external = safeExternalConfig(externalPath);
   baseURL ||= external?.baseURL;
   apiKey ||= external?.apiKey;
   const modelId = environment.PUBG_INTELLIGENCE_AI_MODEL?.trim() || external?.modelId || 'google/gemini-2.5-flash';

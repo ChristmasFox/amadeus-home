@@ -27,6 +27,8 @@ Without model settings, a deterministic local answer is shown with a clear degra
 - `PUBG_INTELLIGENCE_AI_MODEL` (optional; defaults to `google/gemini-2.5-flash`)
 - `PUBG_INTELLIGENCE_AI_CONFIG_FILE` (optional owner-only `0600` JSON file with `baseURL`, `apiKey`, and optional `modelId`; the default is `~/.config/amadeus/pubg-intelligence-ai.json`)
 
+The current Lab-local owner config selects `arthur-combo` at `http://127.0.0.1:20128/v1`. The research service calls 9Router server-side, so a browser opened from another LAN device does not need a router URL of its own. The top bar shows the configured model ID when the model is available. To move 9Router to another host, set `PUBG_INTELLIGENCE_AI_BASE_URL` or update the external owner config to a stable private LAN address or hostname; do not pin an OrbStack temporary IP in source. Keep `apiKey` in the owner-only file or runtime environment, never in Git.
+
 For OpenAI-compatible 9Router routes, the app sends `stream: false` explicitly because this router returns SSE when the field is omitted. The assistant submits its final response through a typed AI SDK tool call, then validates the full local claim schema and evidence references.
 
 The response can use tactical coaching, squad-humor, or chronological-story wording. Templates change wording only; candidate claims are schema-validated, every claim must cite evidence returned by a read-only server tool, and unsupported numeric values or references fall back to local deterministic output. The server fixes the selected squad and date scope; model tool inputs cannot choose a tenant, file, database, or arbitrary match ID.
