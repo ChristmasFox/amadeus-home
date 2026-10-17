@@ -50,6 +50,9 @@ function localIntent(message: string): ResearchIntent {
   if (/telemetry|缓存覆盖|事件缓存|解析缓存/iu.test(text)) {
     return { action: 'telemetry_coverage', metric: null, groupBy: null };
   }
+  if (/打法|playstyle/iu.test(text) && /(近\s*(?:\d+|[零一二两三四五六七八九十]+)?\s*(?:场|局)|最近|last\s+\d+|\bplayer_[0-9]{2}\b)/iu.test(text)) {
+    return { action: 'player_comparison', metric, groupBy: 'player' };
+  }
   if (/按地图|地图.*(比较|表现|胜率|伤害|击杀)|map.*(breakdown|compare)/iu.test(text)) {
     return { action: 'map_breakdown', metric, groupBy: 'map' };
   }

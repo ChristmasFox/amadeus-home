@@ -22,6 +22,7 @@ import {
   buildResearchReport,
   buildResearchSquads,
   buildFrequentPairCandidates,
+  classifyResearchQuestion,
   ExperimentRunStore,
   replayTacticalBenchmark,
   analyzeTacticalMatch,
@@ -79,6 +80,33 @@ interface Snapshot {
 function safePlayerName(value: string, index: number): string {
   const normalized = redactSensitiveText(value.trim()).replace(/\[手机号已隐藏\]/gu, '匿名队员');
   return normalized || `队员 ${index + 1}`;
+}
+
+interface ScopedPlayerAlias {
+  accountId: string;
+  name: string;
+  alias: string;
+}
+
+function requestedRecentMatchCount(question: string): number {
+  const text = question.normalize('NFKC').toLocaleLowerCase('zh-CN');
+  const match = /(?:近|最近|last)\s*(\d{1,2}|[零一二两三四五六七八九十]+)\s*(?:场|局|matches?)?/iu.exec(text);
+  if (!match?.[1]) return 10;
+  const token = match[1];
+  const chinese: Record<string, number> = { 零: 0, 一: 1, 二: 2, 两: 2, 三: 3, 四: 4, 五: 5, 六: 6, 七: 7, 八: 8, 九: 9, 十: 10 };
+  const parsed = /^\d+$/u.test(token) ? Number(token) : chinese[token];
+  return Math.max(1, Math.min(10, Number.isFinite(parsed) ? parsed! : 10));
+}
+
+function requestedPlayerReview(question: string, players: readonly ScopedPlayerAlias[]): ScopedPlayerAlias | undefined {
+  const text = question.normalize('NFKC').toLocaleLowerCase('zh-CN');
+  if (!/(?:近\s*(?:[\d零一二两三四五六七八九十]+\s*)?(?:场|局)|最近.{0,8}(?:场|局|比赛)?|打法|复盘|分析|表现|状态|playstyle|performance|last\s+\d+)/iu.test(text)) return undefined;
+  const candidates = players.filter((player) => player.name.trim() && text.includes(player.name.normalize('NFKC').toLocaleLowerCase('zh-CN')))
+    .sort((left, right) => right.name.length - left.name.length);
+  const longestNameLength = candidates[0]?.name.length;
+  const best = candidates.filter((player) => player.name.length === longestNameLength);
+  const accounts = new Set(best.map((player) => player.accountId));
+  return accounts.size === 1 ? best[0] : undefined;
 }
 
 function sanitizeMatch(match: NormalizedMatch): NormalizedMatch {
@@ -394,6 +422,7 @@ function createScopedAssistantContext(input: {
   matches: readonly NormalizedMatch[];
   squad: ResearchSquad;
   telemetryMatchIds: ReadonlySet<string>;
+  requestedMatchLimit?: number;
 }): ScopedAssistantContext {
   const { snapshot, matches, squad } = input;
   const memberIds = new Set(squad.memberIds.length
@@ -450,6 +479,38 @@ function createScopedAssistantContext(input: {
       victim: null,
       damage: null,
     }));
+    const playerRecentMatches = input.requestedMatchLimit === undefined ? undefined : [...matches]
+      .sort((left, right) => right.timestamp - left.timestamp || right.matchId.localeCompare(left.matchId))
+      .slice(0, input.requestedMatchLimit)
+      .flatMap((match) => {
+        const player = match.players.find((candidate) => memberIds.has(candidate.accountId));
+        if (!player) return [];
+        const playerAlias = accountAliases.get(player.accountId) ?? 'PLAYER_UNKNOWN';
+        const ref = addEvidence({
+          matchId: match.matchId,
+          eventId: null,
+          timeSeconds: null,
+          kind: 'match-store:player-performance',
+          matchRef: matchAliases.get(match.matchId) ?? 'M0000',
+          occurredAt: match.createdAt ?? new Date(match.timestamp).toISOString(),
+          detail: `${match.mapName} · ${match.createdAt ?? '时间未知'} · ${playerAlias} · ${player.kills} 杀 · ${player.damage} 伤害 · ${player.dbnos} 击倒 · ${player.revives} 救援 · 生存 ${player.survivalTime} 秒 · 排名 ${player.rank ?? '未知'}`,
+          actor: playerAlias,
+          victim: null,
+          damage: player.damage,
+        });
+        return [{
+          matchRef: matchAliases.get(match.matchId) ?? 'M0000',
+          date: match.createdAt ?? new Date(match.timestamp).toISOString(),
+          map: match.mapName,
+          rank: player.rank,
+          kills: player.kills,
+          damage: player.damage,
+          knocks: player.dbnos,
+          revives: player.revives,
+          survivalSeconds: player.survivalTime,
+          evidenceRefs: [ref],
+        }];
+      });
     const players = report.players.map((player) => ({
       member: metricAliases.get(player.id) ?? 'PLAYER_UNKNOWN',
       matches: player.matches,
@@ -474,11 +535,13 @@ function createScopedAssistantContext(input: {
       metric,
       groupBy,
       selectedMatches: report.scope.selectedMatches,
+      requestedMatches: input.requestedMatchLimit ?? report.scope.selectedMatches,
       summary: report.summary,
       telemetry: report.telemetry,
       players,
       breakdown,
-      evidenceRefs,
+      ...(playerRecentMatches ? { playerRecentMatches } : {}),
+      evidenceRefs: [...new Set([...(playerRecentMatches?.flatMap((item) => item.evidenceRefs) ?? []), ...evidenceRefs])],
     };
   };
 
@@ -579,6 +642,62 @@ function createScopedAssistantContext(input: {
       const opponentIds = [...new Set(telemetry.events.flatMap((event) => [event.actorId, event.victimId]).filter((id): id is string => Boolean(id) && !memberIds.has(id!)))].sort();
       const opponentAliases = new Map(opponentIds.map((id, index) => [id, `OPPONENT_${String(index + 1).padStart(2, '0')}`]));
       const safePlayer = (id: string | null) => id ? accountAliases.get(id) ?? opponentAliases.get(id) ?? 'OPPONENT_UNKNOWN' : null;
+      const facts = snapshot.features.get(match.matchId)?.facts;
+      const featureEvidenceRefs = (evidenceIds: readonly string[], kind: string, actorId: string | null): string[] => {
+        const evidenceById = new Map((facts?.evidence ?? []).map((evidence) => [evidence.id, evidence]));
+        return [...new Set(evidenceIds.flatMap((id) => {
+          const evidence = evidenceById.get(id);
+          if (!evidence) return [];
+          return [addEvidence({
+            matchId: match.matchId,
+            eventId: evidence.eventIds[0] ?? null,
+            timeSeconds: null,
+            kind: `telemetry-feature:${kind}`,
+            matchRef,
+            occurredAt: match.createdAt ?? new Date(match.timestamp).toISOString(),
+            detail: `${match.mapName} · ${evidence.description}`,
+            actor: actorId ? safePlayer(actorId) : null,
+            victim: null,
+            damage: null,
+          })];
+        }))].slice(0, 8);
+      };
+      const combatFeatures = facts ? {
+        weapons: facts.weapons.filter((item) => memberIds.has(item.playerId)).slice(0, 12).map((item) => ({
+          player: safePlayer(item.playerId), weapon: item.weapon, shots: item.shots, hits: item.hits, damage: item.damage,
+          knocks: item.knocks, kills: item.kills, evidenceRefs: featureEvidenceRefs(item.evidenceIds, 'weapon', item.playerId),
+        })),
+        fights: facts.fights.filter((item) => item.participants.some((id) => memberIds.has(id))).slice(0, 12).map((item) => ({
+          participants: item.participants.map(safePlayer), result: item.result, damage: item.damage, knocks: item.knocks, kills: item.kills,
+          evidenceRefs: featureEvidenceRefs(item.evidenceIds, 'fight', item.participants.find((id) => memberIds.has(id)) ?? null),
+        })),
+      } : null;
+      const trackedBattleRefs = new Set(match.players.filter((player) => memberIds.has(player.accountId)).map((player) => battlePlayerRef(match.matchId, player.accountId)));
+      const battleSummaries = reconstruction.battles.filter((battle) => battle.timeline.some((event) => trackedBattleRefs.has(event.actorRef ?? '') || trackedBattleRefs.has(event.victimRef ?? '')))
+        .slice(0, 12).map((battle) => {
+          const firstKnock = battle.postKnockResponse.firstKnockEventId ? eventsById.get(battle.postKnockResponse.firstKnockEventId) : undefined;
+          const response = battle.postKnockResponse.responseEventId ? eventsById.get(battle.postKnockResponse.responseEventId) : undefined;
+          const eventRef = (event: typeof firstKnock) => event ? addEvidence({
+            matchId: match.matchId,
+            eventId: event.sourceEventId,
+            timeSeconds: event.timeSeconds,
+            kind: `battle:${event.type.toLocaleLowerCase('en-US')}`,
+            matchRef,
+            occurredAt: match.createdAt ?? new Date(match.timestamp).toISOString(),
+            detail: `${match.mapName} · ${event.type} · ${event.timeSeconds === null ? '时间未知' : `${Math.floor(event.timeSeconds / 60)}:${String(Math.floor(event.timeSeconds % 60)).padStart(2, '0')}`} · ${safePlayer(event.actorId) ?? '未知'}${event.victimId ? ` → ${safePlayer(event.victimId)}` : ''}${event.weaponId ? ` · ${event.weaponId}` : ''}${event.type === 'DAMAGE' ? ` · ${event.damage} 伤害` : ''}`,
+            actor: safePlayer(event.actorId),
+            victim: safePlayer(event.victimId),
+            damage: event.type === 'DAMAGE' ? event.damage : null,
+          }) : null;
+          return {
+            startSeconds: battle.startSeconds,
+            endSeconds: battle.endSeconds,
+            firstKnock: firstKnock ? { actor: safePlayer(firstKnock.actorId), victim: safePlayer(firstKnock.victimId), weapon: firstKnock.weaponId } : null,
+            response: { status: battle.postKnockResponse.status, elapsedSeconds: battle.postKnockResponse.elapsedSeconds },
+            responseEvent: response ? { type: response.type, actor: safePlayer(response.actorId), victim: safePlayer(response.victimId) } : null,
+            evidenceRefs: [...new Set([eventRef(firstKnock), eventRef(response)].filter((ref): ref is string => Boolean(ref)))],
+          };
+        });
       const episodes = reconstruction.episodes.slice(0, 16).map((episode, episodeIndex) => {
         const sourceEvents = episode.timeline.slice(0, 24).flatMap((timeline) => {
           const event = eventsById.get(timeline.sourceEventId);
@@ -632,7 +751,15 @@ function createScopedAssistantContext(input: {
         episodes,
         omittedEpisodeCount: Math.max(0, reconstruction.episodes.length - episodes.length),
         circleTransitions,
-        evidenceRefs: [...new Set([...episodes.flatMap((episode) => episode.events.map((event) => event.ref)), ...circleTransitions.flatMap((row) => row.evidenceRefs)])],
+        combatFeatures,
+        battles: battleSummaries,
+        evidenceRefs: [...new Set([
+          ...episodes.flatMap((episode) => episode.events.map((event) => event.ref)),
+          ...circleTransitions.flatMap((row) => row.evidenceRefs),
+          ...(combatFeatures?.weapons.flatMap((item) => item.evidenceRefs) ?? []),
+          ...(combatFeatures?.fights.flatMap((item) => item.evidenceRefs) ?? []),
+          ...battleSummaries.flatMap((battle) => battle.evidenceRefs),
+        ])],
       };
     },
     lookupEvidence: ({ evidenceRefs }) => ({
@@ -1068,7 +1195,17 @@ async function handleApi(request: IncomingMessage, response: ServerResponse, sna
       }
     }
     const playerAliases = [...playerNames.entries()].sort(([left], [right]) => left.localeCompare(right))
-      .map(([accountId, name], index) => ({ name, alias: `PLAYER_${String(index + 1).padStart(2, '0')}` }));
+      .map(([accountId, name], index) => ({ accountId, name, alias: `PLAYER_${String(index + 1).padStart(2, '0')}` }));
+    const playerReview = selectedMatchId ? undefined : requestedPlayerReview(question, playerAliases);
+    const playerReviewLimit = playerReview ? requestedRecentMatchCount(question) : 0;
+    const researchMatches = playerReview
+      ? scopedMatches.filter((match) => match.players.some((player) => player.accountId === playerReview.accountId))
+        .sort((left, right) => right.timestamp - left.timestamp || right.matchId.localeCompare(left.matchId))
+        .slice(0, playerReviewLimit)
+      : scopedMatches;
+    const researchSquad: ResearchSquad = playerReview
+      ? { ...squad, label: playerReview.name, memberIds: [playerReview.accountId] }
+      : squad;
     const privateIdentifiers = [
       ...snapshot.matches.map((match) => ({ value: match.matchId, alias: '[比赛编号已隐藏]' })),
       ...snapshot.matches.flatMap((match) => match.players.map((player) => ({ value: player.accountId, alias: '[队员编号已隐藏]' }))),
@@ -1078,22 +1215,32 @@ async function handleApi(request: IncomingMessage, response: ServerResponse, sna
       .map((player) => player.displayName || player.playerName)
       .filter((name) => name.trim() && !selectedPlayerNames.has(name.toLocaleLowerCase('zh-CN')))
       .map((name) => ({ name, alias: '[范围外队员已隐藏]' }));
-    const promptPlayerAliases = [...playerAliases, ...outOfScopePlayerAliases];
-    const modelQuestion = anonymizeResearchText(question, promptPlayerAliases, privateIdentifiers);
+    const reviewPlayerAliases = playerReview
+      ? [
+        { name: playerReview.name, alias: 'PLAYER_01' },
+        ...snapshot.matches.flatMap((match) => match.players)
+          .map((player) => player.displayName || player.playerName)
+          .filter((name) => name.trim() && name.toLocaleLowerCase('zh-CN') !== playerReview.name.toLocaleLowerCase('zh-CN'))
+          .map((name) => ({ name, alias: '[范围外队员已隐藏]' })),
+      ]
+      : [...playerAliases, ...outOfScopePlayerAliases];
+    const modelQuestion = anonymizeResearchText(question, reviewPlayerAliases, privateIdentifiers);
     const rawHistory = Array.isArray(body.history) ? body.history : [];
     const priorTurns: Array<{ role: 'user' | 'assistant'; text: string }> = rawHistory.flatMap((item) => {
       if (!item || typeof item !== 'object' || Array.isArray(item)) return [];
       const row = item as Record<string, unknown>;
       if ((row.role !== 'user' && row.role !== 'assistant') || typeof row.text !== 'string') return [];
-      return [{ role: row.role as 'user' | 'assistant', text: anonymizeResearchText(redactSensitiveText(row.text), promptPlayerAliases, privateIdentifiers) }];
+      return [{ role: row.role as 'user' | 'assistant', text: anonymizeResearchText(redactSensitiveText(row.text), reviewPlayerAliases, privateIdentifiers) }];
     }).slice(-6);
     const conversationReply = shortConversationReply(question);
     const plan = conversationReply
       ? { intent: { action: 'unsupported', metric: null, groupBy: null } as const, source: 'local-rule' as const }
-      : await snapshot.planner.plan(modelQuestion);
+      : playerReview
+        ? { intent: { action: 'player_comparison', metric: classifyResearchQuestion(question).metric ?? 'damage', groupBy: 'player' } as const, source: 'local-rule' as const }
+        : await snapshot.planner.plan(modelQuestion);
     const report = buildResearchReport({
-      matches: scopedMatches,
-      squad,
+      matches: researchMatches,
+      squad: researchSquad,
       intent: plan.intent,
       telemetryMatchIds: new Set(snapshot.features.keys()),
     });
@@ -1114,9 +1261,10 @@ async function handleApi(request: IncomingMessage, response: ServerResponse, sna
     } else {
       const assistantContext = createScopedAssistantContext({
         snapshot,
-        matches: scopedMatches,
-        squad,
+        matches: researchMatches,
+        squad: researchSquad,
         telemetryMatchIds: new Set(snapshot.features.keys()),
+        ...(playerReview ? { requestedMatchLimit: playerReviewLimit } : {}),
       });
       assistantLabels = assistantContext.labels;
       const fallbackMetrics = await assistantContext.tools.getScopedMetrics({
@@ -1124,13 +1272,21 @@ async function handleApi(request: IncomingMessage, response: ServerResponse, sna
         groupBy: plan.intent.groupBy ?? 'none',
       }) as { evidenceRefs?: string[] };
       const deterministicFallback = deterministicAssistantFallback(question, report.answer, plan.intent.action);
+      const targetMetrics = report.players[0];
+      const fallbackAnswer = playerReview
+        ? report.scope.selectedMatches
+          ? `${playerReview.name} 最近请求的 ${playerReviewLimit} 场中，本地找到 ${report.scope.selectedMatches} 场：${targetMetrics?.kills ?? 0} 杀，累计 ${Math.round(targetMetrics?.damage ?? 0).toLocaleString('zh-CN')} 伤害（平均 ${Math.round(targetMetrics?.averageDamage ?? 0)}），${targetMetrics?.knocks ?? 0} 次击倒、${targetMetrics?.revives ?? 0} 次救援，平均生存 ${Math.round(targetMetrics?.averageSurvivalTime ?? 0)} 秒。${report.telemetry.currentCacheMatches}/${report.scope.selectedMatches} 场有本地 Telemetry 特征；没有模型时，我先不对武器选择或团战跟进作定性。`
+          : `${playerReview.name} 在当前小队和日期范围内没有可分析比赛；可以确认小队选择或扩大日期范围。`
+        : deterministicFallback.answer;
       assistant = await runResearchAssistant({
         ...(snapshot.researchModel ? { model: snapshot.researchModel } : {}),
         message: modelQuestion,
         priorTurns,
         template,
-        scopeDescription: `${from ?? 'start'} through ${to ?? 'latest'}, selected squad, ${scopedMatches.length} eligible matches`,
-        fallbackAnswer: deterministicFallback.answer,
+        scopeDescription: playerReview
+          ? `PLAYER_01, the latest ${researchMatches.length} of up to ${playerReviewLimit} requested matches within ${from ?? 'start'} through ${to ?? 'latest'}`
+          : `${from ?? 'start'} through ${to ?? 'latest'}, selected squad, ${scopedMatches.length} eligible matches`,
+        fallbackAnswer,
         fallbackEvidenceRefs: deterministicFallback.citeReportEvidence ? fallbackMetrics.evidenceRefs ?? [] : deterministicFallback.evidenceRefs,
         tools: assistantContext.tools,
         evidenceByAlias: assistantContext.evidenceByAlias,

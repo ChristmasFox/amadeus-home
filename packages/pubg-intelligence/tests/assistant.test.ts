@@ -115,6 +115,57 @@ test('invalid citations and invented numbers are rejected and deterministically 
   assert.doesNotMatch(result.answer, /999/u);
 });
 
+test('a grounded claim survives when a separate claim contains invalid evidence or numbers', async () => {
+  const result = await runResearchAssistant({
+    model: validModel({
+      answer: 'The average is 500. The player had 999 knocks.',
+      claims: [
+        { kind: 'fact', text: 'The scoped average damage is 500.', evidenceRefs: ['E0001'], evidenceCount: 1, assumptions: [], uncertainty: null },
+        { kind: 'fact', text: 'The player had 999 knocks.', evidenceRefs: ['E9999'], evidenceCount: 1, assumptions: [], uncertainty: null },
+      ],
+      abstained: false,
+    }),
+    message: 'Analyze recent match evidence',
+    scopeDescription: 'selected squad, fixed dates',
+    template: 'tactical_coaching',
+    fallbackAnswer: 'Deterministic scoped average is 500.',
+    fallbackEvidenceRefs: ['E0001'],
+    tools,
+    evidenceByAlias,
+  });
+
+  assert.equal(result.source, 'ai-sdk');
+  assert.equal(result.status, 'degraded');
+  assert.equal(result.degradedReason, 'invalid_grounded_output');
+  assert.equal(result.claims.length, 1);
+  assert.deepEqual(result.claims[0]?.evidenceRefs, ['E0001']);
+  assert.deepEqual(result.evidence.map((item) => item.ref), ['E0001']);
+  assert.equal(result.answer, 'The scoped average damage is 500.');
+  assert.doesNotMatch(result.answer, /999/u);
+});
+
+test('named player review stays inside the server selected recent-match scope and uses existing tools', async () => {
+  const model = validModel(validOutput);
+  const result = await runResearchAssistant({
+    model,
+    message: 'Analyze PLAYER_01 recent playstyle',
+    scopeDescription: 'PLAYER_01, latest 2 of 10 requested matches',
+    template: 'tactical_coaching',
+    fallbackAnswer: 'PLAYER_01 had 500 average damage in the selected matches.',
+    fallbackEvidenceRefs: ['E0001'],
+    tools,
+    evidenceByAlias,
+  });
+
+  assert.deepEqual(result.toolNames, ['get_scoped_metrics']);
+  const requests = JSON.stringify(model.doGenerateCalls);
+  assert.match(requests, /PLAYER_01/u);
+  assert.match(requests, /named player/iu);
+  assert.match(requests, /search_matches/u);
+  assert.match(requests, /get_scoped_metrics/u);
+  assert.match(requests, /get_match_episodes/u);
+});
+
 test('no tool result and no model produce clear deterministic fallbacks', async () => {
   const noToolModel = new MockLanguageModelV4({ doGenerate: {
     ...response([{ type: 'text', text: 'Unsubstantiated answer.' }]),

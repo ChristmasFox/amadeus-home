@@ -43,6 +43,7 @@ const summaryIntent: ResearchIntent = { action: 'summary', metric: 'damage', gro
 test('local research planner recognizes trends, member comparisons, maps, and telemetry coverage', async () => {
   assert.deepEqual(classifyResearchQuestion('最近比赛的平均伤害趋势'), { action: 'trend', metric: 'damage', groupBy: 'week' });
   assert.deepEqual(classifyResearchQuestion('比较队员的击杀和伤害'), { action: 'player_comparison', metric: 'kills', groupBy: 'player' });
+  assert.deepEqual(classifyResearchQuestion('SG_LabmemNo007 近 10 场打法'), { action: 'player_comparison', metric: 'damage', groupBy: 'player' });
   assert.deepEqual(classifyResearchQuestion('按地图拆分前十率'), { action: 'map_breakdown', metric: 'top10', groupBy: 'map' });
   assert.equal(classifyResearchQuestion('Telemetry 缓存覆盖情况').action, 'telemetry_coverage');
   assert.equal(classifyResearchQuestion('你好').action, 'unsupported');

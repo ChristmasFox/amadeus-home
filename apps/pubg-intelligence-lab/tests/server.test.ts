@@ -115,6 +115,34 @@ test('local API serves history and research from a read-only source and stores e
     assert.equal(research.report.scope.selectedMatches, 2);
     assert.match(research.report.answer, /逐周趋势/u);
 
+    const playerReview = await fetch(`${server.url}/api/research`, {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ question: 'Alpha 近 10 场打法', squadId: 'all', from: '2026-10-01', to: '2026-10-31' }),
+    }).then((response) => response.json()) as {
+      plannerSource: string;
+      intent: { action: string; groupBy: string | null };
+      report: { scope: { selectedMatches: number }; players: Array<{ name: string; matches: number; kills: number; damage: number }> };
+      assistant: { source: string; status: string; answer: string; claims: Array<{ evidenceRefs: string[] }>; evidence: Array<{ ref: string }>; labels: Record<string, string> };
+    };
+    assert.equal(playerReview.plannerSource, 'local-rule');
+    assert.deepEqual(playerReview.intent, { action: 'player_comparison', metric: 'damage', groupBy: 'player' });
+    assert.equal(playerReview.report.scope.selectedMatches, 2);
+    assert.deepEqual(playerReview.report.players.map((player) => [player.name, player.matches, player.kills, player.damage]), [['Alpha', 2, 3, 360]]);
+    assert.equal(playerReview.assistant.source, 'deterministic-fallback');
+    assert.ok(playerReview.assistant.evidence.length > 0);
+    assert.ok(playerReview.assistant.claims[0]?.evidenceRefs.length);
+    assert.equal(playerReview.assistant.labels.PLAYER_01, 'Alpha');
+    assert.match(playerReview.assistant.answer, /3 杀，累计 360 伤害（平均 180）/u);
+
+    const oneMatchReview = await fetch(`${server.url}/api/research`, {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ question: '分析 Alpha 最近 1 场打法', squadId: 'all', from: '2026-10-01', to: '2026-10-31' }),
+    }).then((response) => response.json()) as {
+      report: { scope: { selectedMatches: number }; players: Array<{ matches: number; kills: number; damage: number }> };
+    };
+    assert.equal(oneMatchReview.report.scope.selectedMatches, 1, JSON.stringify(oneMatchReview.report));
+    assert.deepEqual(oneMatchReview.report.players.map((player) => [player.matches, player.kills, player.damage]), [[1, 1, 180]]);
+
     const circleQuestion = await fetch(`${server.url}/api/research`, {
       method: 'POST', headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ question: '为什么我们第三圈经常团灭？', squadId: 'all', from: '2026-10-01', to: '2026-10-31' }),
@@ -218,7 +246,7 @@ test('local API serves history and research from a read-only source and stores e
     const latestQuestion = experimentDatabase.prepare('SELECT question FROM research_runs ORDER BY rowid DESC LIMIT 1').get().question ?? '';
     assert.equal(latestQuestion.includes(mobile), false);
     assert.equal(latestQuestion.includes(credential), false);
-    assert.equal(experimentDatabase.prepare('SELECT COUNT(*) AS count FROM research_runs').get().count, 4);
+    assert.equal(experimentDatabase.prepare('SELECT COUNT(*) AS count FROM research_runs').get().count, 6);
     experimentDatabase.close();
     const evaluationResponse = await fetch(`${server.url}/api/evaluations/replay`, {
       method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({}),
@@ -295,7 +323,7 @@ test('AI research keeps malicious follow-up text inside the selected squad/date 
         { ...fixture.players[0]!, accountId: 'private-out-of-scope-player', playerName: 'OutsideVictim', displayName: 'OutsideVictim' },
         fixture.players[1]!,
       ] },
-      { ...fixture, matchId: 'app-match-2', createdAt: '2026-10-12T12:00:00.000Z', players: fixture.players },
+      { ...fixture, matchId: 'app-match-2', createdAt: '2026-10-12T12:00:00.000Z', telemetryUrl: 'https://telemetry-cdn.pubg.com/sanitized-fixture.json', players: fixture.players },
     ]);
     writable.close();
     process.env.PUBG_INTELLIGENCE_DB = source;
@@ -307,6 +335,12 @@ test('AI research keeps malicious follow-up text inside the selected squad/date 
     delete process.env.PUBG_INTELLIGENCE_AI_BASE_URL;
     delete process.env.PUBG_INTELLIGENCE_AI_API_KEY;
     delete process.env.PUBG_INTELLIGENCE_AI_MODEL;
+    await new RawTelemetryArchive(join(root, 'raw-telemetry')).write('app-match-2', Buffer.from(JSON.stringify([
+      { _T: 'LogPlayerTakeDamage', _D: '2026-10-12T12:00:10.000Z', common: { isGame: true }, attacker: { accountId: 'private-player-1', teamId: 'fixture-team-a' }, victim: { accountId: 'opponent-fixture-1', teamId: 'fixture-team-b' }, damage: 30 },
+      { _T: 'LogPlayerMakeGroggy', _D: '2026-10-12T12:00:12.000Z', common: { isGame: true }, attacker: { accountId: 'private-player-1', teamId: 'fixture-team-a' }, victim: { accountId: 'opponent-fixture-1', teamId: 'fixture-team-b' }, dBNOId: 'fixture-dbno' },
+      { _T: 'LogPlayerRevive', _D: '2026-10-12T12:00:22.000Z', common: { isGame: true }, reviver: { accountId: 'opponent-fixture-2', teamId: 'fixture-team-b' }, victim: { accountId: 'opponent-fixture-1', teamId: 'fixture-team-b' } },
+      { _T: 'LogGameStatePeriodic', _D: '2026-10-12T12:00:24.000Z', common: { isGame: true }, gameState: { elapsedTime: 24, numAlivePlayers: 50, numAliveTeams: 13, safetyZonePosition: { x: 1000, y: 2000 }, safetyZoneRadius: 1800 } },
+    ])));
 
     const model = new MockLanguageModelV4({ doGenerate: [
       modelResponse([{ type: 'tool-call', toolCallId: 'plan', toolName: 'submit_research_intent', input: JSON.stringify({ action: 'summary', metric: 'damage', groupBy: null }) }]) as never,
@@ -315,6 +349,17 @@ test('AI research keeps malicious follow-up text inside the selected squad/date 
       modelResponse([{ type: 'tool-call', toolCallId: 'grounded-answer', toolName: 'submit_grounded_answer', input: JSON.stringify({
         answer: 'The selected date range has linked match evidence.',
         claims: [{ kind: 'fact', text: 'The selected date range has linked match evidence.', evidenceRefs: ['E0001'], evidenceCount: 1, assumptions: [], uncertainty: null }],
+        abstained: false,
+      }) }], 'tool-calls') as never,
+      modelResponse([
+        { type: 'tool-call', toolCallId: 'player-metrics', toolName: 'get_scoped_metrics', input: JSON.stringify({ metric: 'damage', groupBy: 'player' }) },
+        { type: 'tool-call', toolCallId: 'player-matches', toolName: 'search_matches', input: JSON.stringify({ limit: 10 }) },
+      ], 'tool-calls') as never,
+      modelResponse([{ type: 'tool-call', toolCallId: 'player-battles', toolName: 'get_match_episodes', input: JSON.stringify({ matchRef: 'M0001' }) }], 'tool-calls') as never,
+      modelResponse([{ type: 'text', text: 'Player metrics and matching games loaded.' }]) as never,
+      modelResponse([{ type: 'tool-call', toolCallId: 'player-answer', toolName: 'submit_grounded_answer', input: JSON.stringify({
+        answer: 'PLAYER_01 has cited match-store evidence for a recent performance review.',
+        claims: [{ kind: 'fact', text: 'PLAYER_01 has cited match-store evidence for a recent performance review.', evidenceRefs: ['E0001'], evidenceCount: 1, assumptions: [], uncertainty: null }],
         abstained: false,
       }) }], 'tool-calls') as never,
     ] });
@@ -376,6 +421,34 @@ test('AI research keeps malicious follow-up text inside the selected squad/date 
     assert.match(requests, /Fixed scope/u);
     assert.match(requests, /selectedMatches.{0,12}1/u);
     assert.match(requests, /untrusted data/u);
+
+    const playerReview = await fetch(`${server.url}/api/research`, {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ question: '帮我分析 Alpha 近 10 场打法', squadId: 'all', from: '2026-10-01', to: '2026-10-31' }),
+    }).then((response) => response.json()) as {
+      plannerSource: string;
+      intent: { action: string; groupBy: string | null };
+      report: { scope: { selectedMatches: number }; players: Array<{ name: string; matches: number }> };
+      assistant: { source: string; status: string; labels: Record<string, string>; toolNames: string[]; evidence: Array<{ matchId: string }> };
+    };
+    assert.equal(playerReview.plannerSource, 'local-rule');
+    assert.deepEqual(playerReview.intent, { action: 'player_comparison', metric: 'damage', groupBy: 'player' });
+    assert.equal(playerReview.report.scope.selectedMatches, 1);
+    assert.deepEqual(playerReview.report.players.map((player) => [player.name, player.matches]), [['Alpha', 1]]);
+    assert.equal(playerReview.assistant.source, 'ai-sdk');
+    assert.equal(playerReview.assistant.status, 'answered');
+    assert.equal(playerReview.assistant.labels.PLAYER_01, 'Alpha');
+    assert.deepEqual(playerReview.assistant.evidence.map((item) => item.matchId), ['app-match-2']);
+    assert.equal(model.doGenerateCalls.length, 8);
+    assert.match(JSON.stringify(model.doGenerateCalls.slice(4)), /PLAYER_01/u);
+    assert.match(JSON.stringify(model.doGenerateCalls.slice(4)), /search_matches/u);
+    assert.match(JSON.stringify(model.doGenerateCalls.slice(4)), /get_scoped_metrics/u);
+    assert.match(JSON.stringify(model.doGenerateCalls.slice(4)), /get_match_episodes/u);
+    assert.match(JSON.stringify(model.doGenerateCalls.slice(4)), /firstKnock/u);
+    assert.ok(playerReview.assistant.toolNames.includes('get_match_episodes'));
+    for (const privateValue of ['Alpha', 'private-player-1', 'app-match-2']) {
+      assert.equal(JSON.stringify(model.doGenerateCalls.slice(4)).includes(privateValue), false, `player review leaked ${privateValue}`);
+    }
   } finally {
     if (server) await server.close();
     const restore = (key: string, value: string | undefined) => value === undefined ? delete process.env[key] : process.env[key] = value;

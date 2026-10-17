@@ -33,7 +33,7 @@ export function researchRecoveryMessage(reason: ResearchAssistantResult['degrade
     case 'no_read_tool_used':
       return '这次回答没有读取可核验的比赛证据。请改问当前小队的一项统计，或指定一场比赛。';
     case 'invalid_grounded_output':
-      return '回答中的证据编号或数字未通过本机校验，已丢弃该回答。请缩小到一项统计或一场比赛后重试。';
+      return '有些内容缺少可核验的比赛或事件依据，已保留通过校验的结论；无法核实的内容已改用本机统计或省略。若要补全打法分析，请指定时间范围，或选择有 Telemetry 记录的比赛。';
     default:
       return null;
   }

@@ -409,7 +409,6 @@ function ResultBlock({ result, onEvidence }: { result: ResearchResponse; onEvide
     return <div className="result-block conversation-result">
       <div className="result-heading"><span className="result-dot" />可以继续问</div>
       <p className="result-answer">{resolveMemberAliases(result.assistant.answer, result.assistant.labels)}</p>
-      {result.assistant.recoveryMessage && <div className="assistant-degraded">{result.assistant.recoveryMessage}</div>}
     </div>;
   }
   const maxBar = Math.max(1, ...report.breakdown.map((item) => item.average));
