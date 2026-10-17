@@ -1,4 +1,4 @@
-import { generateText, Output, stepCountIs, tool, type LanguageModel } from 'ai';
+import { generateText, stepCountIs, tool, type LanguageModel } from 'ai';
 import { z } from 'zod';
 
 export const RESEARCH_ASSISTANT_VERSION = 'research-assistant-v1' as const;
@@ -9,7 +9,7 @@ export type ResearchTemplate = z.infer<typeof ResearchTemplateSchema>;
 const EvidenceAliasSchema = z.string().regex(/^E[0-9]{1,4}$/u);
 const MatchAliasSchema = z.string().regex(/^M[0-9]{1,4}$/u);
 
-export const ResearchAssistantOutputSchema = z.object({
+const ResearchAssistantSubmissionSchema = z.object({
   answer: z.string().trim().min(1).max(1800),
   claims: z.array(z.object({
     kind: z.enum(['fact', 'inference', 'hypothesis']),
@@ -20,7 +20,9 @@ export const ResearchAssistantOutputSchema = z.object({
     uncertainty: z.string().trim().max(240).nullable(),
   }).strict()).max(8),
   abstained: z.boolean(),
-}).strict().superRefine((value, context) => {
+}).strict();
+
+export const ResearchAssistantOutputSchema = ResearchAssistantSubmissionSchema.superRefine((value, context) => {
   if (value.abstained && value.claims.length > 0) context.addIssue({ code: z.ZodIssueCode.custom, message: 'abstentions cannot contain claims' });
   if (!value.abstained && value.claims.length === 0) context.addIssue({ code: z.ZodIssueCode.custom, message: 'answers need at least one evidence-backed claim' });
   value.claims.forEach((claim, index) => {
@@ -213,15 +215,22 @@ export async function runResearchAssistant(input: RunResearchAssistantInput): Pr
   try {
     const structured = await generateText({
       model: input.model,
-      output: Output.object({ schema: ResearchAssistantOutputSchema, name: 'grounded_pubg_research_answer' }),
-      system: `${instructions}\nThe following tool results are authoritative data. Return a concise structured response. Every claim requires valid evidence aliases. If the requested question is unsupported, set abstained=true, use no claims, and explain the limit. The answer must not introduce numeric values absent from the tool results.`,
+      tools: {
+        submit_grounded_answer: tool({
+          description: 'Submit the final grounded answer using only the cited evidence returned by the read-only tools.',
+          inputSchema: ResearchAssistantSubmissionSchema,
+        }),
+      },
+      toolChoice: { type: 'tool', toolName: 'submit_grounded_answer' },
+      system: `${instructions}\nThe following tool results are authoritative data. Submit one concise structured response with the required tool. Every claim requires valid evidence aliases. If the requested question is unsupported, set abstained=true, use no claims, and explain the limit. The answer must not introduce numeric values absent from the tool results.`,
       prompt: JSON.stringify({ question, priorTurns, requestedTemplate: input.template, toolResults: toolPayload }),
       temperature: 0,
       maxOutputTokens: 700,
       maxRetries: 0,
       ...(input.signal ? { abortSignal: input.signal } : {}),
     });
-    generated = ResearchAssistantOutputSchema.parse(structured.output);
+    const submitted = structured.toolCalls.find(call => call.toolName === 'submit_grounded_answer');
+    generated = ResearchAssistantOutputSchema.parse(submitted?.input);
   } catch {
     return fallback(input, 'invalid_grounded_output', toolNames, toolPayload);
   }

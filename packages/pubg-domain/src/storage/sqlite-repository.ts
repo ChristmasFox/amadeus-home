@@ -242,7 +242,7 @@ export class SqlitePubgRepository implements TelemetryFeatureStore {
     return rowToMatch(row, players);
   }
 
-  listMatches(options: { fromMs?: number; toMs?: number; limit?: number } = {}): NormalizedMatch[] {
+  listMatches(options: { fromMs?: number; toMs?: number; limit?: number; order?: 'asc' | 'desc' } = {}): NormalizedMatch[] {
     const clauses: string[] = [];
     const params: unknown[] = [];
     if (options.fromMs !== undefined) {
@@ -254,20 +254,21 @@ export class SqlitePubgRepository implements TelemetryFeatureStore {
       params.push(options.toMs);
     }
     const limit = Math.min(Math.max(Math.trunc(options.limit ?? 10000), 1), 10000);
+    const direction = options.order === 'desc' ? 'DESC' : 'ASC';
     const where = clauses.length ? ' WHERE ' + clauses.join(' AND ') : '';
     const selectedMatchesSql = `
       SELECT match_id, timestamp_ms
       FROM matches${where}
-      ORDER BY timestamp_ms ASC, match_id ASC
+      ORDER BY timestamp_ms ${direction}, match_id ${direction}
       LIMIT ?
     `;
-    const rows = this.db.prepare('SELECT * FROM matches' + where + ' ORDER BY timestamp_ms ASC, match_id ASC LIMIT ?').all(...params, limit);
+    const rows = this.db.prepare('SELECT * FROM matches' + where + ` ORDER BY timestamp_ms ${direction}, match_id ${direction} LIMIT ?`).all(...params, limit);
     const players = this.db.prepare(`
       WITH selected_matches AS (${selectedMatchesSql})
       SELECT player.*
       FROM selected_matches AS selected
       JOIN match_players AS player ON player.match_id = selected.match_id
-      ORDER BY selected.timestamp_ms ASC, selected.match_id ASC, player.account_id ASC
+      ORDER BY selected.timestamp_ms ${direction}, selected.match_id ${direction}, player.account_id ASC
     `).all(...params, limit);
     const byMatch = new Map<string, NormalizedPlayer[]>();
     for (const player of players) {

@@ -7,6 +7,7 @@ import { join } from 'node:path';
 import test from 'node:test';
 import { MockLanguageModelV4 } from 'ai/test';
 import { SqlitePubgRepository } from '@agent/pubg-domain';
+import { RawTelemetryArchive } from '@agent/pubg-intelligence/archive';
 import { startServer } from '../src/server/server.js';
 
 const require = createRequire(import.meta.url);
@@ -43,14 +44,17 @@ test('local API serves history and research from a read-only source and stores e
   const previous = {
     db: process.env.PUBG_INTELLIGENCE_DB,
     experiment: process.env.PUBG_INTELLIGENCE_EXPERIMENT_DB,
+    archive: process.env.PUBG_TELEMETRY_ARCHIVE_DIR,
     port: process.env.PORT,
     host: process.env.HOST,
     base: process.env.PUBG_INTELLIGENCE_AI_BASE_URL,
     key: process.env.PUBG_INTELLIGENCE_AI_API_KEY,
     model: process.env.PUBG_INTELLIGENCE_AI_MODEL,
+    configFile: process.env.PUBG_INTELLIGENCE_AI_CONFIG_FILE,
   };
   let server: Awaited<ReturnType<typeof startServer>> | undefined;
   const originalFetch = globalThis.fetch;
+  let telemetryRequests = 0;
   try {
     const writable = new SqlitePubgRepository(source);
     writable.upsertMatches([
@@ -69,6 +73,7 @@ test('local API serves history and research from a read-only source and stores e
     globalThis.fetch = (async (input, init) => {
       const target = input instanceof Request ? input.url : String(input);
       if (new URL(target).hostname === 'telemetry-cdn.pubg.com') {
+        telemetryRequests += 1;
         return new Response(JSON.stringify(telemetryFixture), { status: 200, headers: { 'content-type': 'application/json' } });
       }
       return originalFetch(input, init);
@@ -76,8 +81,10 @@ test('local API serves history and research from a read-only source and stores e
 
     process.env.PUBG_INTELLIGENCE_DB = source;
     process.env.PUBG_INTELLIGENCE_EXPERIMENT_DB = experiments;
+    process.env.PUBG_TELEMETRY_ARCHIVE_DIR = join(root, 'raw-telemetry');
     process.env.PORT = '0';
     process.env.HOST = '127.0.0.1';
+    process.env.PUBG_INTELLIGENCE_AI_CONFIG_FILE = join(root, 'missing-ai-config.json');
     delete process.env.PUBG_INTELLIGENCE_AI_BASE_URL;
     delete process.env.PUBG_INTELLIGENCE_AI_API_KEY;
     delete process.env.PUBG_INTELLIGENCE_AI_MODEL;
@@ -224,17 +231,28 @@ test('local API serves history and research from a read-only source and stores e
     assert.equal(runRegistry.runs[0]?.runId, evaluation.runId);
     assert.equal(runRegistry.runs[0]?.reviewedLabels, 1);
     assert.equal(createHash('sha256').update(readFileSync(source)).digest('hex'), sourceHash);
+    assert.equal(telemetryRequests, 1);
+    await server.close();
+    server = await startServer();
+    const replayedEpisodes = await fetch(`${server.url}/api/matches/app-match-2/episodes?squadId=all&from=2026-10-12&to=2026-10-12`).then((response) => response.json()) as { status: string };
+    assert.equal(replayedEpisodes.status, 'available');
+    assert.equal(telemetryRequests, 1);
+    const rawArchive = new RawTelemetryArchive(join(root, 'raw-telemetry'));
+    assert.ok(await rawArchive.read('app-match-2'));
+    assert.equal(createHash('sha256').update(readFileSync(source)).digest('hex'), sourceHash);
   } finally {
     if (server) await server.close();
     globalThis.fetch = originalFetch;
     const restore = (key: string, value: string | undefined) => value === undefined ? delete process.env[key] : process.env[key] = value;
     restore('PUBG_INTELLIGENCE_DB', previous.db);
     restore('PUBG_INTELLIGENCE_EXPERIMENT_DB', previous.experiment);
+    restore('PUBG_TELEMETRY_ARCHIVE_DIR', previous.archive);
     restore('PORT', previous.port);
     restore('HOST', previous.host);
     restore('PUBG_INTELLIGENCE_AI_BASE_URL', previous.base);
     restore('PUBG_INTELLIGENCE_AI_API_KEY', previous.key);
     restore('PUBG_INTELLIGENCE_AI_MODEL', previous.model);
+    restore('PUBG_INTELLIGENCE_AI_CONFIG_FILE', previous.configFile);
     rmSync(root, { recursive: true, force: true });
   }
 });
@@ -245,11 +263,13 @@ test('AI research keeps malicious follow-up text inside the selected squad/date 
   const previous = {
     db: process.env.PUBG_INTELLIGENCE_DB,
     experiment: process.env.PUBG_INTELLIGENCE_EXPERIMENT_DB,
+    archive: process.env.PUBG_TELEMETRY_ARCHIVE_DIR,
     port: process.env.PORT,
     host: process.env.HOST,
     base: process.env.PUBG_INTELLIGENCE_AI_BASE_URL,
     key: process.env.PUBG_INTELLIGENCE_AI_API_KEY,
     model: process.env.PUBG_INTELLIGENCE_AI_MODEL,
+    configFile: process.env.PUBG_INTELLIGENCE_AI_CONFIG_FILE,
   };
   let server: Awaited<ReturnType<typeof startServer>> | undefined;
   try {
@@ -264,8 +284,10 @@ test('AI research keeps malicious follow-up text inside the selected squad/date 
     writable.close();
     process.env.PUBG_INTELLIGENCE_DB = source;
     process.env.PUBG_INTELLIGENCE_EXPERIMENT_DB = join(root, 'experiments.sqlite');
+    process.env.PUBG_TELEMETRY_ARCHIVE_DIR = join(root, 'raw-telemetry');
     process.env.PORT = '0';
     process.env.HOST = '127.0.0.1';
+    process.env.PUBG_INTELLIGENCE_AI_CONFIG_FILE = join(root, 'missing-ai-config.json');
     delete process.env.PUBG_INTELLIGENCE_AI_BASE_URL;
     delete process.env.PUBG_INTELLIGENCE_AI_API_KEY;
     delete process.env.PUBG_INTELLIGENCE_AI_MODEL;
@@ -274,11 +296,11 @@ test('AI research keeps malicious follow-up text inside the selected squad/date 
       modelResponse([{ type: 'tool-call', toolCallId: 'plan', toolName: 'submit_research_intent', input: JSON.stringify({ action: 'summary', metric: 'damage', groupBy: null }) }]) as never,
       modelResponse([{ type: 'tool-call', toolCallId: 'scoped-metric', toolName: 'get_scoped_metrics', input: JSON.stringify({ metric: 'damage', groupBy: 'none' }) }], 'tool-calls') as never,
       modelResponse([{ type: 'text', text: 'Scoped metric evidence retrieved.' }]) as never,
-      modelResponse([{ type: 'text', text: JSON.stringify({
+      modelResponse([{ type: 'tool-call', toolCallId: 'grounded-answer', toolName: 'submit_grounded_answer', input: JSON.stringify({
         answer: 'The selected date range has linked match evidence.',
         claims: [{ kind: 'fact', text: 'The selected date range has linked match evidence.', evidenceRefs: ['E0001'], evidenceCount: 1, assumptions: [], uncertainty: null }],
         abstained: false,
-      }) }]) as never,
+      }) }], 'tool-calls') as never,
     ] });
     server = await startServer({ researchModel: model });
 
@@ -320,11 +342,13 @@ test('AI research keeps malicious follow-up text inside the selected squad/date 
     const restore = (key: string, value: string | undefined) => value === undefined ? delete process.env[key] : process.env[key] = value;
     restore('PUBG_INTELLIGENCE_DB', previous.db);
     restore('PUBG_INTELLIGENCE_EXPERIMENT_DB', previous.experiment);
+    restore('PUBG_TELEMETRY_ARCHIVE_DIR', previous.archive);
     restore('PORT', previous.port);
     restore('HOST', previous.host);
     restore('PUBG_INTELLIGENCE_AI_BASE_URL', previous.base);
     restore('PUBG_INTELLIGENCE_AI_API_KEY', previous.key);
     restore('PUBG_INTELLIGENCE_AI_MODEL', previous.model);
+    restore('PUBG_INTELLIGENCE_AI_CONFIG_FILE', previous.configFile);
     rmSync(root, { recursive: true, force: true });
   }
 });

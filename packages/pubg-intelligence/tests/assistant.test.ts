@@ -33,7 +33,7 @@ function validModel(output: unknown): MockLanguageModelV4 {
   return new MockLanguageModelV4({ doGenerate: [
     response([{ type: 'tool-call', toolCallId: 'metrics-call', toolName: 'get_scoped_metrics', input: JSON.stringify({ metric: 'damage', groupBy: 'none' }) }], 'tool-calls') as never,
     response([{ type: 'text', text: 'Metrics loaded.' }]) as never,
-    response([{ type: 'text', text: JSON.stringify(output) }]) as never,
+    response([{ type: 'tool-call', toolCallId: 'answer-call', toolName: 'submit_grounded_answer', input: JSON.stringify(output) }], 'tool-calls') as never,
   ] });
 }
 

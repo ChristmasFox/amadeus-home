@@ -2,6 +2,7 @@ import { createServer, type IncomingMessage, type ServerResponse } from 'node:ht
 import { createHash } from 'node:crypto';
 import { homedir, networkInterfaces } from 'node:os';
 import { basename, dirname, join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { existsSync, mkdirSync, realpathSync, statSync } from 'node:fs';
 import { createServer as createViteServer } from 'vite';
 import type { LanguageModel } from 'ai';
@@ -41,6 +42,8 @@ import {
   type TacticalMatchAnalysis,
   type EvaluationReviewLabel,
 } from '@agent/pubg-intelligence';
+import { RawTelemetryArchive } from '@agent/pubg-intelligence/archive';
+import { assertArchiveOutsideRepository } from '@agent/pubg-intelligence/backfill';
 import { createResearchModel } from './model.js';
 
 const PARSER_VERSION = 'telemetry-parser-6';
@@ -62,6 +65,7 @@ interface Snapshot {
   defaultSquad: ResearchSquad;
   features: Map<string, MatchReviewFeature>;
   telemetryUrls: Map<string, string>;
+  rawTelemetryArchive: RawTelemetryArchive;
   battleTelemetry: Map<string, Promise<BattleTelemetryDocument>>;
   experimentStore: ExperimentRunStore;
   planner: NaturalLanguageResearchPlanner;
@@ -123,6 +127,10 @@ async function openSnapshot(modelOverride?: Exclude<LanguageModel, string>): Pro
   const sourcePath = realpathSync(configuredDatabase);
   if (!statSync(sourcePath).isFile()) throw new Error('PUBG_INTELLIGENCE_DB_INVALID');
   const experimentPath = localDataPath();
+  const configuredArchiveDirectory = process.env.PUBG_TELEMETRY_ARCHIVE_DIR?.trim()
+    || join(homedir(), '.local', 'share', 'amadeus', 'pubg-telemetry-archive');
+  const repositoryRoot = realpathSync(resolve(dirname(fileURLToPath(import.meta.url)), '../../../..'));
+  const telemetryArchiveDirectory = await assertArchiveOutsideRepository(configuredArchiveDirectory, repositoryRoot);
   mkdirSync(dirname(experimentPath), { recursive: true, mode: 0o700 });
   ensureSeparateExperimentPath(sourcePath, experimentPath);
 
@@ -155,6 +163,7 @@ async function openSnapshot(modelOverride?: Exclude<LanguageModel, string>): Pro
     defaultSquad: selectedSquad,
     features,
     telemetryUrls,
+    rawTelemetryArchive: new RawTelemetryArchive(telemetryArchiveDirectory),
     battleTelemetry: new Map(),
     experimentStore: new ExperimentRunStore(experimentPath),
     planner: new NaturalLanguageResearchPlanner(model),
@@ -183,6 +192,7 @@ async function loadBattleTelemetry(snapshot: Snapshot, match: NormalizedMatch): 
   const request = new PubgApiTelemetryDownloader({
     apiKey: '',
     timeoutMs: 30_000,
+    archive: snapshot.rawTelemetryArchive,
     fetchImpl: (input, init) => fetch(input, { ...init, redirect: 'error' }),
   }).download({ ...match, telemetryUrl }).then((payload) => normalizeBattleTelemetry(payload, match));
   snapshot.battleTelemetry.set(match.matchId, request);

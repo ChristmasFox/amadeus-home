@@ -761,12 +761,18 @@ tar -C "$ROOT_DIR/scripts" -cf - \
 orb -m "$MACHINE" -u root python3 - \
   "$OPENCLAW_APP_DIR" "$OPENCLAW_COMPOSE_FILE" "$OPENCLAW_COMPOSE_B64" "$IMAGE" \
   "$OPENCLAW_APP_DIR/.env" "$AMADEUS_IMAGE_SERVICE_BASE_URL" "$AMADEUS_IMAGE_ASSET_HOST_DIR" \
-  "$OPENCLAW_IMAGE_SERVICE_TOKEN_HOST_FILE" \
+  "$OPENCLAW_IMAGE_SERVICE_TOKEN_HOST_FILE" "$PUBG_TELEMETRY_ARCHIVE_HOST_DIR" \
   "$QWEN_IMAGE_BASE_URL" "$QWEN_IMAGE_TOKEN_GUEST_FILE" "$QWEN_IMAGE_LOCAL_ONLY" "$QWEN_IMAGE_FALLBACK_ENABLED" <<'PY'
 import base64, os, re, sys
 from pathlib import Path
-app_dir, compose_path, encoded, image, compose_env_path, image_service_base_url, image_asset_host_dir, image_service_token_host_file, qwen_base_url, qwen_token_host_file, qwen_local_only, qwen_fallback_enabled = sys.argv[1:]
+app_dir, compose_path, encoded, image, compose_env_path, image_service_base_url, image_asset_host_dir, image_service_token_host_file, pubg_telemetry_archive_host_dir, qwen_base_url, qwen_token_host_file, qwen_local_only, qwen_fallback_enabled = sys.argv[1:]
 if not re.fullmatch(r'[A-Za-z0-9._/@:-]+', image): raise SystemExit('invalid OpenClaw image tag')
+archive_path = Path(pubg_telemetry_archive_host_dir).expanduser()
+if not archive_path.is_absolute() or '\n' in str(archive_path) or '\r' in str(archive_path): raise SystemExit('invalid PUBG telemetry archive host directory')
+archive_path.mkdir(parents=True, exist_ok=True, mode=0o700)
+if archive_path.is_symlink() or not archive_path.is_dir(): raise SystemExit('invalid PUBG telemetry archive host directory')
+os.chown(archive_path, 1000, 1000)
+os.chmod(archive_path, 0o700)
 content = base64.b64decode(encoded).decode()
 matches = list(re.finditer(r'(?m)^(\s*)image:\s*.*$', content))
 if len(matches) != 1: raise SystemExit('OpenClaw compose must have one image line')
@@ -788,6 +794,7 @@ def set_env(key, value):
 set_env('AMADEUS_IMAGE_SERVICE_BASE_URL', image_service_base_url)
 set_env('AMADEUS_IMAGE_ASSET_HOST_DIR', image_asset_host_dir)
 set_env('OPENCLAW_IMAGE_SERVICE_TOKEN_HOST_FILE', image_service_token_host_file)
+set_env('PUBG_TELEMETRY_ARCHIVE_HOST_DIR', str(archive_path))
 set_env('AMADEUS_QWEN_IMAGE_BASE_URL', qwen_base_url)
 set_env('OPENCLAW_QWEN_IMAGE_TOKEN_HOST_FILE', qwen_token_host_file)
 set_env('AMADEUS_QWEN_IMAGE_LOCAL_ONLY', qwen_local_only)
