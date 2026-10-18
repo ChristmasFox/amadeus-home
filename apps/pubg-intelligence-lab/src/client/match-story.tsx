@@ -205,7 +205,8 @@ function enemyAt(enemy: StoryEnemy, t: number): { x: number; y: number } | null 
   return t - last[0] > 45 ? null : { x: last[1], y: last[2] };
 }
 
-function RouteMap({ data, story, time, showEnemies, focusTeams, zoom }: { data: MatchStoryData; story: Story; time: number; showEnemies: boolean; focusTeams: ReadonlySet<string>; zoom: boolean }) {
+function RouteMap({ data, story, time, showEnemies, focusTeams, zoom, showImage }: { data: MatchStoryData; story: Story; time: number; showEnemies: boolean; focusTeams: ReadonlySet<string>; zoom: boolean; showImage: boolean }) {
+  const [imageFailed, setImageFailed] = useState(false);
   const sizeMeters = (data.mapSizeKm ?? 8) * 1000;
   // Zoom to where the squad actually moved instead of drawing the whole island.
   const baseView = useMemo(() => {
@@ -250,6 +251,7 @@ function RouteMap({ data, story, time, showEnemies, focusTeams, zoom }: { data: 
   return (
     <svg viewBox={`0 0 ${MAP_VIEW} ${MAP_VIEW}`} className="ms-map" role="img" aria-label="行进路线与毒圈">
       <rect width={MAP_VIEW} height={MAP_VIEW} className="map-bg" />
+      {showImage && data.mapName && !imageFailed && <image href={`/api/maps/${data.mapName}`} x={px(0)} y={py(0)} width={pr(sizeMeters)} height={pr(sizeMeters)} preserveAspectRatio="none" className="map-image" onError={() => setImageFailed(true)} />}
       {gridX.map((value) => <line key={`x${value}`} x1={px(value)} x2={px(value)} y1={0} y2={MAP_VIEW} className="map-grid" />)}
       {gridY.map((value) => <line key={`y${value}`} y1={py(value)} y2={py(value)} x1={0} x2={MAP_VIEW} className="map-grid" />)}
       <text x={10} y={MAP_VIEW - 10} className="map-scale">格线间隔 {step >= 1000 ? `${step / 1000} km` : `${step} m`}</text>
@@ -265,7 +267,7 @@ function RouteMap({ data, story, time, showEnemies, focusTeams, zoom }: { data: 
         return <g key={player.member} className={`route ${tone}`}>
           {rest.length > 1 && <path d={toPath(rest)} className="path future" />}
           {past.length > 1 && <path d={toPath(past)} className="path past" />}
-          {player.landing && <circle cx={px(player.landing.x)} cy={py(player.landing.y)} r={5} className="landing"><title>{`${data.names[player.member]} 落点`}</title></circle>}
+          {player.landing && <circle cx={px(player.landing.x)} cy={py(player.landing.y)} r={9} className="landing"><title>{`${data.names[player.member]} 落点`}</title></circle>}
         </g>;
       })}
       {showEnemies && story.enemies.map((enemy) => {
@@ -280,11 +282,11 @@ function RouteMap({ data, story, time, showEnemies, focusTeams, zoom }: { data: 
         if (!point) {
           const diedHere = enemy.diedAt !== null && time >= enemy.diedAt && time - enemy.diedAt < 40 && focus;
           const last = enemy.route.filter((item) => item[0] <= (enemy.diedAt ?? 0)).at(-1);
-          return diedHere && last ? <path key={enemy.id} d={`M${px(last[1]) - 4},${py(last[2]) - 4}l8,8m0,-8l-8,8`} className="enemy-dead" /> : null;
+          return diedHere && last ? <path key={enemy.id} d={`M${px(last[1]) - 8},${py(last[2]) - 8}l16,16m0,-16l-16,16`} className="enemy-dead" /> : null;
         }
         return <g key={enemy.id} className={`enemy ${focus ? 'focus' : ''}`} transform={`translate(${px(point.x)},${py(point.y)})`}>
-          <circle r={focus ? 5.5 : 3} />
-          {focus && <text y={-9} textAnchor="middle">队{enemy.team}</text>}
+          <circle r={focus ? 10 : 5.5} />
+          {focus && <text y={-15} textAnchor="middle">队{enemy.team}</text>}
           <title>{`对手 队${enemy.team}`}</title>
         </g>;
       })}
@@ -294,17 +296,24 @@ function RouteMap({ data, story, time, showEnemies, focusTeams, zoom }: { data: 
         const cx = px(point.x);
         const cy = py(point.y);
         const bad = event.kind === 'downed' || event.kind === 'death';
-        return <g key={index} className={`pin ${bad ? 'bad' : 'good'}`} transform={`translate(${cx},${cy})`}>{bad ? <path d="M-5,-5L5,5M5,-5L-5,5" /> : <circle r={3.5} />}<title>{`${clock(event.t)} ${data.names[event.member]} ${event.kind === 'knock' ? '击倒' : event.kind === 'kill' ? '击杀' : event.kind === 'downed' ? '被击倒' : '被淘汰'}`}</title></g>;
+        return <g key={index} className={`pin ${bad ? 'bad' : 'good'}`} transform={`translate(${cx},${cy})`}>{bad ? <path d="M-9,-9L9,9M9,-9L-9,9" /> : <circle r={6.5} />}<title>{`${clock(event.t)} ${data.names[event.member]} ${event.kind === 'knock' ? '击倒' : event.kind === 'kill' ? '击杀' : event.kind === 'downed' ? '被击倒' : '被淘汰'}`}</title></g>;
       })}
-      {story.players.map((player) => {
-        const point = interpolate(player, time);
-        if (!point) return null;
-        const tone = toneOf(data, player.member);
-        return <g key={player.member} className={`me ${tone} ${point.down ? 'down' : ''} ${point.gone ? 'gone' : ''}`} transform={`translate(${px(point.x)},${py(point.y)})`}>
-          <circle r={9} className="halo" /><circle r={5.5} className="dot" />
-          <text y={-12} textAnchor="middle">{(data.names[player.member] ?? '').replace(/^SG_LabmemNo/u, '').slice(0, 4)}</text>
-        </g>;
-      })}
+      {(() => {
+        const marks = story.players.map((player) => ({ player, point: interpolate(player, time) })).filter((item): item is { player: StoryPlayer; point: NonNullable<ReturnType<typeof interpolate>> } => item.point !== null);
+        const pixels = marks.map((item) => ({ x: px(item.point.x), y: py(item.point.y) }));
+        // Labels of members standing close together fan out to four corners instead of piling up.
+        const crowded = pixels.some((a, i) => pixels.some((b, j) => j !== i && Math.hypot(a.x - b.x, a.y - b.y) < 46));
+        const fan = [[-28, -26, 'end'], [28, -26, 'start'], [-28, 34, 'end'], [28, 34, 'start']] as const;
+        return marks.map(({ player, point }, index) => {
+          const tone = toneOf(data, player.member);
+          const [dx, dy, anchor] = crowded ? fan[index % 4]! : [0, -22, 'middle'] as const;
+          return <g key={player.member} className={`me ${tone} ${point.down ? 'down' : ''} ${point.gone ? 'gone' : ''}`} transform={`translate(${pixels[index]!.x},${pixels[index]!.y})`}>
+            <circle r={17} className="halo" /><circle r={10} className="dot" />
+            {crowded && <line x1={0} y1={0} x2={dx * 0.55} y2={dy * 0.55} className="leader" />}
+            <text x={dx} y={dy} textAnchor={anchor}>{(data.names[player.member] ?? '').replace(/^SG_LabmemNo/u, '').slice(0, 4)}</text>
+          </g>;
+        });
+      })()}
     </svg>
   );
 }
@@ -318,6 +327,7 @@ export function MatchStoryView({ data, loading, placement, kills, damage }: { da
   const [selectedFight, setSelectedFight] = useState<number | null>(null);
   const [showEnemies, setShowEnemies] = useState(true);
   const [zoom, setZoom] = useState(false);
+  const [showImage, setShowImage] = useState(true);
   const timer = useRef<number | null>(null);
   const story = data?.story ?? null;
   const duration = story ? Math.max(60, story.durationSeconds) : 0;
@@ -389,12 +399,13 @@ export function MatchStoryView({ data, loading, placement, kills, damage }: { da
 
         <div className="ms-map-grid">
           <Section title="行进路线与毒圈" hint="拖动滑块回放；白圈 = 当前安全区，蓝圈 = 下一个毒圈">
-            <RouteMap data={data} story={story} time={time} showEnemies={showEnemies} focusTeams={focusTeams} zoom={zoom} />
+            <RouteMap data={data} story={story} time={time} showEnemies={showEnemies} focusTeams={focusTeams} zoom={zoom} showImage={showImage} />
             <div className="ms-scrub">
               <button type="button" onClick={() => { if (time >= duration) setTime(0); setPlaying((value) => !value); }}>{playing ? '❚❚ 暂停' : '▶ 回放'}</button>
               <input type="range" min={0} max={duration} step={1} value={Math.round(time)} onChange={(event) => { setPlaying(false); setTime(Number(event.target.value)); }} aria-label="回放时间" />
               <b>{clock(time)} / {clock(duration)}</b>
             </div>
+            <label className="ms-toggle"><input type="checkbox" checked={showImage} onChange={(event) => setShowImage(event.target.checked)} /> 显示地图底图（官方地图；没有下载底图时自动退回网格）</label>
             <label className="ms-toggle"><input type="checkbox" checked={zoom} onChange={(event) => setZoom(event.target.checked)} /> 放大到当前位置（跟随小队和正在交战的对手；默认关闭；点选一场交战时自动打开）</label>
             <label className="ms-toggle"><input type="checkbox" checked={showEnemies} onChange={(event) => setShowEnemies(event.target.checked)} /> 显示敌人（灰点 = 其他队伍；交战中的对手会标出队号和近 2 分钟轨迹）</label>
             <div className="ms-now">

@@ -1109,3 +1109,36 @@ button.av-row:hover,.av-row.active{background:#142120}
   .av-compare-grid>.av-panel:first-child{min-height:0}
   .av-compare-grid>.av-panel:first-child .av-radar.compare{max-width:420px}
 }
+.ms-map .map-image{opacity:.62;filter:saturate(.8) brightness(.8)}
+.ms-map .path.future{stroke-opacity:.55;stroke-width:2.2}
+.ms-map .path.past{stroke-width:2.6;stroke-opacity:.95}
+/* Bigger markers: the 1000-unit map is shown at roughly half that width, so everything is drawn about twice as large. */
+.ms-map .path{stroke-width:4}
+.ms-map .path.past{stroke-width:4.5}
+.ms-map .path.future{stroke-width:3.5;stroke-dasharray:6 7}
+.ms-map .landing{stroke-width:3.5}
+.ms-map .pin.good circle{stroke-width:2}
+.ms-map .pin.bad path{stroke-width:4.5}
+.ms-map .me .dot{stroke-width:2.5}
+.ms-map .me text{font:700 17px var(--mono);stroke-width:5px}
+.ms-map .enemy text{font:700 15px var(--mono);stroke-width:5px}
+.ms-map .enemy.focus circle{stroke-width:2.5}
+.ms-map .enemy-trail{stroke-width:3;stroke-dasharray:8 6}
+.ms-map .enemy-dead{stroke-width:4}
+.ms-map .map-scale{font-size:14px}
+.ms-map .zone-now{stroke-width:3}.ms-map .zone-warn{stroke-width:3}.ms-map .zone-final{stroke-width:2}
+.ms-map .me .leader{stroke:var(--tone);stroke-width:2;stroke-opacity:.8}
+/* Slimmer lines, solid dots. */
+.ms-map .path{stroke-width:2.2}
+.ms-map .path.past{stroke-width:2.4;stroke-opacity:.95}
+.ms-map .path.future{stroke-width:1.8;stroke-dasharray:5 6}
+.ms-map .enemy-trail{stroke-width:1.8;stroke-dasharray:6 5}
+.ms-map .landing{fill:var(--tone);stroke:#0b1112;stroke-width:2}
+.ms-map .me .halo{display:none}
+.ms-map .me .dot{fill:var(--tone);fill-opacity:1;stroke:#0b1112;stroke-width:2}
+.ms-map .me.down .dot{fill:var(--amber)}
+.ms-map .enemy circle{fill-opacity:1}
+.ms-map .enemy.focus circle{filter:none;stroke:#0b1112;stroke-width:2}
+.ms-map .pin.good circle{fill:var(--mint);stroke:#0b1112;stroke-width:1.5}
+.ms-map .pin.bad path{stroke-width:3}
+.ms-map .me .leader{stroke-width:1.5}

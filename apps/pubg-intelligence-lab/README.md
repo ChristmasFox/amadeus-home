@@ -82,6 +82,10 @@ The page is a two-pane workspace: the left rail holds the data scope (squad, gam
 | **研究对话** | The natural-language research assistant and its evidence ledger |
 | **评估实验** | Offline evaluation registry and counterexample review |
 
+### Map background
+
+The route map can sit on the official PUBG map artwork. The images are PUBG's own assets, so they are not stored in Git: `scripts/fetch-pubg-map-images.sh` (dry run by default, `--apply` to download) fetches the high-resolution no-text maps from `pubg/api-assets`, shrinks each to a 3072 px JPEG and keeps them in `~/.local/share/amadeus/pubg-intelligence-lab/maps` (override with `PUBG_INTELLIGENCE_MAP_DIR`). `GET /api/maps/<MapName>` serves them (404 when a map is missing, in which case the page falls back to the grid; the public hostname needs a session like every other route). The maps in the ranked data (Erangel, Miramar, Taego, Rondo) are installed; run the script with `--apply` and no `--only` to fetch the rest.
+
 ### Phones
 
 At 820 px and below the workspace becomes a normal scrolling page: the top bar and tab strip stay pinned, the data scope (squad, mode, complete-telemetry switch, dates, match list) opens as a slide-in drawer from the "数据范围" button, the match timeline and wide tables scroll sideways inside their own panel, and grids collapse to one or two columns.

@@ -1578,6 +1578,21 @@ async function handleApi(request: IncomingMessage, response: ServerResponse, sna
     }
     return;
   }
+  const mapImageRoute = request.method === 'GET' ? url.pathname.match(/^\/api\/maps\/([A-Za-z0-9]+_Main)$/u) : null;
+  if (mapImageRoute) {
+    // Map artwork lives in a runtime directory (see scripts/fetch-pubg-map-images.sh), never in Git.
+    const directory = process.env.PUBG_INTELLIGENCE_MAP_DIR?.trim() || join(homedir(), '.local', 'share', 'amadeus', 'pubg-intelligence-lab', 'maps');
+    for (const [extension, type] of [['jpg', 'image/jpeg'], ['png', 'image/png']] as const) {
+      const file = join(directory, `${mapImageRoute[1]}.${extension}`);
+      if (existsSync(file) && statSync(file).isFile()) {
+        response.writeHead(200, { 'content-type': type, 'cache-control': 'private, max-age=86400', 'x-content-type-options': 'nosniff' });
+        response.end(readFileSync(file));
+        return;
+      }
+    }
+    send(response, 404, { error: 'map_image_missing' });
+    return;
+  }
   const matchStoryRoute = request.method === 'GET' ? url.pathname.match(/^\/api\/matches\/([^/]+)\/story$/u) : null;
   if (matchStoryRoute) {
     let matchId: string;
