@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { CompareView, FieldView, MatchRelativePanel, Notes, OverviewView, StyleView, type MatchRelativeData, type PerformanceAnalytics, type TelemetryAnalytics } from './analytics-views.js';
 import { MatchStoryView, type MatchStoryData } from './match-story.js';
 import type { CompareSeries } from './compare-panels.js';
+import { RefreshButton } from './refresh-button.js';
 
 interface SquadOption {
   id: string;
@@ -821,7 +822,7 @@ export function App() {
     <div className="app-shell">
       <header className="topbar">
         <div className="brand-lockup"><div className="brand-mark">P<span>•</span></div><div><strong>PUBG INTELLIGENCE LAB</strong><small>LOCAL RESEARCH / R1</small></div></div>
-        <div className="topbar-right"><div className="source-pill"><span className="pulse" />只读快照 <b>{number(bootstrap?.matchCount ?? 0)} 场</b></div><div className="model-pill"><i>{bootstrap?.modelEnabled ? '✦' : '⌁'}</i>{bootstrap?.modelEnabled ? `9Router · ${bootstrap.modelId ?? '已配置'}` : '本地语义解析'}</div><div className="avatar">IL</div></div>
+        <div className="topbar-right"><RefreshButton /><div className="source-pill"><span className="pulse" />只读快照 <b>{number(bootstrap?.matchCount ?? 0)} 场</b></div><div className="model-pill"><i>{bootstrap?.modelEnabled ? '✦' : '⌁'}</i>{bootstrap?.modelEnabled ? `9Router · ${bootstrap.modelId ?? '已配置'}` : '本地语义解析'}</div><div className="avatar">IL</div></div>
       </header>
 
       <main className="dashboard">

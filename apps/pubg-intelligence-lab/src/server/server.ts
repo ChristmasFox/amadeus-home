@@ -20,6 +20,7 @@ import {
   loadBattleTelemetry,
 } from './match-views.js';
 import { researchRecoveryMessage, shortConversationReply } from './messages.js';
+import { refreshStatus, startRefresh } from './refresh.js';
 import { isPublicRequest, loadPublicAccess, looksProxied } from './public-access.js';
 import { CLIENT_DIST, handlePublic, sendPublicJson } from './public-site.js';
 import {
@@ -203,6 +204,15 @@ async function handleApi(request: IncomingMessage, response: ServerResponse, sna
       selectedSquadId: snapshot.defaultSquad.id,
       squads: snapshot.squads.map(({ id, label, members, matchCount }) => ({ id, label, members: members.map((member) => member.name), matchCount })),
     });
+    return;
+  }
+  if (request.method === 'GET' && url.pathname === '/api/refresh') {
+    send(response, 200, refreshStatus());
+    return;
+  }
+  if (request.method === 'POST' && url.pathname === '/api/refresh') {
+    const result = startRefresh();
+    send(response, result.started ? 202 : 429, result);
     return;
   }
   if (request.method === 'GET' && url.pathname === '/api/matches') {

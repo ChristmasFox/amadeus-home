@@ -1170,3 +1170,4 @@ button.av-row:hover,.av-row.active{background:#142120}
 .rh-bars .cat{fill:#9bb0a8;font-size:10px}
 .rh-bars .n{fill:#5d726d;font-size:9px}
 @media (max-width:1100px){.rh-cards,.rh-charts{grid-template-columns:minmax(0,1fr)}}
+.refresh-control{display:flex;align-items:center;gap:9px}.refresh-control small{font:10px var(--mono);color:#93a39e;white-space:nowrap}.refresh-button{height:31px;display:flex;align-items:center;gap:6px;border:1px solid #37503f;border-radius:20px;padding:0 12px;background:#14201c;color:#cfe6c0;font:10px var(--mono);cursor:pointer}.refresh-button:hover:not(:disabled){border-color:#6c927e;background:#1a2a24}.refresh-button:disabled{opacity:.7;cursor:default}.refresh-button .spin{display:inline-block;animation:refresh-spin 1s linear infinite}@keyframes refresh-spin{to{transform:rotate(360deg)}}@media(max-width:700px){.refresh-control small{display:none}.refresh-button{padding:0 9px;font-size:0;gap:0}.refresh-button span{font-size:15px}}
