@@ -17,3 +17,5 @@ export * from './fights.js';
 export * from './style.js';
 export * from './combat-long.js';
 export * from './lobby.js';
+export * from './streaks.js';
+export * from './match-relative.js';

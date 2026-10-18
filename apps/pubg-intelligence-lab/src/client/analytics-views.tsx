@@ -1,4 +1,4 @@
-import { useMemo, useState, type ReactNode } from 'react';
+import { Fragment, useMemo, useState, type ReactNode } from 'react';
 
 export interface Rate { successes: number; trials: number; rate: number | null; low: number | null; high: number | null }
 export type Trend = 'up' | 'down' | 'flat' | 'insufficient';
@@ -102,8 +102,22 @@ export interface LobbyCombat {
   entries: Array<{ accountId: string; name: string; matches: number; rank: number; damage: LobbyInterval; knocks: LobbyInterval; composite: LobbyInterval; tier: 'above' | 'below' | 'even' | 'unknown'; medianDamagePerMinute: number | null }>;
 }
 
+export interface StreakSummary {
+  matches: number;
+  players: Array<{ accountId: string; name: string; matches: number; takedowns: number; two: number; three: number; fourPlus: number; longest: number; chainedShare: Rate | null; multiPerTen: number | null; wipeTakedowns: number; soloWipes: number }>;
+  wipes: {
+    total: number; perMatch: number | null; matchShare: Rate | null; fullTeam: number; solo: number;
+    bySize: Array<{ wiped: number; count: number }>; byStage: Array<{ stage: 'early' | 'mid' | 'late'; count: number }>; medianSeconds: number | null;
+    leaders: Array<{ accountId: string; name: string; wipeTakedowns: number; led: number; solo: number }>;
+  };
+  wiped: { observed: number; singleTeam: Rate | null; singlePlayer: number };
+  highlights: string[];
+  notes: string[];
+}
+
 export interface TelemetryAnalytics {
   highlights: Insight[];
+  streaks: StreakSummary;
   longRun: LongRunCombat;
   lobby: LobbyCombat;
   style: SquadStyle;
@@ -174,7 +188,7 @@ function seconds(value: number | null): string {
   return value === null ? '—' : value >= 60 ? `${Math.floor(value / 60)}分${Math.round(value % 60)}秒` : `${value.toFixed(1)}秒`;
 }
 
-function Kpi({ label, value, sub, tone }: { label: string; value: string; sub?: string; tone?: 'good' | 'warn' | undefined }) {
+function Kpi({ label, value, sub, tone }: { label: string; value: string; sub?: string | undefined; tone?: 'good' | 'warn' | undefined }) {
   return <div className={`av-kpi ${tone ?? ''}`}><span>{label}</span><b>{value}</b>{sub && <small>{sub}</small>}</div>;
 }
 
@@ -305,7 +319,7 @@ function ProfilePanel({ data }: { data: PlayerProfiles }) {
           </div>;
         })}
       </div>
-      <p className="av-note">{data.notes.join(' ')}</p>
+      <Notes>{data.notes.join(' ')}</Notes>
     </Panel>
   );
 }
@@ -341,7 +355,7 @@ function LineupPanel({ data }: { data: PerformanceAnalytics['lineups'] }) {
           })}
           {!members.length && <p className="av-note">没有同时满足在场与缺席各 5 场的队员。</p>}
         </div>
-        <p className="av-note">{data.notes.join(' ')}</p>
+        <Notes>{data.notes.join(' ')}</Notes>
       </Panel>
     </div>
   );
@@ -364,7 +378,7 @@ export function OverviewView({ data, loading }: { data: PerformanceAnalytics | n
 
   return (
     <div className="av-stack">
-      <div className="av-kpis">
+      <div className="av-kpis six">
         <Kpi label="比赛场次" value={int(squad.matches)} sub={data.scope.completeOnly ? `仅完整遥测 · ${squad.rankedMatches} 场有排名` : `${squad.rankedMatches} 场有排名 · ${data.scope.archivedMatches} 场有完整遥测`} />
         <Kpi label="吃鸡率" value={pct(squad.win.rate, 1)} sub={`${squad.win.successes}/${squad.win.trials} · 95% ${ci(squad.win)}`} />
         <Kpi label="前十率" value={pct(squad.top10.rate, 1)} sub={`${squad.top10.successes}/${squad.top10.trials} · 95% ${ci(squad.top10)}`} />
@@ -426,7 +440,7 @@ export function OverviewView({ data, loading }: { data: PerformanceAnalytics | n
       </div>
       <ProfilePanel data={data.profiles} />
       <LineupPanel data={data.lineups} />
-      {squad.notes.length > 0 && <p className="av-note">{squad.notes.join(' ')}</p>}
+      {squad.notes.length > 0 && <Notes>{squad.notes.join(' ')}</Notes>}
     </div>
   );
 }
@@ -506,7 +520,7 @@ function FightPanel({ data }: { data: TelemetryAnalytics['fights'] }) {
           </div>)}
         </div>)}
       </div>
-      <p className="av-note">{data.notes.join(' ')}</p>
+      <Notes>{data.notes.join(' ')}</Notes>
     </Panel>
   );
 }
@@ -562,7 +576,7 @@ function ZonePanel({ data }: { data: TelemetryAnalytics['zone'] }) {
         </div>)}
       </div>
       <div className="av-legend"><span><i className="zone0" />圈中心</span><span><i className="zone1" />中间</span><span><i className="zone2" />圈边</span><span><i className="zone3" />圈外</span></div>
-      <p className="av-note">圈数 = 遥测里 isGame 的整数部分。位置样本按小队成员每约 10 秒一次；「圈外」指离安全区中心超过其半径。</p>
+      <Notes>圈数 = 遥测里 isGame 的整数部分。位置样本按小队成员每约 10 秒一次；「圈外」指离安全区中心超过其半径。</Notes>
     </Panel>
   );
 }
@@ -675,7 +689,7 @@ function LongRunBoard({ data }: { data: LongRunCombat }) {
           {entry.metrics.map((metric) => <span key={metric.key} className={metric.tier === 'stable' || metric.tier === 'lean' ? (metric.direction === 'high' ? 'up' : 'down') : ''}>{metric.ratio === null ? '—' : `×${metric.ratio.toFixed(2)}`}{metric.tier === 'stable' ? ' ●' : metric.tier === 'lean' ? ' ◐' : ''}</span>)}
         </div>)}
       </div>
-      <p className="av-note">{data.notes.join(' ')}</p>
+      <Notes>{data.notes.join(' ')}</Notes>
     </div>
   );
 }
@@ -702,101 +716,379 @@ function LobbyBoard({ data }: { data: LobbyCombat }) {
           <span>{entry.matches}</span>
         </div>)}
       </div>
-      <p className="av-note">{data.notes.join(' ')}</p>
+      <Notes>{data.notes.join(' ')}</Notes>
     </div>
   );
 }
 
-function CombatPanel({ style, data }: { style: SquadStyle; data: TelemetryAnalytics }) {
-  const bestOf = (pick: (entry: SquadStyle['funnel'][number]) => number | null, higherIsBetter = true) => {
-    const values = style.funnel.map(pick).filter((value): value is number => value !== null);
-    return values.length ? (higherIsBetter ? Math.max(...values) : Math.min(...values)) : null;
-  };
-  const top = { hit: bestOf((entry) => entry.hitRate), dps: bestOf((entry) => entry.damagePerShot), hpk: bestOf((entry) => entry.hitsPerKnock, false), conv: bestOf((entry) => entry.conversion), knock: bestOf((entry) => entry.knockRate), dpm: bestOf((entry) => entry.damagePerMinute) };
-  const mark = (value: number | null, best: number | null) => (value !== null && best !== null && Math.abs(value - best) < 1e-9 ? 'best' : '');
-  const maxRatio = Math.max(1.5, ...style.combat.map((entry) => entry.ratio ?? 0));
+const STAGE_TEXT = { early: '前期 1–2 圈', mid: '中期 3–4 圈', late: '后期 5 圈起' } as const;
+
+function StreakPanel({ data }: { data: StreakSummary }) {
+  if (!data.matches) return null;
+  const { wipes } = data;
+  const maxMulti = Math.max(1, ...data.players.map((player) => player.multiPerTen ?? 0));
+  const wipeLead = new Map(wipes.leaders.map((entry) => [entry.accountId, entry]));
   return (
-    <Panel title="谁更能打" hint="战斗力指数 = 每分钟伤害（含火箭筒/手雷/燃烧瓶，权重 50%）+ 交战击倒率（25%）+ 同枪型命中率（25%），比的是相对队友；只统计排位赛">
-      <ul className="av-verdicts">
-        <li><b>战绩口径</b><span>{data.longRun.verdict}</span></li>
-        <li><b>全场口径</b><span>{data.lobby.verdict}</span></li>
-        <li><b>交战口径</b><span>{style.combatVerdict}</span></li>
-      </ul>
-      {style.combatHighlights.length > 0 && <div className="av-chips av-strengths">{style.combatHighlights.map((entry) => <span key={`${entry.name}-${entry.label}`} className={`av-chip ${entry.ratio >= 1 ? 'form-hot' : 'weak'}`} title={entry.tier === 'lean' && entry.confidence !== null ? `倾向，方向把握 ${(entry.confidence * 100).toFixed(0)}%` : '稳定'}>
-        {entry.name} · {entry.label} ×{entry.ratio.toFixed(2)} {entry.tier === 'stable' ? '●' : '◐'}
-      </span>)}</div>}
-      <div className="av-two even">
-        <LongRunBoard data={data.longRun} />
-        <LobbyBoard data={data.lobby} />
+    <Panel title="连杀与灭队" hint={`${data.matches} 场遥测；连杀 = 同一人 60 秒节奏内放倒多名不同敌人，灭队 = 敌队最后一波全部由本队放倒`}>
+      <div className="av-kpis six">
+        <Kpi label="灭队次数" value={int(wipes.total)} sub={wipes.perMatch === null ? undefined : `平均每场 ${wipes.perMatch.toFixed(2)} 次`} />
+        <Kpi label="有灭队的比赛" value={pct(wipes.matchShare?.rate ?? null)} sub={wipes.matchShare ? `95% ${ci(wipes.matchShare)}` : undefined} />
+        <Kpi label="满编灭队" value={int(wipes.fullTeam)} sub="一波放倒 4 人" />
+        <Kpi label="单人灭队" value={int(wipes.solo)} sub="一人放倒这一波全部敌人" tone={wipes.solo ? 'good' : undefined} />
+        <Kpi label="灭队用时" value={seconds(wipes.medianSeconds)} sub="首个到最后一个放倒，中位数" />
+        <Kpi label="被同一队灭" value={pct(data.wiped.singleTeam?.rate ?? null)} sub={data.wiped.observed ? `${data.wiped.observed} 次被淘汰 · 其中被单人灭 ${data.wiped.singlePlayer} 次` : '样本不足'} tone="warn" />
       </div>
-      <div className="av-two even stacked">
+      {data.highlights.length > 0 && <ul className="av-verdicts">{data.highlights.map((line) => <li key={line}><b>要点</b><span>{line}</span></li>)}</ul>}
+      <div className="av-streak-grid">
         <div>
-          <h4>战斗力榜（×1.00 = 与队友持平）</h4>
-          {style.combat.map((entry) => <div className="av-combat-row" key={entry.accountId}>
-            <span className="rank">{entry.rank}</span>
-            <b>{entry.name}</b>
-            <span className="av-bar-wrap"><Bar value={entry.ratio ?? 0} max={maxRatio} tone={(entry.ratio ?? 0) >= 1 ? 'mint' : 'amber'} /></span>
-            <span className={`ratio ${entry.tier === 'stable' || entry.tier === 'lean' ? ((entry.ratio ?? 1) >= 1 ? 'up' : 'down') : ''}`}>{entry.ratio === null ? '—' : `×${entry.ratio.toFixed(2)}`}</span>
-            <small>{entry.tier === 'stable' ? '稳定' : entry.tier === 'lean' ? `倾向 ${entry.confidence === null ? '' : `${(entry.confidence * 100).toFixed(0)}%`}` : '差距不显著'}{entry.low !== null && entry.high !== null ? ` · ${entry.low.toFixed(2)}–${entry.high.toFixed(2)}` : ''}</small>
+          <h4>连杀（每 10 场）</h4>
+          {data.players.map((player) => <div className="av-combat-row" key={player.accountId}>
+            <span className="rank">{player.longest}</span>
+            <b>{player.name}</b>
+            <span className="av-bar-wrap"><i className="av-stack-bar" style={{ width: `${Math.max(2, ((player.multiPerTen ?? 0) / maxMulti) * 100)}%` }} title={`双杀 ${player.two} · 三杀 ${player.three} · 四杀+ ${player.fourPlus}`}>
+              {([['two', player.two], ['three', player.three], ['four', player.fourPlus]] as const).map(([kind, count]) => count > 0 && <u key={kind} className={kind} style={{ flex: count }} />)}
+            </i></span>
+            <span className="ratio">{player.multiPerTen === null ? '—' : player.multiPerTen.toFixed(1)}</span>
+            <small>双杀 {player.two} · 三杀 {player.three} · 四杀+ {player.fourPlus}</small>
           </div>)}
-          <p className="av-note">排名只表示点估计的高低；差距不显著时，前几名之间不能说谁一定更强。</p>
+          <div className="av-legend small"><span className="two">双杀</span><span className="three">三杀</span><span className="four">四杀+</span><span>左侧数字 = 最长连杀</span></div>
         </div>
         <div>
-          <h4>输出转化漏斗（射击 → 命中 → 击倒 → 击杀）</h4>
-          <div className="av-table funnel">
-            <div className="av-row head"><span>队员</span><span>射击</span><span>命中率</span><span>每发伤害</span><span>命中/击倒</span><span>交战击倒率</span><span>击倒转化</span></div>
-            {style.funnel.map((entry) => <div className="av-row" key={entry.accountId}>
-              <b>{entry.name}</b>
-              <span>{int(entry.shots)}</span>
-              <span className={mark(entry.hitRate, top.hit)}>{pct(entry.hitRate, 1)}</span>
-              <span className={mark(entry.damagePerShot, top.dps)}>{entry.damagePerShot === null ? '—' : entry.damagePerShot.toFixed(1)}</span>
-              <span className={mark(entry.hitsPerKnock, top.hpk)}>{entry.hitsPerKnock === null ? '—' : entry.hitsPerKnock.toFixed(1)}</span>
-              <span className={mark(entry.knockRate, top.knock)}>{pct(entry.knockRate)}</span>
-              <span className={mark(entry.conversion, top.conv)} title={`${entry.chainsFinished}/${entry.chainsDealt}`}>{pct(entry.conversion)}</span>
-            </div>)}
+          <h4>灭队构成</h4>
+          <div className="av-table streak">
+            <div className="av-row head"><span>一波放倒</span><span>次数</span></div>
+            {wipes.bySize.map((entry) => <div className="av-row" key={entry.wiped}><b>{entry.wiped === 4 ? '4 人（满编）' : `${entry.wiped} 人`}</b><span>{entry.count}</span></div>)}
+            {wipes.byStage.map((entry) => <div className="av-row" key={entry.stage}><b>{STAGE_TEXT[entry.stage]}</b><span>{entry.count}</span></div>)}
           </div>
-          <p className="av-note">命中/击倒越低说明每个击倒需要的命中越少；击倒转化 = 自己打倒的人最终被小队终结的比例（其余被救起或未观察到结果）；交战击倒率 = 参与的交战里至少打倒一人的比例。高亮为队内最优。漏斗里的射击和命中不含霰弹枪（一发多颗弹丸）和火箭筒/榴弹（不产生枪械命中）；命中率 = 对敌命中事件 ÷ 开火事件，绝对值和游戏内准确率不是一回事。指数里的命中率是「同枪型」比较：拿队友用同类枪的命中率，按你自己的用枪比例折算后再比，狙击手不会因为用栓狙就显得枪法更好。爆头率和击倒转化率仍在风格维度里展示，但不计入指数：真实数据里爆头率可靠性低、与胜负无关，转化率主要取决于队友是否补枪。</p>
         </div>
       </div>
+      <div className="av-table longrun">
+        <div className="av-row head"><span>队员</span><span>放倒</span><span>连杀占比</span><span>灭队中放倒</span><span>主导 / 单人灭队</span></div>
+        {data.players.map((player) => <div className="av-row" key={player.accountId}>
+          <b>{player.name}</b>
+          <span>{player.takedowns}</span>
+          <span title={player.chainedShare ? `95% ${ci(player.chainedShare)}` : undefined}>{pct(player.chainedShare?.rate ?? null)}</span>
+          <span>{player.wipeTakedowns}</span>
+          <span>{wipeLead.get(player.accountId)?.led ?? 0} / {player.soloWipes}</span>
+        </div>)}
+      </div>
+      <Notes>{data.notes.join(' ')}</Notes>
     </Panel>
   );
+}
+
+/** "高 84%" / "低 26%" instead of a raw ratio, so a cell reads as a sentence. */
+function differenceText(reading: StyleAxisReading): string {
+  if (reading.ratio === null) return '—';
+  if (reading.tier !== 'stable' && reading.tier !== 'lean') return '≈ 持平';
+  const percent = Math.round(Math.abs(reading.ratio - 1) * 100);
+  return reading.ratio >= 1 ? `高 ${percent}%` : `低 ${percent}%`;
 }
 
 function StyleMatrix({ style }: { style: SquadStyle }) {
+  const [showAll, setShowAll] = useState(false);
   const readings = (key: string) => style.players.map((player) => player.axes.find((axis) => axis.key === key)!);
   const keys = style.players[0]!.axes.map((axis) => ({ key: axis.key, label: axis.label, group: axis.group }));
+  const notable = (key: string) => readings(key).some((reading) => reading.tier === 'stable' || reading.tier === 'lean');
+  const visible = keys.filter((item) => showAll || notable(item.key));
+  const hidden = keys.length - keys.filter((item) => notable(item.key)).length;
   return (
-    <Panel title="风格对比矩阵" hint="每格 = 该队员 ÷ 队友合计；● 稳定 ◐ 倾向；绿色偏高、橙色偏低，悬停看数值">
+    <Panel title="风格对比矩阵" hint="每格 = 这个人比另外三名队友高或低多少">
+      <div className="av-matrix-legend">
+        <span className="up">高 84%<small>明显比队友高</small></span>
+        <span className="down">低 26%<small>明显比队友低</small></span>
+        <span className="even">≈ 持平<small>差不多，或差距可能只是运气</small></span>
+        <span className="mark">● 可靠　◐ 大概率</span>
+        <span className="hint">格子下方小字 = 这个人的实际数值；悬停看队友数值和区间</span>
+      </div>
       <div className="av-matrix" style={{ gridTemplateColumns: `minmax(150px,1.4fr) repeat(${style.players.length}, minmax(96px,1fr))` }}>
         <span className="head" />
-        {style.players.map((player) => <span className="head" key={player.accountId}>{player.name}</span>)}
-        {GROUPS.map((group) => <div className="av-matrix-group" key={group} style={{ display: 'contents' }}>
-          <span className="group" style={{ gridColumn: `1 / span ${style.players.length + 1}` }}>{group}</span>
-          {keys.filter((item) => item.group === group).map((item) => <div key={item.key} style={{ display: 'contents' }}>
-            <span className="axis">{item.label}</span>
-            {readings(item.key).map((reading, index) => <span key={style.players[index]!.accountId} className={`cell ${reading.tier}`} style={{ background: cellColor(reading) }} title={axisTitle(reading)}>
-              {ratioText(reading)}<i>{TIER_MARK[reading.tier]}</i>
-            </span>)}
-          </div>)}
-        </div>)}
+        {style.players.map((player, index) => <span className={`head ${PLAYER_TONES[index % 4]}`} key={player.accountId}>{player.name}</span>)}
+        {GROUPS.map((group) => {
+          const rows = visible.filter((item) => item.group === group);
+          if (!rows.length) return null;
+          return <div className="av-matrix-group" key={group} style={{ display: 'contents' }}>
+            <span className="group" style={{ gridColumn: `1 / span ${style.players.length + 1}` }}>{group}</span>
+            {rows.map((item) => <div key={item.key} style={{ display: 'contents' }}>
+              <span className="axis">{item.label}</span>
+              {readings(item.key).map((reading, index) => {
+                const tone = reading.tier === 'stable' || reading.tier === 'lean' ? (reading.ratio !== null && reading.ratio >= 1 ? 'up' : 'down') : 'even';
+                return <span key={style.players[index]!.accountId} className={`cell ${reading.tier} ${tone}`} style={{ background: cellColor(reading) }} title={axisTitle(reading)}>
+                  <span className="main">{tone === 'up' ? '▲ ' : tone === 'down' ? '▼ ' : ''}{differenceText(reading)}<i>{TIER_MARK[reading.tier]}</i></span>
+                  <small>{reading.value === null ? '' : formatAxis(reading.key, reading.value)}</small>
+                </span>;
+              })}
+            </div>)}
+          </div>;
+        })}
       </div>
+      {hidden > 0 && <button type="button" className="av-link av-matrix-toggle" onClick={() => setShowAll((value) => !value)}>
+        {showAll ? '只看有明显差异的维度' : `显示全部 ${keys.length} 个维度（另有 ${hidden} 个维度四人都差不多）`}
+      </button>}
     </Panel>
   );
 }
 
-function SpreadPanel({ spreads }: { spreads: SquadStyle['spreads'] }) {
-  const items = spreads.filter((item) => item.supported).slice(0, 8);
+const PLAYER_TONES = ['p0', 'p1', 'p2', 'p3'] as const;
+const CLASS_TONES: Record<string, string> = { AR: '#69d9c3', DMR: '#b8f277', SR: '#8fb8ff', SMG: '#eeb96a', LMG: '#e58c8c', SG: '#c79bf2', Pistol: '#9bb0a8', other: '#4b5f5c' };
+
+function tierWord(tier: StyleTier, confidence: number | null): string {
+  return tier === 'stable' ? '稳定' : tier === 'lean' ? `倾向${confidence === null ? '' : ` ${(confidence * 100).toFixed(0)}%`}` : '差距不显著';
+}
+
+/** Log-scale position of a ratio on a 0.5–2 axis, 0..1. */
+function ratioPos(ratio: number): number {
+  return Math.max(0, Math.min(1, (Math.log2(ratio) + 1) / 2));
+}
+
+/** A ratio as a bar growing left (below 1) or right (above 1) from the centre line. */
+function DivergingBar({ ratio, tier }: { ratio: number | null; tier: StyleTier }) {
+  if (ratio === null) return <span className="av-div-bar" />;
+  const pos = ratioPos(ratio);
+  const left = Math.min(pos, 0.5);
+  const width = Math.abs(pos - 0.5);
+  return <span className="av-div-bar"><i className={`${ratio >= 1 ? 'up' : 'down'} ${tier}`} style={{ left: `${left * 100}%`, width: `${Math.max(1.5, width * 100)}%` }} /></span>;
+}
+
+function RosterStrip({ style }: { style: SquadStyle }) {
+  const order = style.combat.map((entry) => entry.accountId);
+  const players = [...style.players].sort((left, right) => order.indexOf(left.accountId) - order.indexOf(right.accountId));
+  return (
+    <div className="av-roster">
+      {players.map((player) => {
+        const combat = style.combat.find((entry) => entry.accountId === player.accountId);
+        const toneIndex = style.players.findIndex((item) => item.accountId === player.accountId);
+        const lead = player.archetypes[0];
+        return <article className={`av-roster-card ${PLAYER_TONES[toneIndex % 4]}`} key={player.accountId}>
+          <header>
+            <span className="avatar">{player.name.replace(/^SG_LabmemNo/u, '').slice(0, 3)}</span>
+            <div><b>{player.name}</b>{lead && <small>{archetypeLabel(lead)}</small>}</div>
+            {combat && <span className="rank">#{combat.rank}</span>}
+          </header>
+          {combat && <div className="power">
+            <span className={`value ${combat.tier === 'stable' || combat.tier === 'lean' ? ((combat.ratio ?? 1) >= 1 ? 'up' : 'down') : ''}`}>{combat.ratio === null ? '—' : `×${combat.ratio.toFixed(2)}`}</span>
+            <span className="caption">战斗力 · {tierWord(combat.tier, combat.confidence)}</span>
+            <div className="av-forest mini">
+              <i className="one" />
+              {combat.low !== null && combat.high !== null && <u style={{ left: `${ratioPos(combat.low) * 100}%`, width: `${(ratioPos(combat.high) - ratioPos(combat.low)) * 100}%` }} />}
+              {combat.ratio !== null && <b style={{ left: `${ratioPos(combat.ratio) * 100}%` }} />}
+            </div>
+          </div>}
+          <ul>
+            {player.traits.slice(0, 3).map((trait) => <li key={trait.key}>
+              <span>{trait.text}</span>
+              <em className={trait.ratio >= 1 ? 'up' : 'down'}>×{trait.ratio.toFixed(2)}</em>
+            </li>)}
+            {!player.traits.length && <li><span>和队友没有明显差别</span></li>}
+          </ul>
+        </article>;
+      })}
+    </div>
+  );
+}
+
+function ForestRow({ name, rank, ratio, low, high, tier, confidence }: { name: string; rank: number; ratio: number | null; low: number | null; high: number | null; tier: StyleTier; confidence: number | null }) {
+  const tone = tier === 'stable' || tier === 'lean' ? ((ratio ?? 1) >= 1 ? 'up' : 'down') : 'even';
+  return (
+    <div className="av-forest-row">
+      <span className="rank">{rank}</span>
+      <b>{name}</b>
+      <div className="av-forest">
+        <i className="one" />
+        {low !== null && high !== null && <u className={tone} style={{ left: `${ratioPos(low) * 100}%`, width: `${Math.max(0.5, (ratioPos(high) - ratioPos(low)) * 100)}%` }} />}
+        {ratio !== null && <b className={tone} style={{ left: `${ratioPos(ratio) * 100}%` }} />}
+      </div>
+      <span className={`ratio ${tone}`}>{ratio === null ? '—' : `×${ratio.toFixed(2)}`}</span>
+      <small>{tierWord(tier, confidence)}</small>
+    </div>
+  );
+}
+
+function lensCell(kind: 'ratio' | 'percentile', value: number | null, tone: 'up' | 'down' | 'even'): ReactNode {
+  if (value === null) return <span className="av-lens-cell even">—</span>;
+  return <span className={`av-lens-cell ${tone}`}>{kind === 'ratio' ? `×${value.toFixed(2)}` : `${Math.round(value * 100)}`}</span>;
+}
+
+function CombatPanel({ style, data }: { style: SquadStyle; data: TelemetryAnalytics }) {
+  const lensTone = (tier: StyleTier, ratio: number | null): 'up' | 'down' | 'even' => (tier === 'stable' || tier === 'lean') && ratio !== null ? (ratio >= 1 ? 'up' : 'down') : 'even';
+  const steps: Array<{ key: string; label: string; pick: (entry: SquadStyle['funnel'][number]) => number | null; text: (value: number) => string; lowIsBetter?: boolean }> = [
+    { key: 'dpm', label: '每分钟伤害', pick: (entry) => entry.damagePerMinute, text: (value) => value.toFixed(1) },
+    { key: 'hit', label: '命中率', pick: (entry) => entry.hitRate, text: (value) => `${(value * 100).toFixed(1)}%` },
+    { key: 'hpk', label: '每个击倒需命中', pick: (entry) => entry.hitsPerKnock, text: (value) => value.toFixed(1), lowIsBetter: true },
+    { key: 'knock', label: '交战击倒率', pick: (entry) => entry.knockRate, text: (value) => `${(value * 100).toFixed(0)}%` },
+    { key: 'conv', label: '击倒转化', pick: (entry) => entry.conversion, text: (value) => `${(value * 100).toFixed(0)}%` },
+  ];
+  return (
+    <Panel title="谁更能打" hint="三种口径互相印证：交战表现、长期战绩份额、相对全场">
+      <ul className="av-verdicts">
+        <li><b>交战口径</b><span>{style.combatVerdict}</span></li>
+        <li><b>战绩口径</b><span>{data.longRun.verdict}</span></li>
+        <li><b>全场口径</b><span>{data.lobby.verdict}</span></li>
+      </ul>
+      <div className="av-combat-top">
+        <div>
+          <h4>战斗力指数 <small>点 = 估计值，横条 = 95% 区间，竖线 = 与队友持平</small></h4>
+          {style.combat.map((entry) => <ForestRow key={entry.accountId} name={entry.name} rank={entry.rank} ratio={entry.ratio} low={entry.low} high={entry.high} tier={entry.tier} confidence={entry.confidence} />)}
+          <div className="av-forest-axis"><span>×0.5</span><span>×0.71</span><span>×1</span><span>×1.41</span><span>×2</span></div>
+        </div>
+        <div>
+          <h4>三口径对照 <small>绿 / 橙 = 稳定或倾向偏高 / 偏低</small></h4>
+          <div className="av-lens">
+            <span className="head">队员</span><span className="head">交战</span><span className="head">战绩份额</span><span className="head">全场分位</span>
+            {style.combat.map((entry) => {
+              const longRun = data.longRun.entries.find((row) => row.accountId === entry.accountId);
+              const lobby = data.lobby.entries.find((row) => row.accountId === entry.accountId);
+              return <Fragment key={entry.accountId}>
+                <b>{entry.name}</b>
+                {lensCell('ratio', entry.ratio, lensTone(entry.tier, entry.ratio))}
+                {lensCell('ratio', longRun?.composite.ratio ?? null, longRun ? lensTone(longRun.composite.tier, longRun.composite.ratio) : 'even')}
+                {lensCell('percentile', lobby?.composite.mean ?? null, lobby?.tier === 'above' ? 'up' : lobby?.tier === 'below' ? 'down' : 'even')}
+              </Fragment>;
+            })}
+          </div>
+          <small className="av-lens-foot">交战 {style.matches} 场遥测 · 战绩 {data.longRun.matches} 场 · 全场 {data.lobby.matches} 场</small>
+        </div>
+      </div>
+      <h4>输出转化 <small>每格 4 根柱 = 4 名队员，亮色为队内最佳</small></h4>
+      <div className="av-multiples">
+        {steps.map((step) => {
+          const values = style.funnel.map((entry) => step.pick(entry));
+          const known = values.filter((value): value is number => value !== null);
+          const max = Math.max(...known, 0) || 1;
+          const best = known.length ? (step.lowIsBetter ? Math.min(...known) : Math.max(...known)) : null;
+          return <div className="av-multiple" key={step.key}>
+            <span className="title">{step.label}{step.lowIsBetter ? <small>越低越好</small> : null}</span>
+            <div className="bars">{style.funnel.map((entry, index) => {
+              const value = values[index] ?? null;
+              const toneIndex = style.players.findIndex((player) => player.accountId === entry.accountId);
+              return <div className="col" key={entry.accountId} title={`${entry.name}：${value === null ? '—' : step.text(value)}`}>
+                <em>{value === null ? '—' : step.text(value)}</em>
+                <i className={`${PLAYER_TONES[toneIndex % 4]} ${value !== null && value === best ? 'best' : ''}`} style={{ height: `${value === null ? 0 : Math.max(4, (value / max) * 100)}%` }} />
+                <small>{entry.name.replace(/^SG_LabmemNo/u, 'No.')}</small>
+              </div>;
+            })}</div>
+          </div>;
+        })}
+      </div>
+      <details className="av-more"><summary>明细：长期战绩、全场分位与漏斗原始数字</summary>
+        <div className="av-two even">
+          <LongRunBoard data={data.longRun} />
+          <LobbyBoard data={data.lobby} />
+        </div>
+        <div className="av-table funnel">
+          <div className="av-row head"><span>队员</span><span>射击</span><span>命中率</span><span>每发伤害</span><span>命中/击倒</span><span>交战击倒率</span><span>击倒转化</span></div>
+          {style.funnel.map((entry) => <div className="av-row" key={entry.accountId}>
+            <b>{entry.name}</b><span>{int(entry.shots)}</span><span>{pct(entry.hitRate, 1)}</span><span>{entry.damagePerShot === null ? '—' : entry.damagePerShot.toFixed(1)}</span>
+            <span>{entry.hitsPerKnock === null ? '—' : entry.hitsPerKnock.toFixed(1)}</span><span>{pct(entry.knockRate)}</span><span title={`${entry.chainsFinished}/${entry.chainsDealt}`}>{pct(entry.conversion)}</span>
+          </div>)}
+        </div>
+      </details>
+      <Notes>战斗力指数 = 每分钟伤害（含火箭筒 / 手雷 / 燃烧瓶，权重 50%）+ 交战击倒率（25%）+ 同枪型命中率（25%），都是相对队友的比值，只统计排位赛。排名只表示点估计的高低；区间重叠时不能说谁一定更强。命中率 = 对敌命中事件 ÷ 开火事件，不含霰弹枪和火箭筒，绝对值和游戏内准确率不是一回事；指数里的命中率是「同枪型」比较，狙击手不会因为用栓狙就显得枪法更好。击倒转化 = 自己打倒的人最终被小队终结的比例。爆头率和击倒转化率不计入指数：真实数据里爆头率可靠性低、与胜负无关，转化率主要取决于队友是否补枪。</Notes>
+    </Panel>
+  );
+}
+
+/** Weapon-class shares as a donut. */
+function ClassDonut({ shares }: { shares: Array<{ weaponClass: string; share: number }> }) {
+  const radius = 30;
+  const circumference = 2 * Math.PI * radius;
+  const total = shares.reduce((sum, entry) => sum + entry.share, 0);
+  const rest = Math.max(0, 1 - total);
+  const segments = [...shares, ...(rest > 0.01 ? [{ weaponClass: 'other', share: rest }] : [])];
+  let offset = 0;
+  return (
+    <div className="av-donut">
+      <svg viewBox="0 0 80 80" role="img" aria-label="武器类型占比">
+        <circle cx="40" cy="40" r={radius} className="track" />
+        {segments.map((entry) => {
+          const length = entry.share * circumference;
+          const node = <circle key={entry.weaponClass} cx="40" cy="40" r={radius} className="seg" stroke={CLASS_TONES[entry.weaponClass] ?? CLASS_TONES.other} strokeDasharray={`${Math.max(0, length - 1.5)} ${circumference}`} strokeDashoffset={-offset} transform="rotate(-90 40 40)"><title>{CLASS_LABEL[entry.weaponClass] ?? entry.weaponClass} {pct(entry.share)}</title></circle>;
+          offset += length;
+          return node;
+        })}
+        <text x="40" y="38" className="big">{CLASS_LABEL[segments[0]?.weaponClass ?? ''] ?? '—'}</text>
+        <text x="40" y="50" className="small">{segments[0] ? pct(segments[0].share) : ''}</text>
+      </svg>
+      <ul>{segments.map((entry) => <li key={entry.weaponClass}><i style={{ background: CLASS_TONES[entry.weaponClass] ?? CLASS_TONES.other }} />{CLASS_LABEL[entry.weaponClass] ?? (entry.weaponClass === 'other' ? '其他' : entry.weaponClass)}<b>{pct(entry.share)}</b></li>)}</ul>
+    </div>
+  );
+}
+
+function PlayerCard({ player, toneIndex }: { player: SquadStyle['players'][number]; toneIndex: number }) {
+  const maxWeapon = Math.max(0.01, ...player.weapons.map((weapon) => weapon.share));
+  return (
+    <section className={`av-panel av-pcard ${PLAYER_TONES[toneIndex % 4]}`}>
+      <header>
+        <h3>{player.name}</h3>
+        <span className="av-chips">{player.archetypes.map((entry) => <span key={entry.id} className={`av-chip ${entry.tier === 'stable' ? 'form-hot' : ''}`}>{archetypeLabel(entry)}</span>)}</span>
+      </header>
+      <p className="av-style-summary">{player.summary}</p>
+      <div className="av-pcard-body">
+        <div className="av-radar-wrap"><Radar axes={player.axes} /></div>
+        <div className="av-pcard-side">
+          <h4>最突出的特点</h4>
+          {player.traits.length ? <ul className="av-trait-bars">{player.traits.slice(0, 5).map((trait) => <li key={trait.key}>
+            <span className="text">{trait.text}</span>
+            <DivergingBar ratio={trait.ratio} tier={trait.tier} />
+            <b className={trait.ratio >= 1 ? 'up' : 'down'}>×{trait.ratio.toFixed(2)}</b>
+            <small className={`tier ${trait.tier}`}>{trait.tier === 'stable' ? '●' : '◐'}</small>
+          </li>)}</ul> : <p className="av-note">与队友相比没有明显偏离的维度。</p>}
+          <h4>武器偏好</h4>
+          <div className="av-weapon-row">
+            <ClassDonut shares={player.classShares} />
+            <ul className="av-weapon-bars">{player.weapons.map((weapon) => <li key={weapon.weapon}><span>{weapon.weapon}</span><i><u style={{ width: `${(weapon.share / maxWeapon) * 100}%` }} /></i><b>{pct(weapon.share)}</b></li>)}</ul>
+          </div>
+        </div>
+      </div>
+      <footer>{player.matches} 场 · 存活 {Math.round(player.minutes)} 分钟{player.landingSpread !== null ? ` · 落地离队友中心平均 ${Math.round(player.landingSpread)}m` : ''}</footer>
+      <details className="av-axis-detail"><summary>全部维度的数值</summary>
+        <div className="av-table style-axes">
+          <div className="av-row head"><span>维度</span><span>个人</span><span>队友</span><span>比值</span><span>95% 区间</span><span>判定</span></div>
+          {player.axes.map((axis) => <div className="av-row" key={axis.key} title={axisTitle(axis)}>
+            <b>{axis.label}</b>
+            <span>{axis.value === null ? '—' : formatAxis(axis.key, axis.value)}</span>
+            <span>{axis.matesValue === null ? '—' : formatAxis(axis.key, axis.matesValue)}</span>
+            <span className={axis.tier === 'stable' || axis.tier === 'lean' ? (axis.direction === 'high' ? 'up' : 'down') : ''}>{ratioText(axis)}</span>
+            <span>{axis.low === null || axis.high === null ? '—' : `${axis.low.toFixed(2)}–${axis.high.toFixed(2)}`}</span>
+            <span>{TIER_TEXT[axis.tier]}{TIER_MARK[axis.tier] ? ` ${TIER_MARK[axis.tier]}` : ''}</span>
+          </div>)}
+        </div>
+      </details>
+    </section>
+  );
+}
+
+/** One axis per row, each member a dot on a shared scale: where the squad spreads out the most. */
+function SpreadPanel({ style }: { style: SquadStyle }) {
+  const items = style.spreads.filter((item) => item.supported).slice(0, 8);
   if (!items.length) return null;
   return (
-    <Panel title="队内差异最大的维度" hint="同一维度上，最高和最低的人差几倍；只列至少一端有稳定或倾向差异的">
-      <div className="av-table spreads">
-        <div className="av-row head"><span>维度</span><span>最高</span><span>最低</span><span>相差</span></div>
-        {items.map((item) => <div className="av-row" key={item.key}>
-          <b>{item.label}<small>{item.group}</small></b>
-          <span>{item.highest.name} <em>{formatAxis(item.key, item.highest.value)}</em> {TIER_MARK[item.highest.tier]}</span>
-          <span>{item.lowest.name} <em>{formatAxis(item.key, item.lowest.value)}</em> {TIER_MARK[item.lowest.tier]}</span>
-          <span>{item.spread.toFixed(2)}×</span>
-        </div>)}
+    <Panel title="队内差异最大的维度" hint="每行一条刻度，点 = 每名队员；只列至少一端有稳定或倾向差异的维度">
+      <div className="av-legend">{style.players.map((player, index) => <span key={player.accountId} className={PLAYER_TONES[index % 4]}>{player.name}</span>)}</div>
+      <div className="av-strips">
+        {items.map((item) => {
+          const points = style.players.map((player, index) => ({ player, index, value: player.axes.find((axis) => axis.key === item.key)?.value ?? null }))
+            .filter((point): point is typeof point & { value: number } => point.value !== null);
+          const low = Math.min(...points.map((point) => point.value));
+          const high = Math.max(...points.map((point) => point.value));
+          const span = high - low || 1;
+          const positioned = points.map((point) => ({ ...point, left: 6 + ((point.value - low) / span) * 88 })).sort((left, right) => left.left - right.left);
+          // Labels of neighbouring dots would overlap, so every other close neighbour puts its label underneath.
+          const below = new Set<string>();
+          positioned.forEach((point, index) => {
+            const previous = positioned[index - 1];
+            if (previous && point.left - previous.left < 9 && !below.has(previous.player.accountId)) below.add(point.player.accountId);
+          });
+          return <div className="av-strip" key={item.key}>
+            <span className="label">{item.label}<small>{item.group} · 相差 {item.spread.toFixed(2)}×</small></span>
+            <div className="track">
+              <i className="line" />
+              {positioned.map((point) => <b key={point.player.accountId} className={`${PLAYER_TONES[point.index % 4]} ${below.has(point.player.accountId) ? 'below' : ''}`} style={{ left: `${point.left}%` }} title={`${point.player.name}：${formatAxis(item.key, point.value)}`}>
+                <em>{formatAxis(item.key, point.value)}</em>
+              </b>)}
+            </div>
+          </div>;
+        })}
       </div>
     </Panel>
   );
@@ -810,54 +1102,21 @@ export function StyleView({ data, loading, error, onReload }: { data: TelemetryA
   if (style.players.length === 0) return <div className="av-empty">当前范围没有可用于风格分析的遥测数据。</div>;
   return (
     <div className="av-stack">
-      <p className="av-scope">基于 <b>{style.matches}</b> 场有归档遥测的比赛。每个维度都是「个人值 ÷ 队友合计值（不含自己）」：×1.00 即与队友持平。<b>● 稳定</b> = 95% 重抽样区间不含 1；<b>◐ 倾向</b> = 方向在 85% 以上的重抽样中一致，但区间跨过 1，只能说「更可能」。</p>
+      <p className="av-scope">基于 <b>{style.matches}</b> 场有归档遥测的排位赛 · ×1.00 = 与队友持平 · <b>●</b> 稳定 <b>◐</b> 倾向</p>
+      <Notes>每个维度都是「个人值 ÷ 队友合计值（不含自己）」。● 稳定 = 95% 重抽样区间不含 1；◐ 倾向 = 方向在 85% 以上的重抽样中一致，但区间跨过 1，只能说「更可能」。</Notes>
+      <RosterStrip style={style} />
       <CombatPanel style={style} data={data} />
+      {data.streaks && <StreakPanel data={data.streaks} />}
       <StyleMatrix style={style} />
-      <div className="av-style-cards">
-        {style.players.map((player) => <section className="av-panel av-style-card" key={player.accountId}>
-          <header>
-            <h3>{player.name}</h3>
-            <span className="av-chips">{player.archetypes.map((entry) => <span key={entry.id} className={`av-chip ${entry.tier === 'stable' ? 'form-hot' : ''}`}>{archetypeLabel(entry)}</span>)}</span>
-          </header>
-          <p className="av-style-summary">{player.summary}</p>
-          <div className="av-style-body">
-            <div className="av-radar-wrap"><Radar axes={player.axes} /><small>虚线圈 = 队友平均 ×1.00；外圈 ×1.5，中心 ×0.67；实心点 = 稳定，半透明 = 倾向</small></div>
-            <div>
-              <h4>最突出的特点</h4>
-              {player.traits.length ? <ul className="av-traits">{player.traits.map((trait) => <li key={trait.key}>
-                <b className={trait.ratio >= 1 ? 'up' : 'down'}>×{trait.ratio.toFixed(2)}</b>
-                <span>{trait.text}</span>
-                <small className={`tier ${trait.tier}`}>{trait.tier === 'stable' ? '稳定' : `倾向 ${trait.confidence === null ? '' : `${(trait.confidence * 100).toFixed(0)}%`}`}</small>
-              </li>)}</ul> : <p className="av-note">与队友相比没有明显偏离的维度。</p>}
-            </div>
-            <div>
-              <h4>武器偏好</h4>
-              <div className="av-chips">{player.weapons.map((weapon) => <span className="av-chip" key={weapon.weapon}>{weapon.weapon} {pct(weapon.share)}</span>)}</div>
-              <div className="av-chips" style={{ marginTop: 6 }}>{player.classShares.map((entry) => <span className="av-chip" key={entry.weaponClass}>{CLASS_LABEL[entry.weaponClass] ?? entry.weaponClass} {pct(entry.share)}</span>)}</div>
-              <p className="av-note">{player.matches} 场 · 存活 {Math.round(player.minutes)} 分钟{player.landingSpread !== null ? ` · 落地离队友中心平均 ${Math.round(player.landingSpread)}m` : ''}</p>
-            </div>
-          </div>
-          <details className="av-axis-detail"><summary>全部维度的数值</summary>
-            <div className="av-table style-axes">
-              <div className="av-row head"><span>维度</span><span>个人</span><span>队友</span><span>比值</span><span>95% 区间</span><span>判定</span></div>
-              {player.axes.map((axis) => <div className="av-row" key={axis.key} title={axisTitle(axis)}>
-                <b>{axis.label}</b>
-                <span>{axis.value === null ? '—' : formatAxis(axis.key, axis.value)}</span>
-                <span>{axis.matesValue === null ? '—' : formatAxis(axis.key, axis.matesValue)}</span>
-                <span className={axis.tier === 'stable' || axis.tier === 'lean' ? (axis.direction === 'high' ? 'up' : 'down') : ''}>{ratioText(axis)}</span>
-                <span>{axis.low === null || axis.high === null ? '—' : `${axis.low.toFixed(2)}–${axis.high.toFixed(2)}`}</span>
-                <span>{TIER_TEXT[axis.tier]}{TIER_MARK[axis.tier] ? ` ${TIER_MARK[axis.tier]}` : ''}</span>
-              </div>)}
-            </div>
-          </details>
-        </section>)}
+      <div className="av-pcards">
+        {style.players.map((player, index) => <PlayerCard key={player.accountId} player={player} toneIndex={index} />)}
       </div>
-      <SpreadPanel spreads={style.spreads} />
+      <SpreadPanel style={style} />
       <Panel title="小队搭配" hint="风格重叠与缺口">
         {style.overlaps.length > 0 && <div><h4>风格相近的搭档</h4>{style.overlaps.map((overlap) => <p className="av-pair" key={overlap.accountIds.join('|')}><b>{overlap.names.join(' × ')}</b>相似度 {overlap.similarity.toFixed(2)}，都表现为：{overlap.sharedTraits.join('；')}。</p>)}</div>}
         {style.gaps.length > 0 && <div><h4>小队缺口</h4><ul className="av-traits">{style.gaps.map((gap) => <li key={gap}>{gap}</li>)}</ul></div>}
         {style.overlaps.length === 0 && style.gaps.length === 0 && <p className="av-note">没有发现明显的风格重叠或缺口。</p>}
-        <p className="av-note">{style.notes.join(' ')}</p>
+        <Notes>{style.notes.join(' ')}</Notes>
       </Panel>
     </div>
   );
@@ -940,11 +1199,242 @@ export function FieldView({ data, loading, error, onReload }: { data: TelemetryA
           </div>
         </>}
         <ContestPanel contest={data.landing.contest} />
-        <p className="av-note">{data.landing.notes.join(' ')}</p>
+        <Notes>{data.landing.notes.join(' ')}</Notes>
       </Panel>
 
       <RolePanel roles={data.roles} />
-      <p className="av-note">{combat.notes.join(' ')}</p>
+      <Notes>{combat.notes.join(' ')}</Notes>
+    </div>
+  );
+}
+
+export function Notes({ children, label = '口径说明' }: { children: ReactNode; label?: string }) {
+  return <details className="av-notes"><summary>{label}</summary><div>{children}</div></details>;
+}
+
+// ---------------------------------------------------------------------------------------------------------------
+// Single match against each member's usual level.
+
+export interface RelativeReading {
+  key: string;
+  label: string;
+  format: 'int' | 'minutes' | 'percent' | 'decimal';
+  higherIsBetter: boolean;
+  value: number | null;
+  median: number | null;
+  percentile: number | null;
+  goodness: number | null;
+  historyCount: number;
+}
+
+export interface MatchRelativeData {
+  matchId: string;
+  telemetry: boolean;
+  historyMatches: number;
+  players: Array<{ accountId: string; name: string; historyMatches: number; form: number | null; metrics: RelativeReading[] }>;
+  placement: { value: number | null; goodness: number | null; historyCount: number };
+  highlights: Array<{ tone: 'good' | 'bad' | 'info'; text: string }>;
+  notes: string[];
+}
+
+function relativeText(format: RelativeReading['format'], value: number | null): string {
+  if (value === null) return '—';
+  if (format === 'percent') return `${(value * 100).toFixed(1)}%`;
+  if (format === 'minutes') return `${value.toFixed(1)}分`;
+  if (format === 'decimal') return value.toFixed(1);
+  return String(Math.round(value));
+}
+
+function toneOf(goodness: number | null): 'good' | 'bad' | 'mid' {
+  if (goodness === null) return 'mid';
+  return goodness >= 0.65 ? 'good' : goodness <= 0.35 ? 'bad' : 'mid';
+}
+
+/** A 270° gauge: 0 at the lower left, 100 at the lower right, 50 straight up. */
+function Gauge({ value, label }: { value: number | null; label: string }) {
+  const radius = 36;
+  const circumference = 2 * Math.PI * radius;
+  const sweep = circumference * 0.75;
+  return (
+    <svg viewBox="0 0 100 100" className={`av-gauge ${toneOf(value)}`} role="img" aria-label={`${label} ${value === null ? '未知' : Math.round(value * 100)}`}>
+      <circle cx="50" cy="52" r={radius} className="track" strokeDasharray={`${sweep} ${circumference}`} transform="rotate(135 50 52)" />
+      {value !== null && <circle cx="50" cy="52" r={radius} className="fill" strokeDasharray={`${Math.max(1, sweep * value)} ${circumference}`} transform="rotate(135 50 52)" />}
+      <text x="50" y="54" className="value">{value === null ? '—' : Math.round(value * 100)}</text>
+      <text x="50" y="72" className="label">{label}</text>
+    </svg>
+  );
+}
+
+function PercentileTrack({ reading }: { reading: RelativeReading }) {
+  const tone = toneOf(reading.goodness);
+  return (
+    <div className="av-ptrack" title={reading.median === null ? '历史不足，暂不比较' : `平时中位 ${relativeText(reading.format, reading.median)} · ${reading.historyCount} 场历史`}>
+      <span className="label">{reading.label}<small>{reading.median === null ? '历史不足' : `平时 ${relativeText(reading.format, reading.median)}`}</small></span>
+      <span className="track"><i className="mid" />{reading.goodness !== null && <b className={`dot ${tone}`} style={{ left: `${reading.goodness * 100}%` }} />}</span>
+      <span className={`val ${tone}`}>{relativeText(reading.format, reading.value)}</span>
+    </div>
+  );
+}
+
+export function MatchRelativePanel({ data, loading }: { data: MatchRelativeData | null; loading: boolean }) {
+  if (loading && !data) return <section className="av-panel av-relative"><header><h3>这局相对平时</h3><span>正在对比每个人的历史…</span></header><div className="av-spinner" /></section>;
+  if (!data || !data.players.length) return null;
+  return (
+    <section className="av-panel av-relative">
+      <header><h3>这局相对平时</h3><span>每个人只和自己的 {data.historyMatches} 场历史比；圆环 = 综合分位，50 为平常水平</span></header>
+      {data.highlights.length > 0 && <ul className="av-relative-highlights">{data.highlights.map((item) => <li key={item.text} className={item.tone}>{item.text}</li>)}</ul>}
+      <div className="av-relative-grid">
+        {data.players.map((player) => <div className="av-relative-card" key={player.accountId}>
+          <div className="head"><Gauge value={player.form} label="综合分位" /><div><b>{player.name}</b><small>{player.historyMatches} 场历史</small></div></div>
+          {player.metrics.filter((reading) => reading.value !== null).map((reading) => <PercentileTrack key={reading.key} reading={reading} />)}
+        </div>)}
+      </div>
+      <div className="av-ptrack-legend"><span>← 比平时差</span><span>平常</span><span>比平时好 →</span></div>
+      <Notes>{data.notes.join(' ')}{!data.telemetry ? ' 这一局没有归档遥测，只比较战绩里的数值。' : ''}</Notes>
+    </section>
+  );
+}
+
+// ---------------------------------------------------------------------------------------------------------------
+// Head-to-head player comparison.
+
+interface CompareMetric {
+  key: string;
+  group: string;
+  label: string;
+  a: number | null;
+  b: number | null;
+  text: (value: number) => string;
+  /** Which direction is better; null for style axes where neither side "wins". */
+  better: 'high' | 'low' | null;
+}
+
+const ratioFmt = (value: number) => `×${value.toFixed(2)}`;
+const pctFmt = (value: number) => `${(value * 100).toFixed(0)}%`;
+const oneFmt = (value: number) => value.toFixed(1);
+const intFmt = (value: number) => String(Math.round(value));
+
+function buildCompareMetrics(data: TelemetryAnalytics, a: string, b: string): CompareMetric[] {
+  const { style } = data;
+  const pick = <T,>(rows: readonly T[], id: string, key: (row: T) => string) => rows.find((row) => key(row) === id);
+  const axis = (id: string, key: string) => style.players.find((player) => player.accountId === id)?.axes.find((item) => item.key === key)?.value ?? null;
+  const make = (key: string, group: string, label: string, get: (id: string) => number | null | undefined, text: (value: number) => string, better: CompareMetric['better']): CompareMetric =>
+    ({ key, group, label, a: get(a) ?? null, b: get(b) ?? null, text, better });
+  const funnel = (id: string) => pick(style.funnel, id, (row) => row.accountId);
+  const streak = (id: string) => data.streaks ? pick(data.streaks.players, id, (row) => row.accountId) : undefined;
+  const role = (id: string) => pick(data.roles, id, (row) => row.accountId);
+  return [
+    make('combat', '综合实力', '战斗力指数', (id) => pick(style.combat, id, (row) => row.accountId)?.ratio, ratioFmt, 'high'),
+    make('longRun', '综合实力', '长期战绩份额', (id) => pick(data.longRun.entries, id, (row) => row.accountId)?.composite.ratio, ratioFmt, 'high'),
+    make('lobby', '综合实力', '全场分位', (id) => pick(data.lobby.entries, id, (row) => row.accountId)?.composite.mean, (value) => `${(value * 100).toFixed(0)}`, 'high'),
+    make('dpm', '输出', '每分钟伤害', (id) => funnel(id)?.damagePerMinute, oneFmt, 'high'),
+    make('hit', '输出', '命中率', (id) => funnel(id)?.hitRate, (value) => `${(value * 100).toFixed(1)}%`, 'high'),
+    make('dps', '输出', '每发伤害', (id) => funnel(id)?.damagePerShot, oneFmt, 'high'),
+    make('knock', '输出', '交战击倒率', (id) => funnel(id)?.knockRate, pctFmt, 'high'),
+    make('conv', '输出', '击倒转化', (id) => funnel(id)?.conversion, pctFmt, 'high'),
+    make('multi', '连杀与灭队', '每 10 场连杀', (id) => streak(id)?.multiPerTen, oneFmt, 'high'),
+    make('chain', '连杀与灭队', '连杀占比', (id) => streak(id)?.chainedShare?.rate, pctFmt, 'high'),
+    make('longest', '连杀与灭队', '最长连杀', (id) => streak(id)?.longest, intFmt, 'high'),
+    make('wipe', '连杀与灭队', '每 10 场灭队放倒', (id) => { const row = streak(id); return row && row.matches ? (row.wipeTakedowns / row.matches) * 10 : null; }, oneFmt, 'high'),
+    make('solo', '连杀与灭队', '单人灭队', (id) => streak(id)?.soloWipes, intFmt, 'high'),
+    make('firstKnock', '交战角色', '首倒占比', (id) => role(id)?.firstKnockShare, pctFmt, 'high'),
+    make('firstDowned', '交战角色', '先被打倒', (id) => role(id)?.firstDownedShare, pctFmt, 'low'),
+    make('revive', '交战角色', '救援占比', (id) => role(id)?.reviveShare, pctFmt, 'high'),
+    make('risk', '交战角色', '每次交战被击倒', (id) => axis(id, 'risk'), (value) => value.toFixed(2), 'low'),
+    make('range', '打法（无优劣）', '交战距离', (id) => axis(id, 'range'), (value) => `${Math.round(value)}m`, null),
+    make('initiative', '打法（无优劣）', '先手比例', (id) => axis(id, 'initiative'), pctFmt, null),
+    make('tempo', '打法（无优劣）', '参战频率', (id) => axis(id, 'tempo'), (value) => `${value.toFixed(2)}/分`, null),
+    make('supplies', '打法（无优劣）', '补给使用', (id) => axis(id, 'supplies'), (value) => `${value.toFixed(2)}/分`, null),
+    make('isolation', '打法（无优劣）', '脱队程度', (id) => axis(id, 'isolation'), pctFmt, null),
+  ];
+}
+
+function winnerOf(metric: CompareMetric): 'a' | 'b' | null {
+  if (metric.better === null || metric.a === null || metric.b === null) return null;
+  const top = Math.max(Math.abs(metric.a), Math.abs(metric.b));
+  if (top === 0 || Math.abs(metric.a - metric.b) / top < 0.03) return null;
+  return (metric.a > metric.b) === (metric.better === 'high') ? 'a' : 'b';
+}
+
+function RadarCompare({ series }: { series: Array<{ name: string; axes: StyleAxisReading[]; tone: 'a' | 'b' }> }) {
+  const size = 240;
+  const center = size / 2;
+  const radius = 82;
+  const keys = RADAR_KEYS.filter((key) => series.every((item) => item.axes.some((axis) => axis.key === key)));
+  const angle = (index: number) => -Math.PI / 2 + (index / keys.length) * Math.PI * 2;
+  const scale = (ratio: number | null) => Math.max(0, Math.min(1, 0.5 + 0.5 * Math.log2(ratio ?? 1) / RADAR_LOG_SPAN));
+  const at = (index: number, fraction: number) => [center + Math.cos(angle(index)) * radius * fraction, center + Math.sin(angle(index)) * radius * fraction] as const;
+  const labels = series[0]?.axes ?? [];
+  return (
+    <svg viewBox={`-60 -8 ${size + 120} ${size + 16}`} className="av-radar compare" role="img" aria-label="两人打法雷达对比">
+      {[0.25, 0.5, 0.75, 1].map((ring) => <polygon key={ring} points={keys.map((_, index) => at(index, ring).join(',')).join(' ')} className={ring === 0.5 ? 'ring avg' : 'ring'} />)}
+      {keys.map((_, index) => { const [x, y] = at(index, 1); return <line key={index} x1={center} y1={center} x2={x} y2={y} className="spoke" />; })}
+      {series.map((item) => <polygon key={item.name} className={`shape ${item.tone}`} points={keys.map((key, index) => at(index, scale(item.axes.find((axis) => axis.key === key)?.ratio ?? null)).join(',')).join(' ')}><title>{item.name}</title></polygon>)}
+      {series.map((item) => keys.map((key, index) => { const [x, y] = at(index, scale(item.axes.find((axis) => axis.key === key)?.ratio ?? null)); return <circle key={`${item.name}-${key}`} cx={x} cy={y} r={2.6} className={`dot ${item.tone}`} />; }))}
+      {keys.map((key, index) => { const [x, y] = at(index, 1.17); return <text key={key} x={x} y={y} textAnchor={x < center - 6 ? 'end' : x > center + 6 ? 'start' : 'middle'} dominantBaseline="middle" className="label">{labels.find((axis) => axis.key === key)?.label ?? key}</text>; })}
+    </svg>
+  );
+}
+
+export function CompareView({ data, loading, error, onReload }: { data: TelemetryAnalytics | null; loading: boolean; error: string; onReload: () => void }) {
+  const [picked, setPicked] = useState<{ a: string; b: string }>({ a: '', b: '' });
+  if (loading && !data) return <div className="av-empty"><div className="av-spinner" />正在读取归档遥测…首次约需一分钟，之后会缓存。</div>;
+  if (error && !data) return <div className="av-empty">{error}<button type="button" className="av-link" onClick={onReload}>重试</button></div>;
+  if (!data || data.style.players.length < 2) return <div className="av-empty">当前范围少于两名有遥测数据的队员，无法对比。</div>;
+  const ids = data.style.players.map((player) => player.accountId);
+  const ranked = data.style.combat.map((entry) => entry.accountId).filter((id) => ids.includes(id));
+  const a = ids.includes(picked.a) ? picked.a : ranked[0] ?? ids[0]!;
+  const b = ids.includes(picked.b) && picked.b !== a ? picked.b : (ranked.find((id) => id !== a) ?? ids.find((id) => id !== a)!);
+  const playerA = data.style.players.find((player) => player.accountId === a)!;
+  const playerB = data.style.players.find((player) => player.accountId === b)!;
+  const metrics = buildCompareMetrics(data, a, b);
+  const winners = metrics.map(winnerOf);
+  const winsA = winners.filter((winner) => winner === 'a').length;
+  const winsB = winners.filter((winner) => winner === 'b').length;
+  const groups = [...new Set(metrics.map((metric) => metric.group))];
+  const choose = (slot: 'a' | 'b', id: string) => setPicked((current) => {
+    const next = { a, b, [slot]: id };
+    if (next.a === next.b) next[slot === 'a' ? 'b' : 'a'] = slot === 'a' ? b === id ? a : b : a === id ? b : a;
+    return next;
+  });
+  return (
+    <div className="av-stack">
+      <section className="av-panel av-versus">
+        <div className="av-versus-side a">
+          <div className="av-picker">{data.style.players.map((player) => <button type="button" key={player.accountId} className={player.accountId === a ? 'active' : ''} onClick={() => choose('a', player.accountId)}>{player.name}</button>)}</div>
+          <h2>{playerA.name}</h2>
+          <span className="av-chips">{playerA.archetypes.slice(0, 2).map((entry) => <span className="av-chip" key={entry.id}>{archetypeLabel(entry)}</span>)}</span>
+        </div>
+        <div className="av-versus-score"><b className="a">{winsA}</b><span>:</span><b className="b">{winsB}</b><small>有优劣的指标里领先的项数（差距小于 3% 算平）</small></div>
+        <div className="av-versus-side b">
+          <div className="av-picker">{data.style.players.map((player) => <button type="button" key={player.accountId} className={player.accountId === b ? 'active' : ''} onClick={() => choose('b', player.accountId)}>{player.name}</button>)}</div>
+          <h2>{playerB.name}</h2>
+          <span className="av-chips">{playerB.archetypes.slice(0, 2).map((entry) => <span className="av-chip" key={entry.id}>{archetypeLabel(entry)}</span>)}</span>
+        </div>
+      </section>
+      <div className="av-compare-grid">
+        <Panel title="打法雷达" hint="相对全队其他人的比值；虚线圈 = 持平">
+          <RadarCompare series={[{ name: playerA.name, axes: playerA.axes, tone: 'a' }, { name: playerB.name, axes: playerB.axes, tone: 'b' }]} />
+          <div className="av-legend"><span className="a">{playerA.name}</span><span className="b">{playerB.name}</span></div>
+        </Panel>
+        <Panel title="逐项对比" hint="高亮 = 这一项更好的一方">
+          {groups.map((group) => <div className="av-fly-group" key={group}>
+            <h4>{group}</h4>
+            {metrics.filter((metric) => metric.group === group).map((metric) => {
+              const winner = winnerOf(metric);
+              const top = Math.max(Math.abs(metric.a ?? 0), Math.abs(metric.b ?? 0)) || 1;
+              return <div className="av-fly" key={metric.key}>
+                <span className={`v a ${winner === 'a' ? 'win' : ''}`}>{metric.a === null ? '—' : metric.text(metric.a)}</span>
+                <span className="bar a"><i className={winner === 'a' ? 'win' : ''} style={{ width: `${(Math.abs(metric.a ?? 0) / top) * 100}%` }} /></span>
+                <b>{metric.label}{metric.better === 'low' ? <small>越低越好</small> : null}</b>
+                <span className="bar b"><i className={winner === 'b' ? 'win' : ''} style={{ width: `${(Math.abs(metric.b ?? 0) / top) * 100}%` }} /></span>
+                <span className={`v b ${winner === 'b' ? 'win' : ''}`}>{metric.b === null ? '—' : metric.text(metric.b)}</span>
+              </div>;
+            })}
+          </div>)}
+        </Panel>
+      </div>
+      <Notes>战斗力指数、打法维度和角色都基于 {data.style.matches} 场有归档遥测的排位赛；长期战绩份额基于 {data.longRun.matches} 场战绩；全场分位基于 {data.lobby.matches} 场。两人的数值都是各自全部场次的汇总，不要求同场。领先项数只是计数，不代表统计上显著；统计判定见「打法风格」页的稳定 / 倾向标记。</Notes>
     </div>
   );
 }

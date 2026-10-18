@@ -29,9 +29,14 @@ import {
   analyzeCombatQuality,
   analyzeFieldTelemetry,
   analyzeLobby,
+  analyzeStreaks,
+  buildMatchRelative,
+  type RelativeValues,
   buildLongRunCombat,
   summarizeLobby,
+  summarizeStreaks,
   type LobbyMatchStats,
+  type StreakMatchStats,
   analyzeStyleTelemetry,
   buildSquadStyle,
   emptyFights,
@@ -293,6 +298,7 @@ interface MatchTelemetryAnalysis {
   fights: FightMatchStats;
   style: Record<string, PlayerStyleMatch>;
   lobby: Record<string, LobbyMatchStats>;
+  streaks: StreakMatchStats;
 }
 
 /**
@@ -329,6 +335,7 @@ function analyzeMatchTelemetry(snapshot: Snapshot, squad: ResearchSquad, match: 
         fights: fightStats,
         style,
         lobby: analyzeLobby(payload, new Set(trackedPlayerIds)),
+        streaks: analyzeStreaks(payload, new Set(trackedPlayerIds)),
       };
     } catch {
       return 'failed';
@@ -336,6 +343,73 @@ function analyzeMatchTelemetry(snapshot: Snapshot, squad: ResearchSquad, match: 
   })();
   snapshot.matchTelemetry.set(key, request);
   return request;
+}
+
+/** History used to place one match against each member's usual level: the most recent matches of the same mode. */
+const MATCH_RELATIVE_HISTORY_LIMIT = 150;
+
+function storeValues(match: NormalizedMatch, accountId: string): RelativeValues | null {
+  const player = match.players.find((item) => item.accountId === accountId);
+  if (!player) return null;
+  return { damage: player.damage, kills: player.kills, knocks: player.dbnos, assists: player.assists, survival: Math.max(0, player.survivalTime) / 60 };
+}
+
+function telemetryValues(analysis: MatchTelemetryAnalysis, accountId: string): RelativeValues {
+  const style = analysis.style[accountId];
+  const streak = analysis.streaks.players[accountId];
+  const sg = 5;
+  const shots = style ? style.shots - (style.classShots[sg] ?? 0) : 0;
+  const hits = style ? style.hits - (style.classHits[sg] ?? 0) : 0;
+  return {
+    dpm: style && style.minutes >= 1 ? (style.gunDamage + style.explosiveDamage) / style.minutes : null,
+    hitRate: shots >= 30 ? hits / shots : null,
+    takedowns: streak?.takedowns ?? null,
+    longestStreak: streak?.longest ?? null,
+    wipeTakedowns: streak?.wipeTakedowns ?? null,
+    timesDowned: analysis.fights.roles[accountId]?.timesDowned ?? null,
+  };
+}
+
+async function computeMatchRelative(snapshot: Snapshot, squad: ResearchSquad, match: NormalizedMatch) {
+  const members = (squad.memberIds.length ? match.players.filter((player) => squad.memberIds.includes(player.accountId)) : match.players.slice(0, 4))
+    .map((player) => ({ accountId: player.accountId, name: player.displayName || player.playerName }));
+  const group = modeGroupOf(match.gameMode);
+  const history = snapshot.matches
+    .filter((other) => other.matchId !== match.matchId && inMode(other, group) && other.players.some((player) => members.some((member) => member.accountId === player.accountId)))
+    .sort((left, right) => right.timestamp - left.timestamp)
+    .slice(0, MATCH_RELATIVE_HISTORY_LIMIT);
+  const archived = await archivedIds(snapshot);
+  const telemetrySquad: ResearchSquad = squad.memberIds.length ? squad : { ...squad, memberIds: members.map((member) => member.accountId) };
+  const withTelemetry = [match, ...history].filter((item) => archived.has(item.matchId));
+  const analyses = new Map<string, MatchTelemetryAnalysis>();
+  let nextIndex = 0;
+  await Promise.all(Array.from({ length: Math.min(3, withTelemetry.length) }, async () => {
+    while (nextIndex < withTelemetry.length) {
+      const item = withTelemetry[nextIndex++]!;
+      const result = await analyzeMatchTelemetry(snapshot, telemetrySquad, item);
+      if (typeof result !== 'string') analyses.set(item.matchId, result);
+    }
+  }));
+  const valuesFor = (item: NormalizedMatch, accountId: string): RelativeValues | null => {
+    const base = storeValues(item, accountId);
+    if (!base) return null;
+    const analysis = analyses.get(item.matchId);
+    return analysis ? { ...base, ...telemetryValues(analysis, accountId) } : base;
+  };
+  const squadPlacement = (item: NormalizedMatch) => item.players.find((player) => members.some((member) => member.accountId === player.accountId) && player.rank !== null && player.rank > 0)?.rank ?? null;
+  return {
+    matchId: match.matchId,
+    telemetry: analyses.has(match.matchId),
+    historyMatches: history.length,
+    ...buildMatchRelative({
+      players: members.map((member) => ({
+        ...member,
+        current: valuesFor(match, member.accountId) ?? {},
+        history: history.map((item) => valuesFor(item, member.accountId)).filter((values): values is RelativeValues => values !== null),
+      })),
+      placement: { current: squadPlacement(match), history: history.map(squadPlacement).filter((rank): rank is number => rank !== null) },
+    }),
+  };
 }
 
 interface TelemetryAnalyticsQuery {
@@ -389,6 +463,7 @@ async function computeTelemetryAnalytics(snapshot: Snapshot, query: TelemetryAna
   const zone = summarizeZone(analyzed.map((item) => item.result.field));
   const style = buildSquadStyle({ matches: analyzed.map((item) => ({ matchId: item.match.matchId, players: item.result.style })), names });
   const lobby = summarizeLobby(analyzed.map((item) => item.result.lobby), names);
+  const streaks = summarizeStreaks(analyzed.map((item) => item.result.streaks), names);
   // The Match Store needs no telemetry, so the long-run comparison uses every match in scope, not only archived ones.
   const longRun = buildLongRunCombat({
     matches: snapshot.matches.filter((match) => inSquad(match, squad) && inMode(match, mode)
@@ -418,6 +493,7 @@ async function computeTelemetryAnalytics(snapshot: Snapshot, query: TelemetryAna
     zone,
     style,
     lobby,
+    streaks,
     longRun,
     highlights: rankInsights([...buildCombatInsights({ combat, deaths, landing }), ...buildFieldInsights({ fights, distance, zone, landing, roles })], FIELD_INSIGHT_MAX),
   };
@@ -1396,6 +1472,16 @@ async function handleApi(request: IncomingMessage, response: ServerResponse, sna
     } catch {
       send(response, 200, { matchId, status: 'unavailable', reason: 'telemetry_fetch_or_parse_failed' });
     }
+    return;
+  }
+  const matchRelative = request.method === 'GET' ? url.pathname.match(/^\/api\/matches\/([^/]+)\/relative$/u) : null;
+  if (matchRelative) {
+    let matchId: string;
+    try { matchId = decodeURIComponent(matchRelative[1] ?? ''); }
+    catch { send(response, 400, { error: 'invalid_match_id' }); return; }
+    const match = snapshot.byId.get(matchId);
+    if (!match) { send(response, 404, { error: 'match_not_found' }); return; }
+    send(response, 200, await computeMatchRelative(snapshot, selectSquad(snapshot, url.searchParams.get('squadId')), match));
     return;
   }
   const matchDetail = request.method === 'GET' ? url.pathname.match(/^\/api\/matches\/([^/]+)$/u) : null;

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
-import { FieldView, OverviewView, StyleView, type PerformanceAnalytics, type TelemetryAnalytics } from './analytics-views.js';
+import { CompareView, FieldView, MatchRelativePanel, Notes, OverviewView, StyleView, type MatchRelativeData, type PerformanceAnalytics, type TelemetryAnalytics } from './analytics-views.js';
 
 interface SquadOption {
   id: string;
@@ -455,8 +455,8 @@ function ResultBlock({ result, onEvidence }: { result: ResearchResponse; onEvide
   );
 }
 
-type WorkspaceTab = 'overview' | 'field' | 'style' | 'match' | 'chat' | 'lab';
-const WORKSPACE_TABS: readonly WorkspaceTab[] = ['overview', 'field', 'style', 'match', 'chat', 'lab'];
+type WorkspaceTab = 'overview' | 'field' | 'style' | 'compare' | 'match' | 'chat' | 'lab';
+const WORKSPACE_TABS: readonly WorkspaceTab[] = ['overview', 'field', 'style', 'compare', 'match', 'chat', 'lab'];
 
 function initialTab(): WorkspaceTab {
   const requested = new URLSearchParams(window.location.search).get('tab');
@@ -498,6 +498,8 @@ export function App() {
   const [activeResearch, setActiveResearch] = useState<ResearchResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [detailLoading, setDetailLoading] = useState(false);
+  const [relative, setRelative] = useState<MatchRelativeData | null>(null);
+  const [relativeLoading, setRelativeLoading] = useState(false);
   const [error, setError] = useState('');
   const [evaluationRunId, setEvaluationRunId] = useState('');
   const [evaluationRuns, setEvaluationRuns] = useState<EvaluationRunSummary[]>([]);
@@ -574,6 +576,18 @@ export function App() {
       .then(setDetail)
       .catch((reason: unknown) => { if (!(reason instanceof DOMException && reason.name === 'AbortError')) setDetail(null); })
       .finally(() => setDetailLoading(false));
+    return () => controller.abort();
+  }, [selectedMatchId, squadId]);
+
+  useEffect(() => {
+    setRelative(null);
+    if (!selectedMatchId || !squadId) return;
+    const controller = new AbortController();
+    setRelativeLoading(true);
+    void json<MatchRelativeData>(`/api/matches/${encodeURIComponent(selectedMatchId)}/relative?squadId=${encodeURIComponent(squadId)}`, { signal: controller.signal })
+      .then(setRelative)
+      .catch(() => undefined)
+      .finally(() => { if (!controller.signal.aborted) setRelativeLoading(false); });
     return () => controller.abort();
   }, [selectedMatchId, squadId]);
 
@@ -668,7 +682,7 @@ export function App() {
   }
 
   useEffect(() => {
-    if ((tab === 'field' || tab === 'style') && !telemetryData && !telemetryLoading && !telemetryError && squadId) void loadTelemetryAnalytics();
+    if ((tab === 'field' || tab === 'style' || tab === 'compare') && !telemetryData && !telemetryLoading && !telemetryError && squadId) void loadTelemetryAnalytics();
   }, [tab, telemetryData, telemetryLoading, telemetryError, squadId]);
 
   async function loadFrequentPairs() {
@@ -814,16 +828,18 @@ export function App() {
 
         <section className="workspace">
           <nav className="workspace-tabs" aria-label="分析视图">
-            {([['overview', '总览', '战绩与队员状态'], ['field', '落点与交战', '遥测分析'], ['style', '打法风格', '每个人的特点'], ['match', '单局复盘', detail ? '已选 1 场' : '先选比赛'], ['chat', '研究对话', 'AI 助手'], ['lab', '评估实验', '开发']] as const).map(([key, label, hint]) => <button type="button" key={key} className={tab === key ? 'active' : ''} onClick={() => { setTab(key); window.history.replaceState(null, '', key === 'overview' ? window.location.pathname : `?tab=${key}`); }}><b>{label}</b><small>{hint}</small></button>)}
+            {([['overview', '总览', '战绩与队员状态'], ['field', '落点与交战', '遥测分析'], ['style', '打法风格', '每个人的特点'], ['compare', '队员对比', '两人正面比较'], ['match', '单局复盘', detail ? '已选 1 场' : '先选比赛'], ['chat', '研究对话', 'AI 助手'], ['lab', '评估实验', '开发']] as const).map(([key, label, hint]) => <button type="button" key={key} className={tab === key ? 'active' : ''} onClick={() => { setTab(key); window.history.replaceState(null, '', key === 'overview' ? window.location.pathname : `?tab=${key}`); }}><b>{label}</b><small>{hint}</small></button>)}
           </nav>
           {error && <div className="inline-error workspace-error">{error}</div>}
           {tab === 'overview' && <div className="workspace-body"><OverviewView data={analytics} loading={analyticsLoading} /></div>}
           {tab === 'field' && <div className="workspace-body"><FieldView data={telemetryData} loading={telemetryLoading} error={telemetryError} onReload={() => void loadTelemetryAnalytics()} /></div>}
           {tab === 'style' && <div className="workspace-body"><StyleView data={telemetryData} loading={telemetryLoading} error={telemetryError} onReload={() => void loadTelemetryAnalytics()} /></div>}
+          {tab === 'compare' && <div className="workspace-body"><CompareView data={telemetryData} loading={telemetryLoading} error={telemetryError} onReload={() => void loadTelemetryAnalytics()} /></div>}
           {tab === 'match' && <div className="workspace-body match-tab"><div className="flow-columns">
             {!detail && !detailLoading && <div className="av-empty">从左侧选择一场比赛，查看单局分析、交战时间线和证据链。</div>}
           {detailLoading && <div className="skeleton-card"><span /><span /><span /></div>}
           {detail && <>
+            <div className="match-relative-slot"><MatchRelativePanel data={relative?.matchId === selectedMatchId ? relative : null} loading={relativeLoading} /></div>
             <div className="selected-match-card"><div className="selected-match-image"><span>{(detail.match.mapLabel ?? detail.match.mapName).toUpperCase()}</span><i>#{detail.match.placement ?? '—'}</i><div className="image-lines" /></div><div className="selected-match-meta"><div><b>{dateLabel(detail.match.createdAt)}</b><span>{detail.match.gameMode}</span></div><span className={`cache-tag ${detail.telemetry.status === 'HIT' ? 'cached' : 'missing'}`}>{detail.telemetry.status === 'HIT' ? 'V6 CACHED' : 'BASE FACTS'}</span></div>
               <div className="match-metric-grid"><Metric label="击杀" value={number(detail.match.kills)} /><Metric label="伤害" value={number(detail.match.damage)} /><Metric label="队员" value={String(detail.analysis.players.length)} /></div>
               <button className="battle-load-button" onClick={() => void loadBattleReconstruction()} disabled={battleLoading}>
@@ -835,9 +851,10 @@ export function App() {
             {detail.analysis.good.length > 0 && <div className="analysis-list"><div className="card-label">有效执行 <span className="green">+{detail.analysis.good.length}</span></div>{detail.analysis.good.slice(0, 3).map((item, index) => <p key={index}><i>↗</i>{item}</p>)}</div>}
             {detail.analysis.improvements.length > 0 && <div className="analysis-list"><div className="card-label">可复盘点 <span className="amber">{detail.analysis.improvements.length}</span></div>{detail.analysis.improvements.slice(0, 3).map((item, index) => <p key={index}><i>·</i>{item}</p>)}</div>}
           </>}
-          {detail && <button className="tactical-pairs-button" onClick={() => void loadFrequentPairs()} disabled={frequentPairsLoading}>
+          {detail && <details className="tech-details"><summary>研究工具 · 常搭对、规则候选与证据链</summary>
+          <button className="tactical-pairs-button" onClick={() => void loadFrequentPairs()} disabled={frequentPairsLoading}>
             {frequentPairsLoading ? '正在分析当前范围比赛…' : frequentPairs ? `重跑跨局常搭对分析 · ${frequentPairs.analyzedMatches} 场` : '分析跨局常搭对候选 · 最多 30 场'} <span>↗</span>
-          </button>}
+          </button>
           {frequentPairsError && <div className="inline-error">{frequentPairsError}</div>}
           {frequentPairs && <section className="tactical-analysis tactical-pair-analysis">
             <div className="evidence-heading"><div><span className="eyebrow">SOCIAL · MATCH HOLDOUT</span><b>重复共同交战候选</b></div><span>{frequentPairs.analyzedMatches}/{frequentPairs.requestedMatches}</span></div>
@@ -851,13 +868,14 @@ export function App() {
             <div className="tactical-integrity">schema {battleData.tactical.schemaVersion} · 交战 {battleData.tactical.diagnostics.episodeCount} · 位置样本 {battleData.tactical.diagnostics.positionEventCount} · 队伍字段不完整 {battleData.tactical.diagnostics.incompleteTeamEventCount} · 未识别来源 {battleData.tactical.diagnostics.unmatchedBattleSourceCount}</div>
             {battleData.tactical.candidates.map((candidate) => <TacticalCandidateCard key={candidate.id} candidate={candidate} labels={battleData.labels?.tacticalPlayers ?? {}} />)}
           </section>}
-          {detail && <div className="evidence-card detail-evidence"><div className="evidence-heading"><div><span className="eyebrow">SOURCE TRACE</span><b>单局证据链</b></div><span>{detail.evidence.length}</span></div><div className="evidence-list">{detail.evidence.slice(0, 8).map((item) => <div className="evidence-row static" key={item.id}><div className={`evidence-ref ${item.source === 'telemetry' ? 'telemetry-ref' : ''}`}>{item.id}</div><div><span>{item.source === 'telemetry' ? 'Telemetry 特征' : 'Match Store'} · {item.kind}</span><small>{item.description}</small></div></div>)}</div></div>}
+          <div className="evidence-card detail-evidence"><div className="evidence-heading"><div><span className="eyebrow">SOURCE TRACE</span><b>单局证据链</b></div><span>{detail.evidence.length}</span></div><div className="evidence-list">{detail.evidence.slice(0, 8).map((item) => <div className="evidence-row static" key={item.id}><div className={`evidence-ref ${item.source === 'telemetry' ? 'telemetry-ref' : ''}`}>{item.id}</div><div><span>{item.source === 'telemetry' ? 'Telemetry 特征' : 'Match Store'} · {item.kind}</span><small>{item.description}</small></div></div>)}</div></div>
+          </details>}
           {battleError && <div className="inline-error">{battleError}</div>}
           {battleData?.status === 'unavailable' && <div className="battle-empty"><b>原始遥测不可用</b><span>{battleData.reason === 'no_telemetry_asset_in_snapshot' ? '只读快照没有保存该比赛的遥测资产引用。' : '读取或解析遥测失败；快照未被修改。'}</span></div>}
           {battleData?.status === 'no_contact_events' && <div className="battle-empty"><b>未重建出交战片段</b><span>未发现满足启发式的对敌伤害、击倒或淘汰事件。此结果不代表没有发生交战。</span><small>{battleData.diagnostics?.sameTeamContactEventCount ?? 0} 条同队事件被排除 · {battleData.diagnostics?.untimedContactEventCount ?? 0} 条接触事件缺少时间</small></div>}
           {battleData?.status === 'available' && <section className="battle-reconstruction">
             <div className="evidence-heading"><div><span className="eyebrow">BATTLE RECONSTRUCTION</span><b>交战片段</b></div><span>v{battleData.parserVersion} · {battleData.episodes?.length ?? 0}</span></div>
-            <div className="battle-integrity">接触 {battleData.diagnostics?.contactEventCount ?? 0} · 未归属 {battleData.diagnostics?.unassignedContactEventCount ?? 0} · 同队排除 {battleData.diagnostics?.sameTeamContactEventCount ?? 0} · 无效伤害 {battleData.diagnostics?.ineffectiveContactEventCount ?? 0}<br />赛前排除 {battleData.diagnostics?.preMatchContactEventCount ?? 0} · 未知阶段 {battleData.diagnostics?.unknownPhaseContactEventCount ?? 0} · 无时间 {battleData.diagnostics?.untimedContactEventCount ?? 0}<br />重复来源 {battleData.diagnostics?.duplicateSourceEventCount ?? 0} · 重复分配 {battleData.diagnostics?.duplicateTimelineAssignmentCount ?? 0} · 队伍未知 {battleData.diagnostics?.unknownTeamContactEventCount ?? 0}<br />状态冲突 {battleData.diagnostics?.conflictingStateTransitionCount ?? 0} · 上下文歧义 {battleData.diagnostics?.ambiguousContextEventCount ?? 0} · 未决 knock 链 {battleData.diagnostics?.unresolvedKnockChainCount ?? 0}<br />圈变化 {battleData.circleTransitions?.length ?? 0} · 未知阶段圈样本 {battleData.diagnostics?.unknownPhaseCircleSampleCount ?? 0} · 共享圈采样 {battleData.diagnostics?.sharedCircleSampleContextCount ?? 0}</div>
+            <Notes label="重建诊断计数"><div className="battle-integrity">接触 {battleData.diagnostics?.contactEventCount ?? 0} · 未归属 {battleData.diagnostics?.unassignedContactEventCount ?? 0} · 同队排除 {battleData.diagnostics?.sameTeamContactEventCount ?? 0} · 无效伤害 {battleData.diagnostics?.ineffectiveContactEventCount ?? 0}<br />赛前排除 {battleData.diagnostics?.preMatchContactEventCount ?? 0} · 未知阶段 {battleData.diagnostics?.unknownPhaseContactEventCount ?? 0} · 无时间 {battleData.diagnostics?.untimedContactEventCount ?? 0}<br />重复来源 {battleData.diagnostics?.duplicateSourceEventCount ?? 0} · 重复分配 {battleData.diagnostics?.duplicateTimelineAssignmentCount ?? 0} · 队伍未知 {battleData.diagnostics?.unknownTeamContactEventCount ?? 0}<br />状态冲突 {battleData.diagnostics?.conflictingStateTransitionCount ?? 0} · 上下文歧义 {battleData.diagnostics?.ambiguousContextEventCount ?? 0} · 未决 knock 链 {battleData.diagnostics?.unresolvedKnockChainCount ?? 0}<br />圈变化 {battleData.circleTransitions?.length ?? 0} · 未知阶段圈样本 {battleData.diagnostics?.unknownPhaseCircleSampleCount ?? 0} · 共享圈采样 {battleData.diagnostics?.sharedCircleSampleContextCount ?? 0}</div></Notes>
             {(battleData.battles?.length ?? 0) > 0 && <div className="battle-v2">
               <div className="card-label">团战重建 V2 <span>{battleData.battles?.length ?? 0} 个 battle group</span></div>
               <div className="battle-group-list">{battleData.battles?.map((battle, index) => <button type="button" className={`battle-group-row ${selectedBattle?.id === battle.id ? 'active' : ''}`} key={battle.id} onClick={() => setSelectedBattleId(battle.id)}>
