@@ -830,7 +830,6 @@ function StyleMatrix({ style }: { style: SquadStyle }) {
 }
 
 const PLAYER_TONES = ['p0', 'p1', 'p2', 'p3'] as const;
-const CLASS_TONES: Record<string, string> = { AR: '#69d9c3', DMR: '#b8f277', SR: '#8fb8ff', SMG: '#eeb96a', LMG: '#e58c8c', SG: '#c79bf2', Pistol: '#9bb0a8', other: '#4b5f5c' };
 
 function tierWord(tier: StyleTier, confidence: number | null): string {
   return tier === 'stable' ? '稳定' : tier === 'lean' ? `倾向${confidence === null ? '' : ` ${(confidence * 100).toFixed(0)}%`}` : '差距不显著';
@@ -988,32 +987,6 @@ function CombatPanel({ style, data }: { style: SquadStyle; data: TelemetryAnalyt
   );
 }
 
-/** Weapon-class shares as a donut. */
-function ClassDonut({ shares }: { shares: Array<{ weaponClass: string; share: number }> }) {
-  const radius = 30;
-  const circumference = 2 * Math.PI * radius;
-  const total = shares.reduce((sum, entry) => sum + entry.share, 0);
-  const rest = Math.max(0, 1 - total);
-  const segments = [...shares, ...(rest > 0.01 ? [{ weaponClass: 'other', share: rest }] : [])];
-  let offset = 0;
-  return (
-    <div className="av-donut">
-      <svg viewBox="0 0 80 80" role="img" aria-label="武器类型占比">
-        <circle cx="40" cy="40" r={radius} className="track" />
-        {segments.map((entry) => {
-          const length = entry.share * circumference;
-          const node = <circle key={entry.weaponClass} cx="40" cy="40" r={radius} className="seg" stroke={CLASS_TONES[entry.weaponClass] ?? CLASS_TONES.other} strokeDasharray={`${Math.max(0, length - 1.5)} ${circumference}`} strokeDashoffset={-offset} transform="rotate(-90 40 40)"><title>{CLASS_LABEL[entry.weaponClass] ?? entry.weaponClass} {pct(entry.share)}</title></circle>;
-          offset += length;
-          return node;
-        })}
-        <text x="40" y="38" className="big">{CLASS_LABEL[segments[0]?.weaponClass ?? ''] ?? '—'}</text>
-        <text x="40" y="50" className="small">{segments[0] ? pct(segments[0].share) : ''}</text>
-      </svg>
-      <ul>{segments.map((entry) => <li key={entry.weaponClass}><i style={{ background: CLASS_TONES[entry.weaponClass] ?? CLASS_TONES.other }} />{CLASS_LABEL[entry.weaponClass] ?? (entry.weaponClass === 'other' ? '其他' : entry.weaponClass)}<b>{pct(entry.share)}</b></li>)}</ul>
-    </div>
-  );
-}
-
 function PlayerCard({ player, toneIndex }: { player: SquadStyle['players'][number]; toneIndex: number }) {
   const maxWeapon = Math.max(0.01, ...player.weapons.map((weapon) => weapon.share));
   return (
@@ -1026,6 +999,7 @@ function PlayerCard({ player, toneIndex }: { player: SquadStyle['players'][numbe
       <div className="av-pcard-body">
         <div className="av-radar-wrap"><Radar axes={player.axes} /></div>
         <div className="av-pcard-side">
+          <div>
           <h4>最突出的特点</h4>
           {player.traits.length ? <ul className="av-trait-bars">{player.traits.slice(0, 5).map((trait) => <li key={trait.key}>
             <span className="text">{trait.text}</span>
@@ -1033,10 +1007,12 @@ function PlayerCard({ player, toneIndex }: { player: SquadStyle['players'][numbe
             <b className={trait.ratio >= 1 ? 'up' : 'down'}>×{trait.ratio.toFixed(2)}</b>
             <small className={`tier ${trait.tier}`}>{trait.tier === 'stable' ? '●' : '◐'}</small>
           </li>)}</ul> : <p className="av-note">与队友相比没有明显偏离的维度。</p>}
+          </div>
+          <div>
           <h4>武器偏好</h4>
           <div className="av-weapon-row">
-            <ClassDonut shares={player.classShares} />
             <ul className="av-weapon-bars">{player.weapons.map((weapon) => <li key={weapon.weapon}><span>{weapon.weapon}</span><i><u style={{ width: `${(weapon.share / maxWeapon) * 100}%` }} /></i><b>{pct(weapon.share)}</b></li>)}</ul>
+          </div>
           </div>
         </div>
       </div>

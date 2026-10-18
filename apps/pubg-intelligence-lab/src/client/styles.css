@@ -717,16 +717,6 @@ button.av-row:hover,.av-row.active{background:#142120}
 .av-div-bar i.up{background:var(--mint)}.av-div-bar i.down{background:var(--amber)}
 .av-div-bar i.lean{opacity:.55}
 .av-weapon-row{display:grid;grid-template-columns:auto minmax(0,1fr);gap:14px;align-items:center}
-.av-donut{display:flex;align-items:center;gap:10px}
-.av-donut svg{width:92px;height:92px;flex:none}
-.av-donut .track{fill:none;stroke:#152020;stroke-width:11}
-.av-donut .seg{fill:none;stroke-width:11}
-.av-donut .big{fill:var(--text);font:700 11px var(--display);text-anchor:middle}
-.av-donut .small{fill:var(--muted);font:9px var(--mono);text-anchor:middle}
-.av-donut ul{list-style:none;margin:0;padding:0;font-size:10.5px;color:#9bb0a8;display:flex;flex-direction:column;gap:2px}
-.av-donut li{display:flex;align-items:center;gap:5px;white-space:nowrap}
-.av-donut li i{width:8px;height:8px;border-radius:2px}
-.av-donut li b{margin-left:4px;color:#c6d4cf;font-weight:600}
 .av-weapon-bars{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:7px;font-size:12px}
 .av-weapon-bars li{display:grid;grid-template-columns:minmax(60px,auto) minmax(30px,1fr) 38px;gap:8px;align-items:center}
 .av-weapon-bars span{color:#c6d4cf;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -774,3 +764,29 @@ button.av-row:hover,.av-row.active{background:#142120}
 .av-matrix .cell.even small{color:#55675f}
 .av-matrix-toggle{margin-top:10px}
 .av-matrix .cell.up small,.av-matrix .cell.down small{color:#f1f7f5;opacity:.82}
+.av-pcard-body{grid-template-columns:minmax(260px,1fr) minmax(0,1fr);align-items:center}
+.av-pcard .av-radar-wrap{align-items:center;justify-content:center;align-self:center}
+.av-pcard .av-radar{width:100%;max-width:440px;margin:0 auto}
+.av-pcard .av-radar .label{font-size:11px}
+@media (max-width:760px){.av-pcard-body{grid-template-columns:minmax(0,1fr)}}
+.av-pcard-body{grid-template-columns:minmax(300px,1.15fr) minmax(0,1fr);align-items:stretch}
+.av-pcard .av-radar-wrap{display:flex;align-items:center;justify-content:center;align-self:stretch;height:100%}
+.av-pcard .av-radar{width:100%;max-width:520px;height:auto;margin:auto}
+.av-pcard .av-radar .label{font-size:11.5px}
+.av-pcard-body{grid-template-columns:minmax(0,1fr);gap:10px;align-items:start}
+.av-pcard .av-radar-wrap{height:auto;align-self:center;justify-content:center}
+.av-pcard .av-radar{width:100%;max-width:640px;height:auto;margin:0 auto}
+.av-pcard .av-radar .label{font-size:11px}
+.av-pcard-side{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(0,1fr);gap:20px;align-items:start}
+.av-pcard-side>div{min-width:0}
+@media (max-width:760px){.av-pcard-side{grid-template-columns:minmax(0,1fr)}}
+.av-pcard .av-radar{max-width:540px}
+.av-pcard .av-radar .label{font-size:9.5px}
+/* Player card: radar on the left half, vertically centred; traits and weapons stacked on the right. */
+.av-pcard-body{grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:18px;align-items:center}
+.av-pcard .av-radar-wrap{display:flex;align-items:center;justify-content:center;align-self:center;height:auto}
+.av-pcard .av-radar{width:100%;max-width:380px;height:auto;margin:0 auto}
+.av-pcard .av-radar .label{font-size:10px}
+.av-pcard-side{display:block}
+.av-pcard-side>div+div{margin-top:12px}
+@media (max-width:900px){.av-pcard-body{grid-template-columns:minmax(0,1fr)}}
