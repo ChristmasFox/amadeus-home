@@ -64,7 +64,9 @@ import {
   buildPlayerProfiles,
   buildProfileInsights,
   buildResearchReport,
+  analyzeRhythm,
   buildSquadAnalytics,
+  type RhythmMatch,
   buildWeaponEfficiency,
   classifyResearchQuestion,
   type EvaluationReviewLabel,
@@ -252,6 +254,14 @@ async function handleApi(request: IncomingMessage, response: ServerResponse, sna
       memberIds: squad.memberIds,
       facts: new Map(scoped.flatMap((match) => { const feature = snapshot.features.get(match.matchId); return feature ? [[match.matchId, feature.facts] as const] : []; })),
     });
+    // Sessions need an unbroken run of matches, so the rhythm analysis ignores the complete-telemetry switch.
+    const rhythmMatches: RhythmMatch[] = snapshot.matches.filter((match) => inSquad(match, squad) && inMode(match, mode)
+      && (scopeBounds.fromMs === undefined || match.timestamp >= scopeBounds.fromMs)
+      && (scopeBounds.toMs === undefined || match.timestamp < scopeBounds.toMs)).map((match) => {
+      const present = match.players.filter((player) => members.size === 0 || members.has(player.accountId));
+      const ranks = present.map((player) => player.rank).filter((rank): rank is number => rank !== null && rank > 0);
+      return { timestamp: match.timestamp, rank: ranks.length ? Math.min(...ranks) : null, damage: present.length ? present.reduce((sum, player) => sum + player.damage, 0) / present.length : 0 };
+    });
     send(response, 200, {
       scope: { squadLabel: squad.label, selectedMatches: scoped.length, telemetryMatches, archivedMatches: scoped.filter((match) => archived.has(match.matchId)).length, mode, completeOnly },
       squad: squadAnalytics,
@@ -261,6 +271,7 @@ async function handleApi(request: IncomingMessage, response: ServerResponse, sna
       profiles,
       highlights: rankInsights([...buildPerformanceInsights({ squad: squadAnalytics, maps, lineups, series }), ...buildProfileInsights(profiles)]),
       weapons: buildWeaponEfficiency(weaponSamples).slice(0, 12),
+      rhythm: analyzeRhythm({ matches: rhythmMatches }),
     });
     return;
   }

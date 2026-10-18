@@ -1,4 +1,5 @@
 import { Fragment, useMemo, useState, type ReactNode } from 'react';
+import { RhythmPanel, type RhythmData } from './rhythm-panel.js';
 import { Complement, HeadToHead, TrendAndSpread, WeaponCompare, styleSimilarity, type CompareSeries, type Contrast } from './compare-panels.js';
 
 export interface Rate { successes: number; trials: number; rate: number | null; low: number | null; high: number | null }
@@ -26,6 +27,7 @@ export interface PlayerProfiles {
 
 export interface PerformanceAnalytics {
   highlights: Insight[];
+  rhythm?: RhythmData;
   profiles: PlayerProfiles;
   scope: { squadLabel: string; selectedMatches: number; telemetryMatches: number; archivedMatches: number; mode: string; completeOnly: boolean };
   series: Array<{ matchId: string; timestamp: number; mapLabel: string; placement: number | null; damage: number; kills: number }>;
@@ -408,6 +410,8 @@ export function OverviewView({ data, loading }: { data: PerformanceAnalytics | n
       <HighlightsPanel items={data.highlights} />
 
       <TrendPanel series={data.series} />
+
+      {data.rhythm && <RhythmPanel data={data.rhythm} />}
 
       <Panel title="队员状态" hint="近 5 场对比此前基线（中位数 / MAD）">
         <div className="av-table players">
