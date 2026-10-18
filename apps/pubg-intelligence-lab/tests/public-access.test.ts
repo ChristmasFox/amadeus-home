@@ -9,7 +9,8 @@ import {
   isPublicHostname, isPublicRequest, loadPasswordVerifier, loadPublicAccess, login, logout, looksProxied, validSession, LOGIN_MAX_ATTEMPTS, PUBLIC_SESSION_COOKIE,
   type PublicAccess,
 } from '../src/server/public-access.js';
-import { handlePublic, type Snapshot } from '../src/server/server.js';
+import { handlePublic } from '../src/server/public-site.js';
+import type { Snapshot } from '../src/server/snapshot.js';
 
 function writeVerifier(directory: string, password: string, mode = 0o600): string {
   const salt = randomBytes(16);
@@ -67,7 +68,7 @@ test('the public scope shows only a login page until a session exists, then serv
   const directory = mkdtempSync(join(tmpdir(), 'pubg-public-'));
   const access = loadPublicAccess({ PUBG_INTELLIGENCE_PUBLIC_HOST: 'pubg.example.com', PUBG_INTELLIGENCE_PUBLIC_AUTH_FILE: writeVerifier(directory, 'secret-pass') }, directory)!;
   const snapshot = {} as Snapshot;
-  const server: Server = createServer((request, response) => { void handlePublic(request, response, snapshot, access); });
+  const server: Server = createServer((request, response) => { void handlePublic(request, response, snapshot, access, async (_request, apiResponse) => { apiResponse.writeHead(200, { 'content-type': 'application/json' }); apiResponse.end('{"api":true}'); }); });
   await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
   const port = (server.address() as { port: number }).port;
   const call = (method: string, path: string, headers: Record<string, string> = {}, body?: string) => new Promise<{ status: number; headers: Record<string, string | string[] | undefined>; body: string }>((resolve, reject) => {

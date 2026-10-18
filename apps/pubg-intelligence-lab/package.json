@@ -9,7 +9,8 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "tsx --test tests/**/*.test.ts",
     "ai:e2e": "tsx scripts/real-ai-e2e.ts",
-    "archive:e2e": "tsx scripts/verify-real-archive.ts"
+    "archive:e2e": "tsx scripts/verify-real-archive.ts",
+    "smoke:ui": "node scripts/smoke-ui.mjs"
   },
   "dependencies": {
     "@agent/pubg-domain": "workspace:*",
@@ -25,6 +26,7 @@
     "@types/react": "19.2.14",
     "@types/react-dom": "19.2.3",
     "@vitejs/plugin-react": "5.1.4",
+    "playwright-core": "1.62.1",
     "tsx": "4.23.13",
     "typescript": "5.9.2",
     "vite": "7.3.1"

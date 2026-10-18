@@ -20,3 +20,4 @@ export * from './lobby.js';
 export * from './streaks.js';
 export * from './match-relative.js';
 export * from './match-story.js';
+export * from './match-insight.js';

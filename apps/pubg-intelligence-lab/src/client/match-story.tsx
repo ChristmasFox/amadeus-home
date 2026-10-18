@@ -17,11 +17,19 @@ interface StoryFight {
   members: Array<{ member: string; damage: number; knocks: number; downed: number }>;
   enemies: FightEnemy[];
 }
+type DownCause = 'ambush_far' | 'ambush_close' | 'crossfire' | 'isolated' | 'lost_duel' | 'bluezone' | 'environment';
+interface StoryDown {
+  t: number; member: string; cause: DownCause; attackerTeam: string | null; weapon: string | null; meters: number | null; returnDamage: number; takenDamage: number;
+  teamsHitting: number; nearestTeammate: number | null; alone: boolean | null; teamsNearby: number | null; phase: number | null; outcome: 'revived' | 'died' | 'unknown'; afterSeconds: number | null;
+}
+interface TurningPoint { kind: 'first_loss' | 'collapse' | 'costly' | 'decisive' | 'final_fight'; t: number; fight: number | null; member: string | null; count: number }
+interface RotationEpoch { phase: number | null; start: number; end: number; radius: number; outsideAtStart: number; enteredAfter: number | null; shrinkAfter: number | null; margin: number | null; blueSeconds: number; blueDamage: number; distance: number; vehicleShare: number | null }
+interface MatchRotation { epochs: RotationEpoch[]; blueSeconds: number; blueDamage: number; distance: number; vehicleShare: number | null; landingToFight: number | null; lateEntries: number; circlesChecked: number }
 interface StoryPlayer { member: string; landing: { t: number; x: number; y: number } | null; lifeline: LifeSegment[]; route: RoutePoint[]; damagePerMinute: number[]; diedAt: number | null }
 interface Story {
   mapName: string | null; durationSeconds: number; startTeams: number | null; startPlayers: number | null;
   events: StoryEvent[]; fights: StoryFight[]; circle: CirclePoint[]; phaseStarts: Array<{ phase: number; t: number }>;
-  players: StoryPlayer[]; enemies: StoryEnemy[]; squadOutAt: number | null; teamsAtEnd: number | null;
+  players: StoryPlayer[]; enemies: StoryEnemy[]; downs: StoryDown[]; turningPoints: TurningPoint[]; rotation: MatchRotation; squadOutAt: number | null; teamsAtEnd: number | null;
 }
 interface StoryRow {
   accountId: string; name: string; damage: number; kills: number; knocks: number; assists: number; revives: number; survivalSeconds: number; rank: number | null;
@@ -29,7 +37,7 @@ interface StoryRow {
 }
 export interface MatchStoryData {
   matchId: string; available: boolean; reason: string | null; mapName: string | null; mapLabel: string; mapSizeKm: number | null; gameMode: string;
-  durationSeconds: number; createdAt: string | null; names: Record<string, string>; players: StoryRow[]; story: Story | null;
+  durationSeconds: number; createdAt: string | null; names: Record<string, string>; downCauses: Array<{ key: DownCause; label: string; advice: string }>; players: StoryRow[]; story: Story | null;
 }
 
 const TONES = ['p0', 'p1', 'p2', 'p3'] as const;
@@ -65,14 +73,17 @@ function fightSentence(fight: StoryFight, name: (id: string) => string): string 
   return `${opener}，与${against}交战 ${Math.max(1, fight.end - fight.start)} 秒：${parts.join('，')}${star}。`;
 }
 
-function downNarrative(event: StoryEvent, data: MatchStoryData, story: Story): string {
-  const cause = !event.byPlayer ? '被毒圈或环境击倒' : `被对手${event.weapon ? `用 ${event.weapon}` : ''}${event.meters !== null ? `在 ${event.meters} 米外` : ''}击倒`;
-  const later = story.events.filter((item) => item.t > event.t && (item.kind === 'death' || item.kind === 'revive') && (item.kind === 'death' ? item.member === event.member : item.other === event.member))[0];
-  if (!later) return `${cause}。`;
-  const gap = Math.round(later.t - event.t);
-  return later.kind === 'revive'
-    ? `${cause}，${gap} 秒后被 ${data.names[later.member] ?? '队友'} 救起。`
-    : `${cause}，${gap} 秒后被淘汰${later.byPlayer ? '' : '（环境）'}。`;
+
+function turningPointText(point: TurningPoint, data: MatchStoryData): { tone: 'good' | 'bad' | 'info'; text: string } {
+  const name = (id: string | null) => (id ? data.names[id] ?? '队员' : '队员');
+  const fight = point.fight !== null ? `第 ${point.fight} 场交战` : '';
+  switch (point.kind) {
+    case 'first_loss': return { tone: 'bad', text: `${clock(point.t)} ${name(point.member)} 被淘汰${fight ? `（${fight}）` : ''}——小队从此少一个人，是比赛的第一个无法挽回的损失。` };
+    case 'collapse': return { tone: 'bad', text: `从 ${clock(point.t)} 起连续 ${point.count} 场交战落了下风，之后再没能翻过来，直到全队被淘汰。` };
+    case 'final_fight': return { tone: 'bad', text: `${clock(point.t)} 的${fight}是最后一战：被打倒的人比打倒的多 ${Math.max(0, point.count)} 个，全队就此出局。` };
+    case 'costly': return { tone: 'bad', text: `代价最大的一场是${fight}（${clock(point.t)}）：被打倒的人比打倒的多 ${point.count} 个。` };
+    case 'decisive': return { tone: 'good', text: `决定性的一场是${fight}（${clock(point.t)}）：打倒的人比被打倒的多 ${point.count} 个，把局面扳了回来。` };
+  }
 }
 
 interface Highlight { tone: 'good' | 'bad' | 'info'; text: string }
@@ -94,6 +105,13 @@ function buildHighlights(data: MatchStoryData, story: Story): Highlight[] {
   if (bestFight && bestFight.enemyDowns >= 2) out.push({ tone: 'good', text: `最漂亮的一波是第 ${bestFight.index} 场（${clock(bestFight.start)}）：打倒 ${bestFight.enemyDowns} 人，${bestFight.ourDowns === 0 ? '自己无人倒地' : `自己倒 ${bestFight.ourDowns} 人`}。` });
   const knocks = story.events.filter((event) => event.kind === 'knock' && event.meters !== null).sort((left, right) => right.meters! - left.meters!)[0];
   if (knocks && knocks.meters! >= 150) out.push({ tone: 'good', text: `最远的击倒：${name(knocks.member)} 用 ${knocks.weapon ?? '武器'} 在 ${knocks.meters} 米外（${clock(knocks.t)}）。` });
+  if (story.downs.length >= 3) {
+    const counts = new Map<DownCause, number>();
+    for (const down of story.downs) counts.set(down.cause, (counts.get(down.cause) ?? 0) + 1);
+    const parts = [...counts.entries()].sort((left, right) => right[1] - left[1]).map(([cause, count]) => `${data.downCauses.find((item) => item.key === cause)?.label ?? cause} ${count}`);
+    out.push({ tone: 'info', text: `${story.downs.length} 次倒地的原因：${parts.join('、')}。` });
+  }
+  for (const point of story.turningPoints) out.push(turningPointText(point, data));
   if (story.squadOutAt !== null) {
     const end = story.circle.filter((point) => point.t <= story.squadOutAt!).at(-1);
     out.push({ tone: 'bad', text: `全队在 ${clock(story.squadOutAt)} 被淘汰${end?.phase ? `，第 ${end.phase} 圈` : ''}${story.teamsAtEnd !== null ? `，场上还剩 ${story.teamsAtEnd} 队` : ''}${rank !== null ? `，最终第 ${rank} 名` : ''}。` });
@@ -165,6 +183,10 @@ function Timeline({ data, story, time, onTime, selectedFight, onFight }: { data:
         </g>;
       })}
       {ticks.map((tick) => <g key={tick}><line x1={x(tick)} x2={x(tick)} y1={height - 30} y2={height - 26} className="tick" /><text x={x(tick)} y={height - 14} textAnchor="middle" className="axis-label">{clock(tick)}</text></g>)}
+      {story.turningPoints.map((point) => <g key={`${point.kind}${point.t}`} className={`turn ${point.kind === 'decisive' ? 'good' : 'bad'}`}>
+        <line x1={x(point.t)} x2={x(point.t)} y1={20} y2={height - 28} />
+        <path d={`M${x(point.t)},16 l6,-9 h-12 z`}><title>{turningPointText(point, data).text}</title></path>
+      </g>)}
       <line x1={x(time)} x2={x(time)} y1={20} y2={height - 28} className="cursor" />
     </svg>
   );
@@ -240,8 +262,9 @@ function RouteMap({ data, story, time, showEnemies, focusTeams, zoom, showImage 
   const py = (value: number) => ((value - view.minY) / view.span) * MAP_VIEW;
   const pr = (value: number) => (value / view.span) * MAP_VIEW;
   const step = view.span > 6000 ? 1000 : view.span > 2500 ? 500 : view.span > 1200 ? 250 : 100;
-  const zoneNow = [...story.circle].reverse().find((point) => point.t <= time && point.zone) ?? story.circle.find((point) => point.zone);
-  const finalZone = [...story.circle].reverse().find((point) => point.zone)?.zone ?? null;
+  const zoneNow = [...story.circle].reverse().find((point) => point.t <= time && (point.zone || point.warn)) ?? story.circle.find((point) => point.zone || point.warn);
+  // `warn` is the next safe circle (white, fixed for a phase); `zone` is the gas wall (blue, closing on it).
+  const finalZone = [...story.circle].reverse().find((point) => point.warn)?.warn ?? null;
   const gridX = Array.from({ length: Math.ceil(view.span / step) + 2 }, (_, index) => Math.floor(view.minX / step) * step + index * step);
   const gridY = Array.from({ length: Math.ceil(view.span / step) + 2 }, (_, index) => Math.floor(view.minY / step) * step + index * step);
   const eventPoint = (event: StoryEvent) => {
@@ -256,9 +279,9 @@ function RouteMap({ data, story, time, showEnemies, focusTeams, zoom, showImage 
       {gridY.map((value) => <line key={`y${value}`} y1={py(value)} y2={py(value)} x1={0} x2={MAP_VIEW} className="map-grid" />)}
       <text x={10} y={MAP_VIEW - 10} className="map-scale">格线间隔 {step >= 1000 ? `${step / 1000} km` : `${step} m`}</text>
       {finalZone && <circle cx={px(finalZone.x)} cy={py(finalZone.y)} r={pr(finalZone.r)} className="zone-final" />}
-      {story.phaseStarts.map((item) => { const point = story.circle.find((candidate) => candidate.t >= item.t && candidate.zone); return point?.zone ? <circle key={item.phase} cx={px(point.zone.x)} cy={py(point.zone.y)} r={pr(point.zone.r)} className="zone-ghost" /> : null; })}
-      {zoneNow?.warn && <circle cx={px(zoneNow.warn.x)} cy={py(zoneNow.warn.y)} r={pr(zoneNow.warn.r)} className="zone-warn" />}
-      {zoneNow?.zone && <circle cx={px(zoneNow.zone.x)} cy={py(zoneNow.zone.y)} r={pr(zoneNow.zone.r)} className="zone-now" />}
+      {story.phaseStarts.map((item) => { const point = story.circle.find((candidate) => candidate.t >= item.t && candidate.warn); return point?.warn ? <circle key={item.phase} cx={px(point.warn.x)} cy={py(point.warn.y)} r={pr(point.warn.r)} className="zone-ghost" /> : null; })}
+      {zoneNow?.zone && <circle cx={px(zoneNow.zone.x)} cy={py(zoneNow.zone.y)} r={pr(zoneNow.zone.r)} className="zone-wall" />}
+      {zoneNow?.warn && <circle cx={px(zoneNow.warn.x)} cy={py(zoneNow.warn.y)} r={pr(zoneNow.warn.r)} className="zone-now" />}
       {story.players.map((player) => {
         const tone = toneOf(data, player.member);
         const past = player.route.filter((point) => point.t <= time && (!zoom || point.t >= time - 150));
@@ -398,7 +421,7 @@ export function MatchStoryView({ data, loading, placement, kills, damage }: { da
         </Section>
 
         <div className="ms-map-grid">
-          <Section title="行进路线与毒圈" hint="拖动滑块回放；白圈 = 当前安全区，蓝圈 = 下一个毒圈">
+          <Section title="行进路线与毒圈" hint="拖动滑块回放；白圈 = 下一个安全区，蓝圈 = 当前毒圈边界（会向白圈收缩）">
             <RouteMap data={data} story={story} time={time} showEnemies={showEnemies} focusTeams={focusTeams} zoom={zoom} showImage={showImage} />
             <div className="ms-scrub">
               <button type="button" onClick={() => { if (time >= duration) setTime(0); setPlaying((value) => !value); }}>{playing ? '❚❚ 暂停' : '▶ 回放'}</button>
@@ -455,15 +478,43 @@ export function MatchStoryView({ data, loading, placement, kills, damage }: { da
         </div>
       </Section>
 
-      {story && story.events.some((event) => event.kind === 'downed' || event.kind === 'death') && <Section title="倒地记录" hint="每次被击倒是怎么发生的、之后怎么样了">
+      {story && story.downs.length > 0 && <Section title="倒地记录" hint="每次被击倒的原因：看倒地前 20 秒谁打了谁；鼠标悬停在原因上看改进建议">
         <ul className="ms-downs">
-          {story.events.filter((event) => event.kind === 'downed').map((event, index) => <li key={index} className={toneOf(data, event.member)}>
-            <b>{clock(event.t)}</b><span className="who">{name(event.member)}</span><span>{downNarrative(event, data, story)}</span>
-          </li>)}
+          {story.downs.map((down, index) => {
+            const cause = data.downCauses.find((item) => item.key === down.cause);
+            const bits = [
+              down.attackerTeam !== null ? `队${down.attackerTeam}${down.weapon ? ` 的 ${down.weapon}` : ''}${down.meters !== null && down.meters > 0 ? ` · ${down.meters} 米` : ''}` : '',
+              down.takenDamage > 0 || down.returnDamage > 0 ? `倒地前受到 ${down.takenDamage} 伤害、还手 ${down.returnDamage}` : '',
+              down.nearestTeammate !== null ? `最近队友 ${down.nearestTeammate} 米` : '',
+              down.teamsNearby ? `300 米内另有 ${down.teamsNearby} 队` : '',
+            ].filter(Boolean);
+            const result = down.outcome === 'revived' ? `${down.afterSeconds} 秒后被救起` : down.outcome === 'died' ? `${down.afterSeconds} 秒后被淘汰` : '';
+            return <li key={index} className={toneOf(data, down.member)}>
+              <b>{clock(down.t)}</b><span className="who">{name(down.member)}</span>
+              <span className="what"><i className={`cause ${down.cause}`} title={cause?.advice}>{cause?.label ?? down.cause}</i>{bits.join(' · ')}{result && <em className={down.outcome}>{result}</em>}</span>
+            </li>;
+          })}
           {story.events.filter((event) => event.kind === 'death' && !story.events.some((item) => item.kind === 'downed' && item.member === event.member && item.t < event.t && event.t - item.t < 200)).map((event, index) => <li key={`d${index}`} className={toneOf(data, event.member)}>
-            <b>{clock(event.t)}</b><span className="who">{name(event.member)}</span><span>{event.byPlayer ? `被对手${event.weapon ? `用 ${event.weapon}` : ''}${event.meters !== null ? `在 ${event.meters} 米外` : ''}直接淘汰（没有倒地）。` : '被环境淘汰。'}</span>
+            <b>{clock(event.t)}</b><span className="who">{name(event.member)}</span>
+            <span className="what"><i className="cause direct">直接淘汰</i>{event.byPlayer ? `被对手${event.weapon ? `用 ${event.weapon}` : ''}${event.meters !== null ? `在 ${event.meters} 米外` : ''}直接淘汰（没有倒地）。` : '被环境淘汰。'}</span>
           </li>)}
         </ul>
+      </Section>}
+
+      {story && story.rotation.epochs.length > 0 && <Section title="本局转圈" hint="白圈出现后多久进到圈里，对比毒圈开始收缩的时间；负的提前量 = 被毒圈追上">
+        <div className="ms-rotation">
+          <div className="row head"><span>圈</span><span>刷新时离白圈</span><span>进圈用时</span><span>毒圈开始收缩</span><span>提前量</span><span>毒内 / 毒伤</span><span>走了</span></div>
+          {story.rotation.epochs.map((epoch, index) => <div className="row" key={index}>
+            <b>第 {epoch.phase ?? '—'} 圈</b>
+            <span>{epoch.outsideAtStart === 0 ? '已在圈内' : `${epoch.outsideAtStart} 米`}</span>
+            <span>{epoch.enteredAfter === null ? <em className="bad">没进去</em> : `${epoch.enteredAfter} 秒`}</span>
+            <span>{epoch.shrinkAfter === null ? '—' : `${epoch.shrinkAfter} 秒后`}</span>
+            <span className={epoch.margin === null ? '' : epoch.margin >= 0 ? 'good' : 'bad'}>{epoch.margin === null ? '—' : `${epoch.margin >= 0 ? '+' : ''}${epoch.margin} 秒`}</span>
+            <span className={epoch.blueDamage > 0 ? 'bad' : ''}>{epoch.blueSeconds > 0 ? `${epoch.blueSeconds} 秒` : '—'}{epoch.blueDamage > 0 ? ` · ${epoch.blueDamage}` : ''}</span>
+            <span>{epoch.distance >= 1000 ? `${(epoch.distance / 1000).toFixed(1)} km` : `${epoch.distance} m`}{epoch.vehicleShare !== null && epoch.vehicleShare > 0.3 ? ' 🚗' : ''}</span>
+          </div>)}
+        </div>
+        <p className="ms-rotation-sum">{story.rotation.landingToFight !== null ? `落地后 ${clock(story.rotation.landingToFight)} 打响第一场交战 · ` : ''}共走 {(story.rotation.distance / 1000).toFixed(1)} km{story.rotation.vehicleShare !== null ? `（载具占 ${Math.round(story.rotation.vehicleShare * 100)}%）` : ''} · 毒里待了 {story.rotation.blueSeconds} 秒、吃了 {story.rotation.blueDamage} 点毒伤{story.rotation.circlesChecked > 0 ? ` · 第 3 圈起 ${story.rotation.circlesChecked} 个圈里有 ${story.rotation.lateEntries} 个是毒圈开始收缩后才进的` : ''}。</p>
       </Section>}
     </div>
   );

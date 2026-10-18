@@ -1,9 +1,16 @@
 import { parseTelemetryPayload } from '@agent/pubg-domain';
 import { normalizeWeaponName } from './analytics.js';
+import { buildDowns, buildRotation, buildTurningPoints, type BlueDamage, type MatchRotation, type StoryContact, type StoryDown, type TurningPoint } from './match-insight.js';
 
 export const MATCH_STORY_SCHEMA_VERSION = 1 as const;
-/** Contact events of the squad at most this far apart belong to the same fight. */
-export const STORY_FIGHT_GAP_SECONDS = 40;
+/**
+ * A fight stays open while the squad keeps making contact with one of its opposing teams at most this far apart, and
+ * a contact with a team that is not yet in any open fight joins one only when it comes within STORY_FIGHT_JOIN_SECONDS
+ * of that fight's latest contact (a third party arriving mid-fight); otherwise it starts a separate fight. Grouping by
+ * time alone chained back-to-back fights against different teams into one fight of several minutes.
+ */
+export const STORY_FIGHT_GAP_SECONDS = 35;
+export const STORY_FIGHT_JOIN_SECONDS = 12;
 /** Route samples closer together than this are dropped to keep the payload small. */
 export const STORY_ROUTE_STEP_SECONDS = 10;
 /** Opposing players are sampled less often than the squad to keep the payload small. */
@@ -56,6 +63,8 @@ export interface StoryRoutePoint {
   y: number;
   vehicle: boolean;
   down: boolean;
+  /** Present (true) only while the player is standing in the circle's gas. */
+  blue?: boolean;
 }
 
 export interface StoryCirclePoint {
@@ -135,6 +144,12 @@ export interface MatchStory {
   players: StoryPlayer[];
   /** Every other player's thinned route, so the map can show who was where. */
   enemies: StoryEnemy[];
+  /** Why each squad knock-down happened, from the fire the squad took and returned just before it. */
+  downs: StoryDown[];
+  /** The few moments that decided the match. */
+  turningPoints: TurningPoint[];
+  /** How the squad moved with the circle. */
+  rotation: MatchRotation;
   /** When the last squad member went down for good, null when the squad survived to the end. */
   squadOutAt: number | null;
   /** Teams still alive when the squad was out (or at the end), and the squad's final position among them. */
@@ -196,6 +211,9 @@ export function analyzeMatchStory(payload: unknown, trackedIds: ReadonlySet<stri
     phaseStarts: [],
     players: [],
     enemies: [],
+    downs: [],
+    turningPoints: [],
+    rotation: { epochs: [], blueSeconds: 0, blueDamage: 0, distance: 0, vehicleShare: null, landingToFight: null, lateEntries: 0, circlesChecked: 0 },
     squadOutAt: null,
     teamsAtEnd: null,
   };
@@ -211,8 +229,9 @@ export function analyzeMatchStory(payload: unknown, trackedIds: ReadonlySet<stri
   const enemyLanded = new Map<string, number>();
   const landings = new Map<string, { t: number; x: number; y: number }>();
   const damageBins = new Map<string, number[]>();
-  interface Contact { t: number; kind: 'dealt' | 'taken' | 'knock' | 'downed' | 'kill' | 'revive'; member: string; enemyTeam: string | null; amount: number; victim: string | null; weapon?: string | null }
+  type Contact = StoryContact;
   const contacts: Contact[] = [];
+  const blueDamage: BlueDamage[] = [];
   let lastCircleT = -Infinity;
   let maxT = 0;
 
@@ -271,13 +290,18 @@ export function analyzeMatchStory(payload: unknown, trackedIds: ReadonlySet<stri
       if (elapsedTime - (lastRouteT.get(id) ?? -Infinity) < STORY_ROUTE_STEP_SECONDS) continue;
       lastRouteT.set(id, elapsedTime);
       const list = routes.get(id) ?? [];
-      list.push({ t: Math.round(elapsedTime), x: round1(num(location.x)! / 100), y: round1(num(location.y)! / 100), vehicle: obj(event.character).isInVehicle === true, down: obj(event.character).isDBNO === true });
+      list.push({ t: Math.round(elapsedTime), x: round1(num(location.x)! / 100), y: round1(num(location.y)! / 100), vehicle: obj(event.character).isInVehicle === true, down: obj(event.character).isDBNO === true, ...(obj(event.character).isInBlueZone === true ? { blue: true } : {}) });
       routes.set(id, list);
       continue;
     }
     if (type === 'LogPlayerTakeDamage') {
       const category = str(event.damageTypeCategory) ?? '';
       const damage = num(event.damage);
+      if (category === 'Damage_BlueZone' && damage !== null && damage > 0) {
+        const sufferer = trackedId(event.victim);
+        if (sufferer) blueDamage.push({ t, member: sufferer, amount: damage });
+        continue;
+      }
       if (damage === null || damage <= 0 || !(category === 'Damage_Gun' || category === 'Damage_DBNO' || category.startsWith('Damage_Explosion') || category === 'Damage_Molotov')) continue;
       const attackerId = trackedId(event.attacker);
       const victimId = trackedId(event.victim);
@@ -384,10 +408,9 @@ export function analyzeMatchStory(payload: unknown, trackedIds: ReadonlySet<stri
   story.squadOutAt = ids.length > 0 && deaths.every((value) => value !== null) ? Math.max(...(deaths as number[])) : null;
   story.teamsAtEnd = stateAt(story.squadOutAt ?? story.durationSeconds)?.aliveTeams ?? null;
 
-  // Fights: contacts with the squad grouped by time; an enemy takedown is a knock, or a kill that had no knock.
+  // Fights: contacts with the squad grouped by opposing team and time; an enemy takedown is a knock, or a kill that had no knock.
   contacts.sort((left, right) => left.t - right.t);
-  let group: Contact[] = [];
-  const flush = () => {
+  const buildFight = (group: Contact[]) => {
     if (!group.length) return;
     const start = group[0]!.t;
     const end = group.at(-1)!.t;
@@ -450,13 +473,29 @@ export function analyzeMatchStory(payload: unknown, trackedIds: ReadonlySet<stri
       members: [...perMember.entries()].map(([member, value]) => ({ member, damage: Math.round(value.damage), knocks: value.knocks, downed: value.downed })).sort((left, right) => right.damage - left.damage),
       enemies,
     });
-    group = [];
   };
+  interface OpenFight { contacts: Contact[]; teams: Set<string>; last: number }
+  const open: OpenFight[] = [];
+  const finished: Contact[][] = [];
   for (const item of contacts) {
-    if (group.length && item.t - group.at(-1)!.t > STORY_FIGHT_GAP_SECONDS) flush();
-    group.push(item);
+    for (let index = open.length - 1; index >= 0; index -= 1) {
+      if (item.t - open[index]!.last > STORY_FIGHT_GAP_SECONDS) finished.push(open.splice(index, 1)[0]!.contacts);
+    }
+    let target: OpenFight | undefined;
+    if (item.enemyTeam !== null) target = open.find((fight) => fight.teams.has(item.enemyTeam!)) ?? open.find((fight) => item.t - fight.last <= STORY_FIGHT_JOIN_SECONDS);
+    else target = [...open].sort((left, right) => right.last - left.last)[0]; // a revive belongs to the latest fight
+    if (!target) {
+      if (item.enemyTeam === null) continue; // a revive with no fight around it
+      target = { contacts: [], teams: new Set(), last: item.t };
+      open.push(target);
+    }
+    target.contacts.push(item);
+    if (item.enemyTeam !== null) target.teams.add(item.enemyTeam);
+    target.last = item.t;
   }
-  flush();
+  for (const fight of open) finished.push(fight.contacts);
+  finished.sort((left, right) => left[0]!.t - right[0]!.t);
+  for (const group of finished) buildFight(group);
 
   // Opposing players: like the squad, positions before the landing are the plane's flight path and are dropped.
   for (const [id, allPoints] of enemyRoutes) {
@@ -467,6 +506,9 @@ export function analyzeMatchStory(payload: unknown, trackedIds: ReadonlySet<stri
     story.enemies.push({ id, team, route, diedAt: enemyDied.get(id) ?? null });
   }
   story.enemies.sort((left, right) => left.team.localeCompare(right.team, 'en', { numeric: true }) || left.id.localeCompare(right.id));
+  story.downs = buildDowns(story, contacts, blueDamage);
+  story.turningPoints = buildTurningPoints(story);
+  story.rotation = buildRotation(story, blueDamage);
   return story;
 }
 

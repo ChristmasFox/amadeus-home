@@ -116,9 +116,26 @@ export interface StreakSummary {
   notes: string[];
 }
 
+export interface DownSummaryData {
+  matches: number; downs: number;
+  byCause: Array<{ cause: string; label: string; advice: string; count: number; share: number; died: number }>;
+  alone: Rate; revived: Rate; noReturnFire: Rate;
+  byMember: Array<{ member: string; downs: number; causes: Array<{ cause: string; count: number }> }>;
+  byStage: Array<{ stage: 'early' | 'mid' | 'late'; downs: number; noReturnFire: number }>;
+  insights: string[];
+}
+export interface RotationSummaryData {
+  matches: number; bluePenaltyRate: Rate; averageBlueDamage: number | null; averageBlueSeconds: number | null; averageDistanceKm: number | null; vehicleShare: number | null;
+  averageLandingToFight: number | null; lateEntry: Rate; averageMargin: number | null;
+  byPhase: Array<{ phase: number; circles: number; lateRate: number | null; medianEnter: number | null; averageMargin: number | null; averageOutside: number | null; averageDistance: number | null }>;
+  insights: string[];
+}
+
 export interface TelemetryAnalytics {
   highlights: Insight[];
   streaks: StreakSummary;
+  downs: DownSummaryData;
+  rotation: RotationSummaryData;
   longRun: LongRunCombat;
   lobby: LobbyCombat;
   style: SquadStyle;
@@ -559,6 +576,87 @@ function DistancePanel({ data }: { data: TelemetryAnalytics['distance'] }) {
       </div>
     </Panel>
   );
+}
+
+const CAUSE_COLOR: Record<string, string> = { ambush_far: '#eeb96a', ambush_close: '#d98a3d', crossfire: '#d9a8f0', isolated: '#f0a0a0', lost_duel: '#69d9c3', bluezone: '#8fb8ff', environment: '#6f8581' };
+const STAGE_NAME = { early: '前期 1–2 圈', mid: '中期 3–4 圈', late: '后期 5 圈起' } as const;
+
+function DownCausePanel({ data, names }: { data: DownSummaryData; names: Map<string, string> }) {
+  if (data.downs < 10) return null;
+  const maxCount = Math.max(1, ...data.byCause.map((entry) => entry.count));
+  return (
+    <Panel title="倒地原因" hint={`${data.matches} 场遥测里小队共 ${data.downs} 次被击倒；原因看倒地前 20 秒谁打了谁、身边有没有队友`}>
+      <div className="av-kpis">
+        <Kpi label="倒地前没还手" value={pct(data.noReturnFire.rate)} sub={`被玩家击倒的 ${data.noReturnFire.trials} 次里 · 95% ${ci(data.noReturnFire)}`} tone="warn" />
+        <Kpi label="倒地后被救起" value={pct(data.revived.rate)} sub={`${data.revived.successes}/${data.revived.trials} 次有结果的倒地`} tone={(data.revived.rate ?? 0) >= 0.4 ? 'good' : 'warn'} />
+        <Kpi label="倒地时身边没队友" value={pct(data.alone.rate)} sub={`150 米内无人 · ${data.alone.successes}/${data.alone.trials}`} />
+        <Kpi label="场均倒地" value={data.matches ? (data.downs / data.matches).toFixed(1) : '—'} sub="每场全队倒地次数" />
+      </div>
+      {data.insights.length > 0 && <ul className="av-verdicts">{data.insights.map((line) => <li key={line}><b>发现</b><span>{line}</span></li>)}</ul>}
+      <div className="cp-causes">
+        {data.byCause.map((entry) => <div className="cause-row" key={entry.cause} title={entry.advice}>
+          <b><i style={{ background: CAUSE_COLOR[entry.cause] ?? '#6f8581' }} />{entry.label}</b>
+          <span className="bar"><u style={{ width: `${(entry.count / maxCount) * 100}%`, background: CAUSE_COLOR[entry.cause] ?? '#6f8581' }} /></span>
+          <em>{entry.count} 次 · {pct(entry.share)}</em>
+          <small>其中被淘汰 {entry.died}</small>
+        </div>)}
+      </div>
+      <div className="av-two even">
+        <div>
+          <h4>每个人的倒地构成</h4>
+          {data.byMember.map((member) => <div className="cp-member" key={member.member}>
+            <b>{(names.get(member.member) ?? '队员').replace(/^SG_LabmemNo/u, 'No.')}</b>
+            <span className="stack">{member.causes.map((entry) => <u key={entry.cause} title={`${data.byCause.find((item) => item.cause === entry.cause)?.label ?? entry.cause} ${entry.count}`} style={{ flex: entry.count, background: CAUSE_COLOR[entry.cause] ?? '#6f8581' }} />)}</span>
+            <small>{member.downs} 次</small>
+          </div>)}
+        </div>
+        <div>
+          <h4>哪个阶段最容易被先手打倒</h4>
+          {data.byStage.map((entry) => <div className="cp-member" key={entry.stage}>
+            <b>{STAGE_NAME[entry.stage]}</b>
+            <span className="stack"><u style={{ flex: entry.noReturnFire, background: '#eeb96a' }} /><u style={{ flex: Math.max(0, entry.downs - entry.noReturnFire), background: '#2c4141' }} /></span>
+            <small>{entry.downs ? `${Math.round((entry.noReturnFire / entry.downs) * 100)}% 没还手` : '—'}（{entry.downs} 次）</small>
+          </div>)}
+        </div>
+      </div>
+      <Notes>倒地原因按优先级判定：不是玩家造成的（毒圈、坠落等）→ 环境 / 毒圈；20 秒内被两支以上队伍打到 → 多队混战；对攻击者所在队伍没有任何输出：150 米以外为远程先手，其余为近距离偷袭；有还手但 150 米内没有队友 → 落单；其余算正面交战落败。「倒地前没还手」只统计被玩家击倒的次数。鼠标悬停在原因上有对应的改进建议。</Notes>
+    </Panel>
+  );
+}
+
+function RotationPanel({ data }: { data: RotationSummaryData }) {
+  if (data.matches < 10) return null;
+  const maxLate = 1;
+  return (
+    <Panel title="转圈与进圈" hint={`${data.matches} 场遥测；白圈 = 下一个安全区，这里看小队有没有在毒圈开始收缩前走进去`}>
+      <div className="av-kpis">
+        <Kpi label="第 3 圈起转晚的圈" value={pct(data.lateEntry.rate)} sub={`毒圈开始收缩时还没进白圈 · ${data.lateEntry.successes}/${data.lateEntry.trials} · 95% ${ci(data.lateEntry)}`} tone={(data.lateEntry.rate ?? 0) >= 0.4 ? 'warn' : undefined} />
+        <Kpi label="平均提前量" value={data.averageMargin === null ? '—' : `${data.averageMargin >= 0 ? '+' : ''}${Math.round(data.averageMargin)} 秒`} sub="第 3 圈起，进圈比毒圈收缩早多少" tone={(data.averageMargin ?? 0) >= 15 ? 'good' : 'warn'} />
+        <Kpi label="吃到毒的对局" value={pct(data.bluePenaltyRate.rate)} sub={`场均 ${data.averageBlueDamage === null ? '—' : Math.round(data.averageBlueDamage)} 点毒伤 · ${data.averageBlueSeconds === null ? '—' : Math.round(data.averageBlueSeconds)} 秒在毒里`} />
+        <Kpi label="场均路程" value={data.averageDistanceKm === null ? '—' : `${data.averageDistanceKm.toFixed(1)} km`} sub={`载具占 ${pct(data.vehicleShare)}`} />
+        <Kpi label="落地到首战" value={data.averageLandingToFight === null ? '—' : clockText(data.averageLandingToFight)} sub="平均多久打响第一场交战" />
+      </div>
+      {data.insights.length > 0 && <ul className="av-verdicts">{data.insights.map((line) => <li key={line}><b>发现</b><span>{line}</span></li>)}</ul>}
+      <div className="av-table rotation">
+        <div className="av-row head"><span>圈</span><span>样本</span><span>转晚的比例</span><span>中位进圈用时</span><span>平均提前量</span><span>刷新时离白圈</span><span>平均路程</span></div>
+        {data.byPhase.filter((entry) => entry.circles >= 5).map((entry) => <div className="av-row" key={entry.phase}>
+          <b>第 {entry.phase} 圈</b>
+          <span>{entry.circles}</span>
+          <span className="late"><i style={{ width: `${Math.min(100, ((entry.lateRate ?? 0) / maxLate) * 100)}%` }} /><em>{pct(entry.lateRate)}</em></span>
+          <span>{entry.medianEnter === null ? '—' : `${Math.round(entry.medianEnter)} 秒`}</span>
+          <span className={(entry.averageMargin ?? 0) >= 0 ? 'up' : 'down'}>{entry.averageMargin === null ? '—' : `${entry.averageMargin >= 0 ? '+' : ''}${Math.round(entry.averageMargin)} 秒`}</span>
+          <span>{entry.averageOutside === null ? '—' : `${Math.round(entry.averageOutside)} 米`}</span>
+          <span>{entry.averageDistance === null ? '—' : entry.averageDistance >= 1000 ? `${(entry.averageDistance / 1000).toFixed(1)} km` : `${Math.round(entry.averageDistance)} m`}</span>
+        </div>)}
+      </div>
+      <Notes>遥测里 poisonGasWarning 是下一个安全区（游戏里的白圈，整个阶段固定），safetyZone 是正在向它收缩的毒圈边界（蓝圈）。「转晚」= 小队中心在蓝圈开始收缩时还没走进白圈（或始终没进去）；提前量 = 蓝圈开始收缩的时间减去进圈时间，负数表示被毒圈追上。只统计小队还活着的阶段，所以活得越久、经过的圈越多，吃到的毒也越多——这里不拿毒伤和名次做对比，那会因为存活时间不同而得出相反的结论。</Notes>
+    </Panel>
+  );
+}
+
+function clockText(seconds: number): string {
+  const total = Math.round(seconds);
+  return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}`;
 }
 
 function ZonePanel({ data }: { data: TelemetryAnalytics['zone'] }) {
@@ -1149,6 +1247,10 @@ export function FieldView({ data, loading, error, onReload }: { data: TelemetryA
       <FightPanel data={data.fights} />
 
       <DeathPanel deaths={data.deaths} />
+
+      <DownCausePanel data={data.downs} names={new Map(data.style.players.map((player) => [player.accountId, player.name]))} />
+
+      <RotationPanel data={data.rotation} />
 
       <DistancePanel data={data.distance} />
 
