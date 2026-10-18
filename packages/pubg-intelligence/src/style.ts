@@ -14,6 +14,8 @@ export const STYLE_MIN_FIGHTS = 40;
 export const STYLE_MIN_DAMAGE = 1500;
 export const STYLE_MIN_MINUTES = 60;
 export const STYLE_MIN_SHOTS = 800;
+/** Prior shots pulling a teammate class hit rate toward the teammates' overall rate in the weapon-mix adjustment. */
+export const STYLE_CLASS_PRIOR_SHOTS = 200;
 export const STYLE_MIN_KNOCKS = 25;
 export const STYLE_MIN_SPACING_SAMPLES = 100;
 export const STYLE_MIN_ZONE_SAMPLES = 150;
@@ -45,13 +47,13 @@ export type WeaponClass = 'AR' | 'SMG' | 'DMR' | 'SR' | 'LMG' | 'SG' | 'Pistol' 
 const CLASS_ORDER: readonly WeaponClass[] = ['AR', 'SMG', 'DMR', 'SR', 'LMG', 'SG', 'Pistol', 'other'];
 
 const WEAPON_CLASSES: Record<WeaponClass, readonly string[]> = {
-  AR: ['M416', 'BerylM762', 'AK47', 'AKM', 'SCAR-L', 'SCARL', 'G36C', 'QBZ', 'AUG', 'Groza', 'M16A4', 'ACE32', 'K2', 'FAMASG2', 'HK416', 'Mk47Mutant', 'Mutant'],
+  AR: ['M416', 'BerylM762', 'AK47', 'AKM', 'SCAR-L', 'SCARL', 'G36C', 'QBZ', 'AUG', 'Groza', 'M16A4', 'ACE32', 'K2', 'FAMASG2', 'HK416', 'Mk47Mutant', 'Mutant', 'QBZ95'],
   SMG: ['UMP', 'Vector', 'UZI', 'Thompson', 'MP5K', 'P90', 'Bizon', 'MP9', 'JS9'],
   DMR: ['SKS', 'Mini14', 'Mk12', 'FNFal', 'SLR', 'VSS', 'QBU', 'Mk14', 'Dragunov'],
-  SR: ['Kar98k', 'M24', 'AWM', 'Win94', 'Mosin', 'Lynx'],
+  SR: ['Kar98k', 'M24', 'AWM', 'Win94', 'Mosin', 'Lynx', 'L6'],
   LMG: ['M249', 'MG3', 'DP28', 'RPD', 'DP-28'],
-  SG: ['S12K', 'S686', 'S1897', 'DBS', 'OriginS12', 'O12', 'Saiga12'],
-  Pistol: ['P92', 'P1911', 'R1895', 'R45', 'P18C', 'DesertEagle', 'M9', 'Skorpion', 'Sawnoff'],
+  SG: ['S12K', 'S686', 'S1897', 'DBS', 'OriginS12', 'O12', 'Saiga12', 'Winchester', 'Berreta686', 'DP12'],
+  Pistol: ['P92', 'P1911', 'R1895', 'R45', 'P18C', 'DesertEagle', 'M9', 'Skorpion', 'Sawnoff', 'G18', 'NagantM1895', 'vz61Skorpion'],
   other: [],
 };
 
@@ -62,6 +64,16 @@ export function weaponClassOf(weapon: string): WeaponClass {
   }
   return 'other';
 }
+
+/** Damage categories of player-thrown or player-fired explosives and fire. */
+export const EXPLOSIVE_DAMAGE: ReadonlySet<string> = new Set([
+  'Damage_Explosion_PanzerFaustWarhead',
+  'Damage_Explosion_PanzerFaustWarheadVehicleArmorPenetration',
+  'Damage_Explosion_Grenade',
+  'Damage_Explosion_StickyBomb',
+  'Damage_Explosion_Mortar',
+  'Damage_Molotov',
+]);
 
 function obj(value: unknown): Record<string, unknown> {
   return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
@@ -91,11 +103,17 @@ export interface ThrowableCounts {
 /** Raw-telemetry counters for one member of the squad in one match. */
 export interface PlayerRawStyle {
   gunDamage: number;
+  /** Rocket, grenade and fire damage to opponents; counts toward damage per minute but not the shooting statistics. */
+  explosiveDamage: number;
   headDamage: number;
   /** Gun shots fired and the weapon hits (including hits on downed players) with their damage. */
   shots: number;
   hits: number;
   hitDamage: number;
+  /** Shots, hits and hit damage per weapon class (CLASS_ORDER), so hit rates can be compared on the same weapon mix. */
+  classShots: number[];
+  classHits: number[];
+  classHitDamage: number[];
   dealtBins: number[];
   /** Gun damage dealt in the early (circles 1-2), middle (3-4) and late (5+) game. */
   phaseDamage: number[];
@@ -118,10 +136,14 @@ export interface PlayerRawStyle {
 function emptyRaw(): PlayerRawStyle {
   return {
     gunDamage: 0,
+    explosiveDamage: 0,
     headDamage: 0,
     shots: 0,
     hits: 0,
     hitDamage: 0,
+    classShots: new Array<number>(CLASS_ORDER.length).fill(0),
+    classHits: new Array<number>(CLASS_ORDER.length).fill(0),
+    classHitDamage: new Array<number>(CLASS_ORDER.length).fill(0),
     dealtBins: new Array<number>(DISTANCE_BIN_COUNT).fill(0),
     phaseDamage: [0, 0, 0],
     weaponDamage: {},
@@ -215,10 +237,31 @@ export function analyzeStyleTelemetry(payload: unknown, trackedIds: ReadonlySet<
       const id = typeof attacker.accountId === 'string' ? attacker.accountId : null;
       const weapon = obj(event.weapon);
       if (id && trackedIds.has(id) && event.attackType === 'Weapon' && weapon.category === 'Weapon' && (weapon.subCategory === 'Main' || weapon.subCategory === 'Handgun')) {
-        players[id]!.shots += 1;
+        const fired = typeof weapon.itemId === 'string' ? normalizeWeaponName(weapon.itemId) : null;
+        // Launchers never register gun hits, so their shots would only drag the hit rate down.
+        if (fired && fired !== 'PanzerFaust') {
+          players[id]!.shots += 1;
+          players[id]!.classShots[CLASS_ORDER.indexOf(weaponClassOf(fired))]! += 1;
+        }
       }
     } else if (type === 'LogPlayerTakeDamage') {
       const category = event.damageTypeCategory;
+      if (typeof category === 'string' && EXPLOSIVE_DAMAGE.has(category)) {
+        // Explosive and fire damage counts toward damage per minute (and the rocket toward habitual weapons);
+        // it stays out of the hit-rate and range statistics, which only describe gunfire.
+        const rocketAttacker = obj(event.attacker);
+        const rocketVictim = obj(event.victim);
+        const rocketId = typeof rocketAttacker.accountId === 'string' ? rocketAttacker.accountId : null;
+        const rocketVictimId = typeof rocketVictim.accountId === 'string' ? rocketVictim.accountId : null;
+        const rocketDamage = num(event.damage);
+        if (rocketId && trackedIds.has(rocketId) && (rocketVictimId === null || !trackedIds.has(rocketVictimId))
+          && String(rocketAttacker.teamId ?? '') !== String(rocketVictim.teamId ?? '') && rocketDamage !== null && rocketDamage > 0) {
+          const rocketEntry = players[rocketId]!;
+          rocketEntry.explosiveDamage += rocketDamage;
+          if (category.startsWith('Damage_Explosion_PanzerFaustWarhead')) rocketEntry.weaponDamage.PanzerFaust = (rocketEntry.weaponDamage.PanzerFaust ?? 0) + rocketDamage;
+        }
+        continue;
+      }
       if (category !== 'Damage_Gun' && category !== 'Damage_DBNO') continue;
       const attacker = obj(event.attacker);
       const victim = obj(event.victim);
@@ -230,7 +273,13 @@ export function analyzeStyleTelemetry(payload: unknown, trackedIds: ReadonlySet<
       if (String(attacker.teamId ?? '') === String(victim.teamId ?? '')) continue;
       const weapon = typeof event.damageCauserName === 'string' ? normalizeWeaponName(event.damageCauserName) : null;
       const entry = players[attackerId]!;
-      if (weapon) { entry.hits += 1; entry.hitDamage += damage; }
+      if (weapon) {
+        const classIndex = CLASS_ORDER.indexOf(weaponClassOf(weapon));
+        entry.hits += 1;
+        entry.hitDamage += damage;
+        entry.classHits[classIndex]! += 1;
+        entry.classHitDamage[classIndex]! += damage;
+      }
       if (category !== 'Damage_Gun') continue;
       const from = obj(attacker.location);
       const to = obj(victim.location);
@@ -296,7 +345,7 @@ export function emptyFights(): RoleCounts {
 // ---------------------------------------------------------------------------------------------------------------
 // Flat vector layout: sums, subtraction (for "teammates only" baselines) and bootstrap resampling are just array maths.
 const FIGHT_KEYS = Object.keys(emptyFights()) as Array<keyof RoleCounts>;
-const SCALARS = ['minutes', 'gunDamage', 'headDamage', 'shots', 'hits', 'hitDamage', 'throwables', 'rides', 'healUses', 'boostUses', 'earlyPickups', 'footMeters', 'zoneSamples', 'zoneEdgeSamples', 'pickupMatches'] as const;
+const SCALARS = ['minutes', 'gunDamage', 'explosiveDamage', 'headDamage', 'shots', 'hits', 'hitDamage', 'throwables', 'rides', 'healUses', 'boostUses', 'earlyPickups', 'footMeters', 'zoneSamples', 'zoneEdgeSamples', 'pickupMatches'] as const;
 type Scalar = typeof SCALARS[number];
 
 const OFFSET: Record<string, number> = {};
@@ -307,6 +356,9 @@ OFFSET.dealtBins = cursor; cursor += DISTANCE_BIN_COUNT;
 OFFSET.spacingBins = cursor; cursor += SPACING_BIN_COUNT;
 OFFSET.phaseDamage = cursor; cursor += 3;
 OFFSET.classDamage = cursor; cursor += CLASS_ORDER.length;
+OFFSET.classShots = cursor; cursor += CLASS_ORDER.length;
+OFFSET.classHits = cursor; cursor += CLASS_ORDER.length;
+OFFSET.classHitDamage = cursor; cursor += CLASS_ORDER.length;
 const VECTOR_LENGTH = cursor;
 
 type Vec = Float64Array;
@@ -315,6 +367,7 @@ function toVector(stats: PlayerStyleMatch): Vec {
   const vector = new Float64Array(VECTOR_LENGTH);
   vector[OFFSET.minutes!] = stats.minutes;
   vector[OFFSET.gunDamage!] = stats.gunDamage;
+  vector[OFFSET.explosiveDamage!] = stats.explosiveDamage;
   vector[OFFSET.headDamage!] = stats.headDamage;
   vector[OFFSET.shots!] = stats.shots;
   vector[OFFSET.hits!] = stats.hits;
@@ -332,6 +385,9 @@ function toVector(stats: PlayerStyleMatch): Vec {
   stats.dealtBins.forEach((value, index) => { vector[OFFSET.dealtBins! + index] = value; });
   stats.spacingBins.forEach((value, index) => { vector[OFFSET.spacingBins! + index] = value; });
   stats.phaseDamage.forEach((value, index) => { vector[OFFSET.phaseDamage! + index] = value; });
+  stats.classShots.forEach((value, index) => { vector[OFFSET.classShots! + index] = value; });
+  stats.classHits.forEach((value, index) => { vector[OFFSET.classHits! + index] = value; });
+  stats.classHitDamage.forEach((value, index) => { vector[OFFSET.classHitDamage! + index] = value; });
   for (const [weapon, damage] of Object.entries(stats.weaponDamage)) {
     vector[OFFSET.classDamage! + CLASS_ORDER.indexOf(weaponClassOf(weapon))]! += damage;
   }
@@ -401,14 +457,19 @@ export interface StyleAxisDefinition {
   composite?: readonly StyleAxisKey[];
 }
 
-/** Axes that make up the fighting-power index. */
-export const COMBAT_COMPONENTS: readonly StyleAxisKey[] = ['dpm', 'hitRate', 'knockRate', 'conversion', 'precision'];
+/**
+ * Axes that make up the fighting-power index and their weights. Chosen on 112 ranked squad matches: damage per
+ * minute tracked fight wins and placement best; headshot share was unreliable (split-half 0.45) and unrelated to
+ * winning, and knock conversion depends on teammates finishing, so both stay as separate axes only.
+ */
+export const COMBAT_WEIGHTS: Readonly<Partial<Record<StyleAxisKey, number>>> = { dpm: 0.5, knockRate: 0.25, hitRate: 0.25 };
+export const COMBAT_COMPONENTS: readonly StyleAxisKey[] = Object.keys(COMBAT_WEIGHTS) as StyleAxisKey[];
 
 export const STYLE_AXES: readonly StyleAxisDefinition[] = [
-  { key: 'combat', group: '战斗效率', label: '战斗力指数', high: '综合输出与转化明显强于队友', low: '综合输出与转化弱于队友', composite: COMBAT_COMPONENTS },
-  { key: 'dpm', group: '战斗效率', label: '每分钟伤害', high: '每存活分钟打出更多伤害', low: '每存活分钟伤害更少' },
-  { key: 'hitRate', group: '战斗效率', label: '命中率', high: '枪枪到肉，命中率更高', low: '命中率更低' },
-  { key: 'dmgPerShot', group: '战斗效率', label: '每发伤害', high: '每发子弹打出更多伤害', low: '每发子弹伤害更少' },
+  { key: 'combat', group: '战斗效率', label: '战斗力指数', high: '综合输出明显强于队友', low: '综合输出弱于队友', composite: COMBAT_COMPONENTS },
+  { key: 'dpm', group: '战斗效率', label: '每分钟伤害（含爆炸）', high: '每存活分钟打出更多伤害', low: '每存活分钟伤害更少' },
+  { key: 'hitRate', group: '战斗效率', label: '命中率（同枪型）', high: '同样的枪，命中率更高', low: '同样的枪，命中率更低' },
+  { key: 'dmgPerShot', group: '战斗效率', label: '每发伤害（同枪型）', high: '同样的枪，每发打出更多伤害', low: '同样的枪，每发伤害更少' },
   { key: 'knockRate', group: '战斗效率', label: '交战击倒率', high: '更多交战里打倒了人', low: '更少在交战里打倒人' },
   { key: 'conversion', group: '战斗效率', label: '击倒转化率', high: '打倒的人更常被终结', low: '打倒的人更常被救起' },
   { key: 'range', group: '射击', label: '交战距离', high: '比队友打得更远', low: '比队友打得更近' },
@@ -431,6 +492,15 @@ export const STYLE_AXES: readonly StyleAxisDefinition[] = [
   { key: 'foot', group: '位置与风险', label: '跑动量', high: '步行转移更多', low: '步行转移更少' },
   { key: 'mobility', group: '位置与风险', label: '载具使用', high: '更爱开车', low: '很少用载具' },
 ];
+
+/** Shots, hits and hit damage excluding shotguns, whose pellets register several hits per shot. */
+function mixTotals(vector: Vec): { shots: number; hits: number; hitDamage: number } {
+  const sg = CLASS_ORDER.indexOf('SG');
+  const shots = scalar(vector, 'shots') - vector[OFFSET.classShots! + sg]!;
+  const hits = scalar(vector, 'hits') - vector[OFFSET.classHits! + sg]!;
+  const hitDamage = scalar(vector, 'hitDamage') - vector[OFFSET.classHitDamage! + sg]!;
+  return { shots: Math.max(0, shots), hits: Math.max(0, hits), hitDamage: Math.max(0, hitDamage) };
+}
 
 /** Raw metric for one axis from a summed vector; null when there is too little data to measure it. */
 export function axisValue(key: StyleAxisKey, vector: Vec): number | null {
@@ -469,9 +539,9 @@ export function axisValue(key: StyleAxisKey, vector: Vec): number | null {
     case 'zoneEdge': return scalar(vector, 'zoneSamples') >= STYLE_MIN_ZONE_SAMPLES ? scalar(vector, 'zoneEdgeSamples') / scalar(vector, 'zoneSamples') : null;
     case 'foot': return enoughTime ? scalar(vector, 'footMeters') / minutes : null;
     case 'mobility': return enoughTime ? scalar(vector, 'rides') / minutes : null;
-    case 'dpm': return enoughTime ? gun / minutes : null;
-    case 'hitRate': return scalar(vector, 'shots') >= STYLE_MIN_SHOTS ? scalar(vector, 'hits') / scalar(vector, 'shots') : null;
-    case 'dmgPerShot': return scalar(vector, 'shots') >= STYLE_MIN_SHOTS ? scalar(vector, 'hitDamage') / scalar(vector, 'shots') : null;
+    case 'dpm': return enoughTime ? (gun + scalar(vector, 'explosiveDamage')) / minutes : null;
+    case 'hitRate': { const shot = mixTotals(vector); return shot.shots >= STYLE_MIN_SHOTS ? shot.hits / shot.shots : null; }
+    case 'dmgPerShot': { const shot = mixTotals(vector); return shot.shots >= STYLE_MIN_SHOTS ? shot.hitDamage / shot.shots : null; }
     case 'knockRate': return enoughFights ? fight(vector, 'fightsWithKnock') / fights : null;
     case 'conversion': return fight(vector, 'chainsDealt') >= STYLE_MIN_KNOCKS ? fight(vector, 'chainsFinished') / fight(vector, 'chainsDealt') : null;
     case 'combat': return null;
@@ -618,7 +688,7 @@ const ARCHETYPES: ReadonlyArray<{ id: string; label: string; weights: Partial<Re
   { id: 'anchor', label: '贴队稳健型', weights: { isolation: -1, risk: -0.4, zoneEdge: -0.2 }, blurb: '紧跟队友、很少冒险' },
   { id: 'vanguard', label: '前排先锋', weights: { risk: 1, tempo: 0.4, initiative: 0.3 }, blurb: '站在最前面承受火力' },
   { id: 'late', label: '后期输出型', weights: { lateGame: 1, earlyLoot: -0.2, tempo: -0.2 }, blurb: '前期低调、后期才发力' },
-  { id: 'carry', label: '输出核心', weights: { combat: 1, dpm: 0.4, hitRate: 0.3 }, blurb: '综合输出与转化明显强于队友' },
+  { id: 'carry', label: '输出核心', weights: { combat: 1, dpm: 0.4, hitRate: 0.3 }, blurb: '综合输出明显强于队友' },
   { id: 'scavenger', label: '发育搜刮型', weights: { earlyLoot: 1, supplies: 0.3, lateGame: 0.2 }, blurb: '落地后搜刮快、补给足' },
 ];
 
@@ -662,6 +732,40 @@ function ratioOf(own: number | null, base: number | null): number | null {
   return own !== null && base !== null && base > 0 ? own / base : null;
 }
 
+/** Axes whose raw value depends on which weapons were fired; compared on the player's own weapon mix. */
+const MIX_ADJUSTED: ReadonlySet<StyleAxisKey> = new Set(['hitRate', 'dmgPerShot']);
+
+/**
+ * The player's value and what the teammates would score firing the player's own weapon mix (indirect
+ * standardisation by weapon class). Without it a sniper out-"aims" a sprayer simply by using a bolt-action.
+ * Each teammate class rate is shrunk toward the teammates' overall rate with a STYLE_CLASS_PRIOR_SHOTS prior.
+ */
+function axisPair(key: StyleAxisKey, own: Vec, mates: Vec): { value: number | null; matesValue: number | null } {
+  const value = axisValue(key, own);
+  if (!MIX_ADJUSTED.has(key)) return { value, matesValue: axisValue(key, mates) };
+  const matesMix = mixTotals(mates);
+  if (value === null || matesMix.shots < STYLE_MIN_SHOTS) return { value, matesValue: null };
+  const useDamage = key === 'dmgPerShot';
+  const matesOverall = (useDamage ? matesMix.hitDamage : matesMix.hits) / matesMix.shots;
+  const ownShots = slice(own, 'classShots', CLASS_ORDER.length);
+  const mateShots = slice(mates, 'classShots', CLASS_ORDER.length);
+  const mateYield = slice(mates, useDamage ? 'classHitDamage' : 'classHits', CLASS_ORDER.length);
+  let expected = 0;
+  let shots = 0;
+  CLASS_ORDER.forEach((weaponClass, index) => {
+    if (weaponClass === 'SG') return;
+    const rate = (mateYield[index]! + STYLE_CLASS_PRIOR_SHOTS * matesOverall) / (mateShots[index]! + STYLE_CLASS_PRIOR_SHOTS);
+    expected += ownShots[index]! * rate;
+    shots += ownShots[index]!;
+  });
+  return { value, matesValue: shots > 0 ? expected / shots : null };
+}
+
+function pairRatio(key: StyleAxisKey, own: Vec, mates: Vec): number | null {
+  const { value, matesValue } = axisPair(key, own, mates);
+  return ratioOf(value, matesValue);
+}
+
 export function tierFor(ratio: number | null, low: number | null, high: number | null, confidence: number | null): { tier: StyleTier; direction: 'high' | 'low' | null } {
   if (ratio === null) return { tier: 'unknown', direction: null };
   const direction = ratio >= 1 ? 'high' : 'low';
@@ -690,10 +794,12 @@ export function buildSquadStyle(input: BuildSquadStyleInput): SquadStyle {
   const rng = mulberry32(STYLE_BOOTSTRAP_SEED);
   const composite = STYLE_AXES.find((axis) => axis.composite)!;
   const draws = new Map<string, Map<StyleAxisKey, number[]>>(accountIds.map((id) => [id, new Map(STYLE_AXES.map((axis) => [axis.key, [] as number[]]))]));
-  /** Mean log2 ratio of the composite's components; needs at least three of them. */
+  /** Weighted mean log2 ratio of the composite's components; needs damage per minute plus one other. */
   const compositeLog = (logs: Map<StyleAxisKey, number>): number | null => {
-    const values = (composite.composite ?? []).map((key) => logs.get(key)).filter((value): value is number => value !== undefined);
-    return values.length >= 3 ? values.reduce((sum, value) => sum + value, 0) / values.length : null;
+    const present = (composite.composite ?? []).filter((key) => logs.has(key));
+    if (!logs.has('dpm') || present.length < 2) return null;
+    const weight = present.reduce((sum, key) => sum + (COMBAT_WEIGHTS[key] ?? 0), 0);
+    return present.reduce((sum, key) => sum + logs.get(key)! * (COMBAT_WEIGHTS[key] ?? 0), 0) / weight;
   };
   if (matches.length >= 8) {
     for (let round = 0; round < STYLE_BOOTSTRAP_RESAMPLES; round += 1) {
@@ -706,7 +812,7 @@ export function buildSquadStyle(input: BuildSquadStyleInput): SquadStyle {
         const logs = new Map<StyleAxisKey, number>();
         for (const axis of STYLE_AXES) {
           if (axis.composite) continue;
-          const value = ratioOf(axisValue(axis.key, own), axisValue(axis.key, mates));
+          const value = pairRatio(axis.key, own, mates);
           if (value !== null && value > 0) { logs.set(axis.key, Math.log2(value)); draws.get(id)!.get(axis.key)!.push(Math.log2(value)); }
         }
         const combined = compositeLog(logs);
@@ -722,7 +828,7 @@ export function buildSquadStyle(input: BuildSquadStyleInput): SquadStyle {
     const baseLogs = new Map<StyleAxisKey, number>();
     for (const axis of STYLE_AXES) {
       if (axis.composite) continue;
-      const value = ratioOf(axisValue(axis.key, own), axisValue(axis.key, mates));
+      const value = pairRatio(axis.key, own, mates);
       if (value !== null && value > 0) baseLogs.set(axis.key, Math.log2(value));
     }
     readingsByPlayer.set(accountId, STYLE_AXES.map((axis): AxisReading => {
@@ -735,8 +841,7 @@ export function buildSquadStyle(input: BuildSquadStyleInput): SquadStyle {
         value = ratio;
         matesValue = ratio === null ? null : 1;
       } else {
-        value = axisValue(axis.key, own);
-        matesValue = axisValue(axis.key, mates);
+        ({ value, matesValue } = axisPair(axis.key, own, mates));
         ratio = ratioOf(value, matesValue);
       }
       const sorted = [...(draws.get(accountId)!.get(axis.key) ?? [])].sort((left, right) => left - right);
@@ -865,8 +970,8 @@ export function buildSquadStyle(input: BuildSquadStyleInput): SquadStyle {
 
   const funnel: FunnelEntry[] = players.map((player) => {
     const vector = base.perPlayer.get(player.accountId)!;
-    const shots = scalar(vector, 'shots');
-    const hits = scalar(vector, 'hits');
+    // Shotgun pellets register several hits per shot, so the funnel's shooting steps leave shotguns out.
+    const { shots, hits, hitDamage } = mixTotals(vector);
     const minutes = scalar(vector, 'minutes');
     const knocks = fight(vector, 'knocksDealt');
     const dealt = fight(vector, 'chainsDealt');
@@ -879,9 +984,9 @@ export function buildSquadStyle(input: BuildSquadStyleInput): SquadStyle {
       shots,
       hits,
       hitRate: shots > 0 ? hits / shots : null,
-      hitDamage: scalar(vector, 'hitDamage'),
-      damagePerShot: shots > 0 ? scalar(vector, 'hitDamage') / shots : null,
-      damagePerMinute: minutes > 0 ? scalar(vector, 'gunDamage') / minutes : null,
+      hitDamage,
+      damagePerShot: shots > 0 ? hitDamage / shots : null,
+      damagePerMinute: minutes > 0 ? (scalar(vector, 'gunDamage') + scalar(vector, 'explosiveDamage')) / minutes : null,
       knocks,
       hitsPerKnock: knocks > 0 ? hits / knocks : null,
       kills: fight(vector, 'kills'),

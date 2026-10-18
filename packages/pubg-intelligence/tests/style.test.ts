@@ -45,6 +45,9 @@ test('style telemetry measures distance, stage, healing, early loot, movement, c
     { _T: 'LogPlayerAttack', _D: day(136), common: { isGame: 2 }, attackType: 'Weapon', attacker: who('a', 1), weapon: { itemId: 'Item_Weapon_Kar98k_C', category: 'Weapon', subCategory: 'Main' } },
     { _T: 'LogPlayerAttack', _D: day(137), common: { isGame: 2 }, attackType: 'Weapon', attacker: who('a', 1), weapon: { itemId: 'Item_Weapon_Grenade_C', category: 'Equipment', subCategory: 'Throwable' } },
     { _T: 'LogPlayerTakeDamage', _D: day(138), common: { isGame: 2 }, damage: 10, damageTypeCategory: 'Damage_DBNO', damageCauserName: 'WeapKar98k_C', attacker: who('a', 1, geo(0, 0)), victim: who('e', 2, geo(20_000, 0), { isDBNO: true }) },
+    { _T: 'LogPlayerTakeDamage', _D: day(139), common: { isGame: 2 }, damage: 80, damageTypeCategory: 'Damage_Explosion_PanzerFaustWarhead', damageCauserName: 'PanzerFaust100M_Projectile_C', attacker: who('b', 1), victim: who('e', 2) },
+    { _T: 'LogPlayerTakeDamage', _D: day(139), common: { isGame: 2 }, damage: 15, damageTypeCategory: 'Damage_Molotov', attacker: who('b', 1), victim: who('e', 2) },
+    { _T: 'LogPlayerAttack', _D: day(139), common: { isGame: 2 }, attackType: 'Weapon', attacker: who('b', 1), weapon: { itemId: 'Item_Weapon_PanzerFaust100M_C', category: 'Weapon', subCategory: 'Main' } },
     { _T: 'LogPlayerUseThrowable', _D: day(143), common: { isGame: 2 }, attacker: who('a', 1), weapon: { itemId: 'Item_Weapon_SmokeBomb_C' } },
     { _T: 'LogPlayerUseThrowable', _D: day(144), common: { isGame: 2 }, attacker: who('a', 1), weapon: { itemId: 'Item_Weapon_Juju_C' } },
     { _T: 'LogVehicleRide', _D: day(145), common: { isGame: 2 }, character: who('b', 1), vehicle: { vehicleType: 'WheeledVehicle' } },
@@ -53,6 +56,10 @@ test('style telemetry measures distance, stage, healing, early loot, movement, c
   const stats = analyzeStyleTelemetry(payload, tracked);
   assert.equal(stats.a!.gunDamage, 30, 'friendly fire and unknown damage are ignored');
   assert.equal(stats.a!.headDamage, 30);
+  assert.equal(stats.b!.explosiveDamage, 95, 'rocket and fire damage count toward damage per minute');
+  assert.equal(stats.b!.gunDamage, 20, 'but not toward gun damage');
+  assert.equal(stats.b!.weaponDamage.PanzerFaust, 80);
+  assert.equal(stats.b!.shots, 0, 'rocket launches are not shots');
   assert.equal(stats.a!.dealtBins[STYLE_DISTANCE_EDGES.findIndex((edge) => 200 < edge)], 30);
   assert.equal(stats.b!.dealtBins[1], 20, 'a 10 m shot lands in the 10-25 m bin');
   assert.deepEqual(stats.a!.phaseDamage, [30, 0, 0]);
@@ -61,6 +68,7 @@ test('style telemetry measures distance, stage, healing, early loot, movement, c
   assert.equal(stats.a!.shots, 2, 'only guns count as shots');
   assert.equal(stats.a!.hits, 2, 'hits on downed players count as hits');
   assert.equal(stats.a!.hitDamage, 40);
+  assert.equal(stats.a!.classShots[3], 2, 'Kar98k shots are sniper-rifle shots');
   assert.equal(stats.a!.gunDamage, 30, 'distance damage stays on standing targets');
   assert.equal(stats.a!.throwables.smoke, 1);
   assert.equal(stats.a!.throwables.frag + stats.a!.throwables.fire + stats.a!.throwables.flash, 0);
@@ -84,10 +92,14 @@ function playerMatch(overrides: { range?: number; isolated?: boolean; revives?: 
   return {
     minutes: 15,
     gunDamage: 300 * skill,
+    explosiveDamage: 0,
     headDamage: 30 * skill,
     shots: 100,
     hits: Math.round(25 * skill),
     hitDamage: 400 * skill,
+    classShots: [100, 0, 0, 0, 0, 0, 0, 0],
+    classHits: [Math.round(25 * skill), 0, 0, 0, 0, 0, 0, 0],
+    classHitDamage: [400 * skill, 0, 0, 0, 0, 0, 0, 0],
     dealtBins,
     phaseDamage: [100, 100, 100],
     weaponDamage: overrides.weapons ?? { Kar98k: 150, UMP: 150 },
@@ -192,7 +204,7 @@ test('the fighting-power index ranks the stronger fighter first and the funnel r
   assert.equal(style.combat[0]!.rank, 1);
   assert.equal(style.combat[0]!.tier, 'stable');
   assert.ok(style.combat[0]!.ratio! > 1.3 && style.combat[0]!.low! > 1);
-  assert.equal(style.combat[0]!.components.length, 5);
+  assert.equal(style.combat[0]!.components.length, 3);
   assert.ok(style.combat.at(-1)!.ratio! < 1);
   const ace = style.funnel.find((entry) => entry.accountId === 'ace')!;
   const other = style.funnel.find((entry) => entry.accountId === 'b')!;
@@ -214,4 +226,18 @@ test('when nobody leads on the overall index the verdict says so instead of nami
   }));
   const style = buildSquadStyle({ matches, names: new Map([['a', 'A'], ['b', 'B'], ['c', 'C'], ['d', 'D']]) });
   assert.ok(style.combatVerdict.includes('没有显著差距'));
+});
+
+test('hit rate is compared on the same weapon mix, so a sniper is not rated a better shot just for using a bolt-action', () => {
+  const sniper = (): PlayerStyleMatch => ({ ...playerMatch(), shots: 100, hits: 40, hitDamage: 4000, classShots: [0, 0, 0, 100, 0, 0, 0, 0], classHits: [0, 0, 0, 40, 0, 0, 0, 0], classHitDamage: [0, 0, 0, 4000, 0, 0, 0, 0] });
+  const mixed = (): PlayerStyleMatch => ({ ...playerMatch(), shots: 200, hits: 60, hitDamage: 4800, classShots: [100, 0, 0, 100, 0, 0, 0, 0], classHits: [20, 0, 0, 40, 0, 0, 0, 0], classHitDamage: [800, 0, 0, 4000, 0, 0, 0, 0] });
+  const matches = Array.from({ length: 20 }, (_, index) => ({ matchId: `m${index}`, players: { s: sniper(), a: mixed(), b: mixed(), c: mixed() } }));
+  const style = buildSquadStyle({ matches, names: new Map([['s', 'S'], ['a', 'A'], ['b', 'B'], ['c', 'C']]) });
+  const hitRate = style.players.find((player) => player.accountId === 's')!.axes.find((axis) => axis.key === 'hitRate')!;
+  assert.equal(hitRate.value, 0.4, 'raw sniper hit rate');
+  assert.ok(Math.abs(hitRate.ratio! - 1) < 0.02, `same class rates read as parity, got ${hitRate.ratio}`);
+  const shotgun = (): PlayerStyleMatch => ({ ...mixed(), shots: 300, hits: 560, classShots: [100, 0, 0, 100, 0, 100, 0, 0], classHits: [20, 0, 0, 40, 0, 500, 0, 0] });
+  const withShotgun = buildSquadStyle({ matches: matches.map((match) => ({ ...match, players: { ...match.players, s: shotgun() } })), names: new Map([['s', 'S'], ['a', 'A'], ['b', 'B'], ['c', 'C']]) });
+  const pellets = withShotgun.players.find((player) => player.accountId === 's')!.axes.find((axis) => axis.key === 'hitRate')!;
+  assert.equal(pellets.value, 0.3, 'shotgun pellets are left out of the hit rate');
 });

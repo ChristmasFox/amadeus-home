@@ -1,5 +1,5 @@
 import { parseTelemetryPayload } from '@agent/pubg-domain';
-import { mulberry32, percentile, STYLE_BOOTSTRAP_RESAMPLES, STYLE_BOOTSTRAP_SEED } from './style.js';
+import { EXPLOSIVE_DAMAGE, mulberry32, percentile, STYLE_BOOTSTRAP_RESAMPLES, STYLE_BOOTSTRAP_SEED } from './style.js';
 
 export const LOBBY_SCHEMA_VERSION = 1 as const;
 /** Players who left the ground for less than this are dropped from the lobby so early drops do not skew percentiles. */
@@ -63,7 +63,8 @@ export function analyzeLobby(payload: unknown, trackedIds: ReadonlySet<string>):
       const entry = id ? players.get(id) : undefined;
       if (entry && time > entry.seen) entry.seen = time;
     } else if (type === 'LogPlayerTakeDamage') {
-      if (phase === null || phase < 1 || event.damageTypeCategory !== 'Damage_Gun') continue;
+      const category = typeof event.damageTypeCategory === 'string' ? event.damageTypeCategory : '';
+      if (phase === null || phase < 1 || (category !== 'Damage_Gun' && !EXPLOSIVE_DAMAGE.has(category))) continue;
       const damage = num(event.damage);
       const attacker = obj(event.attacker);
       const victim = obj(event.victim);

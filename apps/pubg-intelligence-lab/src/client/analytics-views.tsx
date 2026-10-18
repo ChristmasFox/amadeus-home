@@ -716,7 +716,7 @@ function CombatPanel({ style, data }: { style: SquadStyle; data: TelemetryAnalyt
   const mark = (value: number | null, best: number | null) => (value !== null && best !== null && Math.abs(value - best) < 1e-9 ? 'best' : '');
   const maxRatio = Math.max(1.5, ...style.combat.map((entry) => entry.ratio ?? 0));
   return (
-    <Panel title="谁更能打" hint="战斗力指数 = 每分钟伤害、命中率、交战击倒率、击倒转化率、爆头率的综合，比的是相对队友">
+    <Panel title="谁更能打" hint="战斗力指数 = 每分钟伤害（含火箭筒/手雷/燃烧瓶，权重 50%）+ 交战击倒率（25%）+ 同枪型命中率（25%），比的是相对队友；只统计排位赛">
       <ul className="av-verdicts">
         <li><b>战绩口径</b><span>{data.longRun.verdict}</span></li>
         <li><b>全场口径</b><span>{data.lobby.verdict}</span></li>
@@ -755,7 +755,7 @@ function CombatPanel({ style, data }: { style: SquadStyle; data: TelemetryAnalyt
               <span className={mark(entry.conversion, top.conv)} title={`${entry.chainsFinished}/${entry.chainsDealt}`}>{pct(entry.conversion)}</span>
             </div>)}
           </div>
-          <p className="av-note">命中/击倒越低说明每个击倒需要的命中越少；击倒转化 = 自己打倒的人最终被小队终结的比例（其余被救起或未观察到结果）；交战击倒率 = 参与的交战里至少打倒一人的比例。高亮为队内最优。命中率按「开火事件 ÷ 对敌命中事件」计算，绝对值（约 6–8%）和游戏内准确率不是一回事，只用来在队友之间比较。</p>
+          <p className="av-note">命中/击倒越低说明每个击倒需要的命中越少；击倒转化 = 自己打倒的人最终被小队终结的比例（其余被救起或未观察到结果）；交战击倒率 = 参与的交战里至少打倒一人的比例。高亮为队内最优。漏斗里的射击和命中不含霰弹枪（一发多颗弹丸）和火箭筒/榴弹（不产生枪械命中）；命中率 = 对敌命中事件 ÷ 开火事件，绝对值和游戏内准确率不是一回事。指数里的命中率是「同枪型」比较：拿队友用同类枪的命中率，按你自己的用枪比例折算后再比，狙击手不会因为用栓狙就显得枪法更好。爆头率和击倒转化率仍在风格维度里展示，但不计入指数：真实数据里爆头率可靠性低、与胜负无关，转化率主要取决于队友是否补枪。</p>
         </div>
       </div>
     </Panel>

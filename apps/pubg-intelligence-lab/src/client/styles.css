@@ -515,3 +515,4 @@ button.av-row:hover,.av-row.active{background:#142120}
 .av-verdicts{margin:0 0 12px;padding:0;list-style:none;display:flex;flex-direction:column;gap:6px}
 .av-verdicts li{display:grid;grid-template-columns:78px minmax(0,1fr);gap:12px;align-items:baseline;font-size:13px;line-height:1.65;color:#c6d4cf}
 .av-verdicts li b{color:var(--teal);font-size:11px;letter-spacing:.04em}
+.ranked-note{margin:10px 0 6px;color:var(--muted);font-size:11px}

@@ -18,6 +18,7 @@ interface Bootstrap {
   dateTo: string | null;
   modelEnabled: boolean;
   modeCounts?: Record<string, number>;
+  rankedMatchCount?: number;
   archivedMatchCount?: number;
   selectedSquadId: string;
   squads: SquadOption[];
@@ -787,8 +788,9 @@ export function App() {
             {bootstrap?.squads.map((squad) => <option value={squad.id} key={squad.id}>{squad.label} · {squad.members.length} 人</option>)}
           </select>
           <div className="selected-roster">{currentSquad?.members.map((member) => <span key={member}>{member}</span>) ?? <span>显示全部已记录队员</span>}</div>
+          <div className="ranked-note" title="普通、娱乐、活动和人机局不计入任何统计">仅统计排位赛{bootstrap?.rankedMatchCount !== undefined && <> · {bootstrap.rankedMatchCount} / {bootstrap.matchCount} 场</>}</div>
           <div className="mode-switch" role="group" aria-label="游戏模式">
-            {([['squad', '四排'], ['duo', '双排'], ['solo', '单排'], ['other', '其他'], ['all', '全部']] as const).map(([key, label]) => <button type="button" key={key} className={mode === key ? 'active' : ''} onClick={() => changeScope(() => setMode(key))}>{label}{key !== 'all' && bootstrap?.modeCounts?.[key] !== undefined && <small>{bootstrap.modeCounts[key]}</small>}</button>)}
+            {([['squad', '四排'], ['duo', '双排'], ['solo', '单排'], ['other', '其他'], ['all', '全部']] as const).filter(([key]) => key === 'all' || key === mode || (bootstrap?.modeCounts?.[key] ?? 1) > 0).map(([key, label]) => <button type="button" key={key} className={mode === key ? 'active' : ''} onClick={() => changeScope(() => setMode(key))}>{label}{key !== 'all' && bootstrap?.modeCounts?.[key] !== undefined && <small>{bootstrap.modeCounts[key]}</small>}</button>)}
           </div>
           <label className="complete-toggle" title="只统计有原始遥测归档（完整事件流）的比赛；关闭时统计全部战绩">
             <input type="checkbox" checked={completeOnly} onChange={(event) => changeScope(() => setCompleteOnly(event.target.checked))} />

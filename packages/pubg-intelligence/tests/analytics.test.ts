@@ -54,6 +54,8 @@ test('squad analytics keeps unknown placement out of rates and reports sample no
 test('weapon names merge across attack, damage and variant spellings and drop non-firearms', () => {
   assert.equal(normalizeWeaponName('Item_Weapon_BerylM762_C'), 'BerylM762');
   assert.equal(normalizeWeaponName('WeapBerylM762_C'), 'BerylM762');
+  assert.equal(normalizeWeaponName('PanzerFaust100M_Projectile_C'), 'PanzerFaust');
+  assert.equal(normalizeWeaponName('WeapPanzerFaust100M1_C'), 'PanzerFaust');
   assert.equal(normalizeWeaponName('ZU_Item_Weapon_Groza'), 'Groza');
   assert.equal(normalizeWeaponName('ZU_Item_Weapon_MG3_Reward'), 'MG3');
   assert.equal(normalizeWeaponName('Pickaxe'), null);

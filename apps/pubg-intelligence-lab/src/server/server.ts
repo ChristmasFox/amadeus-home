@@ -1000,8 +1000,13 @@ function requestedMode(url: URL): ModeGroup | 'all' {
   return value === 'all' ? 'all' : MODE_GROUPS.find((group) => group === value) ?? 'squad';
 }
 
+/** Only ranked (competitive) matches are analysed; normal, arcade, event and bot-filled casual matches are discarded. */
+function isRanked(match: NormalizedMatch): boolean {
+  return match.isCompetitive === true;
+}
+
 function inMode(match: NormalizedMatch, mode: ModeGroup | 'all'): boolean {
-  return mode === 'all' || modeGroupOf(match.gameMode) === mode;
+  return isRanked(match) && (mode === 'all' || modeGroupOf(match.gameMode) === mode);
 }
 
 /** Match IDs with a verified raw telemetry archive entry; re-read at most every 30 seconds because the hourly prefetch adds entries. */
@@ -1155,7 +1160,8 @@ async function handleApi(request: IncomingMessage, response: ServerResponse, sna
       matchCount: snapshot.matches.length,
       telemetryCachedMatchCount: snapshot.features.size,
       archivedMatchCount: (await archivedIds(snapshot)).size,
-      modeCounts: Object.fromEntries(MODE_GROUPS.map((group) => [group, snapshot.matches.filter((match) => modeGroupOf(match.gameMode) === group).length])),
+      modeCounts: Object.fromEntries(MODE_GROUPS.map((group) => [group, snapshot.matches.filter((match) => inMode(match, group)).length])),
+      rankedMatchCount: snapshot.matches.filter(isRanked).length,
       parserVersion: PARSER_VERSION,
       featureVersion: FEATURE_VERSION,
       dateFrom: dates[0] ?? null,

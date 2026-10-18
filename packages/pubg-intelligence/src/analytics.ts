@@ -245,7 +245,7 @@ export function buildSquadAnalytics(input: BuildSquadAnalyticsInput): SquadAnaly
   };
 }
 
-const NON_FIREARM = /^(pickaxe|grenade|smokebomb|molotov|flashbang|stungun|sticky|decoy|juju|panzerfaust)/iu;
+const NON_FIREARM = /^(pickaxe|grenade|smokebomb|molotov|flashbang|stungun|sticky|decoy|juju|m79|ziplinegun|flaregun)/iu;
 
 /**
  * Telemetry names the same gun differently across event types (`Item_Weapon_AUG_C` on attacks,
@@ -256,9 +256,11 @@ export function normalizeWeaponName(weapon: string): string | null {
   const name = weapon
     .replace(/^ZU_Item_Weapon_/iu, '')
     .replace(/^Item_Weapon_/iu, '')
-    .replace(/^Weap(?=[A-Z0-9])/u, '')
+    .replace(/^Weap(?=[A-Z0-9]|vz)/u, '')
     .replace(/_(C|Reward)$/iu, '')
-    .replace(/_Reward$/iu, '');
+    .replace(/_Reward$/iu, '')
+    .replace(/_Projectile$/iu, '');
+  if (/^PanzerFaust/iu.test(name)) return 'PanzerFaust';
   return !name || NON_FIREARM.test(name) ? null : name;
 }
 
