@@ -22,6 +22,7 @@ interface Bootstrap {
   modeCounts?: Record<string, number>;
   rankedMatchCount?: number;
   archivedMatchCount?: number;
+  archiveBackup?: { ok: boolean; result: string; at: string; matches: number } | null;
   selectedSquadId: string;
   squads: SquadOption[];
 }
@@ -855,6 +856,13 @@ export function App() {
             {!matches.length && <div className="empty-list">该筛选条件下没有比赛</div>}
             {matches.length < totalMatches && <button className="load-more" onClick={() => setOffset((value) => value + 100)}>加载更多比赛 <span>↓</span></button>}
           </div>
+          {(() => {
+            const backup = bootstrap?.archiveBackup;
+            const ageHours = backup ? (Date.now() - Date.parse(backup.at)) / 3_600_000 : null;
+            const stale = !backup || !backup.ok || (ageHours !== null && ageHours > 48);
+            const text = !backup ? '归档尚未备份' : !backup.ok ? `归档备份未成功（${backup.result === 'skipped' ? '备份盘未挂载' : '校验失败'}）` : ageHours !== null && ageHours > 48 ? `归档备份已 ${Math.floor(ageHours / 24)} 天未更新` : `归档已备份 · ${backup.matches} 场 · ${dateLabel(backup.at)}`;
+            return <div className={`rail-backup ${stale ? 'stale' : ''}`} title="原始遥测归档每天复制一份到备份盘（只追加，不删除）">{stale ? '⚠ ' : '✓ '}{text}</div>;
+          })()}
           <div className="rail-footer"><span>数据源</span><b>Lab SQLite · 只读</b><small>事件缓存 {bootstrap?.telemetryCachedMatchCount ?? 0} 场 / v6</small></div>
         </aside>
 

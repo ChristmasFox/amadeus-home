@@ -1142,3 +1142,5 @@ button.av-row:hover,.av-row.active{background:#142120}
 .ms-map .pin.good circle{fill:var(--mint);stroke:#0b1112;stroke-width:1.5}
 .ms-map .pin.bad path{stroke-width:3}
 .ms-map .me .leader{stroke-width:1.5}
+.rail-backup{margin:10px 0 0;padding:6px 10px;border:1px solid #1f2e2e;border-radius:8px;color:var(--muted);font-size:11px;line-height:1.4}
+.rail-backup.stale{border-color:#6a4f1f;color:var(--amber);background:#2a2216}

@@ -1,5 +1,6 @@
-import { randomBytes, scrypt, timingSafeEqual } from 'node:crypto';
-import { lstatSync, readFileSync } from 'node:fs';
+import { createHmac, randomBytes, scrypt, timingSafeEqual } from 'node:crypto';
+import { existsSync, lstatSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
 import type { IncomingMessage } from 'node:http';
 
 /**
@@ -27,7 +28,14 @@ export interface PublicAccess {
   host: string;
   origin: string;
   verifier: PasswordVerifier;
-  sessions: Map<string, number>;
+  /**
+   * Sessions are signed tokens (`id.expiry.signature`), not server memory, so a restart (the page restarts whenever
+   * the data refreshes) does not log anyone out. The signing key is derived from a persistent secret and the password
+   * verifier, so changing the password invalidates every session. Logged-out tokens are remembered in `revoked`.
+   */
+  key: Buffer;
+  revoked: Map<string, number>;
+  revokedFile: string;
   attempts: Map<string, number[]>;
   globalAttempts: number[];
 }
@@ -64,18 +72,46 @@ export function isPublicHostname(value: string): boolean {
   return value.includes('.');
 }
 
+function loadSessionSecret(stateDirectory: string): Buffer {
+  mkdirSync(stateDirectory, { recursive: true, mode: 0o700 });
+  const file = join(stateDirectory, 'session-secret');
+  if (!existsSync(file)) {
+    const temporary = `${file}.${process.pid}.tmp`;
+    writeFileSync(temporary, randomBytes(32).toString('hex'), { mode: 0o600, flag: 'wx' });
+    try { renameSync(temporary, file); } catch { /* another process created it first */ }
+  }
+  assertPrivateFile(file, 'session_secret_not_private');
+  const secret = readFileSync(file, 'utf8').trim();
+  if (secret.length < 32) throw new Error('session_secret_invalid');
+  return Buffer.from(secret, 'utf8');
+}
+
+function loadRevoked(file: string): Map<string, number> {
+  try {
+    const parsed: unknown = JSON.parse(readFileSync(file, 'utf8'));
+    const now = Date.now();
+    return new Map(Object.entries(parsed && typeof parsed === 'object' ? parsed as Record<string, number> : {}).filter(([, expires]) => typeof expires === 'number' && expires > now));
+  } catch {
+    return new Map();
+  }
+}
+
 /** Builds the public scope from the environment; null (public disabled) unless both a host and a verifier are configured. */
-export function loadPublicAccess(env: NodeJS.ProcessEnv): PublicAccess | null {
+export function loadPublicAccess(env: NodeJS.ProcessEnv, stateDirectory: string): PublicAccess | null {
   const host = env.PUBG_INTELLIGENCE_PUBLIC_HOST?.trim().toLowerCase();
   const authFile = env.PUBG_INTELLIGENCE_PUBLIC_AUTH_FILE?.trim();
   if (!host && !authFile) return null;
   if (!host || !authFile) throw new Error('public_access_needs_host_and_auth_file');
   if (!isPublicHostname(host)) throw new Error('public_host_invalid');
+  const verifier = loadPasswordVerifier(authFile);
+  const revokedFile = join(stateDirectory, 'session-revoked.json');
   return {
     host,
     origin: `https://${host}`,
-    verifier: loadPasswordVerifier(authFile),
-    sessions: new Map(),
+    verifier,
+    key: createHmac('sha256', loadSessionSecret(stateDirectory)).update(verifier.digest).digest(),
+    revoked: loadRevoked(revokedFile),
+    revokedFile,
     attempts: new Map(),
     globalAttempts: [],
   };
@@ -129,12 +165,28 @@ export async function login(access: PublicAccess, client: string, password: unkn
     await new Promise((resolve) => setTimeout(resolve, Math.min(recent.length * 250, 1500)));
     return { failed: true };
   }
-  const token = randomBytes(32).toString('base64url');
-  access.sessions.set(token, now + PUBLIC_SESSION_SECONDS * 1000);
   access.attempts.delete(client);
-  // Expired sessions are dropped here so the map cannot grow without bound.
-  for (const [stored, expires] of access.sessions) if (expires <= now) access.sessions.delete(stored);
-  return { token };
+  return { token: signToken(access, randomBytes(16).toString('base64url'), now + PUBLIC_SESSION_SECONDS * 1000) };
+}
+
+function signature(access: PublicAccess, body: string): string {
+  return createHmac('sha256', access.key).update(body).digest('base64url');
+}
+
+function signToken(access: PublicAccess, id: string, expires: number): string {
+  const body = `${id}.${expires}`;
+  return `${body}.${signature(access, body)}`;
+}
+
+/** The token's id when its signature is genuine and it has not expired, else null. */
+function verifyToken(access: PublicAccess, token: string, now: number): { id: string; expires: number } | null {
+  const [id, expiry, signed, extra] = token.split('.');
+  if (!id || !expiry || !signed || extra !== undefined || !/^\d{1,15}$/u.test(expiry)) return null;
+  const expected = Buffer.from(signature(access, `${id}.${expiry}`));
+  const actual = Buffer.from(signed);
+  if (expected.length !== actual.length || !timingSafeEqual(expected, actual)) return null;
+  const expires = Number(expiry);
+  return expires > now ? { id, expires } : null;
 }
 
 export function sessionToken(request: IncomingMessage): string | null {
@@ -149,16 +201,23 @@ export function sessionToken(request: IncomingMessage): string | null {
 
 export function validSession(access: PublicAccess, request: IncomingMessage, now = Date.now()): boolean {
   const token = sessionToken(request);
-  if (!token) return false;
-  const expires = access.sessions.get(token);
-  if (expires === undefined) return false;
-  if (expires <= now) { access.sessions.delete(token); return false; }
-  return true;
+  const verified = token ? verifyToken(access, token, now) : null;
+  return verified !== null && !access.revoked.has(verified.id);
 }
 
-export function logout(access: PublicAccess, request: IncomingMessage): void {
+export function logout(access: PublicAccess, request: IncomingMessage, now = Date.now()): void {
   const token = sessionToken(request);
-  if (token) access.sessions.delete(token);
+  const verified = token ? verifyToken(access, token, now) : null;
+  if (!verified) return;
+  access.revoked.set(verified.id, verified.expires);
+  for (const [id, expires] of access.revoked) if (expires <= now) access.revoked.delete(id);
+  try {
+    const temporary = `${access.revokedFile}.${process.pid}.tmp`;
+    writeFileSync(temporary, JSON.stringify(Object.fromEntries(access.revoked)), { mode: 0o600 });
+    renameSync(temporary, access.revokedFile);
+  } catch {
+    // The revocation still holds for this process; only its survival across a restart is lost.
+  }
 }
 
 export const loginCookie = (token: string): string => `${PUBLIC_SESSION_COOKIE}=${token}; Path=/; Max-Age=${PUBLIC_SESSION_SECONDS}; Secure; HttpOnly; SameSite=Strict`;

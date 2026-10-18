@@ -26,32 +26,18 @@ import {
   ExperimentRunStore,
   replayTacticalBenchmark,
   analyzeTacticalMatch,
-  analyzeCombatQuality,
-  analyzeFieldTelemetry,
-  analyzeLobby,
-  analyzeStreaks,
-  analyzeMatchStory,
   buildMatchRelative,
   type RelativeValues,
   buildLongRunCombat,
   summarizeLobby,
   summarizeStreaks,
-  type LobbyMatchStats,
-  type StreakMatchStats,
-  analyzeStyleTelemetry,
   buildSquadStyle,
-  emptyFights,
-  type PlayerStyleMatch,
-  analyzeFights,
   buildFieldInsights,
   FIELD_INSIGHT_MAX,
   summarizeDistance,
   summarizeFights,
   summarizeRoles,
   summarizeZone,
-  type FieldMatchStats,
-  type FightMatchStats,
-  analyzeDeaths,
   buildCombatInsights,
   buildLineupAnalytics,
   buildPerformanceInsights,
@@ -62,17 +48,14 @@ import {
   MODE_GROUPS,
   modeGroupOf,
   summarizeDeaths,
-  type DeathRecord,
   type ModeGroup,
   buildLandingPreference,
   buildMapAnalytics,
   buildSquadAnalytics,
   extractLandings,
-  landingPlayerRef,
   mapDisplayName,
   mapSizeKm,
   summarizeCombatQuality,
-  type CombatQualityMatchStats,
   type LandingSample,
   buildWeaponEfficiency,
   anonymizeResearchText,
@@ -96,6 +79,9 @@ import {
 import { RawTelemetryArchive } from '@agent/pubg-intelligence/archive';
 import { assertArchiveOutsideRepository } from '@agent/pubg-intelligence/backfill';
 import { researchRecoveryMessage, shortConversationReply } from './messages.js';
+import { AnalysisCache, analysisVersion } from './analysis-cache.js';
+import { WorkerPool } from './analysis-pool.js';
+import type { MatchTelemetryAnalysis } from './match-analysis.js';
 import {
   clearedCookie, clientKey, isPublicRequest, LOGIN_PAGE, loadPublicAccess, login, loginCookie, logout, looksProxied, MAX_LOGIN_BYTES,
   validSession, type PublicAccess,
@@ -128,6 +114,9 @@ export interface Snapshot {
   archivedIds: { at: number; ids: ReadonlySet<string> } | null;
   telemetryUrls: Map<string, string>;
   rawTelemetryArchive: RawTelemetryArchive;
+  archiveDirectory: string;
+  analysisPool: WorkerPool;
+  analysisCache: AnalysisCache;
   battleTelemetry: Map<string, Promise<BattleTelemetryDocument>>;
   experimentStore: ExperimentRunStore;
   planner: NaturalLanguageResearchPlanner;
@@ -246,6 +235,13 @@ async function openSnapshot(modelOverride?: Exclude<LanguageModel, string>): Pro
   const squads = buildResearchSquads(matches);
   const selectedSquad = defaultSquad(matches, squads);
   const model = modelOverride ?? createResearchModel();
+  // Per-match analysis is CPU-heavy: workers keep the server responsive, and the disk cache survives restarts.
+  const packageDist = (name: string) => join(repositoryRoot, 'packages', name, 'dist', 'src');
+  let analysisSource = '';
+  try { analysisSource = readFileSync(fileURLToPath(new URL('./match-analysis.ts', import.meta.url)), 'utf8'); } catch { /* compiled layout: the packages' hash still covers the analysis code */ }
+  const analysisCache = new AnalysisCache(join(dirname(experimentPath), 'analysis-cache'), analysisVersion([packageDist('pubg-intelligence'), packageDist('pubg-domain')], [analysisSource]));
+  const workerCount = Math.max(1, Math.min(3, Number(process.env.PUBG_INTELLIGENCE_ANALYSIS_WORKERS) || 3));
+  const analysisPool = new WorkerPool(new URL('./analysis-worker.ts', import.meta.url), workerCount);
   return {
     matches,
     byId: new Map(matches.map((match) => [match.matchId, match])),
@@ -258,6 +254,9 @@ async function openSnapshot(modelOverride?: Exclude<LanguageModel, string>): Pro
     archivedIds: null,
     telemetryUrls,
     rawTelemetryArchive: new RawTelemetryArchive(telemetryArchiveDirectory),
+    archiveDirectory: telemetryArchiveDirectory,
+    analysisPool,
+    analysisCache,
     battleTelemetry: new Map(),
     experimentStore: new ExperimentRunStore(experimentPath),
     planner: new NaturalLanguageResearchPlanner(model),
@@ -296,53 +295,24 @@ async function loadBattleTelemetry(snapshot: Snapshot, match: NormalizedMatch): 
   }
 }
 
-interface MatchTelemetryAnalysis {
-  quality: CombatQualityMatchStats;
-  deaths: DeathRecord[];
-  landings: LandingSample[];
-  field: FieldMatchStats;
-  fights: FightMatchStats;
-  style: Record<string, PlayerStyleMatch>;
-  lobby: Record<string, LobbyMatchStats>;
-  streaks: StreakMatchStats;
-}
-
 /**
- * Analyse one archived match for a squad without retaining the parsed telemetry document.
- * Returns 'missing' when the archive has no entry (the CDN keeps telemetry for about 14 days) and 'failed' when it cannot be parsed.
+ * Analyse one archived match for a squad. The result is looked up in memory, then on disk, and only computed (on a
+ * worker thread, so the server stays responsive) when neither has it. Returns 'missing' when the archive has no entry
+ * (the CDN keeps telemetry for about 14 days) and 'failed' when it cannot be parsed.
  */
 function analyzeMatchTelemetry(snapshot: Snapshot, squad: ResearchSquad, match: NormalizedMatch): Promise<MatchTelemetryAnalysis | 'missing' | 'failed'> {
   const key = `${squad.id}|${match.matchId}`;
   const cached = snapshot.matchTelemetry.get(key);
   if (cached) return cached;
-  const members = new Set(squad.memberIds);
-  const memberRefs = new Set(squad.memberIds.map(landingPlayerRef));
   const request = (async (): Promise<MatchTelemetryAnalysis | 'missing' | 'failed'> => {
+    const stored = snapshot.analysisCache.read<MatchTelemetryAnalysis>(squad.id, match.matchId);
+    if (stored) return stored;
     try {
-      const payload = await snapshot.rawTelemetryArchive.read(match.matchId);
-      if (!payload) return 'missing';
-      const telemetry = await (snapshot.battleTelemetry.get(match.matchId) ?? Promise.resolve(normalizeBattleTelemetry(payload, match)));
-      const landings = extractLandings(payload, match, new Set(match.players.map((player) => player.accountId)));
-      const trackedPlayerIds = match.players.filter((player) => members.has(player.accountId)).map((player) => player.accountId);
-      const reconstruction = reconstructBattleEpisodes({ match, telemetry, trackedPlayerIds });
-      const fightStats = analyzeFights(reconstruction, match.matchId, trackedPlayerIds);
-      const rawStyle = analyzeStyleTelemetry(payload, new Set(trackedPlayerIds));
-      const style: Record<string, PlayerStyleMatch> = {};
-      for (const player of match.players) {
-        const raw = rawStyle[player.accountId];
-        if (!raw || !members.has(player.accountId)) continue;
-        style[player.accountId] = { ...raw, minutes: Math.max(0, player.survivalTime) / 60, fights: fightStats.roles[player.accountId] ?? emptyFights() };
-      }
-      return {
-        quality: analyzeCombatQuality(reconstruction),
-        deaths: analyzeDeaths(telemetry, trackedPlayerIds),
-        landings: landings.filter((landing) => memberRefs.has(landing.playerRef)),
-        field: analyzeFieldTelemetry(payload, new Set(trackedPlayerIds)),
-        fights: fightStats,
-        style,
-        lobby: analyzeLobby(payload, new Set(trackedPlayerIds)),
-        streaks: analyzeStreaks(payload, new Set(trackedPlayerIds)),
-      };
+      const result = await snapshot.analysisPool.run<MatchTelemetryAnalysis | 'missing'>({
+        kind: 'analysis', archiveDirectory: snapshot.archiveDirectory, match, memberIds: [...squad.memberIds],
+      });
+      if (result !== 'missing') snapshot.analysisCache.write(squad.id, match.matchId, result);
+      return result;
     } catch {
       return 'failed';
     }
@@ -414,9 +384,10 @@ async function computeMatchStory(snapshot: Snapshot, squad: ResearchSquad, match
   }));
   if (!archived.has(match.matchId)) return { ...base, available: false, reason: 'no_archive', players: rows, story: null };
   try {
-    const payload = await snapshot.rawTelemetryArchive.read(match.matchId);
-    if (!payload) return { ...base, available: false, reason: 'no_archive', players: rows, story: null };
-    const story = analyzeMatchStory(payload, trackedIds);
+    const story = await snapshot.analysisPool.run<Parameters<typeof JSON.stringify>[0] | 'missing'>({
+      kind: 'story', archiveDirectory: snapshot.archiveDirectory, match, memberIds: [...trackedIds],
+    });
+    if (story === 'missing') return { ...base, available: false, reason: 'no_archive', players: rows, story: null };
     const analysis = await analyzeMatchTelemetry(snapshot, squad.memberIds.length ? squad : { ...squad, memberIds: [...trackedIds] }, match);
     if (typeof analysis !== 'string') {
       for (const row of rows) {
@@ -1166,6 +1137,19 @@ async function archivedIds(snapshot: Snapshot): Promise<ReadonlySet<string>> {
   return ids;
 }
 
+/** Result of the last archive backup (written by scripts/backup-pubg-telemetry-archive.sh), so a stalled backup shows on the page. */
+function readArchiveBackup(): { ok: boolean; result: string; at: string; matches: number } | null {
+  const file = join(process.env.PUBG_INTELLIGENCE_STATE_DIR?.trim() || join(homedir(), '.local', 'share', 'amadeus', 'pubg-intelligence-lab'), 'archive-backup.json');
+  try {
+    const value = JSON.parse(readFileSync(file, 'utf8')) as Record<string, unknown>;
+    return typeof value.at === 'string' && typeof value.result === 'string'
+      ? { ok: value.ok === true, result: value.result, at: value.at, matches: typeof value.matches === 'number' ? value.matches : 0 }
+      : null;
+  } catch {
+    return null;
+  }
+}
+
 function wantsCompleteTelemetry(url: URL): boolean {
   return url.searchParams.get('complete') === '1';
 }
@@ -1308,6 +1292,7 @@ async function handleApi(request: IncomingMessage, response: ServerResponse, sna
       matchCount: snapshot.matches.length,
       telemetryCachedMatchCount: snapshot.features.size,
       archivedMatchCount: (await archivedIds(snapshot)).size,
+      archiveBackup: readArchiveBackup(),
       modeCounts: Object.fromEntries(MODE_GROUPS.map((group) => [group, snapshot.matches.filter((match) => inMode(match, group)).length])),
       rankedMatchCount: snapshot.matches.filter(isRanked).length,
       parserVersion: PARSER_VERSION,
@@ -1900,13 +1885,16 @@ export async function handlePublic(request: IncomingMessage, response: ServerRes
 }
 
 export async function startServer(options: { researchModel?: Exclude<LanguageModel, string> } = {}): Promise<{ close: () => Promise<void>; url: string }> {
+  const bootStart = Date.now();
+  const bootMark = (label: string) => { if (process.env.PUBG_INTELLIGENCE_BOOT_TIMING === '1') process.stderr.write(`BOOT ${label} +${Date.now() - bootStart}ms\n`); };
   const snapshot = await openSnapshot(options.researchModel);
+  bootMark('snapshot opened');
   const port = Number(process.env.PORT ?? DEFAULT_PORT);
   const host = process.env.HOST?.trim() || DEFAULT_HOST;
   if (!isLoopbackHost(host) && !isPrivateIPv4Host(host)) throw new Error('HOST_MUST_BE_LOOPBACK_OR_PRIVATE_IPV4');
   const allowedNetwork = bindNetwork(host);
   let vite: Awaited<ReturnType<typeof createViteServer>> | undefined;
-  const publicAccess = loadPublicAccess(process.env);
+  const publicAccess = loadPublicAccess(process.env, process.env.PUBG_INTELLIGENCE_STATE_DIR?.trim() || join(homedir(), '.local', 'share', 'amadeus', 'pubg-intelligence-lab'));
   if (publicAccess && !existsSync(resolve(CLIENT_DIST, 'index.html'))) throw new Error('public_access_needs_built_client');
   const server = createServer((request, response) => {
     if (isPublicRequest(request, publicAccess)) {
@@ -1932,6 +1920,7 @@ export async function startServer(options: { researchModel?: Exclude<LanguageMod
   server.prependListener('upgrade', (request, socket) => {
     if (isPublicRequest(request, publicAccess) || looksProxied(request)) socket.destroy();
   });
+  bootMark('before vite');
   vite = await createViteServer({
     server: { middlewareMode: true, hmr: { server } },
     appType: 'spa',
@@ -1940,10 +1929,12 @@ export async function startServer(options: { researchModel?: Exclude<LanguageMod
       include: ['react', 'react-dom/client', 'react/jsx-runtime', 'react/jsx-dev-runtime'],
     },
   });
+  bootMark('vite ready');
   await new Promise<void>((resolveStart, reject) => {
     server.once('error', reject);
     server.listen(port, host, () => resolveStart());
   });
+  bootMark('listening');
   // Warm the per-match telemetry results for the default squad so the first visit to the field tab is quick.
   void computeTelemetryAnalytics(snapshot, { squad: snapshot.defaultSquad, mode: 'squad', fromMs: undefined, toMs: undefined, limit: MAX_TELEMETRY_ANALYTICS_MATCHES })
     .catch(() => undefined);
@@ -1954,6 +1945,7 @@ export async function startServer(options: { researchModel?: Exclude<LanguageMod
     close: async () => {
       await new Promise<void>((resolveClose, reject) => server.close((error) => error ? reject(error) : resolveClose()));
       await vite?.close();
+      await snapshot.analysisPool.close();
       snapshot.experimentStore.close();
     },
   };

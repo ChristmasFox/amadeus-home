@@ -44,7 +44,7 @@ the server refuse to start. See `infra/vps/README.md` for the proxy, tunnel and 
 
 - A request is public only when its `Host` header equals the configured hostname. Public requests get a password-only
   login page; every other route, including `/api/*` and `/assets/*`, returns 401 until a session exists. Sessions are
-  random server-side tokens (12 h) in a `Secure; HttpOnly; SameSite=Strict` cookie, and state-changing requests must
+  signed tokens (12 h, surviving restarts; see Sessions) in a `Secure; HttpOnly; SameSite=Strict` cookie, and state-changing requests must
   carry the public `Origin`.
 - Login is limited to 5 attempts per minute per visitor (keyed on `CF-Connecting-IP` / `X-Forwarded-For`, used for
   throttling only), 40 per minute overall, with a growing delay on failures. Wrong passwords never reveal anything else.
@@ -81,6 +81,22 @@ The page is a two-pane workspace: the left rail holds the data scope (squad, gam
 | **单局复盘** | The single-match review: domain summary, battle reconstruction, tactical candidates, evidence trace |
 | **研究对话** | The natural-language research assistant and its evidence ledger |
 | **评估实验** | Offline evaluation registry and counterexample review |
+
+### Performance and restarts
+
+The page restarts whenever the hourly snapshot refresh finds new data, so a restart has to be cheap:
+
+- Per-match analysis (parsing a 25 MB telemetry file and deriving everything from it) runs on a small pool of worker threads (`PUBG_INTELLIGENCE_ANALYSIS_WORKERS`, default 3), so the server thread stays free: requests answer in milliseconds while the analysis works in the background. Before this, the page was unreachable for about 90 seconds after every restart.
+- Results are cached on disk in `~/.local/share/amadeus/pubg-intelligence-lab/analysis-cache/<version>/<squad>/<match>.json`. The version is a hash of the built analysis packages plus `match-analysis.ts`, so any change to the analysis code starts a fresh cache; older versions are left in place, never deleted. After a restart the page is ready in about 3 seconds and the first telemetry request takes a fraction of a second; a completely cold cache (new code) takes about 40 seconds in the background.
+- `PUBG_INTELLIGENCE_BOOT_TIMING=1` prints how long each startup phase takes.
+
+### Sessions
+
+Public sessions are signed tokens (`id.expiry.signature`, HMAC-SHA256), not server memory, so a restart does not log anyone out. The signing key comes from a persistent secret (`session-secret`, mode `0600`, in `PUBG_INTELLIGENCE_STATE_DIR`, default `~/.local/share/amadeus/pubg-intelligence-lab`) combined with the password verifier, so changing the password ends every session. Logged-out tokens are remembered in `session-revoked.json` until they would have expired.
+
+### Archive backup
+
+PUBG deletes telemetry about 14 days after a match, so the raw archive cannot be rebuilt. `scripts/backup-pubg-telemetry-archive.sh` (dry run by default, `--apply` to copy) makes an append-only copy to `/Volumes/Avalon/backups/pubg-telemetry-archive` (`PUBG_TELEMETRY_ARCHIVE_BACKUP_DIR` overrides): payload files are content-addressed and copied only when absent, manifests are refreshed, nothing is ever deleted or overwritten, and every source file is checked against the copy by size. `infra/macos/manage-intelligence-lab.sh --apply` installs a daily 03:40 LaunchAgent for it. The result goes to `archive-backup.json`, which the page shows at the bottom of the left rail (amber when the backup is missing, failed, skipped because the disk is not mounted, or older than 48 hours).
 
 ### Map background
 

@@ -1,7 +1,8 @@
 #!/bin/bash
-# Install, inspect or stop the two LaunchAgents of the PUBG Intelligence Lab page:
+# Install, inspect or stop the LaunchAgents of the PUBG Intelligence Lab page:
 #   com.amadeus.pubg-intelligence-lab          keeps the page running
 #   com.amadeus.pubg-intelligence-lab-refresh  hourly, refreshes the read-only snapshot and restarts the page on change
+#   com.amadeus.pubg-archive-backup            daily, append-only copy of the raw telemetry archive to the backup disk
 # Dry-run is the default; --apply installs, --stop --apply unloads. No source, data or Lab runtime is modified.
 set -euo pipefail
 
@@ -9,6 +10,7 @@ ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 TARGET="gui/$(id -u)"
 SERVER_LABEL=com.amadeus.pubg-intelligence-lab
 REFRESH_LABEL=com.amadeus.pubg-intelligence-lab-refresh
+BACKUP_LABEL=com.amadeus.pubg-archive-backup
 AGENTS_DIR="$HOME/Library/LaunchAgents"
 LOG_DIR="$HOME/Library/Logs/Amadeus/PubgIntelligenceLab"
 STATE_DIR="$HOME/Library/Application Support/Amadeus/PubgIntelligenceLab"
@@ -29,6 +31,8 @@ loaded() { launchctl print "$TARGET/$1" >/dev/null 2>&1 && echo loaded || echo n
 if [[ "$ACTION" == --status ]]; then
   echo "INTELLIGENCE_LAB_SERVER=$(loaded "$SERVER_LABEL")"
   echo "INTELLIGENCE_LAB_REFRESH=$(loaded "$REFRESH_LABEL")"
+  echo "INTELLIGENCE_LAB_ARCHIVE_BACKUP=$(loaded "$BACKUP_LABEL")"
+  [[ -f "$HOME/.local/share/amadeus/pubg-intelligence-lab/archive-backup.json" ]] && echo "INTELLIGENCE_LAB_LAST_ARCHIVE_BACKUP=$(cat "$HOME/.local/share/amadeus/pubg-intelligence-lab/archive-backup.json")"
   [[ -f "$STATE_DIR/refresh.json" ]] && echo "INTELLIGENCE_LAB_LAST_REFRESH=$(cat "$STATE_DIR/refresh.json")"
   for interface in en0 en1; do
     address="$(ipconfig getifaddr "$interface" 2>/dev/null || true)"
@@ -39,6 +43,7 @@ fi
 
 if [[ "$ACTION" == --stop ]]; then
   (( APPLY == 1 )) || { echo '--stop changes LaunchAgents; pass --stop --apply' >&2; exit 2; }
+  launchctl bootout "$TARGET/$BACKUP_LABEL" 2>/dev/null || true
   launchctl bootout "$TARGET/$REFRESH_LABEL" 2>/dev/null || true
   launchctl bootout "$TARGET/$SERVER_LABEL" 2>/dev/null || true
   echo 'INTELLIGENCE_LAB_STOPPED=yes'
@@ -50,6 +55,7 @@ if (( APPLY == 0 )); then
 INTELLIGENCE_LAB_ACTION=install_or_update
 INTELLIGENCE_LAB_SERVER_AGENT=$AGENTS_DIR/$SERVER_LABEL.plist (KeepAlive, port 4179, LAN bind chosen at each start)
 INTELLIGENCE_LAB_REFRESH_AGENT=$AGENTS_DIR/$REFRESH_LABEL.plist (hourly at minute 20)
+INTELLIGENCE_LAB_ARCHIVE_BACKUP_AGENT=$AGENTS_DIR/$BACKUP_LABEL.plist (daily at 03:40, append-only copy to the backup disk)
 INTELLIGENCE_LAB_STATE=$STATE_DIR (snapshot, config.env, refresh.json)
 INTELLIGENCE_LAB_LOGS=$LOG_DIR
 INTELLIGENCE_LAB_SOURCE=read-only SQLite backup of the live Lab database; the live database is never written
@@ -75,11 +81,16 @@ BIND=auto
 CONFIG
 fi
 
-for label in "$SERVER_LABEL" "$REFRESH_LABEL"; do
+for label in "$SERVER_LABEL" "$REFRESH_LABEL" "$BACKUP_LABEL"; do
   sed -e "s#__ROOT__#$ROOT#g" -e "s#__LOG__#$LOG_DIR#g" "$ROOT/infra/macos/$label.plist.example" > "$AGENTS_DIR/$label.plist"
   plutil -lint "$AGENTS_DIR/$label.plist" >/dev/null
   launchctl bootout "$TARGET/$label" 2>/dev/null || true
-  launchctl bootstrap "$TARGET" "$AGENTS_DIR/$label.plist"
+  # The old process may still be shutting down (the page stops its worker threads first); retry instead of aborting.
+  for attempt in 1 2 3 4 5 6; do
+    launchctl bootstrap "$TARGET" "$AGENTS_DIR/$label.plist" 2>/dev/null && break
+    (( attempt == 6 )) && { launchctl bootstrap "$TARGET" "$AGENTS_DIR/$label.plist"; exit 1; }
+    sleep 2
+  done
 done
 echo 'INTELLIGENCE_LAB_INSTALLED=yes'
 "$0" --status

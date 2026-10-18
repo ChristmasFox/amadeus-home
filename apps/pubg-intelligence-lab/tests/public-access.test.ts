@@ -1,12 +1,12 @@
 import assert from 'node:assert/strict';
 import { createServer, request as httpRequest, type Server } from 'node:http';
-import { chmodSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdtempSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { scryptSync, randomBytes } from 'node:crypto';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 import {
-  isPublicHostname, isPublicRequest, loadPasswordVerifier, loadPublicAccess, login, looksProxied, validSession, LOGIN_MAX_ATTEMPTS, PUBLIC_SESSION_COOKIE,
+  isPublicHostname, isPublicRequest, loadPasswordVerifier, loadPublicAccess, login, logout, looksProxied, validSession, LOGIN_MAX_ATTEMPTS, PUBLIC_SESSION_COOKIE,
   type PublicAccess,
 } from '../src/server/public-access.js';
 import { handlePublic, type Snapshot } from '../src/server/server.js';
@@ -30,10 +30,10 @@ test('the verifier must be a private file in the shared scrypt format, and publi
     assert.throws(() => loadPasswordVerifier(writeVerifier(directory, 'secret-pass', 0o644)), /public_auth_file_not_private/u);
     const good = writeVerifier(directory, 'secret-pass');
     assert.equal(loadPasswordVerifier(good).digest.length, 64);
-    assert.equal(loadPublicAccess({}), null);
-    assert.throws(() => loadPublicAccess({ PUBG_INTELLIGENCE_PUBLIC_HOST: 'pubg.example.com' }), /needs_host_and_auth_file/u);
-    assert.throws(() => loadPublicAccess({ PUBG_INTELLIGENCE_PUBLIC_HOST: '192.168.1.5', PUBG_INTELLIGENCE_PUBLIC_AUTH_FILE: good }), /public_host_invalid/u);
-    const access = loadPublicAccess({ PUBG_INTELLIGENCE_PUBLIC_HOST: 'PUBG.Example.com', PUBG_INTELLIGENCE_PUBLIC_AUTH_FILE: good })!;
+    assert.equal(loadPublicAccess({}, directory), null);
+    assert.throws(() => loadPublicAccess({ PUBG_INTELLIGENCE_PUBLIC_HOST: 'pubg.example.com' }, directory), /needs_host_and_auth_file/u);
+    assert.throws(() => loadPublicAccess({ PUBG_INTELLIGENCE_PUBLIC_HOST: '192.168.1.5', PUBG_INTELLIGENCE_PUBLIC_AUTH_FILE: good }, directory), /public_host_invalid/u);
+    const access = loadPublicAccess({ PUBG_INTELLIGENCE_PUBLIC_HOST: 'PUBG.Example.com', PUBG_INTELLIGENCE_PUBLIC_AUTH_FILE: good }, directory)!;
     assert.equal(access.host, 'pubg.example.com');
     assert.equal(access.origin, 'https://pubg.example.com');
     assert.ok(isPublicHostname('a.b.co') && !isPublicHostname('localhost') && !isPublicHostname('10.0.0.1'));
@@ -46,7 +46,7 @@ test('the verifier must be a private file in the shared scrypt format, and publi
 test('login accepts only the right password, throttles guessing and expires sessions', async () => {
   const directory = mkdtempSync(join(tmpdir(), 'pubg-public-'));
   try {
-    const access: PublicAccess = loadPublicAccess({ PUBG_INTELLIGENCE_PUBLIC_HOST: 'pubg.example.com', PUBG_INTELLIGENCE_PUBLIC_AUTH_FILE: writeVerifier(directory, 'secret-pass') })!;
+    const access: PublicAccess = loadPublicAccess({ PUBG_INTELLIGENCE_PUBLIC_HOST: 'pubg.example.com', PUBG_INTELLIGENCE_PUBLIC_AUTH_FILE: writeVerifier(directory, 'secret-pass') }, directory)!;
     const start = Date.now();
     assert.deepEqual(await login(access, 'a', 'wrong', start), { failed: true });
     assert.deepEqual(await login(access, 'a', 42, start), { failed: true });
@@ -65,7 +65,7 @@ test('login accepts only the right password, throttles guessing and expires sess
 
 test('the public scope shows only a login page until a session exists, then serves the app', async () => {
   const directory = mkdtempSync(join(tmpdir(), 'pubg-public-'));
-  const access = loadPublicAccess({ PUBG_INTELLIGENCE_PUBLIC_HOST: 'pubg.example.com', PUBG_INTELLIGENCE_PUBLIC_AUTH_FILE: writeVerifier(directory, 'secret-pass') })!;
+  const access = loadPublicAccess({ PUBG_INTELLIGENCE_PUBLIC_HOST: 'pubg.example.com', PUBG_INTELLIGENCE_PUBLIC_AUTH_FILE: writeVerifier(directory, 'secret-pass') }, directory)!;
   const snapshot = {} as Snapshot;
   const server: Server = createServer((request, response) => { void handlePublic(request, response, snapshot, access); });
   await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
@@ -113,4 +113,33 @@ test('the public scope shows only a login page until a session exists, then serv
     await new Promise<void>((resolve) => server.close(() => resolve()));
     rmSync(directory, { recursive: true, force: true });
   }
+});
+
+test('a login survives a restart, a logout does not, and changing the password ends every session', async () => {
+  const directory = mkdtempSync(join(tmpdir(), 'pubg-public-'));
+  try {
+    const env = (file: string) => ({ PUBG_INTELLIGENCE_PUBLIC_HOST: 'pubg.example.com', PUBG_INTELLIGENCE_PUBLIC_AUTH_FILE: file });
+    const file = writeVerifier(directory, 'secret-pass');
+    const before = loadPublicAccess(env(file), directory)!;
+    const issued = await login(before, 'a', 'secret-pass');
+    assert.ok('token' in issued);
+    const request = fakeRequest({ cookie: `${PUBLIC_SESSION_COOKIE}=${(issued as { token: string }).token}` });
+    assert.equal(statSync(join(directory, 'session-secret')).mode & 0o077, 0, 'the signing secret is private');
+    // "Restart": a fresh PublicAccess over the same state directory still accepts the session.
+    const after = loadPublicAccess(env(file), directory)!;
+    assert.ok(validSession(after, request), 'the session outlives a restart');
+    // A tampered expiry or signature is refused.
+    const [id, expiry, signed] = (issued as { token: string }).token.split('.');
+    assert.ok(!validSession(after, fakeRequest({ cookie: `${PUBLIC_SESSION_COOKIE}=${id}.${Number(expiry) + 1000}.${signed}` })));
+    assert.ok(!validSession(after, fakeRequest({ cookie: `${PUBLIC_SESSION_COOKIE}=${id}.${expiry}.${signed}x` })));
+    // Logout is remembered across a restart too.
+    logout(after, request);
+    assert.ok(!validSession(after, request));
+    assert.ok(!validSession(loadPublicAccess(env(file), directory)!, request), 'a logged-out token stays dead after a restart');
+    // A new password derives a new key, so older sessions die with it.
+    const second = await login(loadPublicAccess(env(file), directory)!, 'b', 'secret-pass');
+    const secondRequest = fakeRequest({ cookie: `${PUBLIC_SESSION_COOKIE}=${(second as { token: string }).token}` });
+    const changed = loadPublicAccess(env(writeVerifier(directory, 'a-different-password')), directory)!;
+    assert.ok(!validSession(changed, secondRequest), 'changing the password invalidates existing sessions');
+  } finally { rmSync(directory, { recursive: true, force: true }); }
 });
