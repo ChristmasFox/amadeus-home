@@ -34,6 +34,26 @@ scripts/refresh-intelligence-snapshot.sh --apply     # refresh once by hand
 - `com.amadeus.pubg-intelligence-lab-refresh` runs at minute 20 of every hour, after the Lab prefetch at minute 5. `scripts/refresh-intelligence-snapshot.sh` opens the live database inside the OrbStack machine read-only, copies it with the SQLite backup API, verifies integrity and the SHA-256 of the transfer, compares match, latest-match and feature counts with the snapshot in use and swaps it atomically only when something changed; only then is the page restarted. The previous snapshot is kept as `snapshot.prev.sqlite`; the live database and the telemetry archive are never written.
 - State is in `~/Library/Application Support/Amadeus/PubgIntelligenceLab` (`snapshot.sqlite`, `refresh.json`), logs in `~/Library/Logs/Amadeus/PubgIntelligenceLab`.
 
+## Public access (optional)
+
+The page is LAN-only by default. To also serve it on a public hostname behind a reverse proxy, set both
+`PUBG_INTELLIGENCE_PUBLIC_HOST` (for example `pubg.example.com`) and `PUBG_INTELLIGENCE_PUBLIC_AUTH_FILE` (a mode-`0600`
+JSON scrypt verifier, format `amadeus-qwen-image-lab-scrypt-v1`, kept outside Git; the Image Lab verifier can be reused so
+one password opens both). Setting only one of them, a group- or world-readable verifier, or a missing built client makes
+the server refuse to start. See `infra/vps/README.md` for the proxy, tunnel and firewall steps.
+
+- A request is public only when its `Host` header equals the configured hostname. Public requests get a password-only
+  login page; every other route, including `/api/*` and `/assets/*`, returns 401 until a session exists. Sessions are
+  random server-side tokens (12 h) in a `Secure; HttpOnly; SameSite=Strict` cookie, and state-changing requests must
+  carry the public `Origin`.
+- Login is limited to 5 attempts per minute per visitor (keyed on `CF-Connecting-IP` / `X-Forwarded-For`, used for
+  throttling only), 40 per minute overall, with a growing delay on failures. Wrong passwords never reveal anything else.
+- The public hostname serves the built client (`vite build`; `scripts/run-intelligence-lab.sh` rebuilds it on every
+  start), never the Vite dev server or its HMR socket. A request that carries proxy headers but a non-public `Host` is
+  refused, so tunnelled traffic can never be mistaken for a LAN request.
+- Everything an authenticated visitor can do on the LAN they can do publicly, including the research chat, which calls
+  the configured model.
+
 ## Optional research model
 
 Without model settings, a deterministic local answer is shown with a clear degraded-mode notice. If the base URL and API key below are set, the app uses Vercel AI SDK for bounded intent planning, read-only scoped tool calls, and a typed fact/inference/hypothesis presentation. Gemini Flash is the default model ID for an OpenAI-compatible router; `PUBG_INTELLIGENCE_AI_MODEL` can select another configured model such as the local 9router `arthur-combo` route. Only aliases and aggregate facts are sent in tool results; raw match/event references and player labels are resolved locally. Phone-like values, credentials, known squad names, and local file paths are redacted or aliased before model calls.
@@ -51,7 +71,7 @@ The response can use tactical coaching, squad-humor, or chronological-story word
 
 ## Workspace and analytics
 
-The page is a two-pane workspace: the left rail holds the data scope (squad, game mode, complete-telemetry switch, date range, match list) and the right pane is a set of tabs. `?tab=overview|field|style|compare|match|chat|lab` deep-links a tab; 队员对比 (`compare`) puts two members side by side (overlaid style radar, mirrored bars per metric with the better side highlighted, and a count of metrics each leads); selecting a match in the list opens 单局复盘.
+The page is a two-pane workspace: the left rail holds the data scope (squad, game mode, complete-telemetry switch (on by default), date range, match list) and the right pane is a set of tabs. `?tab=overview|field|style|compare|match|chat|lab` deep-links a tab; 队员对比 (`compare`) puts two members side by side (overlaid style radar, mirrored bars per metric with the better side highlighted, and a count of metrics each leads); selecting a match in the list opens 单局复盘.
 
 | Tab | What it shows |
 | --- | --- |
@@ -61,6 +81,10 @@ The page is a two-pane workspace: the left rail holds the data scope (squad, gam
 | **单局复盘** | The single-match review: domain summary, battle reconstruction, tactical candidates, evidence trace |
 | **研究对话** | The natural-language research assistant and its evidence ledger |
 | **评估实验** | Offline evaluation registry and counterexample review |
+
+### Phones
+
+At 820 px and below the workspace becomes a normal scrolling page: the top bar and tab strip stay pinned, the data scope (squad, mode, complete-telemetry switch, dates, match list) opens as a slide-in drawer from the "数据范围" button, the match timeline and wide tables scroll sideways inside their own panel, and grids collapse to one or two columns.
 
 ### Data scope controls
 
@@ -92,6 +116,7 @@ All algorithms are deterministic and live in `packages/pubg-intelligence/src`; t
 | Landing contest | Other teams whose nearest member landed within 500 m of the squad centre; early-wipe and top-10 rates by contest level and their Newcombe differences; the area name comes from the first position sample after landing | `field.ts`, `landing.ts` | Raw archive |
 | Squad roles | First knock dealt, first member knocked, revives and kills as shares of the squad total; a title needs at least 15 events and a 40% share | `fights.ts` | Raw archive |
 | Streaks and team wipes | A takedown is a knock, or a kill without a prior knock. Takedowns of different enemies by one member at most 60 s apart form a streak (2 / 3 / 4+). A team wipe is an enemy team whose final push (takedowns at most 60 s apart up to its last death) was taken down entirely by the squad, at least two players; each member is credited to the knocker, else the killer. Reports wipes per match, full-team (4) and solo wipes, stage, duration, per-member streaks, chained-takedown share (Wilson interval) and wipe takedowns, plus how often the squad's own final push fell to a single team or player | `streaks.ts` | Raw archive |
+| Match story | One match's raw telemetry as a plain-language story. Lifelines per member (alive, down, dead, from landing), takedown / kill / revive / down / death events with weapon and distance, fights (squad contacts at most 40 s apart: enemy teams, enemy takedowns versus own downs, who fired first, damage both ways, result win / lose / draw / skirmish), every other player's route (a sample every 20 s after landing, bots excluded), the circle and alive-team count over time with the first time of each phase, the route per member (10 s samples after landing, never the plane's flight path) and damage per minute. The page turns these into highlights, a timeline with fight windows, a replayable route map (zoom follows the squad and the opponents it is fighting; other teams are shown as grey dots, the teams in the current fight in red with their last two minutes of movement), fight cards that also name each opposing team (size, players taken down, damage dealt to us, weapons), fight cards, a per-member table and a down log; the old battle-reconstruction output stays under a collapsed developer section | `match-story.ts` | Raw archive |
 | Match versus usual | For the selected match, each member's damage, kills, knocks, assists, survival and (with an archive) damage per minute, hit rate, takedowns, longest streak, wipe takedowns and times downed become a midrank percentile among that member's other matches of the same mode (most recent 150, at least 8). The form score is the mean over damage, kills, knocks, survival and damage per minute; the squad placement is placed the same way. Highlights name the placement, the best-form member and up to two outliers (≥ 85th or ≤ 15th percentile) per member. Nothing is compared across members | `match-relative.ts` | Match Store + raw archive |
 | Play style and fighting power | Twenty-four axes in five groups (fighting efficiency, shooting, tempo, cooperation and supplies, position and risk). Fighting efficiency covers damage per alive minute, hit rate (weapon hit events on opponents ÷ gun attack events, shotguns excluded because one shell registers several pellet hits, launchers excluded because they never register gun hits; the absolute value is a property of the telemetry events), damage per shot, share of fights with a knock and knock-to-finish conversion; hit rate and damage per shot are compared on the same weapon mix (indirect standardisation: the teammates' per-class rate, shrunk toward their overall rate with a 200-shot prior, applied to the member's own shots per class), so a sniper is not rated a better shot for using a bolt-action. Damage per minute includes rocket, grenade, sticky bomb, mortar and fire damage to opponents; distance, headshot and hit statistics use gunfire only. The fighting-power index is the weighted geometric mean of the teammate ratios of damage per minute (0.5), knock share (0.25) and same-weapon hit rate (0.25). The weights were checked on 112 ranked squad matches: per match, damage per minute tracked the squad's fight-win share best (Spearman 0.35, versus 0.18 for knock share and 0.12 for hit rate); headshot share had a split-half reliability of 0.45 and no relation to winning, and conversion depends on teammates finishing, so both remain separate axes outside the index; with its interval taken from the same bootstrap resamples, and the verdict names a leader only when that interval excludes parity. The remaining axes: engagement distance (damage-weighted median), far (≥150 m) and close (<25 m) damage share, sniper/DMR and SMG/shotgun/pistol weapon-class share, headshot share, fight frequency, initiative, fragging, late-game damage share (circle 5+), early looting speed, revives, throwables, healing/boost use per alive minute, isolation (share of samples with no teammate within 150 m), times downed per fight, circle-edge share, on-foot distance and vehicle use. Each is the member's value divided by the teammates' pooled value (the member excluded). A 95% bootstrap interval over matches (300 seeded resamples) grades a difference: stable (interval excludes 1, ratio ≥ 1.15 or ≤ 0.87), lean (the direction holds in ≥ 85% of resamples but the interval crosses 1, shown with that confidence), otherwise even. Archetypes are the highest-scoring fixed weighted rules (stable axes count fully, lean 60%, even axes 25%): a stable high score names the type, a weaker one reads "（倾向）" or "偏…", and a player close to teammates on everything is "均衡全能型", so nobody is left without a type | `style.ts` | Raw archive |
 | Supply and cooperation profile | Healing and boost use per alive minute against the other members, armour-break conversion, friendly damage dealt and taken, flash use, vehicle distance | `profiles.ts` | Cached features |
@@ -113,6 +138,8 @@ Conventions that keep the numbers honest:
 | --- | --- |
 | `GET /api/analytics/performance` | Squad analytics, maps, lineups, series, profiles, weapons, highlights (`squadId`, `mode`, `complete`, `from`, `to`) |
 | `GET /api/analytics/telemetry` | Combat quality, deaths, landing, highlights from the archive (same query plus optional `limit`, default and maximum 400) |
+| `GET /api/analytics/compare` | Per-match numbers for every squad member in scope (damage, kills, knocks, assists, survival, revives, squad placement) for the player-comparison charts (`squadId`, `mode`, `complete`, `from`, `to`) |
+| `GET /api/matches/:id/story` | Plain-language story of one match (`squadId`); `available:false` with a reason when there is no raw archive. `?match=<id>` on the page deep-links a match |
 | `GET /api/matches/:id/relative` | The selected match against each member's usual level (`squadId`) |
 | `GET /api/matches` | Match list (`mode`, `complete`, `search`, `offset` in addition to the scope) |
 | `GET /api/bootstrap` | Counts, squads, `modeCounts`, `archivedMatchCount` |

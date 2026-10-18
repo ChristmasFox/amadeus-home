@@ -1,0 +1,8 @@
+# Append one proxy to /DATA/AppData/frpc/frpc.toml, then `frpc reload -c /DATA/AppData/frpc/frpc.toml`.
+# The Mac LAN address is not pinned here: recheck it from the HomeLab guest immediately before apply.
+[[proxies]]
+name = "pubg-intelligence-lab-tcp"
+type = "tcp"
+localIP = "192.168.5.3"
+localPort = 4179
+remotePort = 4179

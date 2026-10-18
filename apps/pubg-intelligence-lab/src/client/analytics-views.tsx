@@ -1,4 +1,5 @@
 import { Fragment, useMemo, useState, type ReactNode } from 'react';
+import { Complement, HeadToHead, TrendAndSpread, WeaponCompare, styleSimilarity, type CompareSeries, type Contrast } from './compare-panels.js';
 
 export interface Rate { successes: number; trials: number; rate: number | null; low: number | null; high: number | null }
 export type Trend = 'up' | 'down' | 'flat' | 'insufficient';
@@ -803,7 +804,7 @@ function StyleMatrix({ style }: { style: SquadStyle }) {
       </div>
       <div className="av-matrix" style={{ gridTemplateColumns: `minmax(150px,1.4fr) repeat(${style.players.length}, minmax(96px,1fr))` }}>
         <span className="head" />
-        {style.players.map((player, index) => <span className={`head ${PLAYER_TONES[index % 4]}`} key={player.accountId}>{player.name}</span>)}
+        {style.players.map((player, index) => <span className={`head ${PLAYER_TONES[index % 4]}`} key={player.accountId} title={player.name}>{player.name.replace(/^SG_LabmemNo/u, 'No.')}</span>)}
         {GROUPS.map((group) => {
           const rows = visible.filter((item) => item.group === group);
           if (!rows.length) return null;
@@ -891,7 +892,7 @@ function ForestRow({ name, rank, ratio, low, high, tier, confidence }: { name: s
   return (
     <div className="av-forest-row">
       <span className="rank">{rank}</span>
-      <b>{name}</b>
+      <b title={name}>{name.replace(/^SG_LabmemNo/u, 'No.')}</b>
       <div className="av-forest">
         <i className="one" />
         {low !== null && high !== null && <u className={tone} style={{ left: `${ratioPos(low) * 100}%`, width: `${Math.max(0.5, (ratioPos(high) - ratioPos(low)) * 100)}%` }} />}
@@ -938,7 +939,7 @@ function CombatPanel({ style, data }: { style: SquadStyle; data: TelemetryAnalyt
               const longRun = data.longRun.entries.find((row) => row.accountId === entry.accountId);
               const lobby = data.lobby.entries.find((row) => row.accountId === entry.accountId);
               return <Fragment key={entry.accountId}>
-                <b>{entry.name}</b>
+                <b title={entry.name}>{entry.name.replace(/^SG_LabmemNo/u, 'No.')}</b>
                 {lensCell('ratio', entry.ratio, lensTone(entry.tier, entry.ratio))}
                 {lensCell('ratio', longRun?.composite.ratio ?? null, longRun ? lensTone(longRun.composite.tier, longRun.composite.ratio) : 'even')}
                 {lensCell('percentile', lobby?.composite.mean ?? null, lobby?.tier === 'above' ? 'up' : lobby?.tier === 'below' ? 'down' : 'even')}
@@ -1259,7 +1260,7 @@ export function MatchRelativePanel({ data, loading }: { data: MatchRelativeData 
     <section className="av-panel av-relative">
       <header><h3>这局相对平时</h3><span>每个人只和自己的 {data.historyMatches} 场历史比；圆环 = 综合分位，50 为平常水平</span></header>
       {data.highlights.length > 0 && <ul className="av-relative-highlights">{data.highlights.map((item) => <li key={item.text} className={item.tone}>{item.text}</li>)}</ul>}
-      <div className="av-relative-grid">
+      <div className="av-relative-grid" style={{ ["--cols" as string]: Math.min(4, Math.max(1, data.players.length)) }}>
         {data.players.map((player) => <div className="av-relative-card" key={player.accountId}>
           <div className="head"><Gauge value={player.form} label="综合分位" /><div><b>{player.name}</b><small>{player.historyMatches} 场历史</small></div></div>
           {player.metrics.filter((reading) => reading.value !== null).map((reading) => <PercentileTrack key={reading.key} reading={reading} />)}
@@ -1352,7 +1353,7 @@ function RadarCompare({ series }: { series: Array<{ name: string; axes: StyleAxi
   );
 }
 
-export function CompareView({ data, loading, error, onReload }: { data: TelemetryAnalytics | null; loading: boolean; error: string; onReload: () => void }) {
+export function CompareView({ data, loading, error, onReload, series }: { data: TelemetryAnalytics | null; loading: boolean; error: string; onReload: () => void; series: CompareSeries | null }) {
   const [picked, setPicked] = useState<{ a: string; b: string }>({ a: '', b: '' });
   if (loading && !data) return <div className="av-empty"><div className="av-spinner" />正在读取归档遥测…首次约需一分钟，之后会缓存。</div>;
   if (error && !data) return <div className="av-empty">{error}<button type="button" className="av-link" onClick={onReload}>重试</button></div>;
@@ -1368,6 +1369,15 @@ export function CompareView({ data, loading, error, onReload }: { data: Telemetr
   const winsA = winners.filter((winner) => winner === 'a').length;
   const winsB = winners.filter((winner) => winner === 'b').length;
   const groups = [...new Set(metrics.map((metric) => metric.group))];
+  const contrasts: Contrast[] = metrics.filter((metric) => metric.better !== null && metric.a !== null && metric.b !== null).map((metric) => {
+    const top = Math.max(Math.abs(metric.a!), Math.abs(metric.b!)) || 1;
+    const raw = (metric.a! - metric.b!) / top;
+    return { label: metric.label, gap: metric.better === 'low' ? -raw : raw };
+  });
+  const logRatios = (axes: StyleAxisReading[]) => RADAR_KEYS.map((key) => Math.log2(axes.find((axis) => axis.key === key)?.ratio ?? 1));
+  const similarity = styleSimilarity(logRatios(playerA.axes), logRatios(playerB.axes));
+  const sideA = { id: a, name: playerA.name };
+  const sideB = { id: b, name: playerB.name };
   const choose = (slot: 'a' | 'b', id: string) => setPicked((current) => {
     const next = { a, b, [slot]: id };
     if (next.a === next.b) next[slot === 'a' ? 'b' : 'a'] = slot === 'a' ? b === id ? a : b : a === id ? b : a;
@@ -1388,12 +1398,14 @@ export function CompareView({ data, loading, error, onReload }: { data: Telemetr
           <span className="av-chips">{playerB.archetypes.slice(0, 2).map((entry) => <span className="av-chip" key={entry.id}>{archetypeLabel(entry)}</span>)}</span>
         </div>
       </section>
+      <Complement a={sideA} b={sideB} contrasts={contrasts} similarity={similarity} />
       <div className="av-compare-grid">
         <Panel title="打法雷达" hint="相对全队其他人的比值；虚线圈 = 持平">
           <RadarCompare series={[{ name: playerA.name, axes: playerA.axes, tone: 'a' }, { name: playerB.name, axes: playerB.axes, tone: 'b' }]} />
           <div className="av-legend"><span className="a">{playerA.name}</span><span className="b">{playerB.name}</span></div>
         </Panel>
-        <Panel title="逐项对比" hint="高亮 = 这一项更好的一方">
+        <Panel title="逐项对比" hint="高亮 = 这一项更好的一方；内部可滚动" className="cp-scroll-panel">
+          <div className="cp-scroll">
           {groups.map((group) => <div className="av-fly-group" key={group}>
             <h4>{group}</h4>
             {metrics.filter((metric) => metric.group === group).map((metric) => {
@@ -1408,8 +1420,14 @@ export function CompareView({ data, loading, error, onReload }: { data: Telemetr
               </div>;
             })}
           </div>)}
+          </div>
         </Panel>
       </div>
+      {series ? <>
+        <HeadToHead series={series} a={sideA} b={sideB} />
+        <TrendAndSpread series={series} a={sideA} b={sideB} />
+      </> : <div className="av-empty"><div className="av-spinner" />正在读取逐场数据…</div>}
+      <WeaponCompare a={{ name: playerA.name, classShares: playerA.classShares, weapons: playerA.weapons }} b={{ name: playerB.name, classShares: playerB.classShares, weapons: playerB.weapons }} classLabel={CLASS_LABEL} />
       <Notes>战斗力指数、打法维度和角色都基于 {data.style.matches} 场有归档遥测的排位赛；长期战绩份额基于 {data.longRun.matches} 场战绩；全场分位基于 {data.lobby.matches} 场。两人的数值都是各自全部场次的汇总，不要求同场。领先项数只是计数，不代表统计上显著；统计判定见「打法风格」页的稳定 / 倾向标记。</Notes>
     </div>
   );

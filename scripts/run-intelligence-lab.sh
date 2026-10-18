@@ -32,5 +32,10 @@ pnpm --filter @agent/pubg-domain build >/dev/null
 pnpm --filter @agent/pubg-intelligence build >/dev/null
 echo "pubg-intelligence-lab starting on http://$BIND:$PORT with snapshot $SNAPSHOT"
 cd "$ROOT/apps/pubg-intelligence-lab"
+# The public hostname (when configured) serves the built client, never the Vite dev server, so rebuild it on every start.
+if [[ -n "${PUBG_INTELLIGENCE_PUBLIC_HOST:-}" ]]; then
+  ./node_modules/.bin/vite build >/dev/null
+fi
 export HOST="$BIND" PORT PUBG_INTELLIGENCE_DB="$SNAPSHOT"
+export PUBG_INTELLIGENCE_PUBLIC_HOST="${PUBG_INTELLIGENCE_PUBLIC_HOST:-}" PUBG_INTELLIGENCE_PUBLIC_AUTH_FILE="${PUBG_INTELLIGENCE_PUBLIC_AUTH_FILE:-}"
 exec ./node_modules/.bin/tsx src/server.ts

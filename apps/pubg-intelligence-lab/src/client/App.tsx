@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { CompareView, FieldView, MatchRelativePanel, Notes, OverviewView, StyleView, type MatchRelativeData, type PerformanceAnalytics, type TelemetryAnalytics } from './analytics-views.js';
+import { MatchStoryView, type MatchStoryData } from './match-story.js';
+import type { CompareSeries } from './compare-panels.js';
 
 interface SquadOption {
   id: string;
@@ -467,14 +469,15 @@ export function App() {
   const [bootstrap, setBootstrap] = useState<Bootstrap | null>(null);
   const [squadId, setSquadId] = useState('');
   const [mode, setMode] = useState<'squad' | 'duo' | 'solo' | 'other' | 'all'>('squad');
-  const [completeOnly, setCompleteOnly] = useState(false);
+  const [completeOnly, setCompleteOnly] = useState(true);
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');
   const [search, setSearch] = useState('');
   const [matches, setMatches] = useState<MatchRow[]>([]);
   const [totalMatches, setTotalMatches] = useState(0);
   const [offset, setOffset] = useState(0);
-  const [selectedMatchId, setSelectedMatchId] = useState('');
+  const [railOpen, setRailOpen] = useState(false);
+  const [selectedMatchId, setSelectedMatchId] = useState(() => new URLSearchParams(window.location.search).get('match')?.replace(/[^A-Za-z0-9-]/gu, '') ?? '');
   const [detail, setDetail] = useState<MatchDetail | null>(null);
   const [battleData, setBattleData] = useState<BattleMatchResponse | null>(null);
   const [selectedEpisodeId, setSelectedEpisodeId] = useState('');
@@ -499,6 +502,9 @@ export function App() {
   const [loading, setLoading] = useState(false);
   const [detailLoading, setDetailLoading] = useState(false);
   const [relative, setRelative] = useState<MatchRelativeData | null>(null);
+  const [story, setStory] = useState<MatchStoryData | null>(null);
+  const [compareSeries, setCompareSeries] = useState<CompareSeries | null>(null);
+  const [storyLoading, setStoryLoading] = useState(false);
   const [relativeLoading, setRelativeLoading] = useState(false);
   const [error, setError] = useState('');
   const [evaluationRunId, setEvaluationRunId] = useState('');
@@ -576,6 +582,30 @@ export function App() {
       .then(setDetail)
       .catch((reason: unknown) => { if (!(reason instanceof DOMException && reason.name === 'AbortError')) setDetail(null); })
       .finally(() => setDetailLoading(false));
+    return () => controller.abort();
+  }, [selectedMatchId, squadId]);
+
+  useEffect(() => {
+    setCompareSeries(null);
+    if (tab !== 'compare' || !squadId) return;
+    const controller = new AbortController();
+    const params = new URLSearchParams({ squadId, mode });
+    if (completeOnly) params.set('complete', '1');
+    if (from) params.set('from', from);
+    if (to) params.set('to', to);
+    void json<CompareSeries>(`/api/analytics/compare?${params}`, { signal: controller.signal }).then(setCompareSeries).catch(() => undefined);
+    return () => controller.abort();
+  }, [tab, squadId, mode, completeOnly, from, to]);
+
+  useEffect(() => {
+    setStory(null);
+    if (!selectedMatchId || !squadId) return;
+    const controller = new AbortController();
+    setStoryLoading(true);
+    void json<MatchStoryData>(`/api/matches/${encodeURIComponent(selectedMatchId)}/story?squadId=${encodeURIComponent(squadId)}`, { signal: controller.signal })
+      .then(setStory)
+      .catch(() => undefined)
+      .finally(() => { if (!controller.signal.aborted) setStoryLoading(false); });
     return () => controller.abort();
   }, [selectedMatchId, squadId]);
 
@@ -794,7 +824,9 @@ export function App() {
       </header>
 
       <main className="dashboard">
-        <aside className="left-rail">
+        {railOpen && <button type="button" className="rail-backdrop" aria-label="关闭数据范围" onClick={() => setRailOpen(false)} />}
+        <aside className={`left-rail ${railOpen ? 'open' : ''}`}>
+          <button type="button" className="rail-close" onClick={() => setRailOpen(false)}>完成 ✕</button>
           <div className="rail-heading"><div><span className="eyebrow">DATA SCOPE</span><h1>比赛档案</h1></div><span className="count-chip">{totalMatches}</span></div>
           <label className="field-label" htmlFor="squad">研究小队</label>
           <select id="squad" value={squadId} onChange={(event) => changeScope(() => setSquadId(event.target.value))}>
@@ -815,7 +847,7 @@ export function App() {
           <label className="search-box"><span>⌕</span><input type="search" placeholder="搜索地图或模式" value={search} onChange={(event) => changeScope(() => setSearch(event.target.value))} /><kbd>⌘ K</kbd></label>
           <div className="match-list-heading"><span>历史比赛</span><span>{matches.length} / {totalMatches}</span></div>
           <div className="match-list">
-            {matches.map((match, index) => <button className={`match-row ${selectedMatchId === match.matchId ? 'active' : ''}`} key={match.matchId} onClick={() => { setSelectedMatchId(match.matchId); setTab('match'); }}>
+            {matches.map((match, index) => <button className={`match-row ${selectedMatchId === match.matchId ? 'active' : ''}`} key={match.matchId} onClick={() => { setSelectedMatchId(match.matchId); setTab('match'); setRailOpen(false); window.scrollTo({ top: 0 }); }}>
               <div className="match-row-top"><span className="match-index">{String(totalMatches - (offset + index)).padStart(3, '0')}</span><span className="match-date">{dateLabel(match.createdAt)}</span><span className={`telemetry-dot ${match.telemetry === 'HIT' ? 'hit' : ''}`} title={match.telemetry === 'HIT' ? 'v6 特征缓存' : '无 v6 特征缓存'} /></div>
               <div className="match-map">{match.mapLabel ?? match.mapName}<span>{match.placement ? `#${match.placement}` : '排名未知'}</span></div>
               <div className="match-mini-stats"><span>{match.gameMode.replace('squad-', '') || 'squad'}</span><span>{match.kills} kills</span><span>{number(match.damage)} dmg</span></div>
@@ -827,6 +859,10 @@ export function App() {
         </aside>
 
         <section className="workspace">
+          <button type="button" className="rail-toggle" onClick={() => setRailOpen(true)}>
+            <span>☰ 数据范围</span>
+            <small>{({ squad: '四排', duo: '双排', solo: '单排', other: '其他', all: '全部模式' } as const)[mode]} · {completeOnly ? '完整遥测' : '全部战绩'} · {totalMatches} 场</small>
+          </button>
           <nav className="workspace-tabs" aria-label="分析视图">
             {([['overview', '总览', '战绩与队员状态'], ['field', '落点与交战', '遥测分析'], ['style', '打法风格', '每个人的特点'], ['compare', '队员对比', '两人正面比较'], ['match', '单局复盘', detail ? '已选 1 场' : '先选比赛'], ['chat', '研究对话', 'AI 助手'], ['lab', '评估实验', '开发']] as const).map(([key, label, hint]) => <button type="button" key={key} className={tab === key ? 'active' : ''} onClick={() => { setTab(key); window.history.replaceState(null, '', key === 'overview' ? window.location.pathname : `?tab=${key}`); }}><b>{label}</b><small>{hint}</small></button>)}
           </nav>
@@ -834,24 +870,21 @@ export function App() {
           {tab === 'overview' && <div className="workspace-body"><OverviewView data={analytics} loading={analyticsLoading} /></div>}
           {tab === 'field' && <div className="workspace-body"><FieldView data={telemetryData} loading={telemetryLoading} error={telemetryError} onReload={() => void loadTelemetryAnalytics()} /></div>}
           {tab === 'style' && <div className="workspace-body"><StyleView data={telemetryData} loading={telemetryLoading} error={telemetryError} onReload={() => void loadTelemetryAnalytics()} /></div>}
-          {tab === 'compare' && <div className="workspace-body"><CompareView data={telemetryData} loading={telemetryLoading} error={telemetryError} onReload={() => void loadTelemetryAnalytics()} /></div>}
+          {tab === 'compare' && <div className="workspace-body"><CompareView data={telemetryData} loading={telemetryLoading} error={telemetryError} onReload={() => void loadTelemetryAnalytics()} series={compareSeries} /></div>}
           {tab === 'match' && <div className="workspace-body match-tab"><div className="flow-columns">
             {!detail && !detailLoading && <div className="av-empty">从左侧选择一场比赛，查看单局分析、交战时间线和证据链。</div>}
           {detailLoading && <div className="skeleton-card"><span /><span /><span /></div>}
           {detail && <>
+            <div className="match-story-slot"><MatchStoryView data={story?.matchId === selectedMatchId ? story : null} loading={storyLoading} placement={detail.match.placement ?? null} kills={detail.match.kills} damage={detail.match.damage} /></div>
             <div className="match-relative-slot"><MatchRelativePanel data={relative?.matchId === selectedMatchId ? relative : null} loading={relativeLoading} /></div>
-            <div className="selected-match-card"><div className="selected-match-image"><span>{(detail.match.mapLabel ?? detail.match.mapName).toUpperCase()}</span><i>#{detail.match.placement ?? '—'}</i><div className="image-lines" /></div><div className="selected-match-meta"><div><b>{dateLabel(detail.match.createdAt)}</b><span>{detail.match.gameMode}</span></div><span className={`cache-tag ${detail.telemetry.status === 'HIT' ? 'cached' : 'missing'}`}>{detail.telemetry.status === 'HIT' ? 'V6 CACHED' : 'BASE FACTS'}</span></div>
-              <div className="match-metric-grid"><Metric label="击杀" value={number(detail.match.kills)} /><Metric label="伤害" value={number(detail.match.damage)} /><Metric label="队员" value={String(detail.analysis.players.length)} /></div>
-              <button className="battle-load-button" onClick={() => void loadBattleReconstruction()} disabled={battleLoading}>
-                {battleLoading ? '正在读取遥测并重建…' : battleData?.matchId === selectedMatchId ? '重新读取交战时间线' : '重建交战时间线'} <span>↗</span>
-              </button>
-            </div>
-            <div className="insight-copy"><span className="eyebrow">DOMAIN REVIEW</span><p>{detail.analysis.summary}</p>{detail.analysis.teamStory && <p className="team-story">{detail.analysis.teamStory}</p>}</div>
-            {detail.analysis.players.length > 0 && <div className="player-detail-list"><div className="card-label">队员表现 <span>本局</span></div>{detail.analysis.players.slice(0, 4).map((player) => <div className="player-detail" key={player.name}><div className="player-avatar">{player.name.slice(0, 1)}</div><div className="player-detail-name"><b>{player.name}</b><small>{player.role ?? '比赛贡献'}</small></div><div className="player-detail-value"><b>{number(player.damage)}</b><small>伤害</small></div></div>)}</div>}
+            <div className="insight-copy"><span className="eyebrow">系统复盘</span><p>{detail.analysis.summary}</p>{detail.analysis.teamStory && <p className="team-story">{detail.analysis.teamStory}</p>}</div>
             {detail.analysis.good.length > 0 && <div className="analysis-list"><div className="card-label">有效执行 <span className="green">+{detail.analysis.good.length}</span></div>{detail.analysis.good.slice(0, 3).map((item, index) => <p key={index}><i>↗</i>{item}</p>)}</div>}
             {detail.analysis.improvements.length > 0 && <div className="analysis-list"><div className="card-label">可复盘点 <span className="amber">{detail.analysis.improvements.length}</span></div>{detail.analysis.improvements.slice(0, 3).map((item, index) => <p key={index}><i>·</i>{item}</p>)}</div>}
           </>}
-          {detail && <details className="tech-details"><summary>研究工具 · 常搭对、规则候选与证据链</summary>
+          {detail && <details className="tech-details"><summary>开发者数据 · 原始交战重建、规则候选与证据链（含专业术语，日常使用可忽略）</summary>
+          <button className="battle-load-button" onClick={() => void loadBattleReconstruction()} disabled={battleLoading}>
+            {battleLoading ? '正在读取遥测并重建…' : battleData?.matchId === selectedMatchId ? '重新读取交战时间线' : '重建交战时间线'} <span>↗</span>
+          </button>
           <button className="tactical-pairs-button" onClick={() => void loadFrequentPairs()} disabled={frequentPairsLoading}>
             {frequentPairsLoading ? '正在分析当前范围比赛…' : frequentPairs ? `重跑跨局常搭对分析 · ${frequentPairs.analyzedMatches} 场` : '分析跨局常搭对候选 · 最多 30 场'} <span>↗</span>
           </button>
@@ -869,7 +902,6 @@ export function App() {
             {battleData.tactical.candidates.map((candidate) => <TacticalCandidateCard key={candidate.id} candidate={candidate} labels={battleData.labels?.tacticalPlayers ?? {}} />)}
           </section>}
           <div className="evidence-card detail-evidence"><div className="evidence-heading"><div><span className="eyebrow">SOURCE TRACE</span><b>单局证据链</b></div><span>{detail.evidence.length}</span></div><div className="evidence-list">{detail.evidence.slice(0, 8).map((item) => <div className="evidence-row static" key={item.id}><div className={`evidence-ref ${item.source === 'telemetry' ? 'telemetry-ref' : ''}`}>{item.id}</div><div><span>{item.source === 'telemetry' ? 'Telemetry 特征' : 'Match Store'} · {item.kind}</span><small>{item.description}</small></div></div>)}</div></div>
-          </details>}
           {battleError && <div className="inline-error">{battleError}</div>}
           {battleData?.status === 'unavailable' && <div className="battle-empty"><b>原始遥测不可用</b><span>{battleData.reason === 'no_telemetry_asset_in_snapshot' ? '只读快照没有保存该比赛的遥测资产引用。' : '读取或解析遥测失败；快照未被修改。'}</span></div>}
           {battleData?.status === 'no_contact_events' && <div className="battle-empty"><b>未重建出交战片段</b><span>未发现满足启发式的对敌伤害、击倒或淘汰事件。此结果不代表没有发生交战。</span><small>{battleData.diagnostics?.sameTeamContactEventCount ?? 0} 条同队事件被排除 · {battleData.diagnostics?.untimedContactEventCount ?? 0} 条接触事件缺少时间</small></div>}
@@ -929,6 +961,7 @@ export function App() {
             </div>}
             <div className="battle-evaluation-note">启发式：对敌有效 DAMAGE / KNOCK / KILL 按队伍对聚合；相邻接触间隔 ≤28 秒合并，或 knock 后 120 秒内对应 kill 延续。位置按队员每 15 秒取首条样本；歧义事件不强行归属。圈采样仅作为时间邻近的上下文证据，可被相邻 episode 共享。</div>
           </section>}
+          </details>}
           </div></div>}
           {tab === 'chat' && <div className="workspace-body chat-tab"><div className="center-panel">
           <div className="chat-panel">

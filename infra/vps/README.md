@@ -75,6 +75,23 @@ OpenClaw 的 node preflight 使用 `/tmp` 下唯一的私有子目录，显式�
   `netfilter-persistent` 管理。这样 Caddy 可连 `127.0.0.1:18798`，公网不能绕过 TLS 直连。
   apply 后必须从新 SSH 会话复核 SSH 可达性，并确认持久化规则可恢复。
 
+- PUBG Intelligence Lab：`pubg.<domain>` → Caddy（ACME HTTP-01 自动证书）→ frps 本机 TCP `4179` →
+  HomeLab frpc → Mac 页面 `192.168.5.3:4179`。模板为
+  `infra/vps/pubg-intelligence-lab.example.Caddyfile`、
+  `infra/vps/frpc/pubg-intelligence-lab-proxy.example.toml` 和 `frps.toml.example` 里的 `4179`
+  allowPorts。页面本身是仅局域网的研究应用；只有 `Host` 等于运行时配置的公网主机名的请求才走
+  公网范围，且除登录页外全部需要密码会话。认证在应用内（密码-only 登录页、scrypt 校验文件、
+  服务端会话、`Secure; HttpOnly; SameSite=Strict` cookie、登录限速），与 Image Lab 复用同一个
+  `~/Library/Application Support/Amadeus/secrets/qwen-image-lab-auth.json` 校验文件，仓库和日志里
+  没有明文密码。公网范围只提供构建好的前端，不暴露 Vite 开发服务器和 HMR；带代理头
+  （`X-Forwarded-For` / `CF-Connecting-IP`）的请求若 Host 不是公网主机名会被拒绝。
+  VPS TCP `4179` 同样只允许 loopback 回源，规则见
+  `infra/vps/pubg-intelligence-lab-public-input.rules`（IPv4/IPv6 INPUT 各一条，由
+  `netfilter-persistent` 持久化）。Mac 侧在 `config.env` 里设置
+  `PUBG_INTELLIGENCE_PUBLIC_HOST` 与 `PUBG_INTELLIGENCE_PUBLIC_AUTH_FILE`，二者缺一服务拒绝启动。
+  apply 顺序：frps allowPorts → 重启 frps → frpc 追加映射并 `frpc reload` → iptables 规则并持久化 →
+  Caddy 站点、`caddy validate` 后 reload；每个文件先做带时间戳的备份。
+
 ### Daily traffic fuse（source only; no live `tc` apply）
 
 `traffic-fuse/traffic_fuse.py` 是当前 Goal 的确定性 Phase 1 实现：它按

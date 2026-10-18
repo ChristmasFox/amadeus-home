@@ -1,0 +1,2 @@
+# Keep Caddy's loopback upstream reachable while denying direct public HTTP (apply to both iptables and ip6tables).
+-A INPUT ! -i lo -p tcp -m tcp --dport 4179 -j DROP

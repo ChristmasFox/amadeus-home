@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto';
 import { homedir, networkInterfaces } from 'node:os';
 import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { existsSync, mkdirSync, realpathSync, statSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, realpathSync, statSync } from 'node:fs';
 import { createServer as createViteServer } from 'vite';
 import type { LanguageModel } from 'ai';
 import {
@@ -30,6 +30,7 @@ import {
   analyzeFieldTelemetry,
   analyzeLobby,
   analyzeStreaks,
+  analyzeMatchStory,
   buildMatchRelative,
   type RelativeValues,
   buildLongRunCombat,
@@ -69,6 +70,7 @@ import {
   extractLandings,
   landingPlayerRef,
   mapDisplayName,
+  mapSizeKm,
   summarizeCombatQuality,
   type CombatQualityMatchStats,
   type LandingSample,
@@ -94,6 +96,10 @@ import {
 import { RawTelemetryArchive } from '@agent/pubg-intelligence/archive';
 import { assertArchiveOutsideRepository } from '@agent/pubg-intelligence/backfill';
 import { researchRecoveryMessage, shortConversationReply } from './messages.js';
+import {
+  clearedCookie, clientKey, isPublicRequest, LOGIN_PAGE, loadPublicAccess, login, loginCookie, logout, looksProxied, MAX_LOGIN_BYTES,
+  validSession, type PublicAccess,
+} from './public-access.js';
 import { createResearchModel } from './model.js';
 
 const PARSER_VERSION = 'telemetry-parser-6';
@@ -110,7 +116,7 @@ interface MatchReviewFeature {
   facts: MatchReviewFacts;
   createdAt: string;
 }
-interface Snapshot {
+export interface Snapshot {
   matches: NormalizedMatch[];
   byId: Map<string, NormalizedMatch>;
   squads: ResearchSquad[];
@@ -368,6 +374,72 @@ function telemetryValues(analysis: MatchTelemetryAnalysis, accountId: string): R
     wipeTakedowns: streak?.wipeTakedowns ?? null,
     timesDowned: analysis.fights.roles[accountId]?.timesDowned ?? null,
   };
+}
+
+/** Plain-language story of one match: lifelines, fights, route and circle, plus each member's numbers. */
+async function computeMatchStory(snapshot: Snapshot, squad: ResearchSquad, match: NormalizedMatch) {
+  const members = (squad.memberIds.length ? match.players.filter((player) => squad.memberIds.includes(player.accountId)) : match.players.slice(0, 4));
+  const trackedIds = new Set(members.map((player) => player.accountId));
+  const names: Record<string, string> = {};
+  members.forEach((player, index) => { names[player.accountId] = safePlayerName(player.displayName || player.playerName, index); });
+  const base = {
+    matchId: match.matchId,
+    mapName: match.mapName || null,
+    mapLabel: mapDisplayName(match.mapName || '未知地图'),
+    mapSizeKm: mapSizeKm(match.mapName || ''),
+    gameMode: match.gameMode,
+    durationSeconds: match.duration,
+    createdAt: match.createdAt ?? null,
+    names,
+  };
+  const archived = await archivedIds(snapshot);
+  const rows = members.map((player) => ({
+    accountId: player.accountId,
+    name: names[player.accountId]!,
+    damage: player.damage,
+    kills: player.kills,
+    knocks: player.dbnos,
+    assists: player.assists,
+    revives: player.revives,
+    survivalSeconds: Math.max(0, player.survivalTime),
+    rank: player.rank,
+    hitRate: null as number | null,
+    damagePerMinute: null as number | null,
+    timesDowned: null as number | null,
+    heals: null as number | null,
+    throwables: null as number | null,
+    rides: null as number | null,
+    footKm: null as number | null,
+    longestStreak: null as number | null,
+  }));
+  if (!archived.has(match.matchId)) return { ...base, available: false, reason: 'no_archive', players: rows, story: null };
+  try {
+    const payload = await snapshot.rawTelemetryArchive.read(match.matchId);
+    if (!payload) return { ...base, available: false, reason: 'no_archive', players: rows, story: null };
+    const story = analyzeMatchStory(payload, trackedIds);
+    const analysis = await analyzeMatchTelemetry(snapshot, squad.memberIds.length ? squad : { ...squad, memberIds: [...trackedIds] }, match);
+    if (typeof analysis !== 'string') {
+      for (const row of rows) {
+        const style = analysis.style[row.accountId];
+        const streak = analysis.streaks.players[row.accountId];
+        if (style) {
+          const shots = style.shots - (style.classShots[5] ?? 0);
+          const hits = style.hits - (style.classHits[5] ?? 0);
+          row.hitRate = shots >= 30 ? hits / shots : null;
+          row.damagePerMinute = style.minutes >= 1 ? (style.gunDamage + style.explosiveDamage) / style.minutes : null;
+          row.heals = style.healUses + style.boostUses;
+          row.throwables = style.throwables.frag + style.throwables.smoke + style.throwables.flash + style.throwables.fire;
+          row.rides = style.rides;
+          row.footKm = style.footMeters / 1000;
+        }
+        row.timesDowned = analysis.fights.roles[row.accountId]?.timesDowned ?? null;
+        row.longestStreak = streak?.longest ?? null;
+      }
+    }
+    return { ...base, available: true, reason: null, players: rows, story };
+  } catch {
+    return { ...base, available: false, reason: 'unreadable', players: rows, story: null };
+  }
 }
 
 async function computeMatchRelative(snapshot: Snapshot, squad: ResearchSquad, match: NormalizedMatch) {
@@ -1310,6 +1382,38 @@ async function handleApi(request: IncomingMessage, response: ServerResponse, sna
     });
     return;
   }
+  if (request.method === 'GET' && url.pathname === '/api/analytics/compare') {
+    const scopeBounds = safeDateBounds(url.searchParams.get('from'), url.searchParams.get('to'));
+    if (!scopeBounds) { send(response, 400, { error: 'invalid_date_range' }); return; }
+    const squad = selectSquad(snapshot, url.searchParams.get('squadId'));
+    const mode = requestedMode(url);
+    const archived = await archivedIds(snapshot);
+    const completeOnly = wantsCompleteTelemetry(url);
+    const scoped = snapshot.matches.filter((match) => inSquad(match, squad) && inMode(match, mode)
+      && (!completeOnly || archived.has(match.matchId))
+      && (scopeBounds.fromMs === undefined || match.timestamp >= scopeBounds.fromMs)
+      && (scopeBounds.toMs === undefined || match.timestamp < scopeBounds.toMs))
+      .sort((left, right) => left.timestamp - right.timestamp);
+    const ids = squad.memberIds.length ? squad.memberIds : [...new Set(scoped.flatMap((match) => match.players.map((player) => player.accountId)))].slice(0, 4);
+    const names: Record<string, string> = {};
+    ids.forEach((id, index) => {
+      const sample = scoped.flatMap((match) => match.players).find((player) => player.accountId === id);
+      names[id] = safePlayerName(sample?.displayName || sample?.playerName || '', index);
+    });
+    send(response, 200, {
+      players: ids.map((id) => ({ accountId: id, name: names[id] })),
+      matches: scoped.map((match) => {
+        const per: Record<string, { damage: number; kills: number; knocks: number; assists: number; survival: number; revives: number }> = {};
+        for (const id of ids) {
+          const player = match.players.find((item) => item.accountId === id);
+          if (player) per[id] = { damage: player.damage, kills: player.kills, knocks: player.dbnos, assists: player.assists, survival: Math.max(0, player.survivalTime) / 60, revives: player.revives };
+        }
+        const ranks = match.players.filter((player) => ids.includes(player.accountId)).map((player) => player.rank).filter((rank): rank is number => rank !== null && rank > 0);
+        return { t: match.timestamp, rank: ranks.length ? Math.min(...ranks) : null, per };
+      }).filter((entry) => Object.keys(entry.per).length > 0),
+    });
+    return;
+  }
   if (request.method === 'GET' && url.pathname === '/api/analytics/telemetry') {
     const scopeBounds = safeDateBounds(url.searchParams.get('from'), url.searchParams.get('to'));
     if (!scopeBounds) { send(response, 400, { error: 'invalid_date_range' }); return; }
@@ -1472,6 +1576,16 @@ async function handleApi(request: IncomingMessage, response: ServerResponse, sna
     } catch {
       send(response, 200, { matchId, status: 'unavailable', reason: 'telemetry_fetch_or_parse_failed' });
     }
+    return;
+  }
+  const matchStoryRoute = request.method === 'GET' ? url.pathname.match(/^\/api\/matches\/([^/]+)\/story$/u) : null;
+  if (matchStoryRoute) {
+    let matchId: string;
+    try { matchId = decodeURIComponent(matchStoryRoute[1] ?? ''); }
+    catch { send(response, 400, { error: 'invalid_match_id' }); return; }
+    const match = snapshot.byId.get(matchId);
+    if (!match) { send(response, 404, { error: 'match_not_found' }); return; }
+    send(response, 200, await computeMatchStory(snapshot, selectSquad(snapshot, url.searchParams.get('squadId')), match));
     return;
   }
   const matchRelative = request.method === 'GET' ? url.pathname.match(/^\/api\/matches\/([^/]+)\/relative$/u) : null;
@@ -1674,6 +1788,102 @@ async function handleApi(request: IncomingMessage, response: ServerResponse, sna
   send(response, 404, { error: 'not_found' });
 }
 
+const PUBLIC_CONTENT_TYPES: Record<string, string> = {
+  '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8',
+  '.svg': 'image/svg+xml', '.png': 'image/png', '.ico': 'image/x-icon', '.json': 'application/json; charset=utf-8', '.map': 'application/json',
+};
+const CLIENT_DIST = resolve(dirname(fileURLToPath(import.meta.url)), '../../dist/client');
+
+function publicHeaders(contentType: string, extra: Record<string, string> = {}): Record<string, string> {
+  return {
+    'content-type': contentType,
+    'cache-control': 'no-store',
+    'x-content-type-options': 'nosniff',
+    'referrer-policy': 'no-referrer',
+    'x-frame-options': 'DENY',
+    'strict-transport-security': 'max-age=31536000',
+    'content-security-policy': "default-src 'self'; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'",
+    ...extra,
+  };
+}
+
+function sendPublic(response: ServerResponse, status: number, body: Buffer | string, contentType: string, extra: Record<string, string> = {}): void {
+  const payload = typeof body === 'string' ? Buffer.from(body) : body;
+  response.writeHead(status, publicHeaders(contentType, { 'content-length': String(payload.length), ...extra }));
+  response.end(payload);
+}
+
+function sendPublicJson(response: ServerResponse, status: number, value: unknown, extra: Record<string, string> = {}): void {
+  sendPublic(response, status, JSON.stringify(value), 'application/json; charset=utf-8', extra);
+}
+
+/** Serves the built client for an authenticated public visitor; the Vite dev server is never exposed publicly. */
+function servePublicStatic(response: ServerResponse, pathname: string): void {
+  const requested = pathname === '/' || pathname === '/index.html' ? '/index.html' : pathname;
+  const target = resolve(CLIENT_DIST, `.${requested}`);
+  const inside = target === CLIENT_DIST || target.startsWith(`${CLIENT_DIST}/`);
+  const isAsset = requested.startsWith('/assets/');
+  let file = inside && existsSync(target) && statSync(target).isFile() ? target : null;
+  // Unknown paths fall back to the single-page app shell, but a missing asset is a plain 404.
+  if (!file && !isAsset && !requested.startsWith('/api/')) file = resolve(CLIENT_DIST, 'index.html');
+  if (!file || !existsSync(file)) { sendPublicJson(response, 404, { error: 'not_found' }); return; }
+  const extension = file.slice(file.lastIndexOf('.'));
+  sendPublic(response, 200, readFileSync(file), PUBLIC_CONTENT_TYPES[extension] ?? 'application/octet-stream');
+}
+
+async function readLimitedBody(request: IncomingMessage, limit: number): Promise<Buffer | null> {
+  const chunks: Buffer[] = [];
+  let size = 0;
+  for await (const chunk of request) {
+    size += (chunk as Buffer).length;
+    if (size > limit) return null;
+    chunks.push(chunk as Buffer);
+  }
+  return Buffer.concat(chunks);
+}
+
+export async function handlePublic(request: IncomingMessage, response: ServerResponse, snapshot: Snapshot, access: PublicAccess): Promise<void> {
+  const url = new URL(request.url ?? '/', 'http://127.0.0.1');
+  const method = request.method ?? 'GET';
+  const sameOrigin = request.headers.origin === access.origin;
+  if (method === 'POST' && url.pathname === '/api/login') {
+    if (!sameOrigin) { sendPublicJson(response, 403, { error: 'same_origin_required' }); return; }
+    if (!/^application\/json\b/iu.test(request.headers['content-type'] ?? '')) { sendPublicJson(response, 404, { error: 'not_found' }); return; }
+    const body = await readLimitedBody(request, MAX_LOGIN_BYTES);
+    if (!body) { sendPublicJson(response, 413, { error: 'login_payload_too_large' }); return; }
+    let password: unknown;
+    try {
+      const payload: unknown = JSON.parse(body.toString('utf8'));
+      if (!payload || typeof payload !== 'object' || Array.isArray(payload) || Object.keys(payload).join() !== 'password') throw new Error('shape');
+      password = (payload as { password: unknown }).password;
+    } catch { sendPublicJson(response, 400, { error: 'login_payload_invalid' }); return; }
+    const result = await login(access, clientKey(request), password);
+    if ('retryAfter' in result) { sendPublicJson(response, 429, { error: 'login_rate_limited' }, { 'retry-after': String(result.retryAfter) }); return; }
+    if ('failed' in result) { sendPublicJson(response, 401, { error: 'login_failed' }); return; }
+    response.writeHead(204, publicHeaders('application/json', { 'set-cookie': loginCookie(result.token) }));
+    response.end();
+    return;
+  }
+  if (!validSession(access, request)) {
+    if (method === 'GET' && !url.pathname.startsWith('/api/') && !url.pathname.startsWith('/assets/')) { sendPublic(response, 200, LOGIN_PAGE, 'text/html; charset=utf-8'); return; }
+    sendPublicJson(response, 401, { error: 'login_required' });
+    return;
+  }
+  if (method !== 'GET' && method !== 'HEAD' && !sameOrigin) { sendPublicJson(response, 403, { error: 'same_origin_required' }); return; }
+  if (method === 'POST' && url.pathname === '/api/logout') {
+    logout(access, request);
+    response.writeHead(204, publicHeaders('application/json', { 'set-cookie': clearedCookie }));
+    response.end();
+    return;
+  }
+  if (url.pathname.startsWith('/api/')) {
+    await handleApi(request, response, snapshot);
+    return;
+  }
+  if (method !== 'GET' && method !== 'HEAD') { sendPublicJson(response, 405, { error: 'method_not_allowed' }); return; }
+  servePublicStatic(response, url.pathname);
+}
+
 export async function startServer(options: { researchModel?: Exclude<LanguageModel, string> } = {}): Promise<{ close: () => Promise<void>; url: string }> {
   const snapshot = await openSnapshot(options.researchModel);
   const port = Number(process.env.PORT ?? DEFAULT_PORT);
@@ -1681,7 +1891,17 @@ export async function startServer(options: { researchModel?: Exclude<LanguageMod
   if (!isLoopbackHost(host) && !isPrivateIPv4Host(host)) throw new Error('HOST_MUST_BE_LOOPBACK_OR_PRIVATE_IPV4');
   const allowedNetwork = bindNetwork(host);
   let vite: Awaited<ReturnType<typeof createViteServer>> | undefined;
+  const publicAccess = loadPublicAccess(process.env);
+  if (publicAccess && !existsSync(resolve(CLIENT_DIST, 'index.html'))) throw new Error('public_access_needs_built_client');
   const server = createServer((request, response) => {
+    if (isPublicRequest(request, publicAccess)) {
+      void handlePublic(request, response, snapshot, publicAccess!).catch(() => {
+        if (!response.headersSent) sendPublicJson(response, 500, { error: 'research_request_failed' });
+      });
+      return;
+    }
+    // Anything relayed by the public proxy must carry the public Host; a proxied request for another host is refused.
+    if (looksProxied(request)) { send(response, 403, { error: 'proxied_request_not_allowed' }); return; }
     if ((request.url ?? '').startsWith('/api/')) {
       if (!isLocalRequest(request, allowedNetwork)) { send(response, 403, { error: 'local_network_access_only' }); return; }
       void handleApi(request, response, snapshot).catch(() => {
@@ -1692,6 +1912,10 @@ export async function startServer(options: { researchModel?: Exclude<LanguageMod
     vite?.middlewares(request, response, () => {
       if (!response.headersSent) { response.writeHead(404); response.end('Not found'); }
     });
+  });
+  // The dev server's HMR socket must never be reachable through the public hostname or the proxy.
+  server.prependListener('upgrade', (request, socket) => {
+    if (isPublicRequest(request, publicAccess) || looksProxied(request)) socket.destroy();
   });
   vite = await createViteServer({
     server: { middlewareMode: true, hmr: { server } },

@@ -68,6 +68,10 @@ if [[ ! -f "$STATE_DIR/config.env" ]]; then
 # PORT: page port. BIND: auto picks the first private LAN IPv4 (en0, en1) at every start; set 127.0.0.1 for loopback only.
 PORT=4179
 BIND=auto
+# Optional public hostname served behind the VPS proxy with a password login. Both lines are required together; the
+# auth file is a mode-0600 scrypt verifier kept outside Git (the Image Lab verifier can be reused for one shared password).
+# PUBG_INTELLIGENCE_PUBLIC_HOST=pubg.example.com
+# PUBG_INTELLIGENCE_PUBLIC_AUTH_FILE=$HOME/Library/Application Support/Amadeus/secrets/qwen-image-lab-auth.json
 CONFIG
 fi
 
