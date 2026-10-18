@@ -76,9 +76,8 @@ export function storeValues(match: NormalizedMatch, accountId: string): Relative
 export function telemetryValues(analysis: MatchTelemetryAnalysis, accountId: string): RelativeValues {
   const style = analysis.style[accountId];
   const streak = analysis.streaks.players[accountId];
-  const sg = 5;
-  const shots = style ? style.shots - (style.classShots[sg] ?? 0) : 0;
-  const hits = style ? style.hits - (style.classHits[sg] ?? 0) : 0;
+  const shots = style ? style.shots : 0;
+  const hits = style ? style.hits : 0;
   return {
     dpm: style && style.minutes >= 1 ? (style.gunDamage + style.explosiveDamage) / style.minutes : null,
     hitRate: shots >= 30 ? hits / shots : null,
@@ -138,8 +137,8 @@ export async function computeMatchStory(snapshot: Snapshot, squad: ResearchSquad
         const style = analysis.style[row.accountId];
         const streak = analysis.streaks.players[row.accountId];
         if (style) {
-          const shots = style.shots - (style.classShots[5] ?? 0);
-          const hits = style.hits - (style.classHits[5] ?? 0);
+          const shots = style.shots;
+          const hits = style.hits;
           row.hitRate = shots >= 30 ? hits / shots : null;
           row.damagePerMinute = style.minutes >= 1 ? (style.gunDamage + style.explosiveDamage) / style.minutes : null;
           row.heals = style.healUses + style.boostUses;

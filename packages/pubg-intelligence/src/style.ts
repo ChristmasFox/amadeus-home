@@ -14,6 +14,12 @@ export const STYLE_MIN_FIGHTS = 40;
 export const STYLE_MIN_DAMAGE = 1500;
 export const STYLE_MIN_MINUTES = 60;
 export const STYLE_MIN_SHOTS = 800;
+/** A shot counts as part of a fight when someone on either side was hurt within this long before or after it. */
+export const STYLE_ENGAGE_WINDOW_MS = 8000;
+/** Fewest shots in a first-shot or follow-up group before its hit rate is measured. */
+export const STYLE_MIN_SPLIT_SHOTS = 300;
+/** A shot fired this soon after the previous one from the same weapon is a follow-up bullet of a burst or spray. */
+export const STYLE_BURST_GAP_MS = 120;
 /** Prior shots pulling a teammate class hit rate toward the teammates' overall rate in the weapon-mix adjustment. */
 export const STYLE_CLASS_PRIOR_SHOTS = 200;
 export const STYLE_MIN_KNOCKS = 25;
@@ -106,7 +112,12 @@ export interface PlayerRawStyle {
   /** Rocket, grenade and fire damage to opponents; counts toward damage per minute but not the shooting statistics. */
   explosiveDamage: number;
   headDamage: number;
-  /** Gun shots fired and the weapon hits (including hits on downed players) with their damage. */
+  /**
+   * Aimed shots: gun shots fired inside a fight, leaving out the shots that went into a downed player, with the shots
+   * that hurt a standing opponent and their damage. Each shot is paired with its damage by attackId, so one shotgun
+   * blast with several pellets is one hit. Fired outside any fight (walls, vehicles, testing, empty air) and finishing
+   * shots into a downed player are counted separately instead of as misses.
+   */
   shots: number;
   hits: number;
   hitDamage: number;
@@ -114,6 +125,15 @@ export interface PlayerRawStyle {
   classShots: number[];
   classHits: number[];
   classHitDamage: number[];
+  /** The first shot of a burst (or a single shot) versus the follow-up bullets of an automatic burst, among the aimed shots. */
+  firstShots: number;
+  firstHits: number;
+  followShots: number;
+  followHits: number;
+  /** Shots fired with nobody on either side hurt within the engage window. */
+  idleShots: number;
+  /** Shots that went into a downed opponent. */
+  finishingShots: number;
   dealtBins: number[];
   /** Gun damage dealt in the early (circles 1-2), middle (3-4) and late (5+) game. */
   phaseDamage: number[];
@@ -144,6 +164,12 @@ function emptyRaw(): PlayerRawStyle {
     classShots: new Array<number>(CLASS_ORDER.length).fill(0),
     classHits: new Array<number>(CLASS_ORDER.length).fill(0),
     classHitDamage: new Array<number>(CLASS_ORDER.length).fill(0),
+    firstShots: 0,
+    firstHits: 0,
+    followShots: 0,
+    followHits: 0,
+    idleShots: 0,
+    finishingShots: 0,
     dealtBins: new Array<number>(DISTANCE_BIN_COUNT).fill(0),
     phaseDamage: [0, 0, 0],
     weaponDamage: {},
@@ -180,6 +206,10 @@ export function analyzeStyleTelemetry(payload: unknown, trackedIds: ReadonlySet<
   const landedAt = new Map<string, number>();
   const lastStep = new Map<string, { x: number; y: number; time: number; vehicle: boolean }>();
   let safety: { x: number; y: number; radius: number } | null = null;
+  // Shots are judged after the pass: whether each hit (by attackId) and whether anyone was hurt around it.
+  const shotLog = new Map<string, Array<{ t: number; item: string; attackId: string | null; classIndex: number }>>();
+  const outcomes = new Map<string, { standing: boolean; downed: boolean; damage: number }>();
+  const contactTimes: number[] = [];
 
   for (const raw of parseTelemetryPayload(payload)) {
     const event = obj(raw);
@@ -239,13 +269,33 @@ export function analyzeStyleTelemetry(payload: unknown, trackedIds: ReadonlySet<
       if (id && trackedIds.has(id) && event.attackType === 'Weapon' && weapon.category === 'Weapon' && (weapon.subCategory === 'Main' || weapon.subCategory === 'Handgun')) {
         const fired = typeof weapon.itemId === 'string' ? normalizeWeaponName(weapon.itemId) : null;
         // Launchers never register gun hits, so their shots would only drag the hit rate down.
-        if (fired && fired !== 'PanzerFaust') {
-          players[id]!.shots += 1;
-          players[id]!.classShots[CLASS_ORDER.indexOf(weaponClassOf(fired))]! += 1;
+        if (fired && fired !== 'PanzerFaust' && Number.isFinite(time)) {
+          const log = shotLog.get(id) ?? [];
+          log.push({ t: time, item: fired, attackId: event.attackId === undefined || event.attackId === null ? null : String(event.attackId), classIndex: CLASS_ORDER.indexOf(weaponClassOf(fired)) });
+          shotLog.set(id, log);
         }
       }
     } else if (type === 'LogPlayerTakeDamage') {
       const category = event.damageTypeCategory;
+      {
+        const from = obj(event.attacker);
+        const to = obj(event.victim);
+        const fromId = typeof from.accountId === 'string' ? from.accountId : null;
+        const toId = typeof to.accountId === 'string' ? to.accountId : null;
+        const amount = num(event.damage) ?? 0;
+        const rival = String(from.teamId ?? '') !== String(to.teamId ?? '');
+        const squadAttacks = fromId !== null && trackedIds.has(fromId) && !(toId !== null && trackedIds.has(toId)) && rival;
+        const squadHurt = toId !== null && trackedIds.has(toId) && fromId !== null && !trackedIds.has(fromId) && rival;
+        // Hits on a downed player do no damage, so a fight is also "on" while one is being finished.
+        if ((squadAttacks || squadHurt) && Number.isFinite(time) && (amount > 0 || to.isDBNO === true)) contactTimes.push(time);
+        if (squadAttacks && typeof category === 'string' && category.startsWith('Damage_Gun') && event.attackId !== undefined && event.attackId !== null) {
+          const key = String(event.attackId);
+          const outcome = outcomes.get(key) ?? { standing: false, downed: false, damage: 0 };
+          if (amount > 0 && to.isDBNO !== true) { outcome.standing = true; outcome.damage += amount; }
+          else if (to.isDBNO === true) outcome.downed = true;
+          outcomes.set(key, outcome);
+        }
+      }
       if (typeof category === 'string' && EXPLOSIVE_DAMAGE.has(category)) {
         // Explosive and fire damage counts toward damage per minute (and the rocket toward habitual weapons);
         // it stays out of the hit-rate and range statistics, which only describe gunfire.
@@ -273,13 +323,6 @@ export function analyzeStyleTelemetry(payload: unknown, trackedIds: ReadonlySet<
       if (String(attacker.teamId ?? '') === String(victim.teamId ?? '')) continue;
       const weapon = typeof event.damageCauserName === 'string' ? normalizeWeaponName(event.damageCauserName) : null;
       const entry = players[attackerId]!;
-      if (weapon) {
-        const classIndex = CLASS_ORDER.indexOf(weaponClassOf(weapon));
-        entry.hits += 1;
-        entry.hitDamage += damage;
-        entry.classHits[classIndex]! += 1;
-        entry.classHitDamage[classIndex]! += damage;
-      }
       if (category !== 'Damage_Gun') continue;
       const from = obj(attacker.location);
       const to = obj(victim.location);
@@ -316,6 +359,32 @@ export function analyzeStyleTelemetry(payload: unknown, trackedIds: ReadonlySet<
     }
   }
 
+  contactTimes.sort((left, right) => left - right);
+  const fightAround = (t: number): boolean => {
+    let low = 0;
+    let high = contactTimes.length;
+    while (low < high) { const mid = (low + high) >> 1; if (contactTimes[mid]! < t - STYLE_ENGAGE_WINDOW_MS) low = mid + 1; else high = mid; }
+    return low < contactTimes.length && contactTimes[low]! <= t + STYLE_ENGAGE_WINDOW_MS;
+  };
+  for (const [id, log] of shotLog) {
+    const entry = players[id]!;
+    log.sort((left, right) => left.t - right.t);
+    const lastShot = new Map<string, number>();
+    for (const shot of log) {
+      const outcome = shot.attackId === null ? undefined : outcomes.get(shot.attackId);
+      const previous = lastShot.get(shot.item);
+      lastShot.set(shot.item, shot.t);
+      if (outcome?.downed && !outcome.standing) { entry.finishingShots += 1; continue; }
+      if (!fightAround(shot.t)) { entry.idleShots += 1; continue; }
+      const hit = outcome?.standing === true;
+      const follow = previous !== undefined && shot.t - previous <= STYLE_BURST_GAP_MS;
+      entry.shots += 1;
+      entry.classShots[shot.classIndex]! += 1;
+      if (hit) { entry.hits += 1; entry.hitDamage += outcome!.damage; entry.classHits[shot.classIndex]! += 1; entry.classHitDamage[shot.classIndex]! += outcome!.damage; }
+      if (follow) { entry.followShots += 1; if (hit) entry.followHits += 1; } else { entry.firstShots += 1; if (hit) entry.firstHits += 1; }
+    }
+  }
+
   for (const slot of positions.values()) {
     if (slot.size < 2) continue;
     for (const [id, here] of slot) {
@@ -345,7 +414,7 @@ export function emptyFights(): RoleCounts {
 // ---------------------------------------------------------------------------------------------------------------
 // Flat vector layout: sums, subtraction (for "teammates only" baselines) and bootstrap resampling are just array maths.
 const FIGHT_KEYS = Object.keys(emptyFights()) as Array<keyof RoleCounts>;
-const SCALARS = ['minutes', 'gunDamage', 'explosiveDamage', 'headDamage', 'shots', 'hits', 'hitDamage', 'throwables', 'rides', 'healUses', 'boostUses', 'earlyPickups', 'footMeters', 'zoneSamples', 'zoneEdgeSamples', 'pickupMatches'] as const;
+const SCALARS = ['minutes', 'gunDamage', 'explosiveDamage', 'headDamage', 'shots', 'hits', 'hitDamage', 'firstShots', 'firstHits', 'followShots', 'followHits', 'idleShots', 'finishingShots', 'throwables', 'rides', 'healUses', 'boostUses', 'earlyPickups', 'footMeters', 'zoneSamples', 'zoneEdgeSamples', 'pickupMatches'] as const;
 type Scalar = typeof SCALARS[number];
 
 const OFFSET: Record<string, number> = {};
@@ -372,6 +441,12 @@ function toVector(stats: PlayerStyleMatch): Vec {
   vector[OFFSET.shots!] = stats.shots;
   vector[OFFSET.hits!] = stats.hits;
   vector[OFFSET.hitDamage!] = stats.hitDamage;
+  vector[OFFSET.firstShots!] = stats.firstShots;
+  vector[OFFSET.firstHits!] = stats.firstHits;
+  vector[OFFSET.followShots!] = stats.followShots;
+  vector[OFFSET.followHits!] = stats.followHits;
+  vector[OFFSET.idleShots!] = stats.idleShots;
+  vector[OFFSET.finishingShots!] = stats.finishingShots;
   vector[OFFSET.throwables!] = stats.throwables.frag + stats.throwables.smoke + stats.throwables.flash + stats.throwables.fire;
   vector[OFFSET.rides!] = stats.rides;
   vector[OFFSET.healUses!] = stats.healUses;
@@ -439,7 +514,7 @@ function share(part: number, whole: number): number | null {
 }
 
 export type StyleAxisKey =
-  | 'range' | 'farShare' | 'closeShare' | 'marksman' | 'closeGun' | 'precision'
+  | 'range' | 'farShare' | 'closeShare' | 'marksman' | 'closeGun' | 'precision' | 'firstShot' | 'followShot' | 'burst'
   | 'tempo' | 'initiative' | 'fragging' | 'lateGame' | 'earlyLoot'
   | 'revive' | 'utility' | 'supplies' | 'isolation'
   | 'risk' | 'zoneEdge' | 'foot' | 'mobility'
@@ -478,6 +553,9 @@ export const STYLE_AXES: readonly StyleAxisDefinition[] = [
   { key: 'marksman', group: '射击', label: '狙击/射手枪占比', high: '偏爱狙击和射手步枪', low: '很少用狙击和射手步枪' },
   { key: 'closeGun', group: '射击', label: '冲锋/霰弹/手枪占比', high: '偏爱近战武器', low: '很少用近战武器' },
   { key: 'precision', group: '射击', label: '爆头率', high: '爆头占比更高', low: '爆头占比更低' },
+  { key: 'firstShot', group: '射击', label: '首发命中率', high: '首发和单点射击更准', low: '首发和单点射击命中偏低' },
+  { key: 'followShot', group: '射击', label: '连射命中率', high: '连射时后续子弹更准', low: '连射时后续子弹偏飘' },
+  { key: 'burst', group: '射击', label: '连射占比', high: '更爱连射扫射', low: '更爱点射' },
   { key: 'tempo', group: '节奏', label: '参战频率', high: '更爱找交战', low: '参战更少，更低调' },
   { key: 'initiative', group: '节奏', label: '先手比例', high: '更常第一个开火', low: '更多是被动接战' },
   { key: 'fragging', group: '节奏', label: '收割效率', high: '每次交战击倒/击杀更多', low: '更多承担牵制和辅助' },
@@ -493,13 +571,9 @@ export const STYLE_AXES: readonly StyleAxisDefinition[] = [
   { key: 'mobility', group: '位置与风险', label: '载具使用', high: '更爱开车', low: '很少用载具' },
 ];
 
-/** Shots, hits and hit damage excluding shotguns, whose pellets register several hits per shot. */
+/** Aimed shots, hits and standing-target damage. Shotguns need no special case: shots are paired with hits by attack. */
 function mixTotals(vector: Vec): { shots: number; hits: number; hitDamage: number } {
-  const sg = CLASS_ORDER.indexOf('SG');
-  const shots = scalar(vector, 'shots') - vector[OFFSET.classShots! + sg]!;
-  const hits = scalar(vector, 'hits') - vector[OFFSET.classHits! + sg]!;
-  const hitDamage = scalar(vector, 'hitDamage') - vector[OFFSET.classHitDamage! + sg]!;
-  return { shots: Math.max(0, shots), hits: Math.max(0, hits), hitDamage: Math.max(0, hitDamage) };
+  return { shots: scalar(vector, 'shots'), hits: scalar(vector, 'hits'), hitDamage: scalar(vector, 'hitDamage') };
 }
 
 /** Raw metric for one axis from a summed vector; null when there is too little data to measure it. */
@@ -541,6 +615,9 @@ export function axisValue(key: StyleAxisKey, vector: Vec): number | null {
     case 'mobility': return enoughTime ? scalar(vector, 'rides') / minutes : null;
     case 'dpm': return enoughTime ? (gun + scalar(vector, 'explosiveDamage')) / minutes : null;
     case 'hitRate': { const shot = mixTotals(vector); return shot.shots >= STYLE_MIN_SHOTS ? shot.hits / shot.shots : null; }
+    case 'firstShot': return scalar(vector, 'firstShots') >= STYLE_MIN_SPLIT_SHOTS ? scalar(vector, 'firstHits') / scalar(vector, 'firstShots') : null;
+    case 'followShot': return scalar(vector, 'followShots') >= STYLE_MIN_SPLIT_SHOTS ? scalar(vector, 'followHits') / scalar(vector, 'followShots') : null;
+    case 'burst': return scalar(vector, 'shots') >= STYLE_MIN_SHOTS ? scalar(vector, 'followShots') / scalar(vector, 'shots') : null;
     case 'dmgPerShot': { const shot = mixTotals(vector); return shot.shots >= STYLE_MIN_SHOTS ? shot.hitDamage / shot.shots : null; }
     case 'knockRate': return enoughFights ? fight(vector, 'fightsWithKnock') / fights : null;
     case 'conversion': return fight(vector, 'chainsDealt') >= STYLE_MIN_KNOCKS ? fight(vector, 'chainsFinished') / fight(vector, 'chainsDealt') : null;
@@ -638,9 +715,19 @@ export interface FunnelEntry {
   name: string;
   fights: number;
   minutes: number;
+  /** Aimed shots (inside fights, not into downed players) and the ones that hurt a standing opponent. */
   shots: number;
   hits: number;
   hitRate: number | null;
+  /** Hit rate of the first shot of a burst (or a single shot) and of the follow-up bullets of an automatic burst. */
+  firstShotRate: number | null;
+  followShotRate: number | null;
+  /** Share of aimed shots that were follow-up bullets of a burst. */
+  burstShare: number | null;
+  /** Shots fired with nobody hurt around them, as a share of all shots that were not finishing shots. */
+  idleShare: number | null;
+  /** Shots into downed opponents, as a share of all shots. */
+  finishingShare: number | null;
   hitDamage: number;
   damagePerShot: number | null;
   damagePerMinute: number | null;
@@ -753,7 +840,6 @@ function axisPair(key: StyleAxisKey, own: Vec, mates: Vec): { value: number | nu
   let expected = 0;
   let shots = 0;
   CLASS_ORDER.forEach((weaponClass, index) => {
-    if (weaponClass === 'SG') return;
     const rate = (mateYield[index]! + STYLE_CLASS_PRIOR_SHOTS * matesOverall) / (mateShots[index]! + STYLE_CLASS_PRIOR_SHOTS);
     expected += ownShots[index]! * rate;
     shots += ownShots[index]!;
@@ -970,8 +1056,9 @@ export function buildSquadStyle(input: BuildSquadStyleInput): SquadStyle {
 
   const funnel: FunnelEntry[] = players.map((player) => {
     const vector = base.perPlayer.get(player.accountId)!;
-    // Shotgun pellets register several hits per shot, so the funnel's shooting steps leave shotguns out.
     const { shots, hits, hitDamage } = mixTotals(vector);
+    const idle = scalar(vector, 'idleShots');
+    const finishing = scalar(vector, 'finishingShots');
     const minutes = scalar(vector, 'minutes');
     const knocks = fight(vector, 'knocksDealt');
     const dealt = fight(vector, 'chainsDealt');
@@ -984,6 +1071,11 @@ export function buildSquadStyle(input: BuildSquadStyleInput): SquadStyle {
       shots,
       hits,
       hitRate: shots > 0 ? hits / shots : null,
+      firstShotRate: scalar(vector, 'firstShots') > 0 ? scalar(vector, 'firstHits') / scalar(vector, 'firstShots') : null,
+      followShotRate: scalar(vector, 'followShots') > 0 ? scalar(vector, 'followHits') / scalar(vector, 'followShots') : null,
+      burstShare: shots > 0 ? scalar(vector, 'followShots') / shots : null,
+      idleShare: shots + idle > 0 ? idle / (shots + idle) : null,
+      finishingShare: shots + idle + finishing > 0 ? finishing / (shots + idle + finishing) : null,
       hitDamage,
       damagePerShot: shots > 0 ? hitDamage / shots : null,
       damagePerMinute: minutes > 0 ? (scalar(vector, 'gunDamage') + scalar(vector, 'explosiveDamage')) / minutes : null,

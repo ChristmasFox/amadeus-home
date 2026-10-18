@@ -38,13 +38,20 @@ test('style telemetry measures distance, stage, healing, early loot, movement, c
     { _T: 'LogPlayerPosition', _D: day(120), elapsedTime: 120, common: { isGame: 2 }, character: who('a', 1, geo(0, 0)) },
     { _T: 'LogPlayerPosition', _D: day(130), elapsedTime: 130, common: { isGame: 2 }, character: who('a', 1, geo(1_000, 0)) },
     { _T: 'LogPlayerPosition', _D: day(121), elapsedTime: 121, common: { isGame: 2 }, character: who('b', 1, geo(30_000, 0)) },
-    { _T: 'LogPlayerTakeDamage', _D: day(140), common: { isGame: 2 }, damage: 30, damageTypeCategory: 'Damage_Gun', damageReason: 'HeadShot', damageCauserName: 'WeapKar98k_C', attacker: who('a', 1, geo(0, 0)), victim: who('e', 2, geo(20_000, 0)) },
+    { _T: 'LogPlayerTakeDamage', _D: day(135.5), common: { isGame: 2 }, attackId: 11, damage: 30, damageTypeCategory: 'Damage_Gun', damageReason: 'HeadShot', damageCauserName: 'WeapKar98k_C', attacker: who('a', 1, geo(0, 0)), victim: who('e', 2, geo(20_000, 0)) },
     { _T: 'LogPlayerTakeDamage', _D: day(141), common: { isGame: 6 }, damage: 20, damageTypeCategory: 'Damage_Gun', damageReason: 'TorsoShot', damageCauserName: 'WeapUMP_C', attacker: who('b', 1, geo(0, 0)), victim: who('e', 2, geo(1_000, 0)) },
     { _T: 'LogPlayerTakeDamage', _D: day(142), common: { isGame: 2 }, damage: 99, damageTypeCategory: 'Damage_Gun', attacker: who('a', 1), victim: who('b', 1, geo(500, 0)) },
-    { _T: 'LogPlayerAttack', _D: day(135), common: { isGame: 2 }, attackType: 'Weapon', attacker: who('a', 1), weapon: { itemId: 'Item_Weapon_Kar98k_C', category: 'Weapon', subCategory: 'Main' } },
-    { _T: 'LogPlayerAttack', _D: day(136), common: { isGame: 2 }, attackType: 'Weapon', attacker: who('a', 1), weapon: { itemId: 'Item_Weapon_Kar98k_C', category: 'Weapon', subCategory: 'Main' } },
+    { _T: 'LogPlayerAttack', _D: day(135), common: { isGame: 2 }, attackId: 11, attackType: 'Weapon', attacker: who('a', 1), weapon: { itemId: 'Item_Weapon_Kar98k_C', category: 'Weapon', subCategory: 'Main' } },
+    { _T: 'LogPlayerAttack', _D: day(136), common: { isGame: 2 }, attackId: 12, attackType: 'Weapon', attacker: who('a', 1), weapon: { itemId: 'Item_Weapon_Kar98k_C', category: 'Weapon', subCategory: 'Main' } },
+    // A burst of three UMP shots 80 ms apart: one first shot and two follow-ups, one of which hits.
+    { _T: 'LogPlayerAttack', _D: day(138.0), common: { isGame: 2 }, attackId: 21, attackType: 'Weapon', attacker: who('a', 1), weapon: { itemId: 'Item_Weapon_UMP_C', category: 'Weapon', subCategory: 'Main' } },
+    { _T: 'LogPlayerAttack', _D: day(138.08), common: { isGame: 2 }, attackId: 22, attackType: 'Weapon', attacker: who('a', 1), weapon: { itemId: 'Item_Weapon_UMP_C', category: 'Weapon', subCategory: 'Main' } },
+    { _T: 'LogPlayerAttack', _D: day(138.16), common: { isGame: 2 }, attackId: 23, attackType: 'Weapon', attacker: who('a', 1), weapon: { itemId: 'Item_Weapon_UMP_C', category: 'Weapon', subCategory: 'Main' } },
+    { _T: 'LogPlayerTakeDamage', _D: day(138.17), common: { isGame: 2 }, attackId: 23, damage: 25, damageTypeCategory: 'Damage_Gun', damageCauserName: 'WeapUMP_C', attacker: who('a', 1, geo(0, 0)), victim: who('e', 2, geo(1_500, 0)) },
+    // A shot far from any fight: neither a hit nor a miss that counts against the hit rate.
+    { _T: 'LogPlayerAttack', _D: day(900), common: { isGame: 3 }, attackId: 31, attackType: 'Weapon', attacker: who('a', 1), weapon: { itemId: 'Item_Weapon_UMP_C', category: 'Weapon', subCategory: 'Main' } },
     { _T: 'LogPlayerAttack', _D: day(137), common: { isGame: 2 }, attackType: 'Weapon', attacker: who('a', 1), weapon: { itemId: 'Item_Weapon_Grenade_C', category: 'Equipment', subCategory: 'Throwable' } },
-    { _T: 'LogPlayerTakeDamage', _D: day(138), common: { isGame: 2 }, damage: 10, damageTypeCategory: 'Damage_DBNO', damageCauserName: 'WeapKar98k_C', attacker: who('a', 1, geo(0, 0)), victim: who('e', 2, geo(20_000, 0), { isDBNO: true }) },
+    { _T: 'LogPlayerTakeDamage', _D: day(136.01), common: { isGame: 2 }, attackId: 12, damage: 0, damageTypeCategory: 'Damage_Gun', damageCauserName: 'WeapKar98k_C', attacker: who('a', 1, geo(0, 0)), victim: who('e', 2, geo(20_000, 0), { isDBNO: true }) },
     { _T: 'LogPlayerTakeDamage', _D: day(139), common: { isGame: 2 }, damage: 80, damageTypeCategory: 'Damage_Explosion_PanzerFaustWarhead', damageCauserName: 'PanzerFaust100M_Projectile_C', attacker: who('b', 1), victim: who('e', 2) },
     { _T: 'LogPlayerTakeDamage', _D: day(139), common: { isGame: 2 }, damage: 15, damageTypeCategory: 'Damage_Molotov', attacker: who('b', 1), victim: who('e', 2) },
     { _T: 'LogPlayerAttack', _D: day(139), common: { isGame: 2 }, attackType: 'Weapon', attacker: who('b', 1), weapon: { itemId: 'Item_Weapon_PanzerFaust100M_C', category: 'Weapon', subCategory: 'Main' } },
@@ -54,7 +61,7 @@ test('style telemetry measures distance, stage, healing, early loot, movement, c
     { _T: 'LogVehicleRide', _D: day(5), common: { isGame: 0.1 }, character: who('b', 1), vehicle: { vehicleType: 'TransportAircraft' } },
   ];
   const stats = analyzeStyleTelemetry(payload, tracked);
-  assert.equal(stats.a!.gunDamage, 30, 'friendly fire and unknown damage are ignored');
+  assert.equal(stats.a!.gunDamage, 55, 'friendly fire and unknown damage are ignored: the 30 and the 25 from the burst');
   assert.equal(stats.a!.headDamage, 30);
   assert.equal(stats.b!.explosiveDamage, 95, 'rocket and fire damage count toward damage per minute');
   assert.equal(stats.b!.gunDamage, 20, 'but not toward gun damage');
@@ -62,14 +69,15 @@ test('style telemetry measures distance, stage, healing, early loot, movement, c
   assert.equal(stats.b!.shots, 0, 'rocket launches are not shots');
   assert.equal(stats.a!.dealtBins[STYLE_DISTANCE_EDGES.findIndex((edge) => 200 < edge)], 30);
   assert.equal(stats.b!.dealtBins[1], 20, 'a 10 m shot lands in the 10-25 m bin');
-  assert.deepEqual(stats.a!.phaseDamage, [30, 0, 0]);
+  assert.deepEqual(stats.a!.phaseDamage, [55, 0, 0]);
   assert.deepEqual(stats.b!.phaseDamage, [0, 0, 20], 'circle 6 counts as late game');
   assert.equal(stats.a!.weaponDamage.Kar98k, 30);
-  assert.equal(stats.a!.shots, 2, 'only guns count as shots');
-  assert.equal(stats.a!.hits, 2, 'hits on downed players count as hits');
-  assert.equal(stats.a!.hitDamage, 40);
-  assert.equal(stats.a!.classShots[3], 2, 'Kar98k shots are sniper-rifle shots');
-  assert.equal(stats.a!.gunDamage, 30, 'distance damage stays on standing targets');
+  // Kar98k #11 hit a standing player, #12 went into a downed one, the UMP burst has one hit among three, #31 was far from any fight.
+  assert.deepEqual({ shots: stats.a!.shots, hits: stats.a!.hits, finishing: stats.a!.finishingShots, idle: stats.a!.idleShots }, { shots: 4, hits: 2, finishing: 1, idle: 1 }, 'a finishing shot is neither a hit nor a miss; a shot outside any fight is counted apart');
+  assert.equal(stats.a!.hitDamage, 55, 'damage of the shots that hurt a standing opponent');
+  assert.equal(stats.a!.classShots[3], 1, 'the aimed Kar98k shot is a sniper-rifle shot');
+  assert.deepEqual({ first: stats.a!.firstShots, firstHits: stats.a!.firstHits, follow: stats.a!.followShots, followHits: stats.a!.followHits }, { first: 2, firstHits: 1, follow: 2, followHits: 1 }, 'the first UMP shot and the Kar98k shot are first shots; the two bullets 80 ms behind are follow-ups');
+  assert.equal(stats.a!.gunDamage, 55, 'distance damage stays on standing targets');
   assert.equal(stats.a!.throwables.smoke, 1);
   assert.equal(stats.a!.throwables.frag + stats.a!.throwables.fire + stats.a!.throwables.flash, 0);
   assert.equal(stats.b!.rides, 1, 'aircraft rides do not count');
@@ -100,6 +108,12 @@ function playerMatch(overrides: { range?: number; isolated?: boolean; revives?: 
     classShots: [100, 0, 0, 0, 0, 0, 0, 0],
     classHits: [Math.round(25 * skill), 0, 0, 0, 0, 0, 0, 0],
     classHitDamage: [400 * skill, 0, 0, 0, 0, 0, 0, 0],
+    firstShots: 30,
+    firstHits: Math.round(10 * skill),
+    followShots: 70,
+    followHits: Math.round(15 * skill),
+    idleShots: 20,
+    finishingShots: 5,
     dealtBins,
     phaseDamage: [100, 100, 100],
     weaponDamage: overrides.weapons ?? { Kar98k: 150, UMP: 150 },
@@ -236,8 +250,7 @@ test('hit rate is compared on the same weapon mix, so a sniper is not rated a be
   const hitRate = style.players.find((player) => player.accountId === 's')!.axes.find((axis) => axis.key === 'hitRate')!;
   assert.equal(hitRate.value, 0.4, 'raw sniper hit rate');
   assert.ok(Math.abs(hitRate.ratio! - 1) < 0.02, `same class rates read as parity, got ${hitRate.ratio}`);
-  const shotgun = (): PlayerStyleMatch => ({ ...mixed(), shots: 300, hits: 560, classShots: [100, 0, 0, 100, 0, 100, 0, 0], classHits: [20, 0, 0, 40, 0, 500, 0, 0] });
-  const withShotgun = buildSquadStyle({ matches: matches.map((match) => ({ ...match, players: { ...match.players, s: shotgun() } })), names: new Map([['s', 'S'], ['a', 'A'], ['b', 'B'], ['c', 'C']]) });
-  const pellets = withShotgun.players.find((player) => player.accountId === 's')!.axes.find((axis) => axis.key === 'hitRate')!;
-  assert.equal(pellets.value, 0.3, 'shotgun pellets are left out of the hit rate');
+  // Shotguns are included now that shots are paired with hits by attack: a blast is one shot and at most one hit.
+  const withShotgun = buildSquadStyle({ matches: matches.map((match) => ({ ...match, players: { ...match.players, s: { ...sniper(), shots: 150, hits: 40, classShots: [0, 0, 0, 100, 0, 50, 0, 0], classHits: [0, 0, 0, 40, 0, 0, 0, 0] } } })), names: new Map([['s', 'S'], ['a', 'A'], ['b', 'B'], ['c', 'C']]) });
+  assert.ok(withShotgun.players.find((player) => player.accountId === 's')!.axes.find((axis) => axis.key === 'hitRate')!.value! < 0.3, 'fifty missed shotgun shots lower the hit rate');
 });

@@ -71,7 +71,7 @@ export interface SquadStyle {
     components: Array<{ key: string; label: string; ratio: number | null; tier: StyleTier }>;
   }>;
   funnel: Array<{
-    accountId: string; name: string; fights: number; minutes: number; shots: number; hits: number; hitRate: number | null; hitDamage: number; damagePerShot: number | null;
+    accountId: string; name: string; fights: number; minutes: number; shots: number; hits: number; hitRate: number | null; firstShotRate: number | null; followShotRate: number | null; burstShare: number | null; idleShare: number | null; finishingShare: number | null; hitDamage: number; damagePerShot: number | null;
     damagePerMinute: number | null; knocks: number; hitsPerKnock: number | null; kills: number; knockFights: number; knockRate: number | null;
     chainsDealt: number; chainsFinished: number; conversion: number | null;
   }>;
@@ -444,7 +444,7 @@ export function OverviewView({ data, loading }: { data: PerformanceAnalytics | n
           <p className="av-note">×系数 = 该图人均伤害 ÷ 全图人均伤害，仅供参考。</p>
         </Panel>
 
-        <Panel title="武器效率" hint="命中率向全体均值收缩，小样本不会虚高">
+        <Panel title="武器效率" hint="命中率向全体均值收缩，小样本不会虚高；这里是早期口径（含交战外开枪和补倒地的枪），和「打法风格」页的命中率不是同一个数">
           <div className="av-table weapons">
             <div className="av-row head"><span>武器</span><span>射击</span><span>收缩命中率</span><span>每中伤害</span><span>击杀</span></div>
             {weapons.map((weapon) => <div className="av-row" key={weapon.weapon}>
@@ -1074,14 +1074,14 @@ function CombatPanel({ style, data }: { style: SquadStyle; data: TelemetryAnalyt
           <LobbyBoard data={data.lobby} />
         </div>
         <div className="av-table funnel">
-          <div className="av-row head"><span>队员</span><span>射击</span><span>命中率</span><span>每发伤害</span><span>命中/击倒</span><span>交战击倒率</span><span>击倒转化</span></div>
+          <div className="av-row head"><span>队员</span><span>交战内开枪</span><span>命中率</span><span>首发命中</span><span>连射命中</span><span>连射占比</span><span>交战外开枪</span><span>每发伤害</span><span>命中/击倒</span><span>交战击倒率</span><span>击倒转化</span></div>
           {style.funnel.map((entry) => <div className="av-row" key={entry.accountId}>
-            <b>{entry.name}</b><span>{int(entry.shots)}</span><span>{pct(entry.hitRate, 1)}</span><span>{entry.damagePerShot === null ? '—' : entry.damagePerShot.toFixed(1)}</span>
+            <b>{entry.name}</b><span>{int(entry.shots)}</span><span>{pct(entry.hitRate, 1)}</span><span>{pct(entry.firstShotRate, 1)}</span><span>{pct(entry.followShotRate, 1)}</span><span>{pct(entry.burstShare)}</span><span>{pct(entry.idleShare)}</span><span>{entry.damagePerShot === null ? '—' : entry.damagePerShot.toFixed(1)}</span>
             <span>{entry.hitsPerKnock === null ? '—' : entry.hitsPerKnock.toFixed(1)}</span><span>{pct(entry.knockRate)}</span><span title={`${entry.chainsFinished}/${entry.chainsDealt}`}>{pct(entry.conversion)}</span>
           </div>)}
         </div>
       </details>
-      <Notes>战斗力指数 = 每分钟伤害（含火箭筒 / 手雷 / 燃烧瓶，权重 50%）+ 交战击倒率（25%）+ 同枪型命中率（25%），都是相对队友的比值，只统计排位赛。排名只表示点估计的高低；区间重叠时不能说谁一定更强。命中率 = 对敌命中事件 ÷ 开火事件，不含霰弹枪和火箭筒，绝对值和游戏内准确率不是一回事；指数里的命中率是「同枪型」比较，狙击手不会因为用栓狙就显得枪法更好。击倒转化 = 自己打倒的人最终被小队终结的比例。爆头率和击倒转化率不计入指数：真实数据里爆头率可靠性低、与胜负无关，转化率主要取决于队友是否补枪。</Notes>
+      <Notes>战斗力指数 = 每分钟伤害（含火箭筒 / 手雷 / 燃烧瓶，权重 50%）+ 交战击倒率（25%）+ 同枪型命中率（25%），都是相对队友的比值，只统计排位赛。排名只表示点估计的高低；区间重叠时不能说谁一定更强。命中率 = 打中站立敌人的枪数 ÷ 交战内开的枪数。每一枪通过 attackId 和伤害事件一一配对（霰弹枪一发多颗弹丸也只算一枪）；「交战内」指这一枪前后 8 秒内双方任何一边受过伤，交战外的开枪（对墙、载具、空地、试枪）单独统计为「交战外开枪」，不算打空；打进倒地敌人的补枪既不算命中也不算打空，单独统计，不进分母。首发命中 = 一次连发的第一枪或单点射击，连射命中 = 与上一枪间隔不超过 0.12 秒的后续子弹，两者的差距反映压枪和扫射习惯。命中率的绝对值和游戏内准确率不是一回事（遥测里自动武器每颗子弹都记一次开火）；指数里的命中率是「同枪型」比较，狙击手不会因为用栓狙就显得枪法更好。击倒转化 = 自己打倒的人最终被小队终结的比例。爆头率和击倒转化率不计入指数：真实数据里爆头率可靠性低、与胜负无关，转化率主要取决于队友是否补枪。</Notes>
     </Panel>
   );
 }
@@ -1408,6 +1408,8 @@ function buildCompareMetrics(data: TelemetryAnalytics, a: string, b: string): Co
     make('lobby', '综合实力', '全场分位', (id) => pick(data.lobby.entries, id, (row) => row.accountId)?.composite.mean, (value) => `${(value * 100).toFixed(0)}`, 'high'),
     make('dpm', '输出', '每分钟伤害', (id) => funnel(id)?.damagePerMinute, oneFmt, 'high'),
     make('hit', '输出', '命中率', (id) => funnel(id)?.hitRate, (value) => `${(value * 100).toFixed(1)}%`, 'high'),
+    make('firstShot', '输出', '首发命中率', (id) => funnel(id)?.firstShotRate, (value) => `${(value * 100).toFixed(1)}%`, 'high'),
+    make('followShot', '输出', '连射命中率', (id) => funnel(id)?.followShotRate, (value) => `${(value * 100).toFixed(1)}%`, 'high'),
     make('dps', '输出', '每发伤害', (id) => funnel(id)?.damagePerShot, oneFmt, 'high'),
     make('knock', '输出', '交战击倒率', (id) => funnel(id)?.knockRate, pctFmt, 'high'),
     make('conv', '输出', '击倒转化', (id) => funnel(id)?.conversion, pctFmt, 'high'),
@@ -1420,6 +1422,8 @@ function buildCompareMetrics(data: TelemetryAnalytics, a: string, b: string): Co
     make('firstDowned', '交战角色', '先被打倒', (id) => role(id)?.firstDownedShare, pctFmt, 'low'),
     make('revive', '交战角色', '救援占比', (id) => role(id)?.reviveShare, pctFmt, 'high'),
     make('risk', '交战角色', '每次交战被击倒', (id) => axis(id, 'risk'), (value) => value.toFixed(2), 'low'),
+    make('burst', '打法（无优劣）', '连射占比', (id) => funnel(id)?.burstShare, pctFmt, null),
+    make('idle', '打法（无优劣）', '交战外开枪占比', (id) => funnel(id)?.idleShare, pctFmt, null),
     make('range', '打法（无优劣）', '交战距离', (id) => axis(id, 'range'), (value) => `${Math.round(value)}m`, null),
     make('initiative', '打法（无优劣）', '先手比例', (id) => axis(id, 'initiative'), pctFmt, null),
     make('tempo', '打法（无优劣）', '参战频率', (id) => axis(id, 'tempo'), (value) => `${value.toFixed(2)}/分`, null),
