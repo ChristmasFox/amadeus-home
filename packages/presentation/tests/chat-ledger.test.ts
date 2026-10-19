@@ -34,9 +34,13 @@ test('chat team-damage ledger shows kinds, every direction, the worst match and 
   assert.doesNotMatch(renderPubgTeamDamage(presentation as never, { timezone: 'Asia/Shanghai' }), /队内误伤账本/u);
 });
 
-test('a public-agent (Gate) team-damage presentation carries no ledger', () => {
-  const { presentation } = buildPubgToolPresentation('pubg_query_team_damage', { status: 'ok', data, dataUpdatedAt: '2026-10-19T15:50:00.000Z', presentationStyle: 'public_agent' }, {});
-  assert.equal((presentation as { ledger?: unknown }).ledger, undefined);
+test('Gate (public agent) gets the same ledger, and its per-player totals lead the chat layout', () => {
+  const { presentation, displayText } = buildPubgToolPresentation('pubg_query_team_damage', {
+    status: 'ok', data, dataUpdatedAt: '2026-10-19T15:50:00.000Z', presentationStyle: 'public_agent', teamDamage: { aggregateByActor: true },
+  }, { timezone: 'Asia/Shanghai', chatEmphasis: true });
+  assert.equal((presentation as { ledger?: { highlights: unknown[] } }).ledger?.highlights.length, 2);
+  assert.match(displayText, /\*\*队员误伤输出排名：\*\*\n1\. SG_LabmemNo007：120\.5 伤害 \/ 5 次\n2\. SG_LabmemNo004：79\.8 伤害 \/ 4 次/u);
+  assert.match(displayText, /名场面/u);
 });
 
 test('chat match list uses Chinese map and mode names and rounds damage', () => {

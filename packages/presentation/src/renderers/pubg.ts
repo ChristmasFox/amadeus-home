@@ -255,6 +255,14 @@ function renderTeamDamageLedger(presentation: PubgTeamDamagePresentation, option
   const total = presentation.totalDamage === null ? '未知' : formatMetricNumber('damage', presentation.totalDamage);
   lines.push(`• 总误伤：**${total} 点**`);
   lines.push(`• 总命中：**${value(presentation.totalHitCount)} 次**${ledger?.sources.length ? `（${slicesText(ledger.sources)}）` : ''}`);
+  if (presentation.actorTotals?.length) {
+    const basis = presentation.rankingBasis === 'knownDamage' ? '（按已知伤害下限排序）' : '';
+    lines.push('', `**队员误伤输出排名${basis}：**`, ...presentation.actorTotals.map((total) => {
+      const damage = total.complete ? total.damage : total.knownDamage;
+      const hits = total.complete ? total.hitCount : total.knownHitCount;
+      return `${total.position}. ${userText(total.actor)}：${total.complete ? '' : '已知至少 '}${damage === null ? '未知' : formatMetricNumber('damage', damage)} 伤害 / ${value(hits)} 次`;
+    }));
+  }
   lines.push('', '───', '', `**互相伤害明细（共 ${presentation.directions.length} 个方向）：**`);
   presentation.directions.forEach((direction, index) => {
     const damage = direction.damage === null ? '未知' : formatMetricNumber('damage', direction.damage);

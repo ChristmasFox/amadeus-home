@@ -8,7 +8,7 @@ import {
   type Metric,
   type ToolEnvelope,
 } from '@agent/pubg-domain/core';
-import { buildPubgToolPresentation, type PubgSourceRange, type PubgToolName } from '@agent/presentation';
+import { buildPubgToolPresentation, pubgReplyGuide, type PubgSourceRange, type PubgToolName } from '@agent/presentation';
 import type { AccountClaimService } from './account-claim-service.js';
 import type { KookIngressJob, KookRequestHandler } from './kook-ingress-queue.js';
 import type { KookTextPayload } from './kook-message-queue.js';
@@ -437,9 +437,11 @@ async function naturalLanguageReply(
             ...(victimPlayerId ? { victimPlayerId } : {}),
           }
           : undefined;
+        // The agent retells this block, so it gets the chat layout (cards, 误伤账本) and the shared reply guide.
         const presented = buildPubgToolPresentation(toolName, presentationInput(execution.envelope, toolName, teamDamage), {
-          timezone: DEFAULT_TIMEZONE, now, includeCoverage: true, localizedMetrics: true,
+          timezone: DEFAULT_TIMEZONE, now, includeCoverage: true, localizedMetrics: true, chatEmphasis: true,
         });
+        const replyGuide = pubgReplyGuide(presented.presentation);
         const queryResolved = execution.envelope.queryResolved;
         const facts = buildPublicAgentFacts({
           status: execution.envelope.status,
@@ -468,6 +470,7 @@ async function naturalLanguageReply(
           status: execution.envelope.status,
           ...(selfWarning ? { identityWarning: selfWarning.trim() } : {}),
           ...(teamDamageFilters ? { filtersApplied: teamDamageFilters } : {}),
+          ...(replyGuide ? { replyGuide } : {}),
         };
         const resultStatus = ['ok', 'partial', 'no_matches', 'error'].includes(toolResult.status)
           ? toolResult.status : 'other';

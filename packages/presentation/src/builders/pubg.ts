@@ -587,7 +587,7 @@ export function buildPubgTeamDamagePresentation(input: PubgToolPresentationInput
       || left.actor.localeCompare(right.actor));
     actorTotals = totals.map((total, index) => ({ ...total, position: index + 1 }));
   }
-  const ledger = input.presentationStyle === 'public_agent' ? undefined : teamDamageLedger(data, rawDirections);
+  const ledger = teamDamageLedger(data, rawDirections);
   const directions = rawDirections.map(({ actorId: _actorId, victimId: _victimId, knownDamage, knownHitCount, ...direction }) => ({
     ...direction,
     ...(input.presentationStyle === 'public_agent' ? { knownDamage, knownHitCount } : {}),

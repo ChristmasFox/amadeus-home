@@ -383,6 +383,8 @@ test('authorized KOOK queries use persisted Domain facts, preserve unknown cover
     assert.match(agentToolContext, /"meleeKind":"ALL"/u);
     assert.match(agentToolContext, /"bySource"/u);
     assert.match(agentToolContext, /"directions"/u);
+    assert.match(agentToolContext, /"replyGuide":"这是一份队内误伤/u, 'the agent gets the shared reply guide with the facts');
+    assert.match(agentToolContext, /队内误伤账本/u, 'the retold block uses the shared chat ledger layout');
     assert.match(agentToolContext, /"matchCount":1/u);
     assert.doesNotMatch(agentToolContext, new RegExp(`${alice}|${bob}|${matchId}`, 'u'));
     assert.doesNotMatch(agentToolContext, /evidenceRefs|matchIds|playerId|evidenceIds|cacheLookup/u);
