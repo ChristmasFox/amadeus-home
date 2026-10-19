@@ -23,9 +23,6 @@ contract = importlib.util.module_from_spec(contract_spec)
 contract_spec.loader.exec_module(contract)
 
 
-def check_run(name: str = "lab-regression", status: str = "completed", conclusion: str = "success") -> dict:
-    return {"name": name, "status": status, "conclusion": conclusion}
-
 
 with tempfile.TemporaryDirectory(prefix="lab-auto-release-git-") as temporary:
     repo = Path(temporary)
@@ -65,17 +62,6 @@ with tempfile.TemporaryDirectory(prefix="lab-auto-release-git-") as temporary:
     gate_sha = subprocess.run(["git", "-C", str(repo), "rev-parse", "HEAD"], check=True,
                               capture_output=True, text=True).stdout.strip()
     assert auto.lab_source_changes(repo, lab_sha, gate_sha) == []
-
-for rows, expected in (
-    ([check_run()], "passed"),
-    ([check_run(status="in_progress", conclusion="")], "waiting"),
-    ([check_run(conclusion="failure")], "failed"),
-    ([check_run(name="other")], "waiting"),
-):
-    with patch.object(auto, "command", return_value=json.dumps({"check_runs": rows})):
-        assert auto.checks_for_commit(ROOT, "a" * 40) == expected
-with patch.object(auto, "command", return_value=json.dumps({"check_runs": [check_run(), check_run("other", conclusion="failure")]})):
-    assert auto.checks_for_commit(ROOT, "b" * 40) == "failed"
 
 with tempfile.TemporaryDirectory(prefix="lab-auto-release-state-") as temporary:
     original = auto.STATE_ROOT
@@ -126,9 +112,10 @@ runner = (ROOT / "scripts/lab-auto-release.py").read_text(encoding="utf-8")
 deploy = (ROOT / "scripts/deploy-openclaw.sh").read_text(encoding="utf-8")
 devctl = (ROOT / "scripts/devctl.py").read_text(encoding="utf-8")
 release_cli = (ROOT / "scripts/release-cli.sh").read_text(encoding="utf-8")
-assert 'checks_for_commit(root, source_sha) != "passed"' in runner
-assert 'release_ci = checks_for_commit(source_root, release_sha)' in runner
-assert 'if release_ci != "passed":' in runner
+# Solo-development rule (2026-10-17): GitHub checks never hold a personal Lab release, and a pending deploy retries at once.
+assert "checks_for_commit" not in runner
+assert "GitHub checks never hold a personal Lab release." in runner
+assert "RETRY_SECONDS" not in runner and "MAX_DEPLOY_ATTEMPTS = 3" in runner
 assert '"--apply", "--auto-release", "--build-openclaw"' in runner
 assert "--auto-release requires LAB_AUTOMATION_VERIFIED_MAIN_SHA" in deploy
 assert deploy.index("if ((AUTO_RELEASE)); then\n  build_images_and_preflight\nfi") > deploy.index("print('CHECKPOINT='")
@@ -139,6 +126,6 @@ assert "valid_pubg_stats_smoke" in deploy
 assert "AUTO_RELEASE_ROLLBACK=passed" in deploy
 assert "restored_health" in deploy and "[[ \"$restored_health\" == healthy ]]" in deploy
 assert "lab-auto-enable" not in devctl and "lab-auto-disable" not in devctl
-assert "LAB_DEPLOYMENT=AFTER_MAIN_MERGE ci=required release=automatic" in devctl
+assert "LAB_DEPLOYMENT=AFTER_MAIN_UPDATE ci=not_required release=automatic" in devctl
 assert "Lab candidate and manual promotion commands are retired" in release_cli
-print("LAB_AUTO_RELEASE_TEST=passed ci-gate=required version=automatic rollback=single-stage")
+print("LAB_AUTO_RELEASE_TEST=passed ci-gate=none version=automatic rollback=single-stage")

@@ -160,27 +160,6 @@ def checkout_for_sha(root: Path, sha: str) -> Path:
     return worktree
 
 
-def checks_for_commit(root: Path, sha: str) -> str:
-    raw = command(
-        ["gh", "api", f"repos/{REPOSITORY}/commits/{sha}/check-runs?per_page=100"],
-        cwd=root,
-    )
-    try:
-        rows = json.loads(raw).get("check_runs", [])
-    except (json.JSONDecodeError, AttributeError) as exc:
-        raise AutomationError("GitHub returned an invalid check-run response") from exc
-    if not rows:
-        return "waiting"
-    if any(row.get("status") != "completed" for row in rows):
-        return "waiting"
-    conclusions = {row.get("name"): row.get("conclusion") for row in rows}
-    if conclusions.get("lab-regression") != "success":
-        return "waiting" if "lab-regression" not in conclusions else "failed"
-    if any(row.get("conclusion") not in {"success", "skipped"} for row in rows):
-        return "failed"
-    return "passed"
-
-
 def release_version_from_commit(root: Path, sha: str) -> str | None:
     subject = git(root, "show", "-s", "--format=%s", sha)
     prefix = "chore(lab): release v"
