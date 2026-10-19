@@ -49,3 +49,23 @@ test('chat match list uses Chinese map and mode names and rounds damage', () => 
   assert.match(text, /米拉玛｜\*\*#14\*\*/u);
   assert.doesNotMatch(text, /Desert_Main|27\.903175/u);
 });
+
+test('reply check names the dropped card numbers, titles and directions, and ignores swapped names', async () => {
+  const { missingReplyFacts } = await import('../src/index.js');
+  const stats = {
+    type: 'pubg_stats', status: 'ok', dataUpdatedAt: '2026-10-19T15:50:00.000Z', headline: 'x', operation: 'report', groupBy: 'player', summary: 'x', evidenceRefs: [],
+    rows: [
+      { label: 'kim_kkl', evidenceRefs: [], values: { kd: 1.5555, damage: 1935.27, assists: 4 } },
+      { label: 'SG_LabmemNo004', evidenceRefs: [], values: { kd: 1.333, damage: 2630.04, assists: 5 } },
+    ],
+  } as never;
+  const full = 'Nori：KD 1.56，1935.3 伤害\n变态猴：KD 1.33，2630 伤害（全队伤害第一），5 助攻（全队助攻王）\n团队合计：…';
+  assert.deepEqual(missingReplyFacts(stats, full), []);
+  assert.deepEqual(missingReplyFacts(stats, 'Nori：KD 1.56，1935.3 伤害\n变态猴：2630 伤害\n团队合计'), [
+    'SG_LabmemNo004 的 KD 1.33', 'SG_LabmemNo004 的称号「全队助攻王」', 'SG_LabmemNo004 的称号「全队伤害第一」',
+  ]);
+  const { presentation } = buildPubgToolPresentation('pubg_query_team_damage', { status: 'ok', data, dataUpdatedAt: '2026-10-19T15:50:00.000Z' }, {});
+  assert.deepEqual(missingReplyFacts(presentation, '120.5 ... 60 ... 19.8'), []);
+  assert.deepEqual(missingReplyFacts(presentation, '120.5 ... 600'), ['SG_LabmemNo004 → SG_LabmemNo007 的 60 伤害', 'SG_LabmemNo004 → kim_kkl 的 19.8 伤害']);
+  assert.deepEqual(missingReplyFacts({ ...(stats as object), status: 'no_matches' } as never, ''), []);
+});

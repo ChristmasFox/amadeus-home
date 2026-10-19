@@ -1,4 +1,5 @@
 import type { OpenClawPluginApi } from 'openclaw/plugin-sdk/core';
+import { missingReplyFacts, type PubgPresentation } from '@agent/presentation';
 
 // This is an outbound evidence policy, not an intent router: it neither chooses
 // a tool nor answers a PUBG question. It only prevents unsupported match facts
@@ -66,7 +67,24 @@ export function assessPubgEvidence(messages: unknown, finalText: string): Eviden
   return 'verified';
 }
 
+/** Facts the final reply dropped from this turn's last PUBG result block (战绩 cards, 误伤账本); empty otherwise. */
+export function droppedReplyFacts(messages: unknown, finalText: string): string[] {
+  if (!Array.isArray(messages) || !finalText) return [];
+  const entries = messages.filter((value): value is Message => Boolean(value && typeof value === 'object'));
+  for (let i = entries.length - 1; i >= 0; i--) {
+    const message = entries[i]!;
+    if (message.role === 'user') return [];
+    if (message.role !== 'toolResult' || !FACT_TOOLS.has(message.toolName ?? '')) continue;
+    try {
+      const presentation = (JSON.parse(text(message)) as { presentation?: unknown }).presentation;
+      return presentation && typeof presentation === 'object' ? missingReplyFacts(presentation as PubgPresentation, finalText) : [];
+    } catch { return []; }
+  }
+  return [];
+}
+
 export function registerPubgEvidenceGuard(api: OpenClawPluginApi): void {
+  const shapeRevised = new Set<string>();
   const pending = new Map<string, { at: number; delivered: boolean }>();
   api.on('before_agent_finalize', (event, context) => {
     if (context.trigger && context.trigger !== 'user') return; // scheduled prefetch/report has its own contract
@@ -79,6 +97,24 @@ export function registerPubgEvidenceGuard(api: OpenClawPluginApi): void {
       for (const key of keys) pending.set(key, entry);
     } else {
       for (const key of keys) pending.delete(key);
+    }
+    if (verdict === 'verified' && event.runId && !shapeRevised.has(event.runId)) {
+      const dropped = droppedReplyFacts(event.messages, reply);
+      if (dropped.length) {
+        // One rewrite per run: a second miss is delivered as is rather than looping.
+        shapeRevised.add(event.runId);
+        if (shapeRevised.size > 200) shapeRevised.delete(shapeRevised.values().next().value!);
+        api.logger.warn(`pubg reply dropped ${dropped.length} fact(s) from the result block; asking for one rewrite`);
+        return {
+          action: 'revise',
+          reason: 'pubg_reply_incomplete',
+          retry: {
+            instruction: `The draft dropped facts from the PUBG result block: ${dropped.slice(0, 8).join('；')}. Rewrite the whole reply following the result's replyGuide, keeping every card/direction line of displayText with its numbers and titles. Do not call any tool again.`,
+            idempotencyKey: `pubg-shape:${event.runId}`,
+            maxAttempts: 1,
+          },
+        };
+      }
     }
     if (verdict !== 'missing_data' && verdict !== 'wrong_scope') return;
     api.logger.warn(`pubg evidence guard will block unsupported outbound claim: ${verdict}`);

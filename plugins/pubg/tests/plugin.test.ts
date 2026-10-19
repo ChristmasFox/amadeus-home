@@ -80,24 +80,20 @@ test('bundled PUBG skill has the OpenClaw-required frontmatter', () => {
   assert.match(skill, /validated `presentation`/);
 });
 
-test('stats reply guide carries the full 战报 shape the agent must retell', async () => {
-  const { STATS_REPLY_GUIDE } = await import('../src/reply-guides.js');
-  for (const part of ['🏆', '🥇', '• **出战', '• 个人数据：', '• AI 锐评：', '团队合计：', '🔗', '不得编造数字']) {
-    assert.ok(STATS_REPLY_GUIDE.includes(part), part);
-  }
-});
-
-test('every kind of PUBG answer gets the matching reply guide, and failures get an honest one', async () => {
-  const guides = await import('../src/reply-guides.js');
+test('every kind of PUBG answer gets the matching reply guide, the squad examples, and honest failure guides', async () => {
+  const { replyGuideFor } = await import('../src/reply-guides.js');
+  const shared = await import('@agent/presentation');
   const base = { dataUpdatedAt: '2026-10-19T15:50:00.000Z', evidenceRefs: [] };
-  const stats = { ...base, type: 'pubg_stats', status: 'ok', headline: 'x', operation: 'report', groupBy: 'player', summary: 'x', rows: [{ label: 'a', values: {}, evidenceRefs: [] }] } as never;
-  assert.equal(guides.replyGuideFor(stats), guides.STATS_REPLY_GUIDE);
-  assert.equal(guides.replyGuideFor({ ...base, type: 'pubg_team_damage', status: 'ok', directions: [] } as never), guides.TEAM_DAMAGE_REPLY_GUIDE);
-  assert.equal(guides.replyGuideFor({ ...base, type: 'pubg_match_list', status: 'ok', matches: [] } as never), guides.MATCH_LIST_REPLY_GUIDE);
-  assert.equal(guides.replyGuideFor({ ...base, type: 'pubg_comparison', status: 'ok' } as never), guides.GENERAL_REPLY_GUIDE);
-  assert.match(guides.replyGuideFor({ ...base, type: 'pubg_team_damage', status: 'partial', directions: [] } as never) ?? '', /未知不是 0/u);
-  assert.equal(guides.replyGuideFor({ ...base, type: 'pubg_stats', status: 'no_matches', rows: [] } as never), guides.NO_MATCHES_REPLY_GUIDE);
-  assert.equal(guides.replyGuideFor({ ...base, type: 'pubg_status', status: 'error' } as never), guides.ERROR_REPLY_GUIDE);
-  assert.equal(guides.replyGuideFor({ ...base, type: 'pubg_status', status: 'ok' } as never), undefined);
-  assert.match(guides.TEAM_DAMAGE_REPLY_GUIDE, /名场面[\s\S]*清白名单/u);
+  const stats = replyGuideFor({ ...base, type: 'pubg_stats', status: 'ok', rows: [{ label: 'a', values: {}, evidenceRefs: [] }] } as never) ?? '';
+  assert.ok(stats.startsWith(shared.STATS_REPLY_GUIDE));
+  for (const part of ['🏆', '🥇', '• **出战', '• 个人数据：', '• AI 锐评：', '团队合计：', '🔗']) assert.ok(stats.includes(part), part);
+  const damage = replyGuideFor({ ...base, type: 'pubg_team_damage', status: 'ok', directions: [] } as never) ?? '';
+  assert.ok(damage.startsWith(shared.TEAM_DAMAGE_REPLY_GUIDE));
+  assert.match(damage, /名场面[\s\S]*清白名单/u);
+  assert.equal(replyGuideFor({ ...base, type: 'pubg_match_list', status: 'ok', matches: [] } as never), shared.MATCH_LIST_REPLY_GUIDE);
+  assert.equal(replyGuideFor({ ...base, type: 'pubg_comparison', status: 'ok' } as never), shared.GENERAL_REPLY_GUIDE);
+  assert.match(replyGuideFor({ ...base, type: 'pubg_team_damage', status: 'partial', directions: [] } as never) ?? '', /未知不是 0/u);
+  assert.equal(replyGuideFor({ ...base, type: 'pubg_stats', status: 'no_matches', rows: [] } as never), shared.NO_MATCHES_REPLY_GUIDE);
+  assert.equal(replyGuideFor({ ...base, type: 'pubg_status', status: 'error' } as never), shared.ERROR_REPLY_GUIDE);
+  assert.equal(replyGuideFor({ ...base, type: 'pubg_status', status: 'ok' } as never), undefined);
 });
