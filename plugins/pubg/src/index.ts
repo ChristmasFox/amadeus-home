@@ -14,6 +14,7 @@ import {
   buildPubgStatusPresentation,
   buildPubgToolPresentation,
   formatDisplayTime,
+  renderPubgStats,
   renderPubgStatus,
   type PubgSourceRange,
   type PubgStatsPresentation,
@@ -732,6 +733,11 @@ function jsonToolResult(name: string, envelope: ToolEnvelope, fallbackTimezone =
     presentation = { presentation: status, displayText: renderPubgStatus(status, { timezone: displayTimezone, now: envelope.asOf }) };
   }
   const shared = share ? share(envelope, presentation.displayText, displayTimezone, presentation.presentation) : { text: presentation.displayText };
+  // The share page keeps the plain block; the chat reply the agent retells carries WhatsApp bold on names, titles and totals.
+  if (presentation.presentation.type === 'pubg_stats' && shared.text.startsWith(presentation.displayText)) {
+    const chatText = renderPubgStats(presentation.presentation as PubgStatsPresentation, { timezone: displayTimezone, now: envelope.asOf, chatEmphasis: true });
+    shared.text = chatText + shared.text.slice(presentation.displayText.length);
+  }
   return jsonResult({
     ...displayEnvelope,
     asOfLocal: formatLocalTime(envelope.asOf, displayTimezone) ?? envelope.asOf,

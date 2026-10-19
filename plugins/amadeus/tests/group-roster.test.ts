@@ -4,7 +4,7 @@ import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { OpenClawPluginApi } from 'openclaw/plugin-sdk/core';
-import { groupIdFromSessionKey, registerGroupRoster, renderGroupRoster } from '../src/group-roster.js';
+import { GROUP_VOICE_ANCHOR, groupIdFromSessionKey, registerGroupRoster, renderGroupRoster } from '../src/group-roster.js';
 
 const GROUP = '120363000000000000@g.us';
 const SESSION = `agent:main:whatsapp:group:${GROUP}:thread:whatsapp-account-secondary`;
@@ -47,9 +47,10 @@ test('every turn of that group gets its roster, even after a reset; other conver
   try {
     const turn = (sessionKey: string) => hooks[0]!({}, { sessionKey }) as { appendSystemContext?: string } | undefined;
     assert.match(turn(SESSION)?.appendSystemContext ?? '', /称呼「变态猴」/u);
+    assert.ok((turn(SESSION)?.appendSystemContext ?? '').endsWith(GROUP_VOICE_ANCHOR));
     // A reset only changes the session id; the key, and so the roster, stays.
     assert.match(turn(SESSION)?.appendSystemContext ?? '', /称呼「变态猴」/u);
-    assert.equal(turn('agent:main:whatsapp:group:999@g.us'), undefined);
+    assert.equal(turn('agent:main:whatsapp:group:999@g.us')?.appendSystemContext, GROUP_VOICE_ANCHOR);
     assert.equal(turn('agent:main:whatsapp:direct:+8613800000000'), undefined);
   } finally {
     await rm(directory, { recursive: true, force: true });

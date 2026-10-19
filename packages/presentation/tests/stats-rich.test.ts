@@ -49,3 +49,14 @@ test('raw key=value mode still exists but rounds numbers and hides internal keys
   assert.doesNotMatch(text, /denominatorZero/u);
   assert.doesNotMatch(text, /全队助攻王/u);
 });
+
+test('chat emphasis bolds names, titles and totals and drops filler metrics', () => {
+  const text = renderPubgStats(presentation, { chatEmphasis: true, timezone: 'Asia/Shanghai' });
+  assert.match(text, /- \*\*SG_LabmemNo004\*\*/u);
+  assert.match(text, /\*\*11 助攻（全队助攻王）\*\*/u);
+  assert.match(text, /\*\*团队合计：[^*]+\*\*/u);
+  assert.match(text, /3 爆头/u);
+  assert.match(text, /最远击杀 318\.5m/u);
+  assert.doesNotMatch(text, /场均排名|前十率|生存/u);
+  assert.doesNotMatch(renderPubgStats(presentation, { localizedMetrics: true, timezone: 'Asia/Shanghai' }), /\*\*/u);
+});

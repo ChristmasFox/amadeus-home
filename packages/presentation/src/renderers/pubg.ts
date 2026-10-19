@@ -29,6 +29,8 @@ export interface PubgRenderOptions {
   now?: Date | string;
   includeCoverage?: boolean;
   localizedMetrics?: boolean;
+  /** Chat-reply style (implies localized): **bold** names, titles and totals, and no filler metrics. */
+  chatEmphasis?: boolean;
 }
 
 function timeOptions(options: PubgRenderOptions, extra: { forceDate?: boolean } = {}) {
@@ -179,7 +181,9 @@ function richMetricFragment(key: string, raw: string | number | null, title?: st
   }
 }
 
-function metricRow(row: PubgMetricRow, localizedMetrics: boolean, titles: string[] = []): string {
+const CHAT_FILLER_METRICS = new Set(['avg_kills', 'avg_rank', 'top10_rate', 'rank', 'survival_time']);
+
+function metricRow(row: PubgMetricRow, localizedMetrics: boolean, titles: string[] = [], emphasis = false): string {
   if (!localizedMetrics) {
     const entries = Object.entries(row.values)
       .filter(([key]) => !HIDDEN_USER_METRICS.has(key))
@@ -197,21 +201,23 @@ function metricRow(row: PubgMetricRow, localizedMetrics: boolean, titles: string
   for (const key of RICH_METRIC_ORDER) {
     if (!(key in row.values) || HIDDEN_USER_METRICS.has(key)) continue;
     seen.add(key);
+    if (emphasis && CHAT_FILLER_METRICS.has(key)) continue;
     const fragment = richMetricFragment(key, row.values[key] ?? null, titleByKey.get(key));
-    if (fragment) fragments.push(fragment);
+    if (fragment) fragments.push(emphasis && (titleByKey.has(key) || key === 'wins' || key === 'kills' || key === 'kd') ? `**${fragment}**` : fragment);
   }
   for (const [key, item] of Object.entries(row.values)) {
-    if (seen.has(key) || HIDDEN_USER_METRICS.has(key)) continue;
+    if (seen.has(key) || HIDDEN_USER_METRICS.has(key) || (emphasis && CHAT_FILLER_METRICS.has(key))) continue;
     const fragment = richMetricFragment(key, item, titleByKey.get(key));
     if (fragment) fragments.push(fragment);
   }
   // Leftover titles (should not happen) still get shown after the name.
   const orphanTitles = titles.filter((title) => !TITLE_RULES.some((rule) => rule.title === title && titleByKey.get(rule.key) === title));
   const titlePrefix = orphanTitles.length ? orphanTitles.map((title) => `（${title}）`).join('') : '';
-  return `- ${userText(row.label)}${titlePrefix}${fragments.length ? `：${fragments.join('，')}` : ''}`;
+  const name = emphasis ? `**${userText(row.label)}**` : userText(row.label);
+  return `- ${name}${titlePrefix}${fragments.length ? `：${fragments.join('，')}` : ''}`;
 }
 
-function teamTotalsLine(rows: readonly PubgMetricRow[]): string | null {
+function teamTotalsLine(rows: readonly PubgMetricRow[], emphasis = false): string | null {
   if (rows.length < 2) return null;
   const sum = (key: string) => rows.reduce((total, row) => total + (numericMetric(row.values[key] ?? null) ?? 0), 0);
   const max = (key: string) => rows.reduce((best, row) => {
@@ -227,7 +233,8 @@ function teamTotalsLine(rows: readonly PubgMetricRow[]): string | null {
   const wins = max('wins');
   const deaths = sum('deaths');
   const kdPart = deaths > 0 ? `，团队 KD ${formatKd(kills / deaths)}` : '';
-  return `团队合计：${kills} 杀，${formatMetricNumber('damage', damage)} 伤害，${dbnos} 击倒，${assists} 助攻，${revives} 救援${kdPart}${wins > 0 ? `，吃鸡 ${wins}` : ''}`;
+  const line = `团队合计：${kills} 杀，${formatMetricNumber('damage', damage)} 伤害，${dbnos} 击倒，${assists} 助攻，${revives} 救援${kdPart}${wins > 0 ? `，吃鸡 ${wins}` : ''}`;
+  return emphasis ? `**${line}**` : line;
 }
 
 export function renderPubgStatus(presentation: PubgStatusPresentation, options: PubgRenderOptions = {}): string {
@@ -241,13 +248,14 @@ export function renderPubgStatus(presentation: PubgStatusPresentation, options: 
 
 export function renderPubgStats(presentation: PubgStatsPresentation, options: PubgRenderOptions = {}): string {
   const validated = assertValid(validatePubgStatsPresentation(presentation));
-  const localized = options.localizedMetrics === true;
+  const emphasis = options.chatEmphasis === true;
+  const localized = options.localizedMetrics === true || emphasis;
   const titles = localized ? assignStatTitles(validated.rows) : new Map<number, string[]>();
   const lines = [userText(validated.headline), '', userText(validated.summary)];
   if (validated.rows.length) {
-    lines.push('', ...validated.rows.map((row, index) => metricRow(row, localized, titles.get(index) ?? [])));
+    lines.push('', ...validated.rows.map((row, index) => metricRow(row, localized, titles.get(index) ?? [], emphasis)));
     if (localized) {
-      const totals = teamTotalsLine(validated.rows);
+      const totals = teamTotalsLine(validated.rows, emphasis);
       if (totals) lines.push('', totals);
     }
   }
