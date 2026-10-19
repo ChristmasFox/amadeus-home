@@ -497,7 +497,7 @@ def install(root: Path, baseline_sha: str | None) -> None:
         "AMAD_RELEASE_STATE_DIR": str(RELEASE_STATE_ROOT),
     }
     # GitHub may only be reachable through a local proxy; the timer inherits the one set at install time.
-    for name in ("https_proxy", "http_proxy", "all_proxy", "no_proxy"):
+    for name in ("https_proxy", "http_proxy", "all_proxy", "no_proxy", "HTTPS_PROXY", "HTTP_PROXY", "ALL_PROXY", "NO_PROXY"):
         if os.environ.get(name):
             env[name] = os.environ[name]
     document = {

@@ -87,8 +87,8 @@ run_vps_account_map_node_preflight() {
 DOCKER_BUILD_PROXY_ARGS=()
 for proxy_name in HTTP_PROXY HTTPS_PROXY; do
   case "$proxy_name" in
-    HTTP_PROXY) proxy_value="${HTTP_PROXY:-}" ;;
-    HTTPS_PROXY) proxy_value="${HTTPS_PROXY:-}" ;;
+    HTTP_PROXY) proxy_value="${HTTP_PROXY:-${http_proxy:-}}" ;;
+    HTTPS_PROXY) proxy_value="${HTTPS_PROXY:-${https_proxy:-}}" ;;
   esac
   if [[ -n "$proxy_value" ]]; then
     # Docker build containers cannot reach a macOS loopback proxy through
@@ -97,8 +97,8 @@ for proxy_name in HTTP_PROXY HTTPS_PROXY; do
     DOCKER_BUILD_PROXY_ARGS+=(--build-arg "$proxy_name=$proxy_value")
   fi
 done
-if [[ -n "${NO_PROXY:-}" ]]; then
-  DOCKER_BUILD_PROXY_ARGS+=(--build-arg "NO_PROXY=$NO_PROXY")
+if [[ -n "${NO_PROXY:-${no_proxy:-}}" ]]; then
+  DOCKER_BUILD_PROXY_ARGS+=(--build-arg "NO_PROXY=${NO_PROXY:-${no_proxy:-}}")
 fi
 resolve_live_image() {
   local container="$1" value
@@ -486,7 +486,7 @@ deploy_stage verify
 build_images_and_preflight() {
 if ((BUILD_OPENCLAW)); then
   deploy_stage image-build
-  docker buildx build --platform linux/arm64 --load --progress=plain "${DOCKER_BUILD_PROXY_ARGS[@]}" \
+  docker buildx build --platform linux/arm64 --load --progress=plain ${DOCKER_BUILD_PROXY_ARGS[@]+"${DOCKER_BUILD_PROXY_ARGS[@]}"} \
     --build-arg "OCI_SOURCE_REVISION=$SOURCE_REVISION" \
     --build-arg "OCI_PRODUCT_VERSION=$AMADEUS_VERSION" \
     --build-arg "OCI_BUILD_TIMESTAMP=$BUILD_TIMESTAMP" \
@@ -523,7 +523,7 @@ else
 fi
 deploy_stage radar-build
 if ((BUILD_RADAR)); then
-  docker buildx build --platform linux/arm64 --load --progress=plain "${DOCKER_BUILD_PROXY_ARGS[@]}" \
+  docker buildx build --platform linux/arm64 --load --progress=plain ${DOCKER_BUILD_PROXY_ARGS[@]+"${DOCKER_BUILD_PROXY_ARGS[@]}"} \
     --build-arg "OCI_SOURCE_REVISION=$SOURCE_REVISION" \
     --build-arg "OCI_PRODUCT_VERSION=$AMADEUS_VERSION" \
     --build-arg "OCI_BUILD_TIMESTAMP=$BUILD_TIMESTAMP" \
