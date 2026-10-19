@@ -137,7 +137,7 @@ function reviewFor(matches: NormalizedMatch[], facts = new Map<string, MatchRevi
   const session = sessions.at(-1)!;
   return buildSessionReview({
     session, baseline: sessionBaseline(all, TEAM, session), team: TEAM, facts, timezone: 'Asia/Shanghai',
-    pageUrl: 'https://pubg.example.test/', now: new Date(session.lastEndMs + SESSION_GAP_MS),
+    link: 'https://pubg.example.test/s/token', now: new Date(session.lastEndMs + SESSION_GAP_MS),
   });
 }
 
@@ -155,7 +155,7 @@ test('a clear problem and a clear strength both make it into the review, in plai
   assert.equal(review.suggestion, '前期先求稳:换个人少的落点,落地先集合再搜。');
   assert.equal(review.summary.wins, 1);
   assert.equal(review.summary.baselineAvgPlacement !== null, true);
-  assert.equal(review.link, 'https://pubg.example.test/?match=s2');
+  assert.equal(review.link, 'https://pubg.example.test/s/token');
 });
 
 test('a session that looks like the squad usually plays claims nothing', () => {

@@ -90,8 +90,8 @@ export function renderSessionReview(presentation: SessionReviewPresentation, opt
     }
     const findings = review.findings.slice(0, single ? Math.min(1, findingLimit) : findingLimit);
     sections.push({ lines: findings.length
-      ? ['*讲真话*', ...findings.map((finding, index) => (single ? finding.text : `${index + 1}. ${finding.text}`))]
-      : ['*讲真话*', '各项都在你们平时的正常波动范围内,没有值得单独拎出来的问题。'] });
+      ? ['*结论*', ...findings.map((finding, index) => (single ? finding.text : `${index + 1}. ${finding.text}`))]
+      : ['*结论*', '各项都在你们平时的正常波动范围内,没有值得单独拎出来的问题。'] });
     if (!single && review.members.length) {
       sections.push({ drop: 4, lines: ['*队员*', ...review.members.map((member) => memberLine(member, !sameMatchCounts, memberTags))] });
     }
@@ -101,7 +101,7 @@ export function renderSessionReview(presentation: SessionReviewPresentation, opt
     const coverage = review.coverage.telemetry === review.coverage.total
       ? `📎 ${review.coverage.total}/${review.coverage.total} 场有完整遥测`
       : `📎 ${review.coverage.telemetry}/${review.coverage.total} 场有完整遥测,其余只按基础战绩`;
-    sections.push({ lines: review.link ? [coverage, review.link] : [coverage] });
+    sections.push({ lines: review.link ? [coverage, `🔗 ${review.link}`] : [coverage] });
     return sections.filter((section) => section.drop === undefined || !dropped.has(section.drop)).map((section) => section.lines.join('\n')).join('\n\n');
   };
 

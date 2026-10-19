@@ -77,6 +77,7 @@ COPY plugins/pubg/dist/index.js /app/dist/extensions/pubg/dist/index.js
 COPY plugins/pubg/dist/index.js.map /app/dist/extensions/pubg/dist/index.js.map
 COPY plugins/pubg/dist/migrate.js /app/dist/extensions/pubg/dist/migrate.js
 COPY plugins/pubg/dist/migrate.js.map /app/dist/extensions/pubg/dist/migrate.js.map
+COPY plugins/pubg/dist/session-review.js /app/dist/extensions/pubg/dist/session-review.js
 COPY plugins/pubg/openclaw.plugin.json /app/dist/extensions/pubg/openclaw.plugin.json
 COPY plugins/pubg/package.json /app/dist/extensions/pubg/package.json
 COPY plugins/pubg/README.md /app/dist/extensions/pubg/README.md

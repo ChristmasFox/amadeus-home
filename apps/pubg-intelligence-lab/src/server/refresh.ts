@@ -9,6 +9,9 @@ export const REFRESH_COOLDOWN_MS = 2 * 60_000;
 export const REFRESH_STALE_MS = 10 * 60_000;
 
 const SCRIPT = resolve(dirname(fileURLToPath(import.meta.url)), '../../../../scripts/refresh-intelligence-now.sh');
+const SNAPSHOT_SCRIPT = resolve(dirname(fileURLToPath(import.meta.url)), '../../../../scripts/refresh-intelligence-snapshot.sh');
+/** A share link that is not in the snapshot yet may refresh the snapshot (never the PUBG fetch), at most this often. */
+export const SHARE_SYNC_COOLDOWN_MS = 2 * 60_000;
 
 export interface RefreshStatus {
   state: 'idle' | 'running' | 'done';
@@ -85,9 +88,33 @@ export function startRefresh(now = Date.now(), launch: (requestPath: string) => 
   return { started: true, status: refreshStatus(now) };
 }
 
+/** Tests (and any host that must never touch the Lab) set this so no refresh script is ever started. */
+const scriptsDisabled = () => process.env.PUBG_INTELLIGENCE_REFRESH_SCRIPTS === 'off';
+
 function launchScript(requestPath: string): void {
+  if (scriptsDisabled()) return;
   if (!existsSync(SCRIPT)) throw new Error('refresh_script_missing');
   // Detached on purpose: the script restarts this very server when new data arrives.
   const child = spawn('bash', [SCRIPT, requestPath], { detached: true, stdio: 'ignore' });
+  child.unref();
+}
+
+/**
+ * Refreshes only the snapshot (no PUBG fetch, no Lab job) so a just-minted share link becomes readable. Rate-limited
+ * across visitors through a timestamp file; the script restarts the page when the data changed.
+ */
+export function requestSnapshotSync(now = Date.now(), launch: () => void = launchSnapshotSync): boolean {
+  const file = join(stateDirectory(), 'share-sync.json');
+  const last = readJson(file);
+  const lastMs = typeof last?.at === 'string' ? Date.parse(last.at) : Number.NaN;
+  if (Number.isFinite(lastMs) && now - lastMs < SHARE_SYNC_COOLDOWN_MS) return false;
+  writeFileSync(file, JSON.stringify({ at: new Date(now).toISOString() }), { mode: 0o600 });
+  launch();
+  return true;
+}
+
+function launchSnapshotSync(): void {
+  if (scriptsDisabled() || !existsSync(SNAPSHOT_SCRIPT)) return;
+  const child = spawn('bash', [SNAPSHOT_SCRIPT, '--apply', '--restart'], { detached: true, stdio: 'ignore' });
   child.unref();
 }

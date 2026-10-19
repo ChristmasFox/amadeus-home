@@ -5,6 +5,7 @@ import { createResearchModel } from './model.js';
 import {
   type MatchReviewFacts,
   type NormalizedMatch,
+  type ReviewShareRecord,
   SqlitePubgRepository,
   type TeamConfig,
 } from '@agent/pubg-domain';
@@ -75,6 +76,8 @@ export interface Snapshot {
   researchModel?: Exclude<LanguageModel, string>;
   modelEnabled: boolean;
   modelId: string | null;
+  /** Review share links by token hash, read from the snapshot copy of the Lab ledger. */
+  shares: Map<string, ReviewShareRecord>;
 }
 
 export function safePlayerName(value: string, index: number): string {
@@ -142,7 +145,9 @@ export async function openSnapshot(modelOverride?: Exclude<LanguageModel, string
   let matches: NormalizedMatch[];
   const telemetryUrls = new Map<string, string>();
   const features = new Map<string, MatchReviewFeature>();
+  let shares = new Map<string, ReviewShareRecord>();
   try {
+    shares = new Map(repository.listReviewShares().map((record) => [record.tokenHash, record]));
     const sourceMatches = repository.listMatches({ limit: 10000 });
     for (const match of sourceMatches) {
       const telemetryUrl = match.telemetryUrl;
@@ -188,6 +193,7 @@ export async function openSnapshot(modelOverride?: Exclude<LanguageModel, string
     ...(model ? { researchModel: model } : {}),
     modelEnabled: Boolean(model),
     modelId: model?.modelId ?? null,
+    shares,
   };
 }
 

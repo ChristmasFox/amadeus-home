@@ -21,8 +21,9 @@ import {
 } from './match-views.js';
 import { researchRecoveryMessage, shortConversationReply } from './messages.js';
 import { refreshStatus, startRefresh } from './refresh.js';
-import { isPublicRequest, loadPublicAccess, looksProxied } from './public-access.js';
-import { CLIENT_DIST, handlePublic, sendPublicJson } from './public-site.js';
+import { isPublicRequest, loadPublicAccess, looksProxied, validSession } from './public-access.js';
+import { CLIENT_DIST, handlePublic, sendPublicJson, servePublicStatic } from './public-site.js';
+import { handleShareLink, handleShareVisitor, serveShareApi, shareFromCookie } from './share.js';
 import {
   archivedIds,
   createSyntheticTeam,
@@ -204,6 +205,12 @@ async function handleApi(request: IncomingMessage, response: ServerResponse, sna
       selectedSquadId: snapshot.defaultSquad.id,
       squads: snapshot.squads.map(({ id, label, members, matchCount }) => ({ id, label, members: members.map((member) => member.name), matchCount })),
     });
+    return;
+  }
+  if (url.pathname.startsWith('/api/share/')) {
+    const share = shareFromCookie(snapshot, request);
+    if (!share) { send(response, 401, { error: 'share_required' }); return; }
+    await serveShareApi(request, response, snapshot, share);
     return;
   }
   if (request.method === 'GET' && url.pathname === '/api/refresh') {
@@ -719,14 +726,28 @@ export async function startServer(options: { researchModel?: Exclude<LanguageMod
   const publicAccess = loadPublicAccess(process.env, process.env.PUBG_INTELLIGENCE_STATE_DIR?.trim() || join(homedir(), '.local', 'share', 'amadeus', 'pubg-intelligence-lab'));
   if (publicAccess && !existsSync(resolve(CLIENT_DIST, 'index.html'))) throw new Error('public_access_needs_built_client');
   const server = createServer((request, response) => {
+    const pathname = new URL(request.url ?? '/', 'http://127.0.0.1').pathname;
     if (isPublicRequest(request, publicAccess)) {
-      void handlePublic(request, response, snapshot, publicAccess!, handleApi).catch(() => {
-        if (!response.headersSent) sendPublicJson(response, 500, { error: 'research_request_failed' });
-      });
+      const failed = () => { if (!response.headersSent) sendPublicJson(response, 500, { error: 'research_request_failed' }); };
+      if (pathname.startsWith('/s/')) { handleShareLink(request, response, snapshot, { secure: true }); return; }
+      // A visitor with only a share cookie is confined to the share routes; anything else falls back to the login page.
+      const share = validSession(publicAccess!, request) ? null : shareFromCookie(snapshot, request);
+      if (share) {
+        void handleShareVisitor(request, response, snapshot, share, (path) => servePublicStatic(response, path), (apiRequest, apiResponse) => handleApi(apiRequest, apiResponse, snapshot))
+          .then((handled) => (handled ? undefined : handlePublic(request, response, snapshot, publicAccess!, handleApi)))
+          .catch(failed);
+        return;
+      }
+      void handlePublic(request, response, snapshot, publicAccess!, handleApi).catch(failed);
       return;
     }
     // Anything relayed by the public proxy must carry the public Host; a proxied request for another host is refused.
     if (looksProxied(request)) { send(response, 403, { error: 'proxied_request_not_allowed' }); return; }
+    if (pathname.startsWith('/s/')) {
+      if (!isLocalRequest(request, allowedNetwork)) { send(response, 403, { error: 'local_network_access_only' }); return; }
+      handleShareLink(request, response, snapshot, { secure: false });
+      return;
+    }
     if ((request.url ?? '').startsWith('/api/')) {
       if (!isLocalRequest(request, allowedNetwork)) { send(response, 403, { error: 'local_network_access_only' }); return; }
       void handleApi(request, response, snapshot).catch(() => {

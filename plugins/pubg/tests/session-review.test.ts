@@ -4,9 +4,9 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 import { validateOwnerNotificationPresentation } from '@agent/presentation';
-import { SESSION_GAP_MS, type NormalizedMatch, type SessionReviewRecord, type TelemetryFeatureKey, type TelemetryFeatureRecord } from '@agent/pubg-domain';
+import { reviewShareOpen, reviewShareTokenHash, SESSION_GAP_MS, type NormalizedMatch, type ReviewShareRecord, type SessionReviewRecord, type TelemetryFeatureKey, type TelemetryFeatureRecord } from '@agent/pubg-domain';
 import { groupSlug, loadReviewSubscription, type ReportGateway, type ReportSubscription } from '../src/session-review-delivery.js';
-import { runSessionReviewCycle, SESSION_REVIEW_MAX_ATTEMPTS, type SessionReviewCycleInput, type SessionReviewStore } from '../src/session-review-worker.js';
+import { REVIEW_SHARE_LINK, runSessionReviewCycle, SESSION_REVIEW_MAX_ATTEMPTS, type SessionReviewCycleInput, type SessionReviewStore } from '../src/session-review-worker.js';
 
 const MIN = 60_000;
 const START = Date.parse('2026-10-18T12:00:00Z');
@@ -35,7 +35,19 @@ class FakeStore implements SessionReviewStore {
   getSessionReviewMeta(key: string) { return this.meta.get(key) ?? null; }
   setSessionReviewMeta(key: string, value: string) { this.meta.set(key, value); }
   latestPrefetchFinishedMs() { return this.fetchedMs; }
+  shares: ReviewShareRecord[] = [];
+  putReviewShare(record: ReviewShareRecord) { this.shares.push(record); }
+  getReviewShare(hash: string) { return this.shares.find((share) => share.tokenHash === hash) ?? null; }
+  latestReviewShare(_squad: string, key: string) { return this.shares.filter((share) => share.sessionKey === key).at(-1) ?? null; }
+  revokeReviewShares(_squad: string, key: string, at: string) {
+    let count = 0;
+    for (const share of this.shares) if (share.sessionKey === key && share.revokedAt === null) { share.revokedAt = at; count += 1; }
+    return count;
+  }
 }
+
+const SHARE_BASE = 'https://pubg.example.test';
+const shareToken = (message: unknown) => String(message).match(/https:\/\/pubg\.example\.test\/s\/([A-Za-z0-9_-]{22})$/mu)?.[1];
 
 class FakeGateway implements ReportGateway {
   sent: Array<Record<string, unknown>> = [];
@@ -94,7 +106,7 @@ test('the first run marks the switch-on time, so sessions from before are skippe
 });
 
 test('a verified group gets exactly one review with a per-session idempotency key', async () => {
-  const { store, gateway, input } = setup();
+  const { store, gateway, input } = setup({ shareBaseUrl: SHARE_BASE });
   assert.deepEqual((await runSessionReviewCycle(input)).map((item) => item.result), ['sent']);
   assert.equal(gateway.sent.length, 1);
   assert.deepEqual(
@@ -102,8 +114,23 @@ test('a verified group gets exactly one review with a per-session idempotency ke
     { channel: 'whatsapp', to: GROUP, accountId: 'secondary', idempotencyKey: `pubg-session:squad:m1:whatsapp:secondary:${GROUP}` },
   );
   assert.equal(store.records.get('pubg-session:squad:m1')?.status, 'sent');
+  // The delivered text links to a share of exactly these matches; the ledger keeps only the placeholder.
+  const token = shareToken(gateway.sent[0]!.message);
+  assert.ok(token, String(gateway.sent[0]!.message));
+  const share = store.getReviewShare(reviewShareTokenHash(token!))!;
+  assert.deepEqual([share.kind, share.matchIds], ['session', ['m1', 'm2']]);
+  assert.equal(JSON.parse(share.presentationJson).type, 'pubg_session_review');
+  assert.ok(store.records.get('pubg-session:squad:m1')!.message!.includes(REVIEW_SHARE_LINK));
+  assert.ok(!JSON.stringify([...store.records.values(), store.shares]).includes(token!));
   await runSessionReviewCycle(input);
   assert.equal(gateway.sent.length, 1);
+});
+
+test('without a share origin the link line is left out entirely', async () => {
+  const { gateway, input } = setup();
+  await runSessionReviewCycle(input);
+  assert.ok(!String(gateway.sent[0]!.message).includes('🔗'));
+  assert.ok(!String(gateway.sent[0]!.message).includes(REVIEW_SHARE_LINK));
 });
 
 test('the session stays open while the gap has not passed or no fetch ran after it', async () => {
@@ -136,13 +163,19 @@ for (const [name, rows, reason] of [
   });
 }
 
-test('a failed send is retried with the same text and gives up after the attempt limit', async () => {
-  const { store, gateway, input } = setup();
+test('a failed send is retried with the same text and a fresh link, and gives up after the attempt limit', async () => {
+  const { store, gateway, input } = setup({ shareBaseUrl: SHARE_BASE });
   gateway.failSends = 1;
   assert.deepEqual((await runSessionReviewCycle(input)).map((item) => item.result), ['pending_delivery']);
   const first = store.records.get('pubg-session:squad:m1')!;
+  const unsent = store.shares[0]!;
   assert.deepEqual((await runSessionReviewCycle(input)).map((item) => item.result), ['sent']);
-  assert.equal(gateway.sent[0]!.message, first.message);
+  const token = shareToken(gateway.sent[0]!.message)!;
+  assert.equal(String(gateway.sent[0]!.message).replace(`${SHARE_BASE}/s/${token}`, REVIEW_SHARE_LINK), first.message);
+  // The link minted for the failed attempt never reached anyone and no longer opens.
+  assert.equal(reviewShareOpen(unsent, input.now), false);
+  assert.equal(reviewShareOpen(store.getReviewShare(reviewShareTokenHash(token))!, input.now), true);
+  assert.equal(store.getReviewShare(reviewShareTokenHash(token))!.presentationJson, unsent.presentationJson);
 
   const failing = setup();
   failing.gateway.failSends = SESSION_REVIEW_MAX_ATTEMPTS;

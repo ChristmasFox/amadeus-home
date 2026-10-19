@@ -2,6 +2,7 @@ import { renderSessionReview } from '@agent/presentation';
 import {
   buildSessionReview,
   DEFAULT_REVIEW_FEATURE_VERSION,
+  issueReviewShare,
   DEFAULT_TELEMETRY_PARSER_VERSION,
   planSessionReviews,
   SESSION_BASELINE_MS,
@@ -10,6 +11,7 @@ import {
   squadMatches,
   type MatchReviewFacts,
   type NormalizedMatch,
+  type ReviewShareStore,
   type SessionReviewLedger,
   type SessionReviewRecord,
   type SessionTeam,
@@ -29,8 +31,13 @@ import {
 export type SessionReviewMode = 'off' | 'dry-run' | 'deliver';
 export const SESSION_REVIEW_MAX_ATTEMPTS = 5;
 export const SESSION_REVIEW_INTERVAL_MS = 5 * 60_000;
+/**
+ * Stands in for the share link in rendered and stored text. The link carries a fresh token minted right before each
+ * send, so the plaintext token only ever exists in the delivered message, never in the ledger.
+ */
+export const REVIEW_SHARE_LINK = '{{review-share-link}}';
 
-export interface SessionReviewStore extends SessionReviewLedger {
+export interface SessionReviewStore extends SessionReviewLedger, ReviewShareStore {
   listMatches(options: { fromMs?: number; toMs?: number; order?: 'asc' | 'desc' }): NormalizedMatch[];
   get(key: TelemetryFeatureKey): Promise<TelemetryFeatureRecord | null>;
 }
@@ -43,7 +50,8 @@ export interface SessionReviewCycleInput {
   gateway?: ReportGateway;
   ownerOutboxDir?: string;
   timezone: string;
-  pageUrl?: string;
+  /** Intelligence Lab origin; with it every review links to its own share page at <origin>/s/<token>. */
+  shareBaseUrl?: string;
   now: Date;
   log?: (line: string) => void;
 }
@@ -56,7 +64,7 @@ export interface CycleOutcome {
 
 const enabledAtKey = (squadId: string) => `enabled-at:${squadId}`;
 
-async function featuresFor(store: SessionReviewStore, matchIds: Iterable<string>): Promise<Map<string, MatchReviewFacts | null>> {
+async function featuresFor(store: Pick<SessionReviewStore, 'get'>, matchIds: Iterable<string>): Promise<Map<string, MatchReviewFacts | null>> {
   const facts = new Map<string, MatchReviewFacts | null>();
   for (const matchId of matchIds) {
     const record = await store.get({ matchId, parserVersion: DEFAULT_TELEMETRY_PARSER_VERSION, featureVersion: DEFAULT_REVIEW_FEATURE_VERSION });
@@ -65,23 +73,45 @@ async function featuresFor(store: SessionReviewStore, matchIds: Iterable<string>
   return facts;
 }
 
-/** Builds and renders the review text for one closed session; shared by the worker and the manual CLI. */
+/** Builds and renders the review for one closed session; shared by the worker and the manual CLI. */
 export async function renderReviewFor(input: {
-  store: SessionReviewStore;
+  store: Pick<SessionReviewStore, 'get'>;
   matches: readonly NormalizedMatch[];
   session: SquadSession;
   team: SessionReviewCycleInput['team'];
   timezone: string;
-  pageUrl?: string;
+  withShareLink: boolean;
   now: Date;
-}): Promise<string> {
+}): Promise<{ text: string; presentationJson: string }> {
   const baseline = sessionBaseline(input.matches, input.team, input.session);
   const facts = await featuresFor(input.store, [...input.session.matches, ...baseline].map((item) => item.match.matchId));
   const review = buildSessionReview({
     session: input.session, baseline, team: input.team, facts, playerNames: input.team.playerNames,
-    timezone: input.timezone, now: input.now, ...(input.pageUrl ? { pageUrl: input.pageUrl } : {}),
+    timezone: input.timezone, now: input.now, ...(input.withShareLink ? { link: REVIEW_SHARE_LINK } : {}),
   });
-  return renderSessionReview(review);
+  return { text: renderSessionReview(review), presentationJson: JSON.stringify(review) };
+}
+
+/**
+ * Puts a freshly issued share link into the text about to be sent. The review shown on the share page is the one
+ * rendered for this send, or the one stored with the session's previous share when a delivery is retried.
+ */
+export function attachShareLink(input: {
+  store: ReviewShareStore;
+  squadId: string;
+  session: SquadSession;
+  text: string;
+  presentationJson: string | null;
+  shareBaseUrl?: string;
+  now: Date;
+}): string {
+  if (!input.text.includes(REVIEW_SHARE_LINK)) return input.text;
+  const presentationJson = input.presentationJson ?? input.store.latestReviewShare(input.squadId, input.session.key)?.presentationJson ?? null;
+  if (!input.shareBaseUrl || !presentationJson) return input.text.split('\n').filter((line) => !line.includes(REVIEW_SHARE_LINK)).join('\n');
+  const { token } = issueReviewShare(input.store, {
+    squadId: input.squadId, sessionKey: input.session.key, matchIds: input.session.matches.map((item) => item.match.matchId), presentationJson, now: input.now,
+  });
+  return input.text.replace(REVIEW_SHARE_LINK, `${input.shareBaseUrl.replace(/\/$/u, '')}/s/${token}`);
 }
 
 function recordFor(session: SquadSession, squadId: string, now: Date, fields: Pick<SessionReviewRecord, 'status' | 'detail' | 'message' | 'attempts'>): SessionReviewRecord {
@@ -91,9 +121,9 @@ function recordFor(session: SquadSession, squadId: string, now: Date, fields: Pi
   };
 }
 
-type DeliveryInput = Pick<SessionReviewCycleInput, 'subscription' | 'gateway' | 'ownerOutboxDir' | 'team' | 'now'>;
+type DeliveryInput = Pick<SessionReviewCycleInput, 'store' | 'subscription' | 'gateway' | 'ownerOutboxDir' | 'team' | 'now' | 'shareBaseUrl'>;
 
-async function deliver(input: DeliveryInput, session: SquadSession, message: string, attempts: number): Promise<Pick<SessionReviewRecord, 'status' | 'detail' | 'message' | 'attempts'>> {
+async function deliver(input: DeliveryInput, session: SquadSession, message: string, attempts: number, presentationJson: string | null): Promise<Pick<SessionReviewRecord, 'status' | 'detail' | 'message' | 'attempts'>> {
   const block = async (reason: string, groupName?: string) => {
     if (input.ownerOutboxDir) {
       await queueOwnerBlockedNotice(input.ownerOutboxDir, { sessionKey: session.key, reason, occurredAt: input.now.toISOString(), ...(groupName ? { groupName } : {}) });
@@ -108,7 +138,11 @@ async function deliver(input: DeliveryInput, session: SquadSession, message: str
     return block(check.reason, check.groupName);
   }
   try {
-    await sendReview(input.gateway, input.subscription, message, reviewIdempotencyKey(session.key, input.subscription));
+    const text = attachShareLink({
+      store: input.store, squadId: input.team.id, session, text: message, presentationJson, now: input.now,
+      ...(input.shareBaseUrl ? { shareBaseUrl: input.shareBaseUrl } : {}),
+    });
+    await sendReview(input.gateway, input.subscription, text, reviewIdempotencyKey(session.key, input.subscription));
     return { status: 'sent', detail: `group:${check.groupName}`, message, attempts: attempts + 1 };
   } catch (error) {
     if (attempts + 1 >= SESSION_REVIEW_MAX_ATTEMPTS) return block('delivery_failed');
@@ -143,9 +177,10 @@ export async function runSessionReviewCycle(input: SessionReviewCycleInput): Pro
       outcomes.push({ sessionKey: session.key, result: 'skipped', detail: plan.reason });
       continue;
     }
-    const message = plan.decision === 'retry' && plan.record.message
-      ? plan.record.message
-      : await renderReviewFor({ store, matches, session, team, timezone: input.timezone, now, ...(input.pageUrl ? { pageUrl: input.pageUrl } : {}) });
+    const rendered = plan.decision === 'retry' && plan.record.message
+      ? { text: plan.record.message, presentationJson: null }
+      : await renderReviewFor({ store, matches, session, team, timezone: input.timezone, now, withShareLink: Boolean(input.shareBaseUrl) });
+    const message = rendered.text;
     if (input.mode === 'dry-run') {
       store.putSessionReview(recordFor(session, team.id, now, { status: 'dry_run', detail: `${message.length} chars`, message, attempts: 0 }));
       log(`pubg session review dry-run ${session.key} (${session.matches.length} matches, ${message.length} chars)`);
@@ -153,7 +188,7 @@ export async function runSessionReviewCycle(input: SessionReviewCycleInput): Pro
       continue;
     }
     const attempts = plan.decision === 'retry' ? plan.record.attempts : 0;
-    const fields = await deliver(input, session, message, attempts);
+    const fields = await deliver(input, session, message, attempts, rendered.presentationJson);
     store.putSessionReview(recordFor(session, team.id, now, fields));
     log(`pubg session review ${fields.status} ${session.key}${fields.detail ? ` (${fields.detail})` : ''}`);
     outcomes.push({ sessionKey: session.key, result: fields.status as CycleOutcome['result'], ...(fields.detail ? { detail: fields.detail } : {}) });

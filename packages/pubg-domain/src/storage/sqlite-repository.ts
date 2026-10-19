@@ -3,6 +3,7 @@ import { dirname } from 'node:path';
 import { createRequire } from 'node:module';
 import type { NormalizedMatch, NormalizedPlayer, ResultSetRecord, SessionContextRecord } from '../data/model.js';
 import { normalizeRecords } from '../data/model.js';
+import type { ReviewShareRecord, ReviewShareStore } from '../review/review-share.js';
 import type { SessionReviewLedger, SessionReviewRecord, SessionReviewStatus } from '../review/session-review.js';
 import type { TelemetryFeatureKey, TelemetryFeatureRecord, TelemetryFeatureStore } from '../review/telemetry.js';
 import type {
@@ -96,7 +97,7 @@ function keyForFeature(key: TelemetryFeatureKey): string {
   return key.matchId + ':' + key.parserVersion + ':' + key.featureVersion;
 }
 
-export class SqlitePubgRepository implements SessionReviewLedger, TelemetryFeatureStore {
+export class SqlitePubgRepository implements SessionReviewLedger, ReviewShareStore, TelemetryFeatureStore {
   readonly db: SqliteDatabase;
 
   constructor(readonly filename = ':memory:', options: { readOnly?: boolean } = {}) {
@@ -234,6 +235,19 @@ export class SqlitePubgRepository implements SessionReviewLedger, TelemetryFeatu
         meta_key TEXT PRIMARY KEY,
         meta_value TEXT NOT NULL
       );
+
+      CREATE TABLE IF NOT EXISTS review_shares (
+        token_hash TEXT PRIMARY KEY,
+        kind TEXT NOT NULL,
+        squad_id TEXT NOT NULL,
+        session_key TEXT NOT NULL,
+        match_ids_json TEXT NOT NULL,
+        presentation_json TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        expires_at TEXT NOT NULL,
+        revoked_at TEXT
+      );
+      CREATE INDEX IF NOT EXISTS idx_review_shares_session ON review_shares(squad_id, session_key, created_at);
 
       CREATE TABLE IF NOT EXISTS migration_runs (
         id TEXT PRIMARY KEY,
@@ -585,6 +599,40 @@ export class SqlitePubgRepository implements SessionReviewLedger, TelemetryFeatu
     `).run(key, value);
   }
 
+  putReviewShare(record: ReviewShareRecord): void {
+    this.db.prepare(`
+      INSERT INTO review_shares(token_hash, kind, squad_id, session_key, match_ids_json, presentation_json, created_at, expires_at, revoked_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      record.tokenHash, record.kind, record.squadId, record.sessionKey, JSON.stringify(record.matchIds), record.presentationJson,
+      record.createdAt, record.expiresAt, record.revokedAt,
+    );
+  }
+
+  getReviewShare(tokenHash: string): ReviewShareRecord | null {
+    const row = this.db.prepare('SELECT * FROM review_shares WHERE token_hash = ?').get(tokenHash);
+    return row ? shareRecord(row) : null;
+  }
+
+  latestReviewShare(squadId: string, sessionKey: string): ReviewShareRecord | null {
+    const row = this.db.prepare('SELECT * FROM review_shares WHERE squad_id = ? AND session_key = ? ORDER BY created_at DESC LIMIT 1').get(squadId, sessionKey);
+    return row ? shareRecord(row) : null;
+  }
+
+  revokeReviewShares(squadId: string, sessionKey: string, revokedAt: string): number {
+    return Number(this.db.prepare('UPDATE review_shares SET revoked_at = ? WHERE squad_id = ? AND session_key = ? AND revoked_at IS NULL').run(revokedAt, squadId, sessionKey).changes);
+  }
+
+  /** Every stored share, for readers of a database copy (the Intelligence Lab snapshot). */
+  listReviewShares(): ReviewShareRecord[] {
+    try {
+      return this.db.prepare('SELECT * FROM review_shares').all().map(shareRecord);
+    } catch {
+      // A read-only copy made before the table existed.
+      return [];
+    }
+  }
+
   latestPrefetchFinishedMs(): number | null {
     const row = this.db.prepare('SELECT MAX(finished_at) AS finished_at FROM telemetry_prefetch_runs').get();
     const parsed = row?.finished_at ? Date.parse(String(row.finished_at)) : Number.NaN;
@@ -650,4 +698,18 @@ export class SqlitePubgRepository implements SessionReviewLedger, TelemetryFeatu
       prefetchRuns: count('telemetry_prefetch_runs'),
     };
   }
+}
+
+function shareRecord(row: Record<string, unknown>): ReviewShareRecord {
+  return {
+    tokenHash: String(row.token_hash),
+    kind: String(row.kind) === 'match' ? 'match' : 'session',
+    squadId: String(row.squad_id),
+    sessionKey: String(row.session_key),
+    matchIds: jsonValue<string[]>(row.match_ids_json, []),
+    presentationJson: String(row.presentation_json),
+    createdAt: String(row.created_at),
+    expiresAt: String(row.expires_at),
+    revokedAt: row.revoked_at === null || row.revoked_at === undefined ? null : String(row.revoked_at),
+  };
 }

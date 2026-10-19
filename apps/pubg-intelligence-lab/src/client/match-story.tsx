@@ -309,8 +309,8 @@ function RouteMap({ data, story, time, showEnemies, focusTeams, zoom, showImage 
         }
         return <g key={enemy.id} className={`enemy ${focus ? 'focus' : ''}`} transform={`translate(${px(point.x)},${py(point.y)})`}>
           <circle r={focus ? 10 : 5.5} />
-          {focus && <text y={-15} textAnchor="middle">队{enemy.team}</text>}
-          <title>{`对手 队${enemy.team}`}</title>
+          {focus && <text y={-15} textAnchor="middle">{teamText(enemy.team)}</text>}
+          <title>{`对手 ${teamText(enemy.team)}`}</title>
         </g>;
       })}
       {story.events.filter((event) => event.t <= time && (event.kind === 'knock' || event.kind === 'downed' || event.kind === 'death' || event.kind === 'kill')).map((event, index) => {
@@ -343,6 +343,11 @@ function RouteMap({ data, story, time, showEnemies, focusTeams, zoom, showImage 
 
 // ---------------------------------------------------------------------------------------------------------------
 // Main view
+
+/** Team ids are numbers; a shared review already names opposing teams ("敌方 A"). */
+function teamText(team: string): string {
+  return team.startsWith('敌方') ? team : `队${team}`;
+}
 
 export function MatchStoryView({ data, loading, placement, kills, damage }: { data: MatchStoryData | null; loading: boolean; placement: number | null; kills: number; damage: number }) {
   const [time, setTime] = useState(0);
@@ -452,7 +457,7 @@ export function MatchStoryView({ data, loading, placement, kills, damage }: { da
                     <small>{fightSentence(fight, name)}</small>
                     <span className="duel"><i className="dealt" style={{ width: `${(fight.damageDealt / total) * 100}%` }} /><i className="taken" style={{ width: `${(fight.damageTaken / total) * 100}%` }} /></span>
                     <em>打出 {fight.damageDealt} · 承受 {fight.damageTaken}</em>
-                    {fight.enemies.length > 0 && <span className="foes">{fight.enemies.map((enemy) => <span className="foe" key={enemy.team}><b>队{enemy.team}</b>{enemy.size > 0 ? ` ${enemy.size} 人` : ''}{enemy.downed > 0 ? ` · 被打倒 ${enemy.downed}` : ''}{enemy.damageToUs > 0 ? ` · 打了我们 ${enemy.damageToUs}` : ''}{enemy.weapons.length ? ` · ${enemy.weapons.join('/')}` : ''}</span>)}</span>}
+                    {fight.enemies.length > 0 && <span className="foes">{fight.enemies.map((enemy) => <span className="foe" key={enemy.team}><b>{teamText(enemy.team)}</b>{enemy.size > 0 ? ` ${enemy.size} 人` : ''}{enemy.downed > 0 ? ` · 被打倒 ${enemy.downed}` : ''}{enemy.damageToUs > 0 ? ` · 打了我们 ${enemy.damageToUs}` : ''}{enemy.weapons.length ? ` · ${enemy.weapons.join('/')}` : ''}</span>)}</span>}
                   </span>
                   <span className="chip">{outcome.text}</span>
                 </button>;
@@ -483,7 +488,7 @@ export function MatchStoryView({ data, loading, placement, kills, damage }: { da
           {story.downs.map((down, index) => {
             const cause = data.downCauses.find((item) => item.key === down.cause);
             const bits = [
-              down.attackerTeam !== null ? `队${down.attackerTeam}${down.weapon ? ` 的 ${down.weapon}` : ''}${down.meters !== null && down.meters > 0 ? ` · ${down.meters} 米` : ''}` : '',
+              down.attackerTeam !== null ? `${teamText(down.attackerTeam)}${down.weapon ? ` 的 ${down.weapon}` : ''}${down.meters !== null && down.meters > 0 ? ` · ${down.meters} 米` : ''}` : '',
               down.takenDamage > 0 || down.returnDamage > 0 ? `倒地前受到 ${down.takenDamage} 伤害、还手 ${down.returnDamage}` : '',
               down.nearestTeammate !== null ? `最近队友 ${down.nearestTeammate} 米` : '',
               down.teamsNearby ? `300 米内另有 ${down.teamsNearby} 队` : '',

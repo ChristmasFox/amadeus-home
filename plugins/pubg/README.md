@@ -56,7 +56,7 @@ excludes zero are stated as fact; others appear as "仅本时段观察" or not a
 | `reviewGroupTargetFile` | File holding the one WhatsApp group JID (`…@g.us`), kept outside Git |
 | `reviewGroupExpectedName` | The group's current name; delivery is refused when it differs |
 | `reviewGroupAccountId` | WhatsApp account that is a member of the group |
-| `reviewPageBaseUrl` | Optional Intelligence Lab URL for the "best match" link |
+| `reviewPageBaseUrl` | Intelligence Lab origin; each delivered review links to its own share page `<origin>/s/<token>` (7 days, token issued per send, only its hash stored) |
 | `ownerNotificationOutboxDir` | amadeus owner outbox; a blocked review queues an owner notice there |
 
 Before each send the worker checks that the target is a group JID, that the
@@ -71,7 +71,12 @@ sends a test message or one session by hand, using the same checks and key:
 ```sh
 export PUBG_GATEWAY_CALL="orb -m <machine> -u root docker exec openclaw openclaw gateway call"
 tsx src/session-review-cli.ts groups
-tsx src/session-review-cli.ts preview --db <snapshot.sqlite> --team <team.json> --page-url <url>
+tsx src/session-review-cli.ts preview --db <snapshot.sqlite> --team <team.json>
 tsx src/session-review-cli.ts send --db <snapshot.sqlite> --team <team.json> \
   --target-file <file> --expected-name <group name> --account <account id>
 ```
+
+Inside the OpenClaw container the CLI is bundled as
+`/app/dist/extensions/pubg/dist/session-review.js`; there it can issue a share
+link (`--share-base <origin>`), record the send in the ledger (`--record`) and
+send a deliberate second copy of a session (`--resend <tag>`).

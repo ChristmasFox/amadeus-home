@@ -502,7 +502,8 @@ export interface BuildSessionReviewInput {
   facts: ReadonlyMap<string, MatchReviewFacts | null>;
   playerNames?: ReadonlyMap<string, string>;
   timezone: string;
-  pageUrl?: string;
+  /** Link shown at the end of the review; the delivery layer decides what it points to. */
+  link?: string;
   now: Date;
 }
 
@@ -522,7 +523,6 @@ export function buildSessionReview(input: BuildSessionReviewInput): SessionRevie
   for (const item of session.matches) maps.set(item.match.mapName, (maps.get(item.match.mapName) ?? 0) + 1);
   const notes = matchNotes(session, input.facts);
   const topBad = findings.find((finding) => finding.tone === 'bad');
-  const linkMatch = notes.best?.matchId ?? session.matches[0]!.match.matchId;
   const review: SessionReviewPresentation = {
     type: 'pubg_session_review',
     version: 1,
@@ -552,6 +552,6 @@ export function buildSessionReview(input: BuildSessionReviewInput): SessionRevie
   if (notes.worst) review.worstMatch = notes.worst;
   if (single) review.timeline = timelineFor(single, factsFor(single));
   if (topBad && SUGGESTIONS[topBad.metric]) review.suggestion = SUGGESTIONS[topBad.metric]!;
-  if (input.pageUrl) review.link = `${input.pageUrl.replace(/\/$/u, '')}/?match=${encodeURIComponent(linkMatch)}`;
+  if (input.link) review.link = input.link;
   return review;
 }

@@ -4,12 +4,13 @@
  *   session-review-cli groups
  *   session-review-cli preview [--session -1|<session key>]
  *   session-review-cli test   --message <text>
- *   session-review-cli send   [--session -1|<session key>]
+ *   session-review-cli send   [--session -1|<session key>] [--share-base <url>] [--record] [--resend <tag>]
  *
  * Common options: --db <pubg.sqlite> --team <team.json> --target-file <file> --expected-name <name> --account <id>
- * [--page-url <url>] [--timezone <tz>]. The gateway is reached with the command in PUBG_GATEWAY_CALL
- * (default: `openclaw gateway call`), e.g. "orb -m <machine> -u root docker exec openclaw openclaw gateway call".
- * Sends use the same target checks and idempotency key as the worker; nothing is written to the database.
+ * [--timezone <tz>]. The gateway is reached with the command in PUBG_GATEWAY_CALL (default: `openclaw gateway call`,
+ * which is what runs inside the OpenClaw container). Sends use the same target checks as the worker.
+ * --share-base issues a share link (needs the writable Lab database), --record writes the send to the review ledger,
+ * and --resend <tag> gives a deliberate second send of the same session its own idempotency key.
  */
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
@@ -21,7 +22,7 @@ import {
   sendReview,
   type ReportGateway,
 } from './session-review-delivery.js';
-import { renderReviewFor } from './session-review-worker.js';
+import { attachShareLink, renderReviewFor } from './session-review-worker.js';
 
 const run = promisify(execFile);
 
@@ -78,24 +79,35 @@ async function main(): Promise<void> {
     return;
   }
   if (command !== 'preview' && command !== 'send') throw new Error('usage: session-review-cli groups|preview|test|send [options]');
-  const store = new SqlitePubgRepository(required(args, 'db'), { readOnly: true });
+  const shareBase = option(args, 'share-base');
+  const record = args.includes('--record');
+  const store = new SqlitePubgRepository(required(args, 'db'), { readOnly: !(command === 'send' && (shareBase || record)) });
   const now = new Date();
   const matches = store.listMatches({ fromMs: now.getTime() - SESSION_BASELINE_MS - 40 * 24 * 60 * 60_000, order: 'asc' });
   const sessions = splitSquadSessions(squadMatches(matches, sessionTeam.memberIds), team.id);
   const wanted = option(args, 'session') ?? '-1';
   const session = /^-?\d+$/u.test(wanted) ? sessions.at(Number(wanted)) : sessions.find((item) => item.key === wanted);
   if (!session) throw new Error(`session not found: ${wanted}`);
-  const pageUrl = option(args, 'page-url');
-  const message = await renderReviewFor({
-    store, matches, session, team: sessionTeam, timezone: option(args, 'timezone') ?? 'Asia/Shanghai', now, ...(pageUrl ? { pageUrl } : {}),
+  const rendered = await renderReviewFor({
+    store, matches, session, team: sessionTeam, timezone: option(args, 'timezone') ?? 'Asia/Shanghai', now, withShareLink: command === 'preview' || Boolean(shareBase),
   });
-  console.log(`SESSION=${session.key} MATCHES=${session.matches.length} CHARS=${message.length}`);
-  if (command === 'preview') { console.log(message); return; }
+  console.log(`SESSION=${session.key} MATCHES=${session.matches.length} CHARS=${rendered.text.length}`);
+  if (command === 'preview') { console.log(rendered.text); return; }
   const subscription = await subscriptionFor();
   const check = await checkReviewTarget(gateway, subscription, sessionTeam.tenantId);
   if (!check.ok) throw new Error(`target check failed: ${check.reason}${check.groupName ? ` (group is "${check.groupName}")` : ''}`);
-  await sendReview(gateway, subscription, message, reviewIdempotencyKey(session.key, subscription));
-  console.log(`SESSION_REVIEW=sent group="${check.groupName}"`);
+  const text = attachShareLink({ store, squadId: team.id, session, text: rendered.text, presentationJson: rendered.presentationJson, now, ...(shareBase ? { shareBaseUrl: shareBase } : {}) });
+  const resend = option(args, 'resend');
+  await sendReview(gateway, subscription, text, `${reviewIdempotencyKey(session.key, subscription)}${resend ? `:resend:${resend}` : ''}`);
+  if (record) {
+    store.putSessionReview({
+      squadId: team.id, sessionKey: session.key, matchIds: session.matches.map((item) => item.match.matchId), lastMatchEndMs: session.lastEndMs,
+      status: 'sent', detail: `manual${resend ? `:${resend}` : ''} group:${check.groupName}`, message: rendered.text, attempts: 1, updatedAt: now.toISOString(),
+    });
+  }
+  console.log(`SESSION_REVIEW=sent group="${check.groupName}"${record ? ' ledger=recorded' : ''}`);
+  const link = text.match(/https?:\/\/\S+\/s\/[A-Za-z0-9_-]{22}/u)?.[0];
+  if (link) console.log(`SHARE_URL=${link}`);
 }
 
 main().catch((error: unknown) => {

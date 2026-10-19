@@ -210,3 +210,24 @@ The runner compares the frozen `legacy-any-tracked-knock-v0` baseline with `tact
 - The match drilldown links timelines and tactical diagnoses to raw event references. Human battle reviews (`correct`, `insufficient_inference`, `wrong`, `unknown`) are stored in the separate local experiment database and never alter rules automatically.
 - Experiment records go only to the separate local experiment database.
 - Do not commit source snapshots, experiment databases, player phone numbers, or credentials.
+
+## Review share links (`/s/<token>`)
+
+A session review delivered to the group links to `/s/<token>`, which opens a
+read-only page for that review and its matches without the password. The Lab
+issues the token right before each send and stores only its SHA-256 (with the
+match ids and the review as sent) in `review_shares`; the page reads that table
+from the snapshot. A link that is newer than the snapshot shows "正在同步…" and
+asks for a snapshot-only refresh (no PUBG fetch, at most every 2 minutes).
+
+The link sets a separate `amadeus_intelligence_lab_share` cookie (HttpOnly,
+Secure, SameSite=Strict, lifetime = the share's) and the client drops the token
+from the address bar. With only that cookie a visitor reaches `/share`,
+`/api/share/view`, `/api/share/matches/<id>/story` for the shared matches and
+map images; every other API path answers 403, `/` is still the login page, and
+the cookie is never a login. Opposing teams appear as 敌方 A, B, … and their
+account ids are removed. Links expire after 7 days. To close links at once,
+write `share-revoked.json` in the state directory:
+`{"sessionKeys": ["pubg-session:…"], "tokenHashes": [], "disabled": false}`
+(`"disabled": true` closes all). `PUBG_INTELLIGENCE_REFRESH_SCRIPTS=off` keeps a
+test or a copy of the page from ever starting the refresh scripts.

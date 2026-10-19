@@ -48,13 +48,15 @@ test('the full review renders every section in order with local times and map na
   assert.match(text, /7 场排位 · 艾伦格×4 米拉玛×2 泰戈/u);
   assert.match(text, /\*名次\* #5 #12 #2 #18 #7 #3 🏆/u);
   assert.match(text, /场均名次 6\.9\(你们平时 11\.2\)/u);
-  const order = ['*一句话', '*名次*', '*讲真话*', '*队员*', '*最好一局*', '*最差一局*', '*下次试试*', '📎 6/7'];
+  const order = ['*一句话', '*名次*', '*结论*', '*队员*', '*最好一局*', '*最差一局*', '*下次试试*', '📎 6/7'];
   const positions = order.map((marker) => text.indexOf(marker));
   assert.ok(positions.every((position) => position >= 0), `missing section in:\n${text}`);
   assert.deepEqual([...positions].sort((a, b) => a - b), positions);
   assert.match(text, /SG_007 击倒 9 · 淘汰 6 · 伤害 980\/场 ⭐/u);
   assert.match(text, /kim_kk .*⚠ 早出局 3 次/u);
   assert.ok(text.length <= SESSION_REVIEW_MAX_CHARS);
+  assert.ok(!text.includes('讲真话'));
+  assert.match(text, /🔗 https:\/\/pubg\.example\.test\/\?match=m7$/u);
 });
 
 test('a long review drops whole sections from the least important up and never cuts the core', () => {
@@ -63,7 +65,7 @@ test('a long review drops whole sections from the least important up and never c
   assert.ok(!trimmed.includes('*最差一局*'));
   assert.ok(trimmed.includes('*最好一局*'));
   const tight = renderSessionReview(review(), { maxChars: 420 });
-  for (const kept of ['*🎮 时段复盘', '*一句话', '*名次*', '*讲真话*', 'https://pubg.example.test/?match=m7']) assert.ok(tight.includes(kept), `${kept} dropped:\n${tight}`);
+  for (const kept of ['*🎮 时段复盘', '*一句话', '*名次*', '*结论*', 'https://pubg.example.test/?match=m7']) assert.ok(tight.includes(kept), `${kept} dropped:\n${tight}`);
   for (const dropped of ['*最差一局*', '*最好一局*', '*队员*']) assert.ok(!tight.includes(dropped), `${dropped} kept:\n${tight}`);
   // Every line that survives is a whole line from the full render.
   const fullLines = new Set(full.split('\n'));

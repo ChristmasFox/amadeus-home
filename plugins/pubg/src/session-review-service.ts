@@ -54,7 +54,7 @@ export function registerSessionReviewWorker(api: OpenClawPluginApi): void {
             gateway: api.runtime.gateway as unknown as ReportGateway,
             ...(config.ownerNotificationOutboxDir ? { ownerOutboxDir: config.ownerNotificationOutboxDir } : {}),
             timezone: config.timezone ?? 'Asia/Shanghai',
-            ...(config.reviewPageBaseUrl ? { pageUrl: config.reviewPageBaseUrl } : {}),
+            ...(config.reviewPageBaseUrl ? { shareBaseUrl: config.reviewPageBaseUrl } : {}),
             now: new Date(),
             log: (line) => api.logger.info(line),
           });
