@@ -18,7 +18,9 @@ export function renderGroupRoster(entries: readonly AddressingRecord[]): string 
   if (!entries.length) return undefined;
   const lines = entries.map((entry) => {
     const accounts = entry.externalAccounts.filter((account) => account.provider === 'pubg').map((account) => account.externalId);
-    const who = accounts.length ? `${entry.displayName}（PUBG ${accounts.join('、')}）` : entry.displayName;
+    // A display name the member rejected never appears in the prompt; the PUBG account identifies them instead.
+    const name = entry.avoid.includes(entry.displayName) ? undefined : entry.displayName;
+    const who = accounts.length ? `${name ?? ''}（PUBG ${accounts.join('、')}）` : (name ?? entry.personId);
     return `- ${who}：称呼「${entry.addressAs}」${entry.avoid.length ? `；不要叫：${entry.avoid.join('、')}` : ''}${entry.note ? `；${entry.note}` : ''}`;
   });
   return [

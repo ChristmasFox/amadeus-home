@@ -24,6 +24,12 @@ test('the roster names each member, the agreed name, names to avoid and the PUBG
   }])!;
   assert.match(text, /- 胶（PUBG SG_LabmemNo008）：称呼「打工战士」；不要叫：常宽；形象是铃羽/u);
   assert.doesNotMatch(text, /steam/u);
+  const rejected = renderGroupRoster([{
+    personId: 'ye-zai', displayName: '野仔', scope: 'group', scopeId: GROUP, addressAs: '大爹', avoid: ['野仔', '野种'],
+    externalAccounts: [{ provider: 'pubg', externalId: 'kim_kkl' }],
+  }])!;
+  assert.match(rejected, /- （PUBG kim_kkl）：称呼「大爹」；不要叫：野仔、野种/u);
+  assert.doesNotMatch(rejected.replace('不要叫：野仔、野种', ''), /野仔|野种/u);
 });
 
 test('every turn of that group gets its roster, even after a reset; other conversations get nothing', async () => {
