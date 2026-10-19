@@ -703,7 +703,7 @@ export class SqlitePubgRepository implements SessionReviewLedger, ReviewShareSto
 function shareRecord(row: Record<string, unknown>): ReviewShareRecord {
   return {
     tokenHash: String(row.token_hash),
-    kind: String(row.kind) === 'match' ? 'match' : 'session',
+    kind: String(row.kind) === 'match' ? 'match' : String(row.kind) === 'query' ? 'query' : 'session',
     squadId: String(row.squad_id),
     sessionKey: String(row.session_key),
     matchIds: jsonValue<string[]>(row.match_ids_json, []),

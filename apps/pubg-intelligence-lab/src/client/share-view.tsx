@@ -29,12 +29,17 @@ interface ShareMatch {
   damage?: number;
 }
 
-interface ShareView {
-  kind: 'session' | 'match';
-  expiresAt: string;
-  review: ShareReview;
-  matches: ShareMatch[];
+/** A shared query answer (今日战绩 and the like): the answer text exactly as it was sent. */
+interface ShareQuery {
+  title: string;
+  displayText: string;
+  dataUpdatedAt: string | null;
+  timezone: string;
 }
+
+type ShareView =
+  | { kind: 'session' | 'match'; expiresAt: string; review: ShareReview; matches: ShareMatch[] }
+  | { kind: 'query'; expiresAt: string; review: ShareQuery; matches: ShareMatch[] };
 
 const MAP_NAMES: Record<string, string> = {
   Baltic_Main: '艾伦格', Erangel_Main: '艾伦格', Desert_Main: '米拉玛', Tiger_Main: '泰戈', Neon_Main: '荣都', Kiki_Main: '帝斯顿',
@@ -54,7 +59,16 @@ function rankText(rank: number | null | undefined): string {
 
 const TAGS: Record<string, string> = { top_damage: '输出最高', early_outs: '早出局多', medic: '救援最多' };
 
-function ReviewCard({ view }: { view: ShareView }) {
+function QueryCard({ query }: { query: ShareQuery }) {
+  return (
+    <section className="share-card">
+      <div className="share-kicker">战绩查询{query.dataUpdatedAt ? ` · 数据更新于 ${clock(query.dataUpdatedAt, query.timezone)}` : ''}</div>
+      <pre className="share-query-text">{query.displayText}</pre>
+    </section>
+  );
+}
+
+function ReviewCard({ view }: { view: Extract<ShareView, { kind: 'session' | 'match' }> }) {
   const { review } = view;
   const single = view.kind === 'match';
   const sameDay = clock(review.startAt, review.timezone).split(' ')[0] === clock(review.endAt, review.timezone).split(' ')[0];
@@ -136,8 +150,8 @@ export function ShareApp() {
   return (
     <div className="share-shell">
       <header className="share-top"><div className="brand-mark">P</div><div><strong>PUBG 小队复盘</strong><small>只读分享</small></div></header>
-      <ReviewCard view={view} />
-      {view.kind === 'session' && (
+      {view.kind === 'query' ? <QueryCard query={view.review} /> : <ReviewCard view={view} />}
+      {view.kind !== 'match' && (
         <section className="share-list">
           <h2>这几场 <small>点开看每一局的过程</small></h2>
           {view.matches.map((match, index) => (
@@ -155,7 +169,7 @@ export function ShareApp() {
           <MatchStoryView data={story} loading={storyLoading} placement={selectedMatch.placement ?? null} kills={selectedMatch.kills ?? 0} damage={selectedMatch.damage ?? 0} />
         </section>
       )}
-      <footer className="share-foot">只读分享 · 仅包含本次复盘的 {view.matches.length} 场 · {clock(view.expiresAt, view.review.timezone)} 前有效 · 敌方队伍已匿名</footer>
+      <footer className="share-foot">只读分享 · 仅包含{view.kind === 'query' ? '这次查询' : '本次复盘'}的 {view.matches.length} 场 · {clock(view.expiresAt, view.review.timezone ?? 'Asia/Shanghai')} 前有效 · 敌方队伍已匿名</footer>
     </div>
   );
 }

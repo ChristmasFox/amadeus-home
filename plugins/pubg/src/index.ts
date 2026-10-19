@@ -6,6 +6,7 @@ import { Static, Type, type TSchema as TypeSchema } from 'typebox';
 import { openClawConversationAdapter } from './adapters/openclaw.js';
 import { registerPubgEvidenceGuard } from './evidence-guard.js';
 import { registerSessionReviewWorker } from './session-review-service.js';
+import { appendQueryShareLink } from './query-share.js';
 import { IdentityStore, type IdentityResolution, type PersonSnapshot } from '@agent/identity';
 import {
   adaptWorldlineNotification,
@@ -689,7 +690,9 @@ function presentationRangeFor(dataSourceRange: DataSourceRange): PubgSourceRange
   return { from: dataSourceRange.from, to: dataSourceRange.to, ...(segments.length ? { segments } : {}) };
 }
 
-function jsonToolResult(name: string, envelope: ToolEnvelope, fallbackTimezone = 'Asia/Shanghai'): ReturnType<typeof jsonResult> {
+type ShareAppender = (envelope: ToolEnvelope, displayText: string, timezone: string) => string;
+
+function jsonToolResult(name: string, envelope: ToolEnvelope, fallbackTimezone = 'Asia/Shanghai', share?: ShareAppender): ReturnType<typeof jsonResult> {
   const dataSourceRange = dataSourceRangeFor(envelope, fallbackTimezone);
   const displayTimezone = dataSourceRange.timezone ?? fallbackTimezone;
   const displayEnvelope = decorateDisplayTimes(envelope, displayTimezone, envelope.asOf) as Record<string, unknown>;
@@ -725,7 +728,36 @@ function jsonToolResult(name: string, envelope: ToolEnvelope, fallbackTimezone =
     displayTimezone,
     dataSourceRange,
     presentation: presentation.presentation,
-    displayText: presentation.displayText,
+    displayText: share ? share(envelope, presentation.displayText, displayTimezone) : presentation.displayText,
+  });
+}
+
+const shareStores = new Map<string, SqlitePubgRepository>();
+const shareSquads = new Map<string, string>();
+
+/** Appends the share link to query answers when the plugin knows the Intelligence Lab origin (reviewPageBaseUrl). */
+function queryShareFor(name: string, config: PluginConfig): ShareAppender | undefined {
+  const shareBaseUrl = configString(config, 'reviewPageBaseUrl', 'PUBG_REVIEW_PAGE_BASE_URL');
+  if (!shareBaseUrl) return undefined;
+  const databasePath = configString(config, 'databasePath', 'PUBG_DATABASE_PATH') ?? '/data/pubg.sqlite';
+  const teamConfigFile = configString(config, 'teamConfigFile', 'PUBG_TEAM_CONFIG_FILE');
+  const squadKey = teamConfigFile ?? '';
+  if (!shareSquads.has(squadKey)) shareSquads.set(squadKey, loadTeamConfig({ path: teamConfigFile, required: true }).id);
+  return (envelope, displayText, timezone) => appendQueryShareLink({
+    toolName: name,
+    status: envelope.status,
+    matchIds: (envelope.evidenceRefs as { matchIds?: unknown } | undefined)?.matchIds,
+    displayText,
+    dataUpdatedAt: envelope.asOf ?? null,
+    timezone,
+    squadId: shareSquads.get(squadKey)!,
+    shareBaseUrl,
+    store: () => {
+      let store = shareStores.get(databasePath);
+      if (!store) { store = new SqlitePubgRepository(databasePath); shareStores.set(databasePath, store); }
+      return store;
+    },
+    now: new Date(),
   });
 }
 
@@ -754,7 +786,7 @@ function makeTool<Schema extends TypeSchema>(
           ? await prepareIdentitySubject(service, config, input as Static<Schema> & IdentitySubjectInput, toolContext, sessionId, signal)
           : stripIdentityFields(input as Static<Schema> & IdentitySubjectInput);
         if ('status' in prepared && prepared.status === 'error') return jsonToolResult(name, prepared, displayTimezone);
-        return jsonToolResult(name, await execute(service, prepared as Static<Schema>, sessionId, signal), displayTimezone);
+        return jsonToolResult(name, await execute(service, prepared as Static<Schema>, sessionId, signal), displayTimezone, queryShareFor(name, config));
       } catch (error) {
         return jsonToolResult(name, runtimeError(error), configString(config, 'timezone', 'PUBG_TIMEZONE') ?? 'Asia/Shanghai');
       }

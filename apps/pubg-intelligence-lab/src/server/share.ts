@@ -91,6 +91,11 @@ const escapeHtml = (value: string) => value.replace(/[&<>"']/gu, (char) => ({ '&
 
 function shareTitle(record: ReviewShareRecord): { title: string; description: string } {
   try {
+    if (record.kind === 'query') {
+      const query = JSON.parse(record.presentationJson) as { title?: string; displayText?: string };
+      const lines = (query.displayText ?? '').split('\n').map((line) => line.trim()).filter(Boolean);
+      return { title: `${query.title ?? 'PUBG 战绩'} · ${record.matchIds.length} 场`, description: lines[1] ?? 'PUBG 战绩查询' };
+    }
     const review = JSON.parse(record.presentationJson) as { startAt?: string; matchCount?: number; headline?: string; timezone?: string };
     const date = review.startAt ? new Intl.DateTimeFormat('zh-CN', { timeZone: review.timezone ?? 'Asia/Shanghai', month: 'numeric', day: 'numeric' }).format(new Date(review.startAt)) : '';
     const title = record.kind === 'match' ? `单局复盘 · ${date}` : `时段复盘 · ${date} · ${review.matchCount ?? record.matchIds.length} 场排位`;

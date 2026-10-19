@@ -141,6 +141,10 @@ Tool rules:
   and canonical `displayText`. Use `displayText` as the factual response block
   and preserve the raw envelope/evidence alongside it; do not reconstruct a
   second user-facing summary from raw JSON.
+- When `displayText` ends with a `🔗 https://…/s/…` line, that is the no-login
+  share page for exactly the matches in this answer. Keep that line verbatim as
+  the last line of the reply; never edit, shorten, re-host or invent such a link,
+  and never add one when the tool result has none.
 - For a review, use the tool's validated `presentation` contract as the factual
   response boundary. Render its `dataUpdatedAt`/`dataUpdatedAtLocal` and
   `dataSourceRange`/`fromLocal` with the presentation formatter: same-local-day

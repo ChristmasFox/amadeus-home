@@ -69,6 +69,10 @@ test('a share link opens only its own review and matches, without the password, 
     const now = new Date();
     const review = { type: 'pubg_session_review', startAt: matches[2]!.createdAt, endAt: matches[3]!.createdAt, timezone: 'Asia/Shanghai', matchCount: 2, headline: '名次比平时好,开局很稳。' };
     const session = issueReviewShare(repository, { squadId: 'squad', sessionKey: 'pubg-session:squad:share-3', matchIds: ['share-3', 'share-4'], presentationJson: JSON.stringify(review), now });
+    const query = issueReviewShare(repository, {
+      squadId: 'squad', sessionKey: 'pubg-query:1', matchIds: ['share-2', 'share-4'], kind: 'query', now,
+      presentationJson: JSON.stringify({ type: 'pubg_query_share', version: 1, toolName: 'pubg_query_stats', title: '📊 今日战绩', displayText: '📊 今日战绩\n场次 2 · 吃鸡 0', dataUpdatedAt: now.toISOString(), timezone: 'Asia/Shanghai', matchCount: 2 }),
+    });
     const expired = issueReviewShare(repository, { squadId: 'squad', sessionKey: 'pubg-session:squad:share-1', matchIds: ['share-1'], presentationJson: '{}', now: new Date(now.getTime() - 8 * 24 * 60 * 60_000) });
     repository.close();
     const archiveDir = join(root, 'archive');
@@ -113,6 +117,16 @@ test('a share link opens only its own review and matches, without the password, 
     assert.ok(story.story.enemies.every((enemy) => enemy.id.startsWith('enemy-')));
     assert.ok(!/"e[12]"|account\./u.test(storyReply.body), 'no opposing account ids leak');
     assert.equal((await call(url, '/share', cookie)).status, 200);
+
+    // A shared query answer shows its text as sent and only its own matches.
+    const queryPage = await call(url, `/s/${query.token}`);
+    assert.match(queryPage.body, /<title>📊 今日战绩 · 2 场<\/title>/u);
+    assert.match(queryPage.body, /og:description" content="场次 2 · 吃鸡 0"/u);
+    const queryCookie = `${SHARE_COOKIE}=${query.token}`;
+    const queryView = JSON.parse((await call(url, '/api/share/view', queryCookie)).body) as { kind: string; review: { displayText: string }; matches: Array<{ matchId: string }> };
+    assert.deepEqual([queryView.kind, queryView.review.displayText, queryView.matches.map((match) => match.matchId)], ['query', '📊 今日战绩\n场次 2 · 吃鸡 0', ['share-2', 'share-4']]);
+    assert.equal((await call(url, '/api/share/matches/share-3/story', queryCookie)).status, 404);
+    assert.equal((await call(url, '/api/bootstrap', queryCookie)).status, 403);
 
     // Matches outside the share, and the rest of the API, stay closed to the share cookie.
     assert.equal((await call(url, '/api/share/matches/share-1/story', cookie)).status, 404);

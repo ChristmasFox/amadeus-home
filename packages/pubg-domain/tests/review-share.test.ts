@@ -41,3 +41,10 @@ test('issuing again revokes the earlier link of the same session only', () => {
   assert.equal(repository.latestReviewShare('squad', 's1')?.tokenHash, second.record.tokenHash);
   repository.close();
 });
+
+test('a query result can be shared as its own kind', () => {
+  const repository = new SqlitePubgRepository(':memory:');
+  const { token } = issueReviewShare(repository, { squadId: 'squad', sessionKey: 'pubg-query:1', matchIds: ['m1'], presentationJson: '{}', now: NOW, kind: 'query' });
+  assert.equal(repository.getReviewShare(reviewShareTokenHash(token))?.kind, 'query');
+  repository.close();
+});

@@ -5,7 +5,8 @@ export const REVIEW_SHARE_TTL_MS = 7 * 24 * 60 * 60_000;
 /** 128 random bits, base64url: 22 characters. */
 export const REVIEW_SHARE_TOKEN = /^[A-Za-z0-9_-]{22}$/u;
 
-export type ReviewShareKind = 'session' | 'match';
+/** A delivered session review, a one-match review, or a query result (今日战绩 and other answers). */
+export type ReviewShareKind = 'session' | 'match' | 'query';
 
 /**
  * One shared review: the matches it may show and the review exactly as it was sent. Only the token's SHA-256 is
@@ -54,12 +55,14 @@ export function issueReviewShare(store: ReviewShareStore, input: {
   presentationJson: string;
   now: Date;
   ttlMs?: number;
+  /** Defaults to a session or one-match review by the number of matches. */
+  kind?: ReviewShareKind;
 }): { token: string; record: ReviewShareRecord } {
   store.revokeReviewShares(input.squadId, input.sessionKey, input.now.toISOString());
   const token = newReviewShareToken();
   const record: ReviewShareRecord = {
     tokenHash: reviewShareTokenHash(token),
-    kind: input.matchIds.length === 1 ? 'match' : 'session',
+    kind: input.kind ?? (input.matchIds.length === 1 ? 'match' : 'session'),
     squadId: input.squadId,
     sessionKey: input.sessionKey,
     matchIds: [...input.matchIds],
