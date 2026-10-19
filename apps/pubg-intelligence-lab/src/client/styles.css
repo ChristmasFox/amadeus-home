@@ -1185,3 +1185,5 @@ button.av-row:hover,.av-row.active{background:#142120}
 .share-query-player-meta{font:12px/1.55 var(--mono);color:#9aa9a4}
 .share-query-totals{margin:12px 0 0;font:13px/1.55 Inter,sans-serif;color:#c3d0cb;border-top:1px solid #23312f;padding-top:10px}
 @media(max-width:560px){.share-query-gauges{grid-template-columns:repeat(2,1fr)}}
+
+html.is-share,html.is-share body,html.is-share #root{height:auto;min-height:100vh;overflow:visible}html.is-share body{overflow-y:auto}
