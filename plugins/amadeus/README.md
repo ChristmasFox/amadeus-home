@@ -31,5 +31,12 @@ Longbridge trading-day/session facts for validity, and sends only the structured
 notification returned by the deterministic tool. The scheduled open/close jobs
 use the same WhatsApp owner outbox as other Amadeus reports.
 
+WhatsApp and Telegram replies settle through one typed delivery boundary. A
+native tool can declare `replyLink: {kind: "share", url}` on a successful result;
+when its origin is listed in `replyLinkOrigins` and the path is a share page
+(`/s/<22-char token>`), the boundary makes that exact link the reply's last line
+if the agent left it out, and drops any other share-shaped link the model wrote.
+The tool decides which answers carry a link; there is no keyword routing.
+
 All credentials, SSH keys, owner identity, and media paths are deployment
 configuration. They are not part of this package or the repository.

@@ -12,6 +12,8 @@ const FACT_TOOLS = new Set([
 const REQUEST = /PUBG|绝地求生|吃鸡|战绩|对局|几局|击杀|KD|K\/D/u;
 const FACT = /PUBG|绝地求生|吃鸡|战绩|对局|击杀|伤害|KD|K\/D|no_matches|\d+\s*(?:局|杀|场|次)|一局都没有|没有.{0,8}战绩/u;
 const TEAM = /全队|整队|队伍|小队|我们|咱们|大家|所有人|全员|team|squad/iu;
+// A bare record request names no one ("昨日战绩", "@Kurisu 今天战绩"); in the squad it means the whole team.
+const BARE_RECORD = /^(?:\s|@\S+\s*)*(?:今天|今日|昨天|昨日|前天|本周|这周|上周|最近)?\s*(?:的)?\s*(?:PUBG|吃鸡)?\s*(?:战绩|战况)\s*[?？!！。.~]*\s*$/iu;
 const FOLLOW_UP = /^(?:\s|@\S+\s*)*(?:刷新|更新|再查|查最新|最新|重新查)/u;
 const SAFE_REPLY = '这次 PUBG 战绩没有完成本轮数据核验，我不能确认结果。请再试一次。';
 
@@ -55,8 +57,9 @@ export function assessPubgEvidence(messages: unknown, finalText: string): Eviden
     && FACT_TOOLS.has(message.toolName ?? '') && ['ok', 'partial', 'no_matches'].includes(resultStatus(message) ?? ''));
   if (!calls.length || !success) return 'missing_data';
   // A squad query cannot substantiate a person-specific request. The user must
-  // explicitly ask for the team; nickname resolution remains owned by the Skills.
-  if (!TEAM.test(request) && calls.some((call) => {
+  // ask for the team explicitly or name no one at all (a bare 战绩 request);
+  // nickname resolution remains owned by the Skills.
+  if (!TEAM.test(request) && !BARE_RECORD.test(request) && calls.some((call) => {
     const args = call.arguments;
     return Boolean(args && typeof args === 'object' && (args as { team?: unknown }).team === true);
   })) return 'wrong_scope';

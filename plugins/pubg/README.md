@@ -80,3 +80,14 @@ Inside the OpenClaw container the CLI is bundled as
 `/app/dist/extensions/pubg/dist/session-review.js`; there it can issue a share
 link (`--share-base <origin>`), record the send in the ledger (`--record`) and
 send a deliberate second copy of a session (`--resend <tag>`).
+
+### Share links on record answers
+
+With `reviewPageBaseUrl` set, record queries that are built from concrete
+matches (`pubg_query_stats`, `pubg_compare_stats`, `pubg_search_matches`,
+`pubg_get_match`, `pubg_get_review_facts`, `pubg_get_period_review`) end their
+`displayText` with `🔗 <origin>/s/<token>` for exactly those matches (7 days,
+enemies anonymised). The 误伤 query (`pubg_query_team_damage`), operational tools,
+errors and results without matches get no link. The same link is declared as
+`replyLink: {kind: "share", url}`; the amadeus delivery boundary appends it when
+the agent retold the answer without it (see the amadeus README).

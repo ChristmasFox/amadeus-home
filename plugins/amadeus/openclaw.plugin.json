@@ -43,7 +43,8 @@
       "vpsSshKeyFile": { "type": "string", "maxLength": 1024 },
       "vpsSshKnownHostsFile": { "type": "string", "maxLength": 1024 },
       "vpsUsageStateFile": { "type": "string", "maxLength": 1024 },
-      "vpsAccountMapFile": { "type": "string", "maxLength": 1024 }
+      "vpsAccountMapFile": { "type": "string", "maxLength": 1024 },
+      "replyLinkOrigins": { "type": "array", "maxItems": 8, "items": { "type": "string", "maxLength": 256 } }
     },
     "additionalProperties": false
   },

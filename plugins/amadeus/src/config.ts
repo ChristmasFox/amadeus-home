@@ -44,10 +44,24 @@ export interface AmadeusConfig {
   vpsSshKnownHostsFile: string;
   vpsUsageStateFile: string;
   vpsAccountMapFile?: string;
+  /** Origins whose share links a tool may declare as the reply's last line (see reply-links.ts). */
+  replyLinkOrigins: string[];
 }
 
 function stringValue(value: unknown, fallback: string): string {
   return typeof value === 'string' && value.trim() ? value.trim() : fallback;
+}
+
+function originList(value: unknown): string[] {
+  const items = Array.isArray(value) ? value : typeof value === 'string' ? value.split(',') : [];
+  const origins: string[] = [];
+  for (const item of items) {
+    try {
+      const url = new URL(String(item).trim());
+      if (url.protocol === 'https:') origins.push(url.origin);
+    } catch { /* ignore malformed entries */ }
+  }
+  return [...new Set(origins)];
 }
 
 function integerValue(value: unknown, fallback: number): number {
@@ -113,6 +127,7 @@ export function configFor(api: OpenClawPluginApi): AmadeusConfig {
     vpsSshKnownHostsFile: file('vpsSshKnownHostsFile', 'VPS_SSH_KNOWN_HOSTS_FILE', '/run/secrets/vps_ssh_known_hosts'),
     vpsUsageStateFile: file('vpsUsageStateFile', 'VPS_USAGE_STATE_FILE', '/data/vps-usage-state.json'),
     ...(vpsAccountMapFile ? { vpsAccountMapFile } : {}),
+    replyLinkOrigins: originList(value.replyLinkOrigins ?? env('AMADEUS_REPLY_LINK_ORIGINS')),
   };
 }
 

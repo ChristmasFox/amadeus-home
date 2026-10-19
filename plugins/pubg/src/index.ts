@@ -187,6 +187,10 @@ const ToolOutputSchema = Type.Object({
     calculation: Type.String(),
   }, { additionalProperties: true }),
   resultSetId: Type.Optional(Type.String({ maxLength: 256 })),
+  replyLink: Type.Optional(Type.Object({
+    kind: Type.Literal('share'),
+    url: Type.String({ maxLength: 512 }),
+  }, { additionalProperties: false })),
   error: Type.Optional(Type.Object({
     code: Type.String({ maxLength: 128 }),
     retryable: Type.Boolean(),
@@ -690,7 +694,7 @@ function presentationRangeFor(dataSourceRange: DataSourceRange): PubgSourceRange
   return { from: dataSourceRange.from, to: dataSourceRange.to, ...(segments.length ? { segments } : {}) };
 }
 
-type ShareAppender = (envelope: ToolEnvelope, displayText: string, timezone: string) => string;
+type ShareAppender = (envelope: ToolEnvelope, displayText: string, timezone: string) => { text: string; url?: string };
 
 function jsonToolResult(name: string, envelope: ToolEnvelope, fallbackTimezone = 'Asia/Shanghai', share?: ShareAppender): ReturnType<typeof jsonResult> {
   const dataSourceRange = dataSourceRangeFor(envelope, fallbackTimezone);
@@ -720,6 +724,7 @@ function jsonToolResult(name: string, envelope: ToolEnvelope, fallbackTimezone =
     });
     presentation = { presentation: status, displayText: renderPubgStatus(status, { timezone: displayTimezone, now: envelope.asOf }) };
   }
+  const shared = share ? share(envelope, presentation.displayText, displayTimezone) : { text: presentation.displayText };
   return jsonResult({
     ...displayEnvelope,
     asOfLocal: formatLocalTime(envelope.asOf, displayTimezone) ?? envelope.asOf,
@@ -728,7 +733,9 @@ function jsonToolResult(name: string, envelope: ToolEnvelope, fallbackTimezone =
     displayTimezone,
     dataSourceRange,
     presentation: presentation.presentation,
-    displayText: share ? share(envelope, presentation.displayText, displayTimezone) : presentation.displayText,
+    displayText: shared.text,
+    // The amadeus delivery boundary ends the reply with this exact link even when the agent retells the answer.
+    ...(shared.url ? { replyLink: { kind: 'share', url: shared.url } } : {}),
   });
 }
 

@@ -6,6 +6,8 @@ import { validateDeliveryEnvelope, type DeliveryOrigin } from './delivery-envelo
 import { deliveryRuns } from './delivery-runs.js';
 import { registerDeliveryBoundary, type DeliveryBoundaryOptions } from './delivery-boundary.js';
 import { settleTelegramDelivery } from './telegram-runtime.js';
+import { configFor } from './config.js';
+import { turnReplyLink } from './reply-links.js';
 
 export const WHATSAPP_VOICE_RUNS_GLOBAL = '__amadeusWhatsAppVoiceRuns20260925';
 export function hasActiveWhatsAppVoiceLease(channel: unknown, sessionKey: unknown): boolean {
@@ -70,6 +72,9 @@ export function registerVoiceReplyPrompt(api: OpenClawPluginApi, boundaryOptions
       // Persist only bounded correlation metadata. The malformed model
       // payload can contain user data or secrets and must never enter logs.
       warnInvalidStructuredOutput(event.runId, envelope, event.lastAssistantMessage);
+      let origins: string[] = [];
+      try { origins = configFor(api).replyLinkOrigins; } catch { /* no link restoration without readable config */ }
+      deliveryRuns.setReplyLink(event.runId, turnReplyLink(event.messages, origins));
     }
   });
   api.on('reply_payload_sending', async (event, context) => {

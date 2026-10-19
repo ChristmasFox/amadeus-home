@@ -1,6 +1,7 @@
 import { createDeliveryEnvelope, type AttachmentPart, type DeliveryContext, type DeliveryEnvelope } from './delivery-envelope.js';
 import { decodeAgentReply } from './delivery-decoder.js';
 import { normalizeImageCaption } from './image-caption.js';
+import { applyReplyLink } from './reply-links.js';
 
 export type MediaCompletion = Readonly<{
   taskId: string;
@@ -12,7 +13,7 @@ export type MediaCompletion = Readonly<{
 
 /** Per-run accumulator is part of settlement, never an automatic media sender. */
 export class DeliveryRuns {
-  private runs = new Map<string, { context: DeliveryContext; envelope?: DeliveryEnvelope; raw?: unknown; decodeStatus?: 'structured' | 'silent' | 'malformed'; prepared?: DeliveryEnvelope; preparedCaptionSource?: 'native_completion' | 'none'; preparing?: Promise<DeliveryEnvelope>; jobs: Promise<readonly AttachmentPart[]>[]; mediaCompletion?: MediaCompletion | undefined }>();
+  private runs = new Map<string, { context: DeliveryContext; envelope?: DeliveryEnvelope; raw?: unknown; decodeStatus?: 'structured' | 'silent' | 'malformed'; prepared?: DeliveryEnvelope; preparedCaptionSource?: 'native_completion' | 'none'; preparing?: Promise<DeliveryEnvelope>; jobs: Promise<readonly AttachmentPart[]>[]; mediaCompletion?: MediaCompletion | undefined; replyLink?: string | undefined }>();
   private sessions = new Map<string, string>();
   private mediaCompletions = new Map<string, MediaCompletion>();
   private mediaCompletionClaimants = new Map<string, string>();
@@ -87,6 +88,11 @@ export class DeliveryRuns {
     if (!run || run.envelope || run.prepared || run.preparing) return;
     run.context = { ...run.context, origin };
   }
+  /** The share link this turn's tool result declared; settlement guarantees it ends the reply. */
+  setReplyLink(runId: string, link: string | undefined): void {
+    const run = this.runs.get(runId);
+    if (run && !run.prepared && !run.preparing) run.replyLink = link;
+  }
   has(runId: string): boolean { return this.runs.has(runId); }
   runIdFor(sessionKey: string): string | undefined { return this.sessions.get(sessionKey); }
   channelFor(runId: string): string | undefined { return this.runs.get(runId)?.context.channel; }
@@ -145,8 +151,9 @@ export class DeliveryRuns {
         return run.prepared;
       }
       // Internal silence and malformed output never turn into raw protocol delivery.
-      const prepared = !unique.length || (envelope.silent && !envelope.fallbackReason) ? envelope
+      const withAssets = !unique.length || (envelope.silent && !envelope.fallbackReason) ? envelope
         : createDeliveryEnvelope({ ...envelope, silent: false, parts: [...envelope.parts, ...unique], source: 'tool_result' });
+      const prepared = applyReplyLink(withAssets, run.replyLink);
       run.prepared = prepared;
       return prepared;
     })();

@@ -26,6 +26,16 @@ test('person request and short refresh follow-up cannot use team=true', () => {
   assert.equal(assessPubgEvidence([user('今天全队战绩'), ...data], '今天 7 局 PUBG'), 'verified');
 });
 
+test('a bare record request names no one, so it is a whole-team request', () => {
+  const data = [call('pubg_query_stats', { team: true, refresh: true }), result('pubg_query_stats', 'ok')];
+  for (const request of ['昨日战绩', '今日战绩', '今天战绩？', '@Kurisu 昨天战绩', '昨天的PUBG战绩']) {
+    assert.equal(assessPubgEvidence([user(request), ...data], '昨天全队 12 局 PUBG'), 'verified', request);
+  }
+  for (const request of ['我昨天战绩', '猴昨日战绩', '今日猴的战绩']) {
+    assert.equal(assessPubgEvidence([user(request), ...data], '昨天全队 12 局 PUBG'), 'wrong_scope', request);
+  }
+});
+
 test('valid individual facts and safe uncertainty pass; unrelated conversation is untouched', () => {
   const data = [call('pubg_query_stats', { personIds: ['p1'], refresh: true }), result('pubg_query_stats', 'ok')];
   assert.equal(assessPubgEvidence([user('今日猴的战绩'), ...data], 'PUBG 今天 7 局'), 'verified');
