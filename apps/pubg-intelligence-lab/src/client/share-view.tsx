@@ -30,11 +30,20 @@ interface ShareMatch {
 }
 
 /** A shared query answer (今日战绩 and the like): the answer text exactly as it was sent. */
+interface ShareQueryPlayer {
+  label: string;
+  position?: number | null;
+  values: Record<string, string | number | null>;
+  titles: string[];
+}
+
 interface ShareQuery {
   title: string;
   displayText: string;
   dataUpdatedAt: string | null;
   timezone: string;
+  players?: ShareQueryPlayer[];
+  teamTotals?: string | null;
 }
 
 type ShareView =
@@ -59,11 +68,60 @@ function rankText(rank: number | null | undefined): string {
 
 const TAGS: Record<string, string> = { top_damage: '输出最高', early_outs: '早出局多', medic: '救援最多' };
 
+function metricNumber(key: string, raw: string | number | null | undefined): string {
+  if (raw === null || raw === undefined) return '—';
+  if (typeof raw === 'string') return raw;
+  if (!Number.isFinite(raw)) return '—';
+  if (Number.isInteger(raw)) return String(raw);
+  if (key === 'kd' || key === 'avg_kills' || key === 'top10_rate' || key === 'avg_rank') return (Math.round(raw * 100) / 100).toFixed(2);
+  return (Math.round(raw * 10) / 10).toFixed(1);
+}
+
+function QueryPlayerCard({ player }: { player: ShareQueryPlayer }) {
+  const values = player.values;
+  const kd = metricNumber('kd', values.kd ?? null);
+  const avgDamage = metricNumber('avg_damage', values.avg_damage ?? null);
+  const top10Rate = values.top10_rate === null || values.top10_rate === undefined
+    ? null
+    : `${Math.round(Number(values.top10_rate) * 1000) / 10}%`;
+  const wins = Number(values.wins ?? 0);
+  return (
+    <div className="share-query-player">
+      <div className="share-query-player-head">
+        <b>{player.label}</b>
+        {player.titles?.map((title) => <em key={title}>{title}</em>)}
+      </div>
+      <div className="share-query-gauges">
+        <div><b>{kd}</b><span>KD</span></div>
+        <div><b>{avgDamage}</b><span>场均伤害</span></div>
+        <div><b>{top10Rate ?? metricNumber('top10', values.top10 ?? null)}</b><span>{top10Rate ? '前十率' : '前十'}</span></div>
+        <div><b>{wins > 0 ? wins : metricNumber('matches', values.matches ?? null)}</b><span>{wins > 0 ? '吃鸡' : '场次'}</span></div>
+      </div>
+      <div className="share-query-player-meta">
+        {metricNumber('matches', values.matches ?? null)} 场 · {metricNumber('kills', values.kills ?? null)} 杀 · {metricNumber('assists', values.assists ?? null)} 助攻 · {metricNumber('damage', values.damage ?? null)} 伤害 · {metricNumber('dbnos', values.dbnos ?? null)} 击倒 · {metricNumber('revives', values.revives ?? null)} 救援
+        {values.longest_kill !== null && values.longest_kill !== undefined ? ` · 最远 ${metricNumber('longest_kill', values.longest_kill)}m` : ''}
+      </div>
+    </div>
+  );
+}
+
 function QueryCard({ query }: { query: ShareQuery }) {
+  const players = query.players ?? [];
+  const headline = query.displayText.split('\n').map((line) => line.trim()).filter(Boolean)[0] ?? query.title;
+  const summary = query.displayText.split('\n').map((line) => line.trim()).filter(Boolean)[1] ?? '';
   return (
     <section className="share-card">
       <div className="share-kicker">战绩查询{query.dataUpdatedAt ? ` · 数据更新于 ${clock(query.dataUpdatedAt, query.timezone)}` : ''}</div>
-      <pre className="share-query-text">{query.displayText}</pre>
+      <h1 className="share-headline">{headline}</h1>
+      {summary && <p className="share-plain">{summary}</p>}
+      {players.length > 0 ? (
+        <div className="share-query-players">
+          {players.map((player) => <QueryPlayerCard key={`${player.label}-${player.position ?? ''}`} player={player} />)}
+        </div>
+      ) : (
+        <pre className="share-query-text">{query.displayText}</pre>
+      )}
+      {query.teamTotals && <p className="share-query-totals">{query.teamTotals}</p>}
     </section>
   );
 }

@@ -85,12 +85,149 @@ const METRIC_LABELS: Record<string, string> = {
   performance_score: '表现分', chicken_index: '吃鸡指数',
 };
 
-function metricRow(row: PubgMetricRow, localizedMetrics: boolean): string {
-  const entries = Object.entries(row.values).map(([key, item]) => localizedMetrics
-    ? `${METRIC_LABELS[key] ?? userText(key)} ${value(item)}`
-    : `${userText(key)}=${value(item)}`);
-  const rank = row.position === undefined ? '' : `（序号：${value(row.position)}）`;
-  return `- ${userText(row.label)}${rank}${entries.length ? `：${entries.join('，')}` : ''}`;
+/** Keys that are internal bookkeeping and should not appear in user-facing 战绩 lines. */
+const HIDDEN_USER_METRICS = new Set(['denominatorZero', 'performance_score', 'chicken_index']);
+
+/** Prefer this order when composing a localized player line. */
+const RICH_METRIC_ORDER = [
+  'matches', 'kills', 'assists', 'damage', 'dbnos', 'revives', 'headshot_kills', 'top10', 'wins',
+  'kd', 'avg_damage', 'longest_kill', 'deaths', 'avg_kills', 'avg_rank', 'top10_rate', 'rank', 'survival_time',
+] as const;
+
+const TITLE_RULES: ReadonlyArray<{ key: string; title: string }> = [
+  { key: 'assists', title: '全队助攻王' },
+  { key: 'damage', title: '全队伤害第一' },
+  { key: 'dbnos', title: '破点王' },
+  { key: 'revives', title: '全队救援王' },
+];
+
+function numericMetric(value: string | number | null | undefined): number | null {
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  if (typeof value === 'string' && value.trim() && Number.isFinite(Number(value))) return Number(value);
+  return null;
+}
+
+/** Round floats for chat/share display; integers stay integers. */
+export function formatMetricNumber(key: string, raw: string | number | null): string {
+  if (raw === null) return '未知';
+  if (typeof raw === 'string') return userText(raw);
+  if (!Number.isFinite(raw)) return '未知';
+  if (Number.isInteger(raw)) return String(raw);
+  if (key === 'kd' || key === 'avg_kills' || key === 'top10_rate' || key === 'avg_rank' || key === 'rank') {
+    return (Math.round(raw * 100) / 100).toFixed(2);
+  }
+  // damage / avg_damage / longest_kill → one decimal
+  return (Math.round(raw * 10) / 10).toFixed(1);
+}
+
+function formatKd(raw: string | number | null): string {
+  if (raw === null) return '未知';
+  if (typeof raw === 'string') return userText(raw);
+  if (!Number.isFinite(raw)) return '未知';
+  return (Math.round(raw * 100) / 100).toFixed(2);
+}
+
+/** Deterministic honorary titles for clear team leaders (strict max, ties broken by row order). */
+export function assignStatTitles(rows: readonly PubgMetricRow[]): Map<number, string[]> {
+  const titles = new Map<number, string[]>();
+  if (rows.length < 2) return titles;
+  for (const rule of TITLE_RULES) {
+    let bestIndex = -1;
+    let bestValue = 0;
+    for (let index = 0; index < rows.length; index += 1) {
+      const amount = numericMetric(rows[index]!.values[rule.key] ?? null);
+      if (amount === null || amount <= 0) continue;
+      if (bestIndex < 0 || amount > bestValue) {
+        bestIndex = index;
+        bestValue = amount;
+      }
+    }
+    if (bestIndex < 0) continue;
+    const list = titles.get(bestIndex) ?? [];
+    list.push(rule.title);
+    titles.set(bestIndex, list);
+  }
+  return titles;
+}
+
+function richMetricFragment(key: string, raw: string | number | null, title?: string): string | null {
+  if (raw === null) return null;
+  const titleSuffix = title ? `（${title}）` : '';
+  switch (key) {
+    case 'matches': return `${formatMetricNumber(key, raw)} 场`;
+    case 'kills': return `${formatMetricNumber(key, raw)} 杀`;
+    case 'assists': return `${formatMetricNumber(key, raw)} 助攻${titleSuffix}`;
+    case 'damage': return `${formatMetricNumber(key, raw)} 伤害${titleSuffix}`;
+    case 'dbnos': return `${formatMetricNumber(key, raw)} 击倒${titleSuffix}`;
+    case 'revives': return `${formatMetricNumber(key, raw)} 救援${titleSuffix}`;
+    case 'headshot_kills': return `${formatMetricNumber(key, raw)} 爆头`;
+    case 'top10': return `${formatMetricNumber(key, raw)} 次前十`;
+    case 'wins': return Number(raw) > 0 ? `${formatMetricNumber(key, raw)} 吃鸡` : null;
+    case 'kd': return `KD ${formatKd(raw)}`;
+    case 'avg_damage': return `场均伤害 ${formatMetricNumber(key, raw)}`;
+    case 'longest_kill': return `最远击杀 ${formatMetricNumber(key, raw)}m`;
+    case 'deaths': return `${formatMetricNumber(key, raw)} 死`;
+    case 'avg_kills': return `场均击杀 ${formatMetricNumber(key, raw)}`;
+    case 'avg_rank': return `场均排名 ${formatMetricNumber(key, raw)}`;
+    case 'top10_rate': return `前十率 ${formatMetricNumber(key, raw)}`;
+    case 'rank': return `排名 ${formatMetricNumber(key, raw)}`;
+    case 'survival_time': return `生存 ${formatMetricNumber(key, raw)}s`;
+    default: {
+      if (HIDDEN_USER_METRICS.has(key)) return null;
+      return `${METRIC_LABELS[key] ?? userText(key)} ${formatMetricNumber(key, raw)}`;
+    }
+  }
+}
+
+function metricRow(row: PubgMetricRow, localizedMetrics: boolean, titles: string[] = []): string {
+  if (!localizedMetrics) {
+    const entries = Object.entries(row.values)
+      .filter(([key]) => !HIDDEN_USER_METRICS.has(key))
+      .map(([key, item]) => `${userText(key)}=${typeof item === 'number' ? formatMetricNumber(key, item) : value(item)}`);
+    const rank = row.position === undefined ? '' : `（序号：${value(row.position)}）`;
+    return `- ${userText(row.label)}${rank}${entries.length ? `：${entries.join('，')}` : ''}`;
+  }
+  const titleByKey = new Map<string, string>();
+  for (const title of titles) {
+    const rule = TITLE_RULES.find((item) => item.title === title);
+    if (rule) titleByKey.set(rule.key, title);
+  }
+  const seen = new Set<string>();
+  const fragments: string[] = [];
+  for (const key of RICH_METRIC_ORDER) {
+    if (!(key in row.values) || HIDDEN_USER_METRICS.has(key)) continue;
+    seen.add(key);
+    const fragment = richMetricFragment(key, row.values[key] ?? null, titleByKey.get(key));
+    if (fragment) fragments.push(fragment);
+  }
+  for (const [key, item] of Object.entries(row.values)) {
+    if (seen.has(key) || HIDDEN_USER_METRICS.has(key)) continue;
+    const fragment = richMetricFragment(key, item, titleByKey.get(key));
+    if (fragment) fragments.push(fragment);
+  }
+  // Leftover titles (should not happen) still get shown after the name.
+  const orphanTitles = titles.filter((title) => !TITLE_RULES.some((rule) => rule.title === title && titleByKey.get(rule.key) === title));
+  const titlePrefix = orphanTitles.length ? orphanTitles.map((title) => `（${title}）`).join('') : '';
+  return `- ${userText(row.label)}${titlePrefix}${fragments.length ? `：${fragments.join('，')}` : ''}`;
+}
+
+function teamTotalsLine(rows: readonly PubgMetricRow[]): string | null {
+  if (rows.length < 2) return null;
+  const sum = (key: string) => rows.reduce((total, row) => total + (numericMetric(row.values[key] ?? null) ?? 0), 0);
+  const max = (key: string) => rows.reduce((best, row) => {
+    const amount = numericMetric(row.values[key] ?? null);
+    return amount === null ? best : Math.max(best, amount);
+  }, 0);
+  const kills = sum('kills');
+  const damage = sum('damage');
+  const dbnos = sum('dbnos');
+  const assists = sum('assists');
+  const revives = sum('revives');
+  // Squad chicken dinners are credited to every member of the winning match; max avoids double-counting.
+  const wins = max('wins');
+  const deaths = sum('deaths');
+  const kdPart = deaths > 0 ? `，团队 KD ${formatKd(kills / deaths)}` : '';
+  return `团队合计：${kills} 杀，${formatMetricNumber('damage', damage)} 伤害，${dbnos} 击倒，${assists} 助攻，${revives} 救援${kdPart}${wins > 0 ? `，吃鸡 ${wins}` : ''}`;
 }
 
 export function renderPubgStatus(presentation: PubgStatusPresentation, options: PubgRenderOptions = {}): string {
@@ -104,8 +241,16 @@ export function renderPubgStatus(presentation: PubgStatusPresentation, options: 
 
 export function renderPubgStats(presentation: PubgStatsPresentation, options: PubgRenderOptions = {}): string {
   const validated = assertValid(validatePubgStatsPresentation(presentation));
+  const localized = options.localizedMetrics === true;
+  const titles = localized ? assignStatTitles(validated.rows) : new Map<number, string[]>();
   const lines = [userText(validated.headline), '', userText(validated.summary)];
-  if (validated.rows.length) lines.push('', ...validated.rows.map(row => metricRow(row, options.localizedMetrics === true)));
+  if (validated.rows.length) {
+    lines.push('', ...validated.rows.map((row, index) => metricRow(row, localized, titles.get(index) ?? [])));
+    if (localized) {
+      const totals = teamTotalsLine(validated.rows);
+      if (totals) lines.push('', totals);
+    }
+  }
   return lines.concat(footer(validated, options)).join('\n');
 }
 

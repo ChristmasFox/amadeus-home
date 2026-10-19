@@ -6,15 +6,17 @@ import { Static, Type, type TSchema as TypeSchema } from 'typebox';
 import { openClawConversationAdapter } from './adapters/openclaw.js';
 import { registerPubgEvidenceGuard } from './evidence-guard.js';
 import { registerSessionReviewWorker } from './session-review-service.js';
-import { appendQueryShareLink } from './query-share.js';
+import { appendQueryShareLink, type QuerySharePlayerRow } from './query-share.js';
 import { IdentityStore, type IdentityResolution, type PersonSnapshot } from '@agent/identity';
 import {
   adaptWorldlineNotification,
+  assignStatTitles,
   buildPubgStatusPresentation,
   buildPubgToolPresentation,
   formatDisplayTime,
   renderPubgStatus,
   type PubgSourceRange,
+  type PubgStatsPresentation,
 } from '@agent/presentation';
 import {
   PubgApiClient,
@@ -694,7 +696,12 @@ function presentationRangeFor(dataSourceRange: DataSourceRange): PubgSourceRange
   return { from: dataSourceRange.from, to: dataSourceRange.to, ...(segments.length ? { segments } : {}) };
 }
 
-type ShareAppender = (envelope: ToolEnvelope, displayText: string, timezone: string) => { text: string; url?: string };
+type ShareAppender = (
+  envelope: ToolEnvelope,
+  displayText: string,
+  timezone: string,
+  presentation: ReturnType<typeof buildPubgToolPresentation>['presentation'],
+) => { text: string; url?: string };
 
 function jsonToolResult(name: string, envelope: ToolEnvelope, fallbackTimezone = 'Asia/Shanghai', share?: ShareAppender): ReturnType<typeof jsonResult> {
   const dataSourceRange = dataSourceRangeFor(envelope, fallbackTimezone);
@@ -711,7 +718,7 @@ function jsonToolResult(name: string, envelope: ToolEnvelope, fallbackTimezone =
       queryResolved: envelope.queryResolved,
       evidenceRefs: envelope.evidenceRefs,
       ...(envelope.error ? { error: envelope.error } : {}),
-    }, { timezone: displayTimezone, now: envelope.asOf });
+    }, { timezone: displayTimezone, now: envelope.asOf, localizedMetrics: true });
   } catch (error) {
     const status = buildPubgStatusPresentation({
       toolName: name,
@@ -724,7 +731,7 @@ function jsonToolResult(name: string, envelope: ToolEnvelope, fallbackTimezone =
     });
     presentation = { presentation: status, displayText: renderPubgStatus(status, { timezone: displayTimezone, now: envelope.asOf }) };
   }
-  const shared = share ? share(envelope, presentation.displayText, displayTimezone) : { text: presentation.displayText };
+  const shared = share ? share(envelope, presentation.displayText, displayTimezone, presentation.presentation) : { text: presentation.displayText };
   return jsonResult({
     ...displayEnvelope,
     asOfLocal: formatLocalTime(envelope.asOf, displayTimezone) ?? envelope.asOf,
@@ -750,22 +757,45 @@ function queryShareFor(name: string, config: PluginConfig): ShareAppender | unde
   const teamConfigFile = configString(config, 'teamConfigFile', 'PUBG_TEAM_CONFIG_FILE');
   const squadKey = teamConfigFile ?? '';
   if (!shareSquads.has(squadKey)) shareSquads.set(squadKey, loadTeamConfig({ path: teamConfigFile, required: true }).id);
-  return (envelope, displayText, timezone) => appendQueryShareLink({
-    toolName: name,
-    status: envelope.status,
-    matchIds: (envelope.evidenceRefs as { matchIds?: unknown } | undefined)?.matchIds,
-    displayText,
-    dataUpdatedAt: envelope.asOf ?? null,
-    timezone,
-    squadId: shareSquads.get(squadKey)!,
-    shareBaseUrl,
-    store: () => {
-      let store = shareStores.get(databasePath);
-      if (!store) { store = new SqlitePubgRepository(databasePath); shareStores.set(databasePath, store); }
-      return store;
-    },
-    now: new Date(),
-  });
+  return (envelope, displayText, timezone, presentation) => {
+    const players = playersFromPresentation(presentation);
+    const teamTotals = teamTotalsFromDisplayText(displayText);
+    return appendQueryShareLink({
+      toolName: name,
+      status: envelope.status,
+      matchIds: (envelope.evidenceRefs as { matchIds?: unknown } | undefined)?.matchIds,
+      displayText,
+      dataUpdatedAt: envelope.asOf ?? null,
+      timezone,
+      squadId: shareSquads.get(squadKey)!,
+      shareBaseUrl,
+      store: () => {
+        let store = shareStores.get(databasePath);
+        if (!store) { store = new SqlitePubgRepository(databasePath); shareStores.set(databasePath, store); }
+        return store;
+      },
+      now: new Date(),
+      ...(players.length ? { players } : {}),
+      ...(teamTotals ? { teamTotals } : {}),
+    });
+  };
+}
+
+function playersFromPresentation(presentation: ReturnType<typeof buildPubgToolPresentation>['presentation']): QuerySharePlayerRow[] {
+  if (presentation.type !== 'pubg_stats') return [];
+  const stats = presentation as PubgStatsPresentation;
+  const titles = assignStatTitles(stats.rows);
+  return stats.rows.map((row, index) => ({
+    label: row.label,
+    ...(row.position !== undefined ? { position: row.position } : {}),
+    values: row.values,
+    titles: titles.get(index) ?? [],
+  }));
+}
+
+function teamTotalsFromDisplayText(displayText: string): string | null {
+  const line = displayText.split('\n').map((item) => item.trim()).find((item) => item.startsWith('团队合计：'));
+  return line ?? null;
 }
 
 function makeTool<Schema extends TypeSchema>(

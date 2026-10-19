@@ -16,6 +16,13 @@ export const QUERY_SHARE_TOOLS: ReadonlySet<string> = new Set([
 /** A share page lists its matches; very wide queries share the first ones the result names. */
 export const QUERY_SHARE_MAX_MATCHES = 60;
 
+export interface QuerySharePlayerRow {
+  label: string;
+  position?: number | null;
+  values: Record<string, string | number | null>;
+  titles: string[];
+}
+
 export interface QuerySharePresentation {
   type: 'pubg_query_share';
   version: 1;
@@ -25,6 +32,9 @@ export interface QuerySharePresentation {
   dataUpdatedAt: string | null;
   timezone: string;
   matchCount: number;
+  /** Structured rows for the share page UI (optional for older shares). */
+  players?: QuerySharePlayerRow[];
+  teamTotals?: string | null;
 }
 
 /**
@@ -44,6 +54,8 @@ export function appendQueryShareLink(input: {
   shareBaseUrl?: string;
   store: () => ReviewShareStore;
   now: Date;
+  players?: QuerySharePlayerRow[];
+  teamTotals?: string | null;
 }): { text: string; url?: string } {
   const plain = { text: input.displayText };
   if (!input.shareBaseUrl || !QUERY_SHARE_TOOLS.has(input.toolName) || input.status === 'error') return plain;
@@ -61,6 +73,8 @@ export function appendQueryShareLink(input: {
       dataUpdatedAt: input.dataUpdatedAt,
       timezone: input.timezone,
       matchCount: ids.length,
+      ...(input.players?.length ? { players: input.players } : {}),
+      ...(input.teamTotals ? { teamTotals: input.teamTotals } : {}),
     };
     const { token } = issueReviewShare(input.store(), {
       squadId: input.squadId, sessionKey: `pubg-query:${randomUUID()}`, matchIds: ids, presentationJson: JSON.stringify(presentation), now: input.now, kind: 'query',
