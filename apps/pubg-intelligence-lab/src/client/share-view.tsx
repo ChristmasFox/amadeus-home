@@ -230,7 +230,8 @@ export function ShareApp() {
         const data = await response.json() as ShareView;
         setView(data);
         const first = data.matches.find((match) => match.available);
-        if (data.kind === 'match' && first) setSelected(first.matchId);
+        // A wide screen shows the story beside the list, so it opens the first match instead of an empty pane.
+        if (first && (data.kind === 'match' || window.matchMedia('(min-width: 1200px)').matches)) setSelected(first.matchId);
       })
       .catch(() => setFailed(true));
   }, []);
@@ -252,6 +253,8 @@ export function ShareApp() {
   return (
     <div className="share-shell">
       <header className="share-top"><div className="brand-mark">P</div><div><strong>PUBG 小队复盘</strong><small>只读分享</small></div></header>
+      <div className="share-body">
+      <div className="share-main">
       {view.kind === 'query' ? <QueryCard query={view.review} /> : <ReviewCard view={view} />}
       {view.kind !== 'match' && (
         <section className="share-list">
@@ -266,11 +269,16 @@ export function ShareApp() {
           ))}
         </section>
       )}
+      </div>
+      <div className="share-side">
+      {!selectedMatch && view.kind !== 'match' && <section className="share-story-empty">点开左边任意一局，这里显示整局过程。</section>}
       {selectedMatch && (
         <section className="share-story">
           <MatchStoryView data={story} loading={storyLoading} placement={selectedMatch.placement ?? null} kills={selectedMatch.kills ?? 0} damage={selectedMatch.damage ?? 0} />
         </section>
       )}
+      </div>
+      </div>
       <footer className="share-foot">只读分享 · 仅包含{view.kind === 'query' ? '这次查询' : '本次复盘'}的 {view.matches.length} 场 · {clock(view.expiresAt, view.review.timezone ?? 'Asia/Shanghai')} 前有效 · 敌方队伍已匿名</footer>
     </div>
   );
