@@ -79,3 +79,10 @@ test('bundled PUBG skill has the OpenClaw-required frontmatter', () => {
   assert.match(skill, /pubg_get_period_review/);
   assert.match(skill, /validated `presentation`/);
 });
+
+test('stats reply guide carries the full 战报 shape the agent must retell', async () => {
+  const { STATS_REPLY_GUIDE } = await import('../src/stats-reply-guide.js');
+  for (const part of ['🏆', '🥇', '• **出战', '• 个人数据：', '• AI 锐评：', '团队合计：', '🔗', '不得编造数字']) {
+    assert.ok(STATS_REPLY_GUIDE.includes(part), part);
+  }
+});

@@ -52,6 +52,7 @@ test('raw key=value mode still exists but rounds numbers and hides internal keys
 
 test('chat emphasis bolds names, titles and totals and drops filler metrics', () => {
   const text = renderPubgStats(presentation, { chatEmphasis: true, timezone: 'Asia/Shanghai' });
+  assert.match(text, /🥇 \*\*kim_kkl\*\*/u);
   assert.match(text, /🥈 \*\*SG_LabmemNo004\*\*\n• \*\*出战 8 局\*\*：/u);
   assert.match(text, /• 个人数据：\*\*KD 1\.43\*\*，场均伤害 342\.9，最远击杀 318\.5m/u);
   assert.match(text, /^🏆 /u);

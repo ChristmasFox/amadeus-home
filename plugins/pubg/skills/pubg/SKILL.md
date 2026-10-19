@@ -1,6 +1,6 @@
 ---
 name: pubg
-description: "Use deterministic PUBG match statistics and evidence-backed review tools."
+description: "PUBG 战绩/对局/复盘（昨日战绩、今日战绩、谁伤害最高等）：必须调用原生 PUBG 工具取数，按结果里的 displayText 与 replyGuide 写完整战报。Read before any PUBG answer."
 user-invocable: false
 ---
 
@@ -167,6 +167,8 @@ Tool rules:
   short bullets, is a wrong answer even when every remaining number is correct. A
   repeat of the same query still gets the full block; tease the repetition in the
   opening line instead of shortening.
+  A stats result also carries `replyGuide`: the same shape with a worked example. Follow it.
+  Do not turn the cards into one-line `- 名字：…` bullets; that is the wrong shape.
 - When `displayText` ends with a `🔗 https://…/s/…` line, that is the no-login
   share page for exactly the matches in this answer. Keep that line verbatim as
   the last line of the reply; never edit, shorten, re-host or invent such a link,

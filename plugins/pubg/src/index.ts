@@ -7,6 +7,7 @@ import { openClawConversationAdapter } from './adapters/openclaw.js';
 import { registerPubgEvidenceGuard } from './evidence-guard.js';
 import { registerSessionReviewWorker } from './session-review-service.js';
 import { appendQueryShareLink, type QuerySharePlayerRow } from './query-share.js';
+import { STATS_REPLY_GUIDE } from './stats-reply-guide.js';
 import { IdentityStore, type IdentityResolution, type PersonSnapshot } from '@agent/identity';
 import {
   adaptWorldlineNotification,
@@ -747,9 +748,14 @@ function jsonToolResult(name: string, envelope: ToolEnvelope, fallbackTimezone =
     dataSourceRange,
     presentation: presentation.presentation,
     displayText: shared.text,
+    ...(isStatsReport(presentation.presentation) ? { replyGuide: STATS_REPLY_GUIDE } : {}),
     // The amadeus delivery boundary ends the reply with this exact link even when the agent retells the answer.
     ...(shared.url ? { replyLink: { kind: 'share', url: shared.url } } : {}),
   });
+}
+
+function isStatsReport(presentation: ReturnType<typeof buildPubgToolPresentation>['presentation']): boolean {
+  return presentation.type === 'pubg_stats' && presentation.status !== 'error' && (presentation as PubgStatsPresentation).rows.length > 0;
 }
 
 const shareStores = new Map<string, SqlitePubgRepository>();

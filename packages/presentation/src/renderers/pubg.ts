@@ -217,6 +217,19 @@ function metricRow(row: PubgMetricRow, localizedMetrics: boolean, titles: string
   return `- ${name}${titlePrefix}${fragments.length ? `：${fragments.join('，')}` : ''}`;
 }
 
+/** A model-built time_range arrives labelled 指定时间; a one-business-day range reads better as its date. */
+function chatHeadline(headline: string, range: PubgSourceRange | undefined, options: PubgRenderOptions): string {
+  const text = userText(headline);
+  if (text !== '指定时间' || !range?.from || !range.to) return text;
+  const from = new Date(range.from);
+  const hours = (new Date(range.to).getTime() - from.getTime()) / 3_600_000;
+  if (!Number.isFinite(hours) || hours < 23 || hours > 25) return text;
+  try {
+    const parts = new Intl.DateTimeFormat('zh-CN', { timeZone: options.timezone ?? 'Asia/Shanghai', month: 'long', day: 'numeric', weekday: 'long' }).format(from);
+    return `${parts} 全天战报`;
+  } catch { return text; }
+}
+
 const CHAT_MEDALS = ['🥇', '🥈', '🥉'] as const;
 const CHAT_VOLUME_KEYS = ['kills', 'assists', 'damage', 'dbnos', 'revives', 'headshot_kills', 'top10', 'wins'] as const;
 const CHAT_PERSONAL_KEYS = ['kd', 'avg_damage', 'longest_kill', 'deaths'] as const;
@@ -277,10 +290,15 @@ export function renderPubgStats(presentation: PubgStatsPresentation, options: Pu
   const emphasis = options.chatEmphasis === true;
   const localized = options.localizedMetrics === true || emphasis;
   const titles = localized ? assignStatTitles(validated.rows) : new Map<number, string[]>();
-  const lines = [emphasis ? `🏆 ${userText(validated.headline)}` : userText(validated.headline), '', userText(validated.summary)];
+  const lines = [emphasis ? `🏆 ${chatHeadline(validated.headline, validated.sourceRange, options)}` : userText(validated.headline), '', userText(validated.summary)];
   if (validated.rows.length) {
     if (emphasis) {
-      validated.rows.forEach((row, index) => lines.push('', ...chatPlayerBlock(row, index, titles.get(index) ?? [])));
+      // Medals rank by K/D (ties: kills, then damage), whatever order the query asked for.
+      const metric = (row: PubgMetricRow, key: string) => numericMetric(row.values[key] ?? null) ?? -1;
+      const ranked = validated.rows
+        .map((row, index) => ({ row, titles: titles.get(index) ?? [], kd: metric(row, 'kd'), kills: metric(row, 'kills'), damage: metric(row, 'damage') }))
+        .sort((a, b) => b.kd - a.kd || b.kills - a.kills || b.damage - a.damage);
+      ranked.forEach((entry, place) => lines.push('', ...chatPlayerBlock(entry.row, place, entry.titles)));
     } else {
       lines.push('', ...validated.rows.map((row, index) => metricRow(row, localized, titles.get(index) ?? [], false)));
     }
