@@ -1,3 +1,3 @@
-# Amadeus 1.10.9
+# Amadeus 1.10.10
 
-- Lab 发布流程与运行可靠性更新。
+- PUBG Intelligence Lab 研究体验与证据链更新。
