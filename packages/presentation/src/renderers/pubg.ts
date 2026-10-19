@@ -217,6 +217,32 @@ function metricRow(row: PubgMetricRow, localizedMetrics: boolean, titles: string
   return `- ${name}${titlePrefix}${fragments.length ? `：${fragments.join('，')}` : ''}`;
 }
 
+const CHAT_MEDALS = ['🥇', '🥈', '🥉'] as const;
+const CHAT_VOLUME_KEYS = ['kills', 'assists', 'damage', 'dbnos', 'revives', 'headshot_kills', 'top10', 'wins'] as const;
+const CHAT_PERSONAL_KEYS = ['kd', 'avg_damage', 'longest_kill', 'deaths'] as const;
+
+/** Chat card: medal + bold name, then a 出战 line (volume) and a 个人数据 line (rates), like the squad's 战报. */
+function chatPlayerBlock(row: PubgMetricRow, index: number, titles: string[]): string[] {
+  const titleByKey = new Map<string, string>();
+  for (const title of titles) {
+    const rule = TITLE_RULES.find((item) => item.title === title);
+    if (rule) titleByKey.set(rule.key, title);
+  }
+  const emphasize = (key: string) => titleByKey.has(key) || key === 'wins' || key === 'kills' || key === 'kd';
+  const fragments = (keys: readonly string[]) => keys.flatMap((key) => {
+    if (!(key in row.values)) return [];
+    const fragment = richMetricFragment(key, row.values[key] ?? null, titleByKey.get(key));
+    return fragment ? [emphasize(key) ? `**${fragment}**` : fragment] : [];
+  });
+  const matches = row.values.matches === undefined ? null : richMetricFragment('matches', row.values.matches ?? null);
+  const volume = fragments(CHAT_VOLUME_KEYS);
+  const personal = fragments(CHAT_PERSONAL_KEYS);
+  const lines = [`${CHAT_MEDALS[index] ?? '🎖️'} **${userText(row.label)}**`];
+  if (matches || volume.length) lines.push(`• **${matches ? `出战 ${matches.replace(/ 场$/u, '')} 局` : '数据'}**${volume.length ? `：${volume.join('，')}` : ''}`);
+  if (personal.length) lines.push(`• 个人数据：${personal.join('，')}`);
+  return lines;
+}
+
 function teamTotalsLine(rows: readonly PubgMetricRow[], emphasis = false): string | null {
   if (rows.length < 2) return null;
   const sum = (key: string) => rows.reduce((total, row) => total + (numericMetric(row.values[key] ?? null) ?? 0), 0);
@@ -251,9 +277,13 @@ export function renderPubgStats(presentation: PubgStatsPresentation, options: Pu
   const emphasis = options.chatEmphasis === true;
   const localized = options.localizedMetrics === true || emphasis;
   const titles = localized ? assignStatTitles(validated.rows) : new Map<number, string[]>();
-  const lines = [userText(validated.headline), '', userText(validated.summary)];
+  const lines = [emphasis ? `🏆 ${userText(validated.headline)}` : userText(validated.headline), '', userText(validated.summary)];
   if (validated.rows.length) {
-    lines.push('', ...validated.rows.map((row, index) => metricRow(row, localized, titles.get(index) ?? [], emphasis)));
+    if (emphasis) {
+      validated.rows.forEach((row, index) => lines.push('', ...chatPlayerBlock(row, index, titles.get(index) ?? [])));
+    } else {
+      lines.push('', ...validated.rows.map((row, index) => metricRow(row, localized, titles.get(index) ?? [], false)));
+    }
     if (localized) {
       const totals = teamTotalsLine(validated.rows, emphasis);
       if (totals) lines.push('', totals);
