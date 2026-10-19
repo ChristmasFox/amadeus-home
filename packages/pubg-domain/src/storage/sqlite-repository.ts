@@ -3,6 +3,7 @@ import { dirname } from 'node:path';
 import { createRequire } from 'node:module';
 import type { NormalizedMatch, NormalizedPlayer, ResultSetRecord, SessionContextRecord } from '../data/model.js';
 import { normalizeRecords } from '../data/model.js';
+import type { SessionReviewLedger, SessionReviewRecord, SessionReviewStatus } from '../review/session-review.js';
 import type { TelemetryFeatureKey, TelemetryFeatureRecord, TelemetryFeatureStore } from '../review/telemetry.js';
 import type {
   MatchWriteMetadata,
@@ -95,7 +96,7 @@ function keyForFeature(key: TelemetryFeatureKey): string {
   return key.matchId + ':' + key.parserVersion + ':' + key.featureVersion;
 }
 
-export class SqlitePubgRepository implements TelemetryFeatureStore {
+export class SqlitePubgRepository implements SessionReviewLedger, TelemetryFeatureStore {
   readonly db: SqliteDatabase;
 
   constructor(readonly filename = ':memory:', options: { readOnly?: boolean } = {}) {
@@ -214,6 +215,24 @@ export class SqlitePubgRepository implements TelemetryFeatureStore {
         session_id TEXT PRIMARY KEY,
         expires_at TEXT NOT NULL,
         context_json TEXT NOT NULL
+      );
+
+      CREATE TABLE IF NOT EXISTS squad_session_reviews (
+        squad_id TEXT NOT NULL,
+        session_key TEXT NOT NULL,
+        match_ids_json TEXT NOT NULL,
+        last_match_end_ms INTEGER NOT NULL,
+        status TEXT NOT NULL,
+        detail TEXT,
+        message TEXT,
+        attempts INTEGER NOT NULL DEFAULT 0,
+        updated_at TEXT NOT NULL,
+        PRIMARY KEY(squad_id, session_key)
+      );
+
+      CREATE TABLE IF NOT EXISTS squad_session_review_meta (
+        meta_key TEXT PRIMARY KEY,
+        meta_value TEXT NOT NULL
       );
 
       CREATE TABLE IF NOT EXISTS migration_runs (
@@ -520,6 +539,56 @@ export class SqlitePubgRepository implements TelemetryFeatureStore {
       pendingCount: numeric(row.pending_count),
       failedMatchIds: jsonValue<string[]>(row.failed_match_ids_json, []),
     }));
+  }
+
+  getSessionReview(squadId: string, sessionKey: string): SessionReviewRecord | null {
+    const row = this.db.prepare(`
+      SELECT squad_id, session_key, match_ids_json, last_match_end_ms, status, detail, message, attempts, updated_at
+      FROM squad_session_reviews WHERE squad_id = ? AND session_key = ?
+    `).get(squadId, sessionKey);
+    if (!row) return null;
+    return {
+      squadId: String(row.squad_id),
+      sessionKey: String(row.session_key),
+      matchIds: jsonValue<string[]>(row.match_ids_json, []),
+      lastMatchEndMs: numeric(row.last_match_end_ms),
+      status: String(row.status) as SessionReviewStatus,
+      detail: row.detail === null || row.detail === undefined ? null : String(row.detail),
+      message: row.message === null || row.message === undefined ? null : String(row.message),
+      attempts: numeric(row.attempts),
+      updatedAt: String(row.updated_at),
+    };
+  }
+
+  putSessionReview(record: SessionReviewRecord): void {
+    this.db.prepare(`
+      INSERT INTO squad_session_reviews(squad_id, session_key, match_ids_json, last_match_end_ms, status, detail, message, attempts, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(squad_id, session_key) DO UPDATE SET
+        match_ids_json = excluded.match_ids_json, last_match_end_ms = excluded.last_match_end_ms, status = excluded.status,
+        detail = excluded.detail, message = excluded.message, attempts = excluded.attempts, updated_at = excluded.updated_at
+    `).run(
+      record.squadId, record.sessionKey, JSON.stringify(record.matchIds), record.lastMatchEndMs, record.status,
+      record.detail, record.message, record.attempts, record.updatedAt,
+    );
+  }
+
+  getSessionReviewMeta(key: string): string | null {
+    const row = this.db.prepare('SELECT meta_value FROM squad_session_review_meta WHERE meta_key = ?').get(key);
+    return row ? String(row.meta_value) : null;
+  }
+
+  setSessionReviewMeta(key: string, value: string): void {
+    this.db.prepare(`
+      INSERT INTO squad_session_review_meta(meta_key, meta_value) VALUES (?, ?)
+      ON CONFLICT(meta_key) DO UPDATE SET meta_value = excluded.meta_value
+    `).run(key, value);
+  }
+
+  latestPrefetchFinishedMs(): number | null {
+    const row = this.db.prepare('SELECT MAX(finished_at) AS finished_at FROM telemetry_prefetch_runs').get();
+    const parsed = row?.finished_at ? Date.parse(String(row.finished_at)) : Number.NaN;
+    return Number.isFinite(parsed) ? parsed : null;
   }
 
   setResultSet(result: ResultSetRecord): void {

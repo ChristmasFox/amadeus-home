@@ -5,6 +5,7 @@ import { defineToolPlugin } from 'openclaw/plugin-sdk/tool-plugin';
 import { Static, Type, type TSchema as TypeSchema } from 'typebox';
 import { openClawConversationAdapter } from './adapters/openclaw.js';
 import { registerPubgEvidenceGuard } from './evidence-guard.js';
+import { registerSessionReviewWorker } from './session-review-service.js';
 import { IdentityStore, type IdentityResolution, type PersonSnapshot } from '@agent/identity';
 import {
   adaptWorldlineNotification,
@@ -55,6 +56,12 @@ const PluginConfigSchema = Type.Object({
   freshnessMs: Type.Optional(Type.Integer({ minimum: 1000, maximum: 86_400_000 })),
   identityDatabasePath: Type.Optional(Type.String({ maxLength: 1024 })),
   identityPresetsFile: Type.Optional(Type.String({ maxLength: 1024 })),
+  sessionReviewMode: Type.Optional(Type.Union([Type.Literal('off'), Type.Literal('dry-run'), Type.Literal('deliver')])),
+  reviewGroupTargetFile: Type.Optional(Type.String({ maxLength: 1024 })),
+  reviewGroupExpectedName: Type.Optional(Type.String({ minLength: 1, maxLength: 128 })),
+  reviewGroupAccountId: Type.Optional(Type.String({ minLength: 1, maxLength: 128 })),
+  reviewPageBaseUrl: Type.Optional(Type.String({ maxLength: 512 })),
+  ownerNotificationOutboxDir: Type.Optional(Type.String({ maxLength: 1024 })),
 }, { additionalProperties: false });
 
 export type PluginConfig = Static<typeof PluginConfigSchema>;
@@ -927,6 +934,7 @@ const registerTools = entry.register;
 entry.register = (api) => {
   registerTools(api);
   registerPubgEvidenceGuard(api);
+  registerSessionReviewWorker(api);
 };
 
 export default entry;

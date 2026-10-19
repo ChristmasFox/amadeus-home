@@ -16,6 +16,7 @@ export * from './review/fun-candidate-generator.js';
 export * from './review/fun-intelligence.js';
 export * from './review/supplemental-intelligence.js';
 export * from './review/subgraph.js';
+export * from './review/session-review.js';
 export * from './schema/query.js';
 export * from './schema/status.js';
 export * from './service/pubg-domain-service.js';

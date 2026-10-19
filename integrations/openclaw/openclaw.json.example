@@ -163,7 +163,13 @@
           "timezone": "Asia/Shanghai",
           "businessDayStart": "06:00",
           "maxMatches": 500,
-          "freshnessMs": 300000
+          "freshnessMs": 300000,
+          "sessionReviewMode": "dry-run",
+          "reviewGroupTargetFile": "/data/pubg-review-group-target",
+          "reviewGroupExpectedName": "未来ガジェット研究所",
+          "reviewPageBaseUrl": "https://pubg.nyannyan.top",
+          "reviewGroupAccountId": "secondary",
+          "ownerNotificationOutboxDir": "/var/lib/openclaw/notifications"
         }
       },
       "whatsapp": {

@@ -52,6 +52,37 @@
       "identityPresetsFile": {
         "type": "string",
         "maxLength": 1024
+      },
+      "sessionReviewMode": {
+        "type": "string",
+        "enum": [
+          "off",
+          "dry-run",
+          "deliver"
+        ],
+        "default": "off"
+      },
+      "reviewGroupTargetFile": {
+        "type": "string",
+        "maxLength": 1024
+      },
+      "reviewGroupExpectedName": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+      },
+      "reviewGroupAccountId": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+      },
+      "reviewPageBaseUrl": {
+        "type": "string",
+        "maxLength": 512
+      },
+      "ownerNotificationOutboxDir": {
+        "type": "string",
+        "maxLength": 1024
       }
     },
     "additionalProperties": false

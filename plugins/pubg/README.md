@@ -33,3 +33,45 @@ At bootstrap the private adapter creates the sole `private` `TeamContext` from
 the protected team config and pairs it with a scope-pinned SQLite repository
 adapter. The async Domain service does not use the public SaaS database or
 infer a team from model-supplied arguments.
+
+## Session review to a WhatsApp group
+
+`pubg-session-review-worker` checks every five minutes for a closed squad
+session and writes one review for it. A session is the squad's ranked matches
+(at least two members on the same team) with gaps under 40 minutes, measured
+from the end of the previous match. It counts as closed only when the gap has
+passed **and** an hourly prefetch finished after the gap; missing telemetry is
+waited for up to 90 minutes after the last match. Every decision is recorded in
+`squad_session_reviews` in the plugin database, keyed by the first match ID, so
+a session is reviewed once. The first run records the switch-on time, and
+sessions that ended earlier are marked skipped instead of being backfilled.
+
+Findings compare the session with the squad's own ranked matches from the 30
+days before it (seeded bootstrap over matches). Only differences whose interval
+excludes zero are stated as fact; others appear as "仅本时段观察" or not at all.
+
+| Config | Meaning |
+| --- | --- |
+| `sessionReviewMode` | `off` (default), `dry-run` (render and record, never send) or `deliver` |
+| `reviewGroupTargetFile` | File holding the one WhatsApp group JID (`…@g.us`), kept outside Git |
+| `reviewGroupExpectedName` | The group's current name; delivery is refused when it differs |
+| `reviewGroupAccountId` | WhatsApp account that is a member of the group |
+| `reviewPageBaseUrl` | Optional Intelligence Lab URL for the "best match" link |
+| `ownerNotificationOutboxDir` | amadeus owner outbox; a blocked review queues an owner notice there |
+
+Before each send the worker checks that the target is a group JID, that the
+account's OpenClaw conversation directory contains that group and that its name
+matches. A failed check sends nothing to any group and queues an owner notice;
+a failed send is retried with the same text and idempotency key up to five
+times.
+
+`src/session-review-cli.ts` (run with `tsx`) lists groups, previews a session,
+sends a test message or one session by hand, using the same checks and key:
+
+```sh
+export PUBG_GATEWAY_CALL="orb -m <machine> -u root docker exec openclaw openclaw gateway call"
+tsx src/session-review-cli.ts groups
+tsx src/session-review-cli.ts preview --db <snapshot.sqlite> --team <team.json> --page-url <url>
+tsx src/session-review-cli.ts send --db <snapshot.sqlite> --team <team.json> \
+  --target-file <file> --expected-name <group name> --account <account id>
+```
