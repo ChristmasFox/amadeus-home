@@ -237,6 +237,8 @@ export async function handleShareVisitor(
   const read = request.method === 'GET' || request.method === 'HEAD';
   if (url.pathname.startsWith('/api/share/')) { await serveShareApi(request, response, snapshot, share); return true; }
   if (read && MAP_IMAGE.test(url.pathname)) { await api(request, response); return true; }
+  // Logging in with the password must still work after someone opened a share link in the same browser.
+  if (request.method === 'POST' && url.pathname === '/api/login') return false;
   if (url.pathname.startsWith('/api/')) { sendPublicJson(response, 403, { error: 'share_scope' }, NO_INDEX); return true; }
   if (read && (url.pathname === '/share' || url.pathname.startsWith('/assets/'))) { serveStatic(url.pathname === '/share' ? '/index.html' : url.pathname); return true; }
   return false;

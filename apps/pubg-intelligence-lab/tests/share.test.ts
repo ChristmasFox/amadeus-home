@@ -26,17 +26,18 @@ function writeVerifier(directory: string, password: string): string {
 interface Reply { status: number; headers: Record<string, string | string[] | undefined>; body: string }
 
 /** A request as the public proxy relays it: the public Host, optionally a cookie. */
-function call(url: string, path: string, cookie?: string, method = 'GET'): Promise<Reply> {
+function call(url: string, path: string, cookie?: string, method = 'GET', body?: string): Promise<Reply> {
   const target = new URL(path, url);
+  const json = body === undefined ? {} : { origin: `https://${HOST}`, 'content-type': 'application/json' };
   return new Promise((resolve, reject) => {
-    const outgoing = httpRequest({ host: target.hostname, port: target.port, path: target.pathname + target.search, method, headers: { host: HOST, ...(cookie ? { cookie } : {}) } }, (response) => {
+    const outgoing = httpRequest({ host: target.hostname, port: target.port, path: target.pathname + target.search, method, headers: { host: HOST, ...json, ...(cookie ? { cookie } : {}) } }, (response) => {
       let body = '';
       response.setEncoding('utf8');
       response.on('data', (chunk: string) => { body += chunk; });
       response.on('end', () => resolve({ status: response.statusCode ?? 0, headers: response.headers, body }));
     });
     outgoing.on('error', reject);
-    outgoing.end();
+    outgoing.end(body);
   });
 }
 
@@ -136,6 +137,11 @@ test('a share link opens only its own review and matches, without the password, 
     assert.equal((await call(url, '/api/refresh', cookie, 'POST')).status, 403);
     assert.equal((await call(url, '/api/research', cookie, 'POST')).status, 403);
     assert.match((await call(url, '/', cookie)).body, /password/u, 'the share cookie is not a login');
+    // The owner can still log in from a browser that opened a share link, and then reaches the full Lab.
+    const login = await call(url, '/api/login', cookie, 'POST', JSON.stringify({ password: 'owner-pass' }));
+    assert.equal(login.status, 204);
+    const ownerSession = String(login.headers['set-cookie']).split(';')[0]!;
+    assert.equal((await call(url, '/api/bootstrap', `${cookie}; ${ownerSession}`)).status, 200);
 
     // Expired, malformed and revoked links all read the same; an unknown well-formed one waits for a snapshot refresh.
     for (const path of [`/s/${expired.token}`, '/s/not-a-token']) assert.equal((await call(url, path)).status, 404, path);
