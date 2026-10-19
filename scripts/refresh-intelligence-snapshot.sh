@@ -95,11 +95,15 @@ if db.execute('PRAGMA integrity_check').fetchone()[0] != 'ok':
     raise SystemExit('integrity check failed')
 def one(sql):
     return db.execute(sql).fetchone()[0]
-print(json.dumps({
+summary = {
     'matches': one('select count(*) from matches'),
     'latestMatchMs': one('select coalesce(max(timestamp_ms),0) from matches'),
     'telemetryFeatures': one("select count(*) from telemetry_features where feature_version='review-features-6'"),
-}))
+}
+# Review share links live in the same database; a new or revoked link must reach the page too.
+if one("select count(*) from sqlite_master where type='table' and name='review_shares'"):
+    summary['reviewShares'] = one("select count(*) || ':' || coalesce(max(created_at),'') || ':' || coalesce(max(revoked_at),'') from review_shares")
+print(json.dumps(summary))
 PY
 }
 new_summary="$(summary "$LOCAL_TMP")"
