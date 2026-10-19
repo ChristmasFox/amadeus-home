@@ -231,6 +231,9 @@ while (($#)); do
   esac
   shift
 done
+# The single-step Lab main release (the documented `--apply --auto-release --build-openclaw`, as the release
+# automation calls it) is OpenClaw-only by definition.
+((AUTO_RELEASE == 0)) || OPENCLAW_ONLY=1
 
 if ((CANDIDATE)); then
   fail 'Lab candidate deployment is retired; Lab runtime changes deploy once after a green main merge.'

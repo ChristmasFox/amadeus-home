@@ -11,6 +11,8 @@ fi
 bash scripts/test-openclaw-lineage-compatibility.sh
 release="$(scripts/deploy-openclaw.sh --dry-run --build-auto)"
 scoped="$(scripts/deploy-openclaw.sh --dry-run --auto-release --openclaw-only --build-openclaw)"
+# The release automation calls the documented form without --openclaw-only; it must plan the same scoped release.
+automation="$(scripts/deploy-openclaw.sh --dry-run --auto-release --build-openclaw)"
 if scripts/deploy-openclaw.sh --dry-run --candidate --build-auto >/dev/null 2>&1; then
   echo 'retired Lab candidate deployment unexpectedly remained available' >&2
   exit 1
@@ -28,6 +30,7 @@ grep -Fxq 'MODE=dry-run' <<<"$release"
 grep -Fxq 'DEPLOYMENT_PHASE=automatic-release' <<<"$scoped"
 grep -Fxq 'DEPLOYMENT_SCOPE=openclaw-only' <<<"$scoped"
 grep -Fxq 'BUILD_MODE=openclaw-only-scoped' <<<"$scoped"
+grep -Fxq 'DEPLOYMENT_SCOPE=openclaw-only' <<<"$automation"
 python3 - <<'PY'
 from pathlib import Path
 s=Path('scripts/deploy-openclaw.sh').read_text()
