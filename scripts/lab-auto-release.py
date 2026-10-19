@@ -496,6 +496,10 @@ def install(root: Path, baseline_sha: str | None) -> None:
         "PUBG_TELEMETRY_ARCHIVE_HOST_DIR": str(Path.home() / ".local/share/amadeus/pubg-telemetry-archive"),
         "AMAD_RELEASE_STATE_DIR": str(RELEASE_STATE_ROOT),
     }
+    # GitHub may only be reachable through a local proxy; the timer inherits the one set at install time.
+    for name in ("https_proxy", "http_proxy", "all_proxy", "no_proxy"):
+        if os.environ.get(name):
+            env[name] = os.environ[name]
     document = {
         "Label": LABEL,
         "ProgramArguments": [sys.executable, str(timer_root / "scripts/lab-auto-release.py"), "once"],
