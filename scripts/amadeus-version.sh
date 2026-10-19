@@ -55,9 +55,11 @@ Usage:
   ./scripts/amadeus-version.sh bump major
 
 Version policy:
-  VERSION is the Lab product version. It follows standard SemVer increments:
-  patch increments the patch component; minor increments minor and resets
-  patch; major increments major and resets minor and patch.
+  VERSION is the Lab product version (SemVer format). The patch digit carries
+  like a counter: a patch bump from x.y.9 (or a legacy patch above 9) goes to
+  x.(y+1).0, never x.y.10. Otherwise patch adds one; minor increments minor
+  and resets patch; major increments major and resets minor and patch. Only
+  the patch digit carries; minor keeps counting (1.9.x -> 1.10.0 on a minor).
 
 After bumping, replace the first line and body of RELEASE_NOTES.md before a
 formal Lab release. The body is one release summary in Chinese; do not append
@@ -97,6 +99,10 @@ PY
       minor=0
       patch=0
     elif [[ "$kind" == minor ]]; then
+      minor=$((minor + 1))
+      patch=0
+    elif ((patch >= 9)); then
+      # 满十进一: the last digit never reaches 10.
       minor=$((minor + 1))
       patch=0
     else

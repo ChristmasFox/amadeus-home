@@ -31,8 +31,12 @@ expect_bump() {
 }
 
 expect_bump '0.0.8' patch '0.0.9'
-expect_bump '0.0.9' patch '0.0.10'
-expect_bump '0.99.99' patch '0.99.100'
+# The patch digit carries at ten: .9 -> next minor .0, and legacy patches above 9 normalise the same way.
+expect_bump '0.0.9' patch '0.1.0'
+expect_bump '1.10.9' patch '1.11.0'
+expect_bump '1.10.11' patch '1.11.0'
+expect_bump '0.99.99' patch '0.100.0'
+expect_bump '1.11.0' patch '1.11.1'
 expect_bump '1.10.4' patch '1.10.5'
 expect_bump '1.10.4' minor '1.11.0'
 expect_bump '1.10.4' major '2.0.0'

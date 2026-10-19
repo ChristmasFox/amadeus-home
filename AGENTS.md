@@ -84,7 +84,7 @@ from text. This bootstrap applies to Codex and other repository-aware agents.
 - 产品版本各自管理：Lab 的唯一版本来源是根目录 `VERSION`；Gate 的唯一版本来源是
   `apps/pubg-saas/package.json.version`。根 `package.json.version` 只描述 Monorepo 工具元数据。
 - 两个产品都按标准 SemVer 使用各自的版本工具；Lab 兼容入口是
-  `scripts/amadeus-version.sh bump patch|minor|major`，Gate 是
+  `scripts/amadeus-version.sh bump patch|minor|major`（Lab patch 满十进一：x.y.9 再 bump patch 得 x.(y+1).0，不出现 x.y.10），Gate 是
   `scripts/pubg-saas-version.sh bump patch|minor|major`。版本变更须同步该产品当前单次
   Release Notes；普通 Commit 不自动增加产品版本。
 - 新正式 Tag 分别使用 `lab/vX.Y.Z` 与 `gate/vX.Y.Z`。历史 `v1.10.4` 等 Tag 保持原样；
