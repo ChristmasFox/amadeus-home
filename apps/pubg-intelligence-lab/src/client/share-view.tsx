@@ -120,10 +120,39 @@ function QueryPlayerCard({ player, place }: { player: ShareQueryPlayer; place: n
   );
 }
 
+const WEEKDAYS = ['日', '一', '二', '三', '四', '五', '六'];
+const MODES: Record<string, string> = { squad: '四排', 'squad-fpp': '四排', duo: '双排', 'duo-fpp': '双排', solo: '单排', 'solo-fpp': '单排' };
+
+/** "10月19日 星期一" from the answer's 数据范围 line; a range spanning several days reads "10月18日–10月19日". */
+function rangeLabel(displayText: string): string | null {
+  const match = displayText.match(/数据范围：(\d{4})-(\d{2})-(\d{2}) \d{2}:\d{2} 至 (\d{4})-(\d{2})-(\d{2})/u);
+  if (!match) return null;
+  const [, y1, m1, d1, y2, m2, d2] = match.map(Number) as number[];
+  const start = Date.UTC(y1!, m1! - 1, d1!);
+  const days = Math.round((Date.UTC(y2!, m2! - 1, d2!) - start) / 86_400_000);
+  if (days <= 1) return `${m1}月${d1}日 星期${WEEKDAYS[new Date(start).getUTCDay()]}`;
+  const last = new Date(Date.UTC(y2!, m2! - 1, d2! - 1));
+  return `${m1}月${d1}日–${last.getUTCMonth() + 1}月${last.getUTCDate()}日`;
+}
+
+/** A match-list answer: the matches themselves are listed below, so the card only names the period and the count. */
+function matchListSummary(displayText: string): { headline: string; summary: string } | null {
+  const rows = displayText.split('\n').filter((line) => line.startsWith('- ') && line.includes('｜'));
+  if (!rows.length) return null;
+  const modes = new Set(rows.map((line) => MODES[line.split('｜')[2]?.trim() ?? ''] ?? '对局'));
+  const mode = modes.size === 1 ? [...modes][0]! : '对局';
+  const period = rangeLabel(displayText);
+  return { headline: `${period ? `${period} ` : ''}${mode === '对局' ? '对局' : `${mode}对局`}`, summary: `共 ${rows.length} 场${mode === '对局' ? '' : mode}，每一局的过程在下面。` };
+}
+
 function QueryCard({ query }: { query: ShareQuery }) {
   const players = rankPlayers(query.players ?? []);
-  const headline = query.displayText.split('\n').map((line) => line.trim()).filter(Boolean)[0] ?? query.title;
-  const summary = query.displayText.split('\n').map((line) => line.trim()).filter(Boolean)[1] ?? '';
+  const lines = query.displayText.split('\n').map((line) => line.trim()).filter(Boolean);
+  const list = players.length ? null : matchListSummary(query.displayText);
+  const generic = /^(?:🏆\s*)?(?:指定时间|PUBG 战绩)$/u.test(lines[0] ?? '');
+  const period = rangeLabel(query.displayText);
+  const headline = list?.headline ?? (generic && period ? `${period} 战绩` : lines[0] ?? query.title);
+  const summary = list?.summary ?? lines[1] ?? '';
   return (
     <section className="share-card">
       <div className="share-kicker">战绩查询{query.dataUpdatedAt ? ` · 数据更新于 ${clock(query.dataUpdatedAt, query.timezone)}` : ''}</div>
@@ -133,7 +162,7 @@ function QueryCard({ query }: { query: ShareQuery }) {
         <div className="share-query-players">
           {players.map((player, place) => <QueryPlayerCard key={`${player.label}-${player.position ?? ''}`} player={player} place={place} />)}
         </div>
-      ) : (
+      ) : list ? null : (
         <pre className="share-query-text">{query.displayText}</pre>
       )}
       {query.teamTotals && <p className="share-query-totals">{query.teamTotals}</p>}
