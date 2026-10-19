@@ -25,7 +25,6 @@ BACKUP_ROOT = Path("/Volumes/Avalon/backups/operation-skuld")
 CHECKPOINT_ROOT = BACKUP_ROOT / "deploy"
 WORKTREE_NAME = "release-worktree"
 CHECK_INTERVAL_SECONDS = 120
-RETRY_SECONDS = 900
 MAX_DEPLOY_ATTEMPTS = 3
 LAB_PATH_PREFIXES = (
     "plugins/amadeus/",
@@ -458,12 +457,6 @@ def release_once(root: Path) -> None:
             if int(pending.get("attempts", 0)) >= MAX_DEPLOY_ATTEMPTS:
                 print("LAB_AUTO_RELEASE=deployment_stopped_after_rollbacks sha=" + release_sha[:12])
                 return
-            last_attempt = pending.get("lastAttemptAt")
-            if last_attempt:
-                previous = datetime.fromisoformat(last_attempt)
-                if (datetime.now(timezone.utc) - previous).total_seconds() < RETRY_SECONDS:
-                    print("LAB_AUTO_RELEASE=rollback_complete_retry_wait sha=" + release_sha[:12])
-                    return
             pending["attempts"] = int(pending.get("attempts", 0)) + 1
             pending["lastAttemptAt"] = datetime.now(timezone.utc).isoformat()
             state["pending"] = pending
