@@ -20,7 +20,14 @@
   },
   "session": {
     "dmScope": "per-account-channel-peer",
-    "groupScope": "per-group"
+    "groupScope": "per-group",
+    "resetByType": {
+      "group": {
+        "mode": "daily",
+        "atHour": 4,
+        "idleMinutes": 360
+      }
+    }
   },
   "memory": {
     "search": {
