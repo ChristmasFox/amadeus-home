@@ -107,3 +107,12 @@ test('a 战绩 reply that dropped a card gets one rewrite request, then goes out
   assert.equal(finalize({ ...event, runId: 'turn-full', lastAssistantMessage: full }, { sessionKey: 'group', trigger: 'user' }), undefined);
   assert.equal(hooks.get('reply_payload_sending')!({ payload: { text: full }, sessionKey: 'group', runId: 'turn-full' }, {}), undefined);
 });
+
+test('an image completion or an image request that mentions 吃鸡 is not a PUBG record claim', () => {
+  const comment = '这 MAPPA 画风的咒术回战吃鸡小队给你端上来了！决赛圈对面怕是直接蒸发了。';
+  const completion = user('<<<BEGIN_OPENCLAW_INTERNAL_CONTEXT>>> OpenClaw runtime context (internal): [Internal task completion event] source: image_generation ... 原始请求：生成四人吃鸡图片');
+  assert.equal(assessPubgEvidence([completion, assistant(comment)], comment), 'not_applicable');
+  assert.equal(assessPubgEvidence([user('生成吃鸡小队图片'), call('image_generate', { prompt: 'squad' }), assistant('开始画了，这次吃鸡小队包你满意。')], '开始画了，这次吃鸡小队包你满意。'), 'not_applicable');
+  // A real 战绩 question with no data tool is still caught.
+  assert.equal(assessPubgEvidence([user('今天吃鸡几局'), assistant('今天吃鸡 2 局')], '今天吃鸡 2 局'), 'missing_data');
+});

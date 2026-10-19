@@ -16,6 +16,8 @@ const TEAM = /全队|整队|队伍|小队|我们|咱们|大家|所有人|全员|
 // A bare record request names no one ("昨日战绩", "@Kurisu 今天战绩"); in the squad it means the whole team.
 const BARE_RECORD = /^(?:\s|@\S+\s*)*(?:今天|今日|昨天|昨日|前天|本周|这周|上周|最近)?\s*(?:的)?\s*(?:PUBG|吃鸡)?\s*(?:战绩|战况)\s*[?？!！。.~]*\s*$/iu;
 const FOLLOW_UP = /^(?:\s|@\S+\s*)*(?:刷新|更新|再查|查最新|最新|重新查)/u;
+const INTERNAL_EVENT = /^\s*<<<BEGIN_OPENCLAW_INTERNAL_CONTEXT>>>/u;
+const CREATIVE_TOOLS = new Set(['image_generate', 'amadeus_image_upscale']);
 const SAFE_REPLY = '这次 PUBG 战绩没有完成本轮数据核验，我不能确认结果。请再试一次。';
 
 function parts(message: Message): Part[] {
@@ -42,6 +44,10 @@ export function assessPubgEvidence(messages: unknown, finalText: string): Eviden
   }
   if (lastUser < 0) return 'not_applicable';
   let request = text(entries[lastUser]!);
+  // A runtime event (an image finishing, a background task) is not a user asking for PUBG facts, and a turn that
+  // makes a picture talks about 吃鸡 as art, not as a record.
+  if (INTERNAL_EVENT.test(request)) return 'not_applicable';
+  if (entries.slice(lastUser + 1).some((message) => message.role === 'assistant' && parts(message).some((part) => part.type === 'toolCall' && CREATIVE_TOOLS.has(part.name ?? '')))) return 'not_applicable';
   if (!REQUEST.test(request) && FOLLOW_UP.test(request)) {
     for (let i = lastUser - 1; i >= Math.max(0, lastUser - 8); i--) {
       if (entries[i]?.role === 'user' && REQUEST.test(text(entries[i]!))) {
