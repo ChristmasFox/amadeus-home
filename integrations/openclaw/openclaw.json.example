@@ -164,7 +164,7 @@
           "businessDayStart": "06:00",
           "maxMatches": 500,
           "freshnessMs": 300000,
-          "sessionReviewMode": "dry-run",
+          "sessionReviewMode": "deliver",
           "reviewGroupTargetFile": "/data/pubg-review-group-target",
           "reviewGroupExpectedName": "未来ガジェット研究所",
           "reviewPageBaseUrl": "https://pubg.nyannyan.top",
