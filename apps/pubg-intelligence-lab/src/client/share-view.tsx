@@ -77,7 +77,22 @@ function metricNumber(key: string, raw: string | number | null | undefined): str
   return (Math.round(raw * 10) / 10).toFixed(1);
 }
 
-function QueryPlayerCard({ player }: { player: ShareQueryPlayer }) {
+const MEDALS = ['🥇', '🥈', '🥉'] as const;
+
+function metricValue(player: ShareQueryPlayer, key: string): number {
+  const raw = player.values[key];
+  const amount = typeof raw === 'number' ? raw : Number(raw);
+  return raw === null || raw === undefined || !Number.isFinite(amount) ? -1 : amount;
+}
+
+/** Same order as the chat 战报: K/D first, then kills, then damage. */
+function rankPlayers(players: ShareQueryPlayer[]): ShareQueryPlayer[] {
+  return [...players].sort((a, b) => metricValue(b, 'kd') - metricValue(a, 'kd')
+    || metricValue(b, 'kills') - metricValue(a, 'kills')
+    || metricValue(b, 'damage') - metricValue(a, 'damage'));
+}
+
+function QueryPlayerCard({ player, place }: { player: ShareQueryPlayer; place: number }) {
   const values = player.values;
   const kd = metricNumber('kd', values.kd ?? null);
   const avgDamage = metricNumber('avg_damage', values.avg_damage ?? null);
@@ -88,7 +103,7 @@ function QueryPlayerCard({ player }: { player: ShareQueryPlayer }) {
   return (
     <div className="share-query-player">
       <div className="share-query-player-head">
-        <b>{player.label}</b>
+        <b>{MEDALS[place] ?? '🎖️'} {player.label}</b>
         {player.titles?.map((title) => <em key={title}>{title}</em>)}
       </div>
       <div className="share-query-gauges">
@@ -106,7 +121,7 @@ function QueryPlayerCard({ player }: { player: ShareQueryPlayer }) {
 }
 
 function QueryCard({ query }: { query: ShareQuery }) {
-  const players = query.players ?? [];
+  const players = rankPlayers(query.players ?? []);
   const headline = query.displayText.split('\n').map((line) => line.trim()).filter(Boolean)[0] ?? query.title;
   const summary = query.displayText.split('\n').map((line) => line.trim()).filter(Boolean)[1] ?? '';
   return (
@@ -116,7 +131,7 @@ function QueryCard({ query }: { query: ShareQuery }) {
       {summary && <p className="share-plain">{summary}</p>}
       {players.length > 0 ? (
         <div className="share-query-players">
-          {players.map((player) => <QueryPlayerCard key={`${player.label}-${player.position ?? ''}`} player={player} />)}
+          {players.map((player, place) => <QueryPlayerCard key={`${player.label}-${player.position ?? ''}`} player={player} place={place} />)}
         </div>
       ) : (
         <pre className="share-query-text">{query.displayText}</pre>
