@@ -207,3 +207,9 @@ test('the subscription file must hold a WhatsApp group JID, and names compare in
   assert.equal(groupSlug('whatsapp:g-未来ガジェット研究所'), groupSlug('未来ガジェット研究所'));
   assert.notEqual(groupSlug('whatsapp:g-别的群'), groupSlug('未来ガジェット研究所'));
 });
+
+test('the CLI never hands the image-private LD_LIBRARY_PATH to the gateway command', async () => {
+  const { childEnvironment } = await import('../src/session-review-cli.js');
+  const child = childEnvironment({ PATH: '/usr/bin', LD_LIBRARY_PATH: '/opt/amadeus-glibc/usr/lib', HOME: '/home/node' });
+  assert.deepEqual(child, { PATH: '/usr/bin', HOME: '/home/node' });
+});

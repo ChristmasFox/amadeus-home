@@ -13,6 +13,8 @@
  * and --resend <tag> gives a deliberate second send of the same session its own idempotency key.
  */
 import { execFile } from 'node:child_process';
+import { realpathSync } from 'node:fs';
+import { pathToFileURL } from 'node:url';
 import { promisify } from 'node:util';
 import { loadTeamConfig, splitSquadSessions, squadMatches, SqlitePubgRepository, SESSION_BASELINE_MS } from '@agent/pubg-domain';
 import {
@@ -37,13 +39,22 @@ function required(args: string[], name: string): string {
   return value;
 }
 
+/**
+ * The child's environment. In the OpenClaw image the node wrapper points LD_LIBRARY_PATH at a private glibc that only
+ * node can load; inherited by a child it breaks every system binary (/usr/bin/env exits 127). The child's own node
+ * wrapper sets it again for itself.
+ */
+export function childEnvironment(environment: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv {
+  return Object.fromEntries(Object.entries(environment).filter(([key]) => key !== 'LD_LIBRARY_PATH'));
+}
+
 /** Calls a Gateway method through the OpenClaw CLI, which runs next to the live gateway. */
 export function cliGateway(command = process.env.PUBG_GATEWAY_CALL?.trim() || 'openclaw gateway call'): ReportGateway {
   const [program, ...prefix] = command.split(/\s+/u);
   return {
     async request(method, params, options) {
       const timeout = Number(options?.timeoutMs ?? 20_000);
-      const { stdout } = await run(program!, [...prefix, method, '--json', '--timeout', String(timeout), '--params', JSON.stringify(params)], { timeout: timeout + 15_000, maxBuffer: 8 * 1024 * 1024 });
+      const { stdout } = await run(program!, [...prefix, method, '--json', '--timeout', String(timeout), '--params', JSON.stringify(params)], { timeout: timeout + 15_000, maxBuffer: 8 * 1024 * 1024, env: childEnvironment() });
       const start = stdout.indexOf('{');
       const parsed = JSON.parse(start >= 0 ? stdout.slice(start) : stdout) as { ok?: boolean; error?: { message?: string } };
       if (parsed.ok === false) throw new Error(parsed.error?.message ?? `${method} failed`);
@@ -110,7 +121,8 @@ async function main(): Promise<void> {
   if (link) console.log(`SHARE_URL=${link}`);
 }
 
-main().catch((error: unknown) => {
+// Run as a program, not when a test imports a helper from this module.
+if (process.argv[1] && import.meta.url === pathToFileURL(realpathSync(process.argv[1])).href) main().catch((error: unknown) => {
   console.error(error instanceof Error ? error.message : String(error));
   process.exitCode = 1;
 });
