@@ -1,6 +1,7 @@
 import type { OpenClawPluginToolContext } from 'openclaw/plugin-sdk/core';
 import {
   IdentityStore,
+  type AddressingRecord,
   type AliasScope,
   type IdentityContext,
   type TrustedChannelIdentity,
@@ -89,6 +90,11 @@ function identityStore(config: AmadeusConfig): IdentityStore {
   const store = new IdentityStore(config.identityDatabasePath, config.identityPresetsFile ? { presetsFile: config.identityPresetsFile } : {});
   stores.set(key, store);
   return store;
+}
+
+/** The reviewed forms of address for one group (empty when none are configured). */
+export function groupAddressing(config: AmadeusConfig, groupId: string): AddressingRecord[] {
+  return identityStore(config).listAddressing('group', groupId);
 }
 
 /**

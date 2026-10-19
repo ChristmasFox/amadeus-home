@@ -232,3 +232,46 @@ test('self and mention resolve only trusted channel metadata, never display name
   assert.equal(mention.person, undefined);
   store.close();
 });
+
+test('reviewed group addressing comes from presets, is scoped to its group and follows edits of the file', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'identity-addressing-'));
+  const database = join(directory, 'identity.sqlite');
+  const presets = join(directory, 'presets.json');
+  const write = (addressing: unknown[]) => writeFile(presets, JSON.stringify({ persons: [
+    { personId: 'jiao', displayName: '胶', aliases: ['胶'], externalAccounts: [{ provider: 'pubg', externalId: 'SG_LabmemNo008' }], addressing },
+    { personId: 'hou', displayName: '猴' },
+  ] }));
+  await write([{ scope: 'group', scopeId: 'group-1@g.us', addressAs: '打工战士', avoid: ['常宽'], note: '形象是铃羽' }]);
+  try {
+    const store = new IdentityStore(database, { presetsFile: presets });
+    assert.deepEqual(store.listAddressing('group', 'group-1@g.us'), [{
+      personId: 'jiao', displayName: '胶', scope: 'group', scopeId: 'group-1@g.us', addressAs: '打工战士', avoid: ['常宽'], note: '形象是铃羽',
+      externalAccounts: [{ provider: 'pubg', externalId: 'SG_LabmemNo008' }],
+    }]);
+    assert.deepEqual(store.listAddressing('group', 'group-2@g.us'), []);
+    // The agreed name also resolves as a reference, but only in that group.
+    assert.equal(store.resolve({ type: 'alias', alias: '打工战士' }, { conversationId: 'group-1@g.us' }).person?.personId, 'jiao');
+    assert.notEqual(store.resolve({ type: 'alias', alias: '打工战士' }, { conversationId: 'group-2@g.us' }).status, 'resolved');
+
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    await write([]);
+    store.refreshPresets(presets);
+    assert.deepEqual(store.listAddressing('group', 'group-1@g.us'), []);
+    store.close();
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test('a malformed addressing entry rejects the presets file', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'identity-addressing-bad-'));
+  const presets = join(directory, 'presets.json');
+  try {
+    for (const addressing of [[{ scope: 'global', scopeId: 'x', addressAs: 'y' }], [{ scope: 'group', scopeId: 'x' }]]) {
+      await writeFile(presets, JSON.stringify({ persons: [{ personId: 'jiao', displayName: '胶', addressing }] }));
+      assert.throws(() => new IdentityStore(':memory:', { presetsFile: presets }), /identity_addressing/u);
+    }
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});

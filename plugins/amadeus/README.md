@@ -31,6 +31,14 @@ Longbridge trading-day/session facts for validity, and sends only the structured
 notification returned by the deterministic tool. The scheduled open/close jobs
 use the same WhatsApp owner outbox as other Amadeus reports.
 
+Group forms of address (how Kurisu calls each member in one group, and names
+to avoid) are reviewed by the owner and written to the external identity presets
+file as `addressing: [{scope: "group", scopeId: "<jid>@g.us", addressAs, avoid,
+note}]` on a person. They are seeded into the identity store and injected into
+every turn of that WhatsApp group's session as system context, so a session
+reset or compaction never loses them and no other conversation sees them. The
+agreed name also resolves as a group-scoped alias.
+
 WhatsApp and Telegram replies settle through one typed delivery boundary. A
 native tool can declare `replyLink: {kind: "share", url}` on a successful result;
 when its origin is listed in `replyLinkOrigins` and the path is a share page

@@ -112,11 +112,36 @@ export interface IdentityPresetAccount {
   label?: string;
 }
 
+/**
+ * How the agent addresses a person in one group. Members agree on these and the owner reviews them; they are kept
+ * apart from aliases, which only say how members may refer to a person.
+ */
+export interface IdentityPresetAddressing {
+  scope: 'group';
+  scopeId: string;
+  addressAs: string;
+  /** Names the agent must not use for this person in that group. */
+  avoid?: string[];
+  note?: string;
+}
+
 export interface IdentityPreset {
   personId?: string;
   displayName: string;
   aliases?: string[];
   externalAccounts?: IdentityPresetAccount[];
+  addressing?: IdentityPresetAddressing[];
+}
+
+export interface AddressingRecord {
+  personId: string;
+  displayName: string;
+  scope: 'group';
+  scopeId: string;
+  addressAs: string;
+  avoid: string[];
+  note?: string;
+  externalAccounts: Array<{ provider: string; externalId: string }>;
 }
 
 export interface AddAliasInput {
@@ -252,14 +277,31 @@ function parsePresetFile(path: string): IdentityPreset[] {
       return result;
     }) : [];
     const aliases = Array.isArray(source.aliases) ? source.aliases.map((alias) => clean(alias, 'identity_alias', 128)) : [];
+    const addressing = Array.isArray(source.addressing) ? source.addressing.map(parsePresetAddressing) : [];
     const personId = optionalClean(source.personId ?? source.id, 128);
     return {
       ...(personId ? { personId } : {}),
       displayName: clean(source.displayName ?? source.name, 'identity_display_name', 128),
       ...(aliases.length ? { aliases } : {}),
       ...(accounts.length ? { externalAccounts: accounts } : {}),
+      ...(addressing.length ? { addressing } : {}),
     };
   });
+}
+
+function parsePresetAddressing(value: unknown): IdentityPresetAddressing {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('identity_addressing_invalid');
+  const row = value as Record<string, unknown>;
+  if (row.scope !== 'group') throw new Error('identity_addressing_scope_invalid');
+  const avoid = Array.isArray(row.avoid) ? row.avoid.map((name) => clean(name, 'identity_addressing_avoid', 64)) : [];
+  const note = optionalClean(row.note, 300);
+  return {
+    scope: 'group',
+    scopeId: clean(row.scopeId, 'identity_addressing_scope_id', 256),
+    addressAs: clean(row.addressAs, 'identity_addressing_name', 64),
+    ...(avoid.length ? { avoid } : {}),
+    ...(note ? { note } : {}),
+  };
 }
 
 function parseScope(scope: unknown): AliasScope {
@@ -361,6 +403,19 @@ export class IdentityStore {
         UNIQUE (provider, external_key)
       );
       CREATE INDEX IF NOT EXISTS idx_identity_external_person ON external_accounts(person_id);
+      CREATE TABLE IF NOT EXISTS addressing (
+        person_id TEXT NOT NULL REFERENCES persons(person_id) ON DELETE CASCADE,
+        scope TEXT NOT NULL CHECK (scope = 'group'),
+        scope_id TEXT NOT NULL,
+        address_as TEXT NOT NULL,
+        avoid_json TEXT NOT NULL DEFAULT '[]',
+        note TEXT,
+        source TEXT NOT NULL CHECK (source IN ('preset', 'confirmed')),
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        PRIMARY KEY (person_id, scope, scope_id)
+      );
+      CREATE INDEX IF NOT EXISTS idx_identity_addressing_scope ON addressing(scope, scope_id);
     `);
   }
 
@@ -675,6 +730,34 @@ export class IdentityStore {
     return this.aliasFromRow(this.db.prepare('SELECT * FROM aliases WHERE alias_id = ?').get(id)!);
   }
 
+  /** The agreed forms of address in one group, in display-name order. */
+  listAddressing(scope: 'group', scopeId: string): AddressingRecord[] {
+    const id = clean(scopeId, 'identity_addressing_scope_id', 256);
+    const rows = this.db.prepare(`SELECT a.*, p.display_name FROM addressing a JOIN persons p ON p.person_id = a.person_id
+      WHERE a.scope = ? AND a.scope_id = ? ORDER BY p.display_name_key`).all(scope, id);
+    return rows.map((row) => {
+      const personId = rowText(row, 'person_id');
+      let avoid: string[] = [];
+      try {
+        const parsed = JSON.parse(rowText(row, 'avoid_json', '[]')) as unknown;
+        if (Array.isArray(parsed)) avoid = parsed.filter((name): name is string => typeof name === 'string');
+      } catch { /* a malformed list adds nothing */ }
+      const note = rowOptional(row, 'note');
+      const accounts = this.db.prepare('SELECT provider, external_id FROM external_accounts WHERE person_id = ? ORDER BY provider, external_id').all(personId)
+        .map((account) => ({ provider: rowText(account, 'provider'), externalId: rowText(account, 'external_id') }));
+      return {
+        personId,
+        displayName: rowText(row, 'display_name'),
+        scope: 'group' as const,
+        scopeId: id,
+        addressAs: rowText(row, 'address_as'),
+        avoid,
+        ...(note ? { note } : {}),
+        externalAccounts: accounts,
+      };
+    });
+  }
+
   seedPresets(presets: IdentityPreset[]): void {
     this.db.exec('BEGIN IMMEDIATE');
     try {
@@ -684,6 +767,15 @@ export class IdentityStore {
         this.upsertAlias({ personId, alias: preset.displayName, scope: 'global', source: 'preset', confidence: 1 });
         for (const alias of preset.aliases ?? []) this.upsertAlias({ personId, alias, scope: 'global', source: 'preset', confidence: 1 });
         for (const account of preset.externalAccounts ?? []) this.linkAccount({ personId, ...account, source: 'preset', confidence: 1 });
+        // The presets file is the reviewed source of a person's addressing: entries it no longer lists are removed.
+        this.db.prepare("DELETE FROM addressing WHERE person_id = ? AND source = 'preset'").run(personId);
+        for (const entry of preset.addressing ?? []) {
+          const timestamp = nowIso(this.now);
+          this.db.prepare(`INSERT INTO addressing (person_id, scope, scope_id, address_as, avoid_json, note, source, created_at, updated_at)
+            VALUES (?, 'group', ?, ?, ?, ?, 'preset', ?, ?)`).run(personId, entry.scopeId, entry.addressAs, JSON.stringify(entry.avoid ?? []), entry.note ?? null, timestamp, timestamp);
+          // Members may also refer to the person by the agreed name in that group.
+          this.upsertAlias({ personId, alias: entry.addressAs, scope: 'group', scopeId: entry.scopeId, source: 'preset', confidence: 1 });
+        }
       }
       this.db.exec('COMMIT');
     } catch (error) {
