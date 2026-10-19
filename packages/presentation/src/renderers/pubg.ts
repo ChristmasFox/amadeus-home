@@ -10,8 +10,10 @@ import type {
   PubgStatsPresentation,
   PubgStatusPresentation,
   PubgTeamDamagePresentation,
+  PubgTeamDamageSlice,
 } from '../contracts/pubg.js';
 import { formatDisplayRange, formatDisplayTime } from '../time/format.js';
+import { sessionMapName } from './session-review.js';
 import {
   assertValid,
   validatePubgComparisonPresentation,
@@ -217,17 +219,60 @@ function metricRow(row: PubgMetricRow, localizedMetrics: boolean, titles: string
   return `- ${name}${titlePrefix}${fragments.length ? `：${fragments.join('，')}` : ''}`;
 }
 
+/** "10月19日星期一" for a range covering one business day; null for anything else. */
+function dayLabel(range: PubgSourceRange | undefined, options: PubgRenderOptions): string | null {
+  if (!range?.from || !range.to) return null;
+  const from = new Date(range.from);
+  const hours = (new Date(range.to).getTime() - from.getTime()) / 3_600_000;
+  if (!Number.isFinite(hours) || hours < 23 || hours > 25) return null;
+  try {
+    return new Intl.DateTimeFormat('zh-CN', { timeZone: options.timezone ?? 'Asia/Shanghai', month: 'long', day: 'numeric', weekday: 'long' }).format(from);
+  } catch { return null; }
+}
+
 /** A model-built time_range arrives labelled 指定时间; a one-business-day range reads better as its date. */
 function chatHeadline(headline: string, range: PubgSourceRange | undefined, options: PubgRenderOptions): string {
   const text = userText(headline);
-  if (text !== '指定时间' || !range?.from || !range.to) return text;
-  const from = new Date(range.from);
-  const hours = (new Date(range.to).getTime() - from.getTime()) / 3_600_000;
-  if (!Number.isFinite(hours) || hours < 23 || hours > 25) return text;
-  try {
-    const parts = new Intl.DateTimeFormat('zh-CN', { timeZone: options.timezone ?? 'Asia/Shanghai', month: 'long', day: 'numeric', weekday: 'long' }).format(from);
-    return `${parts} 全天战报`;
-  } catch { return text; }
+  const day = text === '指定时间' ? dayLabel(range, options) : null;
+  return day ? `${day} 全天战报` : text;
+}
+
+function slicesText(slices: readonly PubgTeamDamageSlice[]): string {
+  return slices.map((slice) => `${slice.label} ${slice.hitCount} 次`).join('、');
+}
+
+/** The 队内误伤账本 a chat reply retells: totals by kind, every direction, the worst matches, and who stayed clean. */
+function renderTeamDamageLedger(presentation: PubgTeamDamagePresentation, options: PubgRenderOptions): string {
+  const day = dayLabel(presentation.sourceRange, options);
+  const ledger = presentation.ledger;
+  const lines = [`🥊 ${day ? `${day} ` : ''}队内误伤账本`, ''];
+  const status = statusLine(presentation.status);
+  if (status) lines.push(status, '');
+  if (!presentation.directions.length) {
+    lines.push(userText(presentation.summary));
+    return lines.concat(footer(presentation, options)).join('\n');
+  }
+  const total = presentation.totalDamage === null ? '未知' : formatMetricNumber('damage', presentation.totalDamage);
+  lines.push(`• 总误伤：**${total} 点**`);
+  lines.push(`• 总命中：**${value(presentation.totalHitCount)} 次**${ledger?.sources.length ? `（${slicesText(ledger.sources)}）` : ''}`);
+  lines.push('', '───', '', `**互相伤害明细（共 ${presentation.directions.length} 个方向）：**`);
+  presentation.directions.forEach((direction, index) => {
+    const damage = direction.damage === null ? '未知' : formatMetricNumber('damage', direction.damage);
+    const kinds = ledger?.directionSources[index] ?? [];
+    lines.push(
+      `${index + 1}. **${userText(direction.actor)} ➡️ ${userText(direction.victim)}**`,
+      `  • 总输出：**${value(direction.hitCount)} 次命中，造成 ${damage} 伤害**${kinds.length ? `（${slicesText(kinds)}）` : ''}${direction.complete ? '' : '（不完整）'}`,
+    );
+  });
+  if (ledger?.highlights.length) {
+    lines.push('', '───', '', '**名场面：**');
+    for (const highlight of ledger.highlights) {
+      const pairs = highlight.pairs.map((pair) => `${userText(pair.actor)} ➡️ ${userText(pair.victim)} ${pair.hitCount} 次 ${formatMetricNumber('damage', pair.damage)} 点`).join('；');
+      lines.push(`• ${highlight.label}：单局 **${formatMetricNumber('damage', highlight.damage)} 点（${highlight.hitCount} 次命中）**：${pairs}`);
+    }
+  }
+  if (ledger?.quiet.length) lines.push('', `清白名单：${ledger.quiet.map(userText).join('、')}（0 次主动队内输出）`);
+  return lines.concat(footer(presentation, options)).join('\n');
 }
 
 const CHAT_MEDALS = ['🥇', '🥈', '🥉'] as const;
@@ -310,8 +355,34 @@ export function renderPubgStats(presentation: PubgStatsPresentation, options: Pu
   return lines.concat(footer(validated, options)).join('\n');
 }
 
+const MODE_NAMES: Readonly<Record<string, string>> = {
+  squad: '四排', 'squad-fpp': '四排第一人称', duo: '双排', 'duo-fpp': '双排第一人称', solo: '单排', 'solo-fpp': '单排第一人称',
+};
+
+/** "SG_LabmemNo004 击杀0 伤害27.903175" → "SG_LabmemNo004 0 杀 27.9 伤害". */
+function chatMatchSummary(summary: string): string {
+  return userText(summary).replace(/击杀(\d+)\s*伤害(\d+(?:\.\d+)?)/gu, (_all, kills: string, damage: string) => `${kills} 杀 ${formatMetricNumber('damage', Number(damage))} 伤害`);
+}
+
+function renderChatMatchList(presentation: PubgMatchListPresentation, options: PubgRenderOptions): string {
+  const day = dayLabel(presentation.sourceRange, options);
+  const modes = new Set(presentation.matches.map((match) => MODE_NAMES[match.gameMode] ?? match.gameMode));
+  const mode = modes.size === 1 ? [...modes][0]! : '';
+  const lines = [`🗂️ ${day ? `${day} ` : ''}${mode ? `${mode}` : ''}对局列表`, ''];
+  const status = statusLine(presentation.status);
+  if (status) lines.push(status, '');
+  lines.push(userText(presentation.summary));
+  presentation.matches.forEach((match, index) => {
+    const at = match.startedAt ? formatDisplayTime(match.startedAt, timeOptions(options)) : '时间未知';
+    const placement = match.placement === null ? '名次未知' : match.placement === 1 ? '**🏆 吃鸡**' : `**#${match.placement}**`;
+    lines.push('', `${index + 1}. ${at}｜${sessionMapName(match.mapName)}${mode ? '' : `｜${MODE_NAMES[match.gameMode] ?? userText(match.gameMode)}`}｜${placement}`, `  • ${chatMatchSummary(match.summary)}`);
+  });
+  return lines.concat(footer(presentation, options)).join('\n');
+}
+
 export function renderPubgMatchList(presentation: PubgMatchListPresentation, options: PubgRenderOptions = {}): string {
   const validated = assertValid(validatePubgMatchListPresentation(presentation));
+  if (options.chatEmphasis) return renderChatMatchList(validated, options);
   const lines = [userText(validated.headline), '', userText(validated.summary)];
   if (validated.matches.length) {
     lines.push('', '对局列表：', ...validated.matches.map((match) => {
@@ -375,6 +446,7 @@ export function renderPubgPeriodReview(presentation: PubgPeriodReviewPresentatio
 
 export function renderPubgTeamDamage(presentation: PubgTeamDamagePresentation, options: PubgRenderOptions = {}): string {
   const validated = assertValid(validatePubgTeamDamagePresentation(presentation));
+  if (options.chatEmphasis) return renderTeamDamageLedger(validated, options);
   const lines = [userText(validated.headline), '', `方向：${userText(validated.direction)}`];
   const status = statusLine(validated.status);
   if (status) lines.push(status);

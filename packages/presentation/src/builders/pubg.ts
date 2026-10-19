@@ -14,9 +14,12 @@ import type {
   PubgSourceRange,
   PubgStatsPresentation,
   PubgStatusPresentation,
+  PubgTeamDamageLedger,
   PubgTeamDamagePresentation,
+  PubgTeamDamageSlice,
   PubgPresentationCoverage,
 } from '../contracts/pubg.js';
+import { sessionMapName } from '../renderers/session-review.js';
 import {
   assertValid,
   validatePubgComparisonPresentation,
@@ -441,6 +444,86 @@ function playerName(value: unknown): string {
   return text(row.name ?? row.displayName ?? row.playerId, '未知玩家');
 }
 
+const VEHICLE_NAMES: ReadonlyArray<[RegExp, string]> = [
+  [/PonyCoupe/u, '小轿车'], [/Dacia|Sedan/u, '轿车'], [/Blanc/u, 'Blanc 跑车'], [/Mirado/u, 'Mirado 跑车'], [/PickupTruck/u, '皮卡'],
+  [/Uaz/iu, '吉普'], [/Motorbike|Dirtbike|Scooter/u, '摩托'], [/Buggy/u, '蹦蹦车'], [/Rony/u, '小巴'], [/Boat|AquaRail/u, '船'], [/Bus|Van/u, '巴士'],
+];
+
+/** 飞踢 / 重拳 / 皮卡撞击 / Beryl M762 走火: what one team-damage event was, in the squad's words. */
+function teamHitKind(event: Record<string, unknown>): string {
+  const source = text(event.source, '');
+  const weapon = text(event.weapon, '');
+  if (source === 'MELEE') return event.meleeKind === 'KICK' ? '飞踢' : event.meleeKind === 'PUNCH' ? '重拳' : '近战';
+  if (source === 'VEHICLE') return `${VEHICLE_NAMES.find(([pattern]) => pattern.test(weapon))?.[1] ?? '载具'}撞击`;
+  if (source === 'GUN') return `${weapon.replace(/^Weap/u, '').replace(/_C$/u, '').replace(/([a-z])([A-Z0-9])/gu, '$1 $2') || '枪械'} 走火`;
+  if (source === 'EXPLOSIVE') return '爆炸物';
+  return '其他伤害';
+}
+
+function addSlice(slices: Map<string, PubgTeamDamageSlice>, label: string, hitCount: number, damage: number): void {
+  const slice = slices.get(label) ?? { label, hitCount: 0, damage: 0 };
+  slice.hitCount += hitCount;
+  slice.damage += damage;
+  slices.set(label, slice);
+}
+
+function sortedSlices(slices: Map<string, PubgTeamDamageSlice>): PubgTeamDamageSlice[] {
+  return [...slices.values()].map((slice) => ({ ...slice, damage: Math.round(slice.damage * 100) / 100 })).sort((a, b) => b.hitCount - a.hitCount || b.damage - a.damage);
+}
+
+/** Reads the per-match events behind the direction totals; undefined when the result carried none. */
+function teamDamageLedger(data: Record<string, unknown>, directions: Array<{ actor: string; victim: string; actorId: string | null; victimId: string | null }>): PubgTeamDamageLedger | undefined {
+  const matches = Array.isArray(data.matches) ? data.matches.map(record) : [];
+  const directionIndex = new Map(directions.map((direction, index) => [`${direction.actorId}:${direction.victimId}`, index]));
+  const names = new Map<string, string>();
+  for (const direction of directions) {
+    if (direction.actorId) names.set(direction.actorId, direction.actor);
+    if (direction.victimId) names.set(direction.victimId, direction.victim);
+  }
+  const sources = new Map<string, PubgTeamDamageSlice>();
+  const perDirection = directions.map(() => new Map<string, PubgTeamDamageSlice>());
+  const perMatch: PubgTeamDamageLedger['highlights'] = [];
+  let events = 0;
+  matches.forEach((match, ordinal) => {
+    const pairs = new Map<string, { actor: string; victim: string; hitCount: number; damage: number }>();
+    for (const raw of Array.isArray(match.teamDamage) ? match.teamDamage : []) {
+      const event = record(raw);
+      const index = directionIndex.get(`${stringOrNull(event.actorPlayerId)}:${stringOrNull(event.victimPlayerId)}`);
+      if (index === undefined) continue; // a direction the query filtered out
+      const hitCount = numberOrNull(event.hitCount) ?? 0;
+      const damage = numberOrNull(event.damage) ?? 0;
+      const kind = teamHitKind(event);
+      events += 1;
+      addSlice(sources, kind, hitCount, damage);
+      addSlice(perDirection[index]!, kind, hitCount, damage);
+      const direction = directions[index]!;
+      const pair = pairs.get(`${index}`) ?? { actor: direction.actor, victim: direction.victim, hitCount: 0, damage: 0 };
+      pair.hitCount += hitCount;
+      pair.damage += damage;
+      pairs.set(`${index}`, pair);
+    }
+    if (!pairs.size) return;
+    const list = [...pairs.values()].map((pair) => ({ ...pair, damage: Math.round(pair.damage * 100) / 100 })).sort((a, b) => b.damage - a.damage);
+    const placement = numberOrNull(match.placement);
+    const map = sessionMapName(text(match.mapName, ''));
+    const at = stringOrNull(match.startedAtLocal);
+    perMatch.push({
+      label: `第 ${ordinal + 1} 局（${map}${placement === null ? '' : ` #${placement}`}${at ? `，${at}` : ''}）`,
+      hitCount: list.reduce((total, pair) => total + pair.hitCount, 0),
+      damage: Math.round(list.reduce((total, pair) => total + pair.damage, 0) * 100) / 100,
+      pairs: list,
+    });
+  });
+  if (!events) return undefined;
+  const actors = new Set(directions.map((direction) => direction.actor));
+  return {
+    sources: sortedSlices(sources),
+    directionSources: perDirection.map(sortedSlices),
+    highlights: perMatch.sort((a, b) => b.damage - a.damage).slice(0, 2),
+    quiet: [...new Set(directions.map((direction) => direction.victim))].filter((victim) => !actors.has(victim)),
+  };
+}
+
 export function buildPubgTeamDamagePresentation(input: PubgToolPresentationInput): PubgTeamDamagePresentation {
   const data = record(input.data);
   const known = knownFor(input);
@@ -456,6 +539,7 @@ export function buildPubgTeamDamagePresentation(input: PubgToolPresentationInput
       actor,
       victim,
       actorId,
+      victimId,
       hitCount: numberOrNull(row.hitCount),
       damage: numberOrNull(row.damage),
       knownHitCount: numberOrNull(row.knownHitCount) ?? numberOrNull(row.hitCount) ?? 0,
@@ -503,7 +587,8 @@ export function buildPubgTeamDamagePresentation(input: PubgToolPresentationInput
       || left.actor.localeCompare(right.actor));
     actorTotals = totals.map((total, index) => ({ ...total, position: index + 1 }));
   }
-  const directions = rawDirections.map(({ actorId: _actorId, knownDamage, knownHitCount, ...direction }) => ({
+  const ledger = input.presentationStyle === 'public_agent' ? undefined : teamDamageLedger(data, rawDirections);
+  const directions = rawDirections.map(({ actorId: _actorId, victimId: _victimId, knownDamage, knownHitCount, ...direction }) => ({
     ...direction,
     ...(input.presentationStyle === 'public_agent' ? { knownDamage, knownHitCount } : {}),
   }));
@@ -530,6 +615,7 @@ export function buildPubgTeamDamagePresentation(input: PubgToolPresentationInput
     totalHitCount,
     totalDamage,
     directions,
+    ...(ledger ? { ledger } : {}),
     ...(actorTotals ? { actorTotals, ...(rankingBasis ? { rankingBasis } : {}) } : {}),
     summary,
     evidenceRefs: input.evidenceRefs?.matchIds ?? [],

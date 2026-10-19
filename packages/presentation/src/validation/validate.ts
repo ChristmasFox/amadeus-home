@@ -13,7 +13,9 @@ import type {
   PubgSourceRange,
   PubgStatsPresentation,
   PubgStatusPresentation,
+  PubgTeamDamageLedger,
   PubgTeamDamagePresentation,
+  PubgTeamDamageSlice,
   PubgPresentationCoverage,
   PresentationTextItem,
 } from '../contracts/pubg.js';
@@ -336,6 +338,44 @@ export function validatePubgPeriodReviewPresentation(value: unknown, knownEviden
   return result({ ...common, type: 'pubg_period_review', period: { label, ...(displayDate ? { displayDate } : {}) }, summary, orderedMatches, highlights, patterns, analysis, evidenceRefs }, errors);
 }
 
+function teamDamageSlices(value: unknown, path: string, errors: string[]): PubgTeamDamageSlice[] {
+  if (!Array.isArray(value)) { errors.push(`${path} must be an array`); return []; }
+  return value.flatMap((item, index) => {
+    const slice = (item ?? {}) as Record<string, unknown>;
+    const label = stringValue(slice.label, `${path}[${index}].label`, errors);
+    const hitCount = finiteOrNull(slice.hitCount, `${path}[${index}].hitCount`, errors);
+    const damage = finiteOrNull(slice.damage, `${path}[${index}].damage`, errors);
+    return label && typeof hitCount === 'number' && typeof damage === 'number' ? [{ label, hitCount, damage }] : [];
+  });
+}
+
+function teamDamageLedger(value: unknown, directionCount: number, errors: string[]): PubgTeamDamageLedger | undefined {
+  if (value === undefined) return undefined;
+  if (!value || typeof value !== 'object') { errors.push('ledger must be an object'); return undefined; }
+  const row = value as Record<string, unknown>;
+  const directionSources = Array.isArray(row.directionSources)
+    ? row.directionSources.map((item, index) => teamDamageSlices(item, `ledger.directionSources[${index}]`, errors))
+    : (errors.push('ledger.directionSources must be an array'), []);
+  if (directionSources.length !== directionCount) errors.push('ledger.directionSources must align with directions');
+  const highlights = Array.isArray(row.highlights) ? row.highlights.flatMap((item, index) => {
+    const highlight = (item ?? {}) as Record<string, unknown>;
+    const label = stringValue(highlight.label, `ledger.highlights[${index}].label`, errors);
+    const hitCount = finiteOrNull(highlight.hitCount, `ledger.highlights[${index}].hitCount`, errors);
+    const damage = finiteOrNull(highlight.damage, `ledger.highlights[${index}].damage`, errors);
+    const pairs = Array.isArray(highlight.pairs) ? highlight.pairs.flatMap((raw, pairIndex) => {
+      const pair = (raw ?? {}) as Record<string, unknown>;
+      const actor = stringValue(pair.actor, `ledger.highlights[${index}].pairs[${pairIndex}].actor`, errors);
+      const victim = stringValue(pair.victim, `ledger.highlights[${index}].pairs[${pairIndex}].victim`, errors);
+      const pairHits = finiteOrNull(pair.hitCount, `ledger.highlights[${index}].pairs[${pairIndex}].hitCount`, errors);
+      const pairDamage = finiteOrNull(pair.damage, `ledger.highlights[${index}].pairs[${pairIndex}].damage`, errors);
+      return actor && victim && typeof pairHits === 'number' && typeof pairDamage === 'number' ? [{ actor, victim, hitCount: pairHits, damage: pairDamage }] : [];
+    }) : (errors.push(`ledger.highlights[${index}].pairs must be an array`), []);
+    return label && typeof hitCount === 'number' && typeof damage === 'number' ? [{ label, hitCount, damage, pairs }] : [];
+  }) : (errors.push('ledger.highlights must be an array'), []);
+  const quiet = Array.isArray(row.quiet) && row.quiet.every((item) => typeof item === 'string') ? row.quiet as string[] : (errors.push('ledger.quiet must be a string array'), []);
+  return { sources: teamDamageSlices(row.sources, 'ledger.sources', errors), directionSources, highlights, quiet };
+}
+
 export function validatePubgTeamDamagePresentation(value: unknown, knownEvidence?: ReadonlySet<string>): ValidationResult<PubgTeamDamagePresentation> {
   const errors: string[] = [];
   if (!value || typeof value !== 'object') return result(value as PubgTeamDamagePresentation, ['presentation must be an object']);
@@ -388,8 +428,9 @@ export function validatePubgTeamDamagePresentation(value: unknown, knownEvidence
   const rankingBasis = row.rankingBasis === undefined ? undefined
     : row.rankingBasis === 'damage' || row.rankingBasis === 'knownDamage' ? row.rankingBasis
       : (errors.push('rankingBasis is invalid'), undefined);
+  const ledger = teamDamageLedger(row.ledger, directions.length, errors);
   if (!headline || !direction || !summary) return result(value as PubgTeamDamagePresentation, errors);
-  return result({ ...common, type: 'pubg_team_damage', headline, direction, source, meleeKind, totalHitCount: totalHitCount ?? null, totalDamage: totalDamage ?? null, directions, ...(actorTotals ? { actorTotals } : {}), ...(rankingBasis ? { rankingBasis } : {}), summary, evidenceRefs }, errors);
+  return result({ ...common, type: 'pubg_team_damage', headline, direction, source, meleeKind, totalHitCount: totalHitCount ?? null, totalDamage: totalDamage ?? null, directions, ...(ledger ? { ledger } : {}), ...(actorTotals ? { actorTotals } : {}), ...(rankingBasis ? { rankingBasis } : {}), summary, evidenceRefs }, errors);
 }
 
 export function validatePubgPresentation(value: unknown, knownEvidence?: ReadonlySet<string>): ValidationResult<PubgPresentation> {

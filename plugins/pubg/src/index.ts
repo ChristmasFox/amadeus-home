@@ -7,7 +7,7 @@ import { openClawConversationAdapter } from './adapters/openclaw.js';
 import { registerPubgEvidenceGuard } from './evidence-guard.js';
 import { registerSessionReviewWorker } from './session-review-service.js';
 import { appendQueryShareLink, type QuerySharePlayerRow } from './query-share.js';
-import { STATS_REPLY_GUIDE } from './stats-reply-guide.js';
+import { replyGuideFor } from './reply-guides.js';
 import { IdentityStore, type IdentityResolution, type PersonSnapshot } from '@agent/identity';
 import {
   adaptWorldlineNotification,
@@ -15,10 +15,15 @@ import {
   buildPubgStatusPresentation,
   buildPubgToolPresentation,
   formatDisplayTime,
+  renderPubgMatchList,
   renderPubgStats,
   renderPubgStatus,
+  renderPubgTeamDamage,
+  type PubgMatchListPresentation,
+  type PubgRenderOptions,
   type PubgSourceRange,
   type PubgStatsPresentation,
+  type PubgTeamDamagePresentation,
 } from '@agent/presentation';
 import {
   PubgApiClient,
@@ -734,11 +739,12 @@ function jsonToolResult(name: string, envelope: ToolEnvelope, fallbackTimezone =
     presentation = { presentation: status, displayText: renderPubgStatus(status, { timezone: displayTimezone, now: envelope.asOf }) };
   }
   const shared = share ? share(envelope, presentation.displayText, displayTimezone, presentation.presentation) : { text: presentation.displayText };
-  // The share page keeps the plain block; the chat reply the agent retells carries WhatsApp bold on names, titles and totals.
-  if (presentation.presentation.type === 'pubg_stats' && shared.text.startsWith(presentation.displayText)) {
-    const chatText = renderPubgStats(presentation.presentation as PubgStatsPresentation, { timezone: displayTimezone, now: envelope.asOf, chatEmphasis: true });
+  // The share page keeps the plain block; the chat reply the agent retells gets the chat layout (bold, medals, ledger).
+  const chatText = chatDisplayText(presentation.presentation, { timezone: displayTimezone, now: envelope.asOf, chatEmphasis: true });
+  if (chatText !== undefined && shared.text.startsWith(presentation.displayText)) {
     shared.text = chatText + shared.text.slice(presentation.displayText.length);
   }
+  const replyGuide = replyGuideFor(presentation.presentation);
   return jsonResult({
     ...displayEnvelope,
     asOfLocal: formatLocalTime(envelope.asOf, displayTimezone) ?? envelope.asOf,
@@ -748,14 +754,17 @@ function jsonToolResult(name: string, envelope: ToolEnvelope, fallbackTimezone =
     dataSourceRange,
     presentation: presentation.presentation,
     displayText: shared.text,
-    ...(isStatsReport(presentation.presentation) ? { replyGuide: STATS_REPLY_GUIDE } : {}),
+    ...(replyGuide ? { replyGuide } : {}),
     // The amadeus delivery boundary ends the reply with this exact link even when the agent retells the answer.
     ...(shared.url ? { replyLink: { kind: 'share', url: shared.url } } : {}),
   });
 }
 
-function isStatsReport(presentation: ReturnType<typeof buildPubgToolPresentation>['presentation']): boolean {
-  return presentation.type === 'pubg_stats' && presentation.status !== 'error' && (presentation as PubgStatsPresentation).rows.length > 0;
+function chatDisplayText(presentation: ReturnType<typeof buildPubgToolPresentation>['presentation'], options: PubgRenderOptions): string | undefined {
+  if (presentation.type === 'pubg_stats') return renderPubgStats(presentation as PubgStatsPresentation, options);
+  if (presentation.type === 'pubg_team_damage') return renderPubgTeamDamage(presentation as PubgTeamDamagePresentation, options);
+  if (presentation.type === 'pubg_match_list') return renderPubgMatchList(presentation as PubgMatchListPresentation, options);
+  return undefined;
 }
 
 const shareStores = new Map<string, SqlitePubgRepository>();

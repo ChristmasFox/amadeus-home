@@ -168,8 +168,41 @@ export interface PubgTeamDamageActorTotal {
   evidenceRefs: string[];
 }
 
+/** One kind of team hit (飞踢, 重拳, a vehicle ram, a gun) with its count and damage. */
+export interface PubgTeamDamageSlice {
+  label: string;
+  hitCount: number;
+  damage: number;
+}
+
+export interface PubgTeamDamagePair {
+  actor: string;
+  victim: string;
+  hitCount: number;
+  damage: number;
+}
+
+/** The match with the most team damage in the period, for the 名场面 lines. */
+export interface PubgTeamDamageHighlight {
+  label: string;
+  hitCount: number;
+  damage: number;
+  pairs: PubgTeamDamagePair[];
+}
+
+/** Detail behind the totals, read from the per-match telemetry events; absent when no events were returned. */
+export interface PubgTeamDamageLedger {
+  sources: PubgTeamDamageSlice[];
+  /** Aligned with `directions`: how each direction's hits break down by kind. */
+  directionSources: PubgTeamDamageSlice[][];
+  highlights: PubgTeamDamageHighlight[];
+  /** Players hit by teammates who never hit a teammate themselves. */
+  quiet: string[];
+}
+
 export interface PubgTeamDamagePresentation extends PubgPresentationBase {
   type: 'pubg_team_damage';
+  ledger?: PubgTeamDamageLedger;
   headline: string;
   direction: string;
   source: string | null;
