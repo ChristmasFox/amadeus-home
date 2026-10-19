@@ -70,12 +70,15 @@ export function registerPubgEvidenceGuard(api: OpenClawPluginApi): void {
   const pending = new Map<string, { at: number; delivered: boolean }>();
   api.on('before_agent_finalize', (event, context) => {
     if (context.trigger && context.trigger !== 'user') return; // scheduled prefetch/report has its own contract
-    const key = context.sessionKey ?? event.sessionKey;
+    // The outbound hook may see a different session-key spelling (or none), so the verdict is also filed under the run id.
+    const keys = [context.sessionKey ?? event.sessionKey, event.runId].filter((value): value is string => Boolean(value));
     const reply = event.lastAssistantMessage ?? '';
     const verdict = assessPubgEvidence(event.messages, reply);
-    if (key) {
-      if (verdict === 'missing_data' || verdict === 'wrong_scope') pending.set(key, { at: Date.now(), delivered: false });
-      else pending.delete(key);
+    if (verdict === 'missing_data' || verdict === 'wrong_scope') {
+      const entry = { at: Date.now(), delivered: false };
+      for (const key of keys) pending.set(key, entry);
+    } else {
+      for (const key of keys) pending.delete(key);
     }
     if (verdict !== 'missing_data' && verdict !== 'wrong_scope') return;
     api.logger.warn(`pubg evidence guard will block unsupported outbound claim: ${verdict}`);
@@ -97,10 +100,13 @@ export function registerPubgEvidenceGuard(api: OpenClawPluginApi): void {
     // WhatsApp's inbound delivery runs this hook with the canonical session key.
     // Its legacy message_sending hook may omit that key, so it cannot correlate
     // the current-turn verdict and must not be used for this safety boundary.
-    const key = event.sessionKey ?? context.sessionKey;
-    if (!key) return;
-    const guard = pending.get(key);
-    if (!guard || Date.now() - guard.at > 120_000) { pending.delete(key); return; }
+    const keys = [event.sessionKey, context.sessionKey, event.runId, context.runId]
+      .filter((value): value is string => typeof value === 'string' && value.length > 0);
+    const guard = keys.map((key) => pending.get(key)).find((entry) => entry !== undefined);
+    if (!guard || Date.now() - guard.at > 120_000) {
+      for (const key of keys) pending.delete(key);
+      return;
+    }
     const content = event.payload.text ?? '';
     if (!FACT.test(content)) return;
     if (guard.delivered) return { cancel: true, reason: 'pubg_unverified_followup_chunk' };

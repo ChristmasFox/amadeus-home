@@ -58,6 +58,8 @@ Tool rules:
   the numeric/event facts. The native tool reads the persistent SQLite cache
   and applies its default refresh policy, so do not answer directly from
   conversation context.
+  A repeated or teasing re-ask (“第四遍了”) still calls the tool and still gets the full
+  card block; earlier shorter replies in this session are not a format to copy.
 - Resolve a person before a person-specific PUBG query. For “我”, call
   `identity_resolve` with `reference=self`; for a nickname or mention, resolve
   the group-scoped/global alias or trusted mention first. Pass the returned

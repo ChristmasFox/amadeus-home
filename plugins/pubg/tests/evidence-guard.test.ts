@@ -67,3 +67,15 @@ test('unsupported claims request one native-tool revision and still fail closed 
   assert.equal(outbound({ payload: { text: reply }, sessionKey: 'group-session' }, context), undefined);
   assert.ok(warnings.length >= 2);
 });
+
+test('outbound guard still blocks when the delivery hook spells the session key differently', () => {
+  const hooks = new Map<string, (event: any, context: any) => any>();
+  registerPubgEvidenceGuard({
+    on: (name: string, handler: (event: any, context: any) => any) => { hooks.set(name, handler); },
+    logger: { warn: () => undefined },
+  } as unknown as OpenClawPluginApi);
+  const reply = '昨天 12 场，Nori 5 杀';
+  hooks.get('before_agent_finalize')!({ runId: 'turn-9', sessionKey: 'agent:main:whatsapp:group:1', lastAssistantMessage: reply, messages: [user('昨天战绩'), assistant(reply)] }, { sessionKey: 'agent:main:whatsapp:group:1', trigger: 'user' });
+  const sent = hooks.get('reply_payload_sending')!({ payload: { text: reply }, runId: 'turn-9', sessionKey: 'whatsapp:group:1' }, { channelId: 'whatsapp' });
+  assert.match(sent?.payload?.text ?? '', /不能确认结果/);
+});
