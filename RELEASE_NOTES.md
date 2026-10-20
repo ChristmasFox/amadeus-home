@@ -1,3 +1,3 @@
-# Amadeus 1.12.9
+# Amadeus 1.13.0
 
-- PUBG 查询与比赛数据分析能力更新。
+- PUBG Intelligence Lab 研究体验与证据链更新。
