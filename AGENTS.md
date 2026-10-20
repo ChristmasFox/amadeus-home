@@ -112,6 +112,9 @@ from text. This bootstrap applies to Codex and other repository-aware agents.
   `scripts/amadeus-version.sh bump patch|minor|major`（Lab patch 满十进一：x.y.9 再 bump patch 得 x.(y+1).0，不出现 x.y.10），Gate 是
   `scripts/pubg-saas-version.sh bump patch|minor|major`。版本变更须同步该产品当前单次
   Release Notes；普通 Commit 不自动增加产品版本。
+- Lab 自动发布的「世界线收束」通知按上一个 `chore(lab): release v*` 之后的 first-parent 提交生成
+  新功能（feat）/修复（fix）/其它变更，chore release 提交被过滤，PR 号取自 squash 后缀或 merge 标题。
+  Lab 提交请在正文加一行 `Release-Note: <一句中文人话>`，通知优先使用它，否则退回提交标题。
 - 新正式 Tag 分别使用 `lab/vX.Y.Z` 与 `gate/vX.Y.Z`。历史 `v1.10.4` 等 Tag 保持原样；
   Git SHA + image digest 的 Candidate 不是正式 Release，也不创建产品正式 Tag。
 - 正式产品 Tag 只能指向已验收且获批准的发布源码；版本工具和普通 Commit 不创建 Tag，

@@ -182,12 +182,84 @@ def release_note_summary(paths: list[str]) -> str:
     return "Lab 发布流程与运行可靠性更新。"
 
 
+RELEASE_SUBJECT_PREFIX = "chore(lab): release v"
+RELEASE_NOTE_TRAILER = "release-note:"
+NOTE_SECTIONS = (("feat", "✨ **新功能**"), ("fix", "🛠️ **修复**"), ("other", "📦 **其它变更**"))
+SCOPE_LABELS = {
+    "lab": "", "9router": "生图路由", "presentation": "消息排版", "pubg": "PUBG",
+    "pubg-intelligence-lab": "PUBG Intelligence Lab", "agents": "协作流程", "gate": "Gate",
+}
+_CONVENTIONAL = __import__("re").compile(r"^(?P<type>[a-z]+)(?:\((?P<scope>[^)]*)\))?(?P<bang>!)?:\s*(?P<desc>.+)$")
+_PR_SUFFIX = __import__("re").compile(r"\s*\(#(?P<pr>\d+)\)\s*$")
+_MERGE = __import__("re").compile(r"^Merge pull request #(?P<pr>\d+) from \S+")
+
+
+def _neutral(text: str) -> str:
+    # The owner notice must not name the runtime vendor (amadeus-version check).
+    import re
+    return re.sub(r"openclaw", "Lab 运行时", text, flags=re.IGNORECASE).strip()
+
+
+def classify_commit(subject: str, body: str) -> dict[str, Any] | None:
+    """Turn one first-parent commit into a release-note entry, or None to skip."""
+    lines = [line.strip() for line in body.splitlines()]
+    pr = None
+    merge = _MERGE.match(subject)
+    if merge:
+        pr = merge.group("pr")
+        title = next((line for line in lines if line), "")
+        subject, lines = title, lines[lines.index(title) + 1:] if title else []
+    suffix = _PR_SUFFIX.search(subject)
+    if suffix:
+        pr = pr or suffix.group("pr")
+        subject = subject[:suffix.start()]
+    if subject.startswith(RELEASE_SUBJECT_PREFIX) or not subject:
+        return None
+    match = _CONVENTIONAL.match(subject)
+    kind, scope, desc = "other", "", subject
+    if match:
+        desc, scope = match.group("desc"), (match.group("scope") or "")
+        kind = {"feat": "feat", "fix": "fix"}.get(match.group("type"), "other")
+        if match.group("type") == "chore" and scope == "lab" and desc.startswith("release v"):
+            return None
+    explicit = next((line[len(RELEASE_NOTE_TRAILER):].strip() for line in lines
+                     if line.lower().startswith(RELEASE_NOTE_TRAILER)), "")
+    text = _neutral(explicit or desc)
+    label = SCOPE_LABELS.get(scope, scope)
+    item = f"{label}：{text}" if label and not explicit else text
+    if pr:
+        item += f"（#{pr}）"
+    return {"kind": kind, "text": item}
+
+
+def release_commits(root: Path, sha: str) -> list[tuple[str, str]]:
+    """First-parent commits since the previous Lab release commit, oldest first."""
+    raw = git(root, "log", "--first-parent", "--format=%s%x1f%b%x1e", "-n", "60", sha)
+    commits: list[tuple[str, str]] = []
+    records = [record.strip("\n") for record in raw.split("\x1e") if record.strip()]
+    for index, record in enumerate(records):
+        subject, _, body = record.partition("\x1f")
+        if subject.startswith(RELEASE_SUBJECT_PREFIX):
+            if index == 0:
+                continue  # the tip is the release commit itself
+            break
+        commits.append((subject, body))
+    return list(reversed(commits))
+
+
+def release_note_body(commits: list[tuple[str, str]], fallback: str) -> str:
+    entries = [entry for entry in (classify_commit(s, b) for s, b in commits) if entry]
+    blocks = []
+    for kind, heading in NOTE_SECTIONS:
+        items = [f"- {entry['text']}" for entry in entries if entry["kind"] == kind]
+        if items:
+            blocks.append(heading + "\n" + "\n".join(items))
+    return "\n\n".join(blocks) if blocks else f"- {fallback}"
+
+
 def write_release_notes(path: Path, version: str, summary: str) -> None:
-    path.write_text(
-        f"# Amadeus {version}\n\n"
-        f"- {summary}\n",
-        encoding="utf-8",
-    )
+    body = summary if summary.lstrip().startswith(("- ", "✨", "🛠", "📦")) else f"- {summary}"
+    path.write_text(f"# Amadeus {version}\n\n{body}\n", encoding="utf-8")
 
 
 def push_main(root: Path) -> None:
@@ -218,7 +290,8 @@ def prepare_release(root: Path, source_sha: str, state: dict[str, Any]) -> dict[
         raise AutomationError("automatic Lab version bump produced no version")
     source_parent = git(tree, "rev-parse", f"{source_sha}^")
     source_paths = git(tree, "diff", "--name-only", f"{source_parent}..{source_sha}").splitlines()
-    write_release_notes(tree / "RELEASE_NOTES.md", version, release_note_summary(source_paths))
+    write_release_notes(tree / "RELEASE_NOTES.md", version,
+                        release_note_body(release_commits(tree, source_sha), release_note_summary(source_paths)))
     command(["bash", "scripts/amadeus-version.sh", "check"], cwd=tree)
     git(tree, "add", "VERSION", "RELEASE_NOTES.md")
     changed = subprocess.run(["git", "-C", str(tree), "diff", "--cached", "--quiet"])
