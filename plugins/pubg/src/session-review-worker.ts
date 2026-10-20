@@ -133,8 +133,14 @@ async function deliver(input: DeliveryInput, session: SquadSession, message: str
   if (!input.subscription?.enabled || !input.gateway) return block('no_subscription');
   const check = await checkReviewTarget(input.gateway, input.subscription, input.team.tenantId);
   if (!check.ok) {
-    // A directory hiccup is retried; a wrong target is held back for the owner to fix.
-    if (check.reason === 'directory_unavailable' && attempts + 1 < SESSION_REVIEW_MAX_ATTEMPTS) return { status: 'pending_delivery', detail: check.reason, message, attempts: attempts + 1 };
+    // A directory hiccup (gateway still warming up after a restart, a timeout) is transient: keep retrying every cycle
+    // and tell the owner once when it outlasts the attempt limit. A wrong target is held back for the owner to fix.
+    if (check.reason === 'directory_unavailable') {
+      if (attempts + 1 === SESSION_REVIEW_MAX_ATTEMPTS && input.ownerOutboxDir) {
+        await queueOwnerBlockedNotice(input.ownerOutboxDir, { sessionKey: session.key, reason: check.reason, occurredAt: input.now.toISOString(), ...(check.error ? { error: check.error } : {}) });
+      }
+      return { status: 'pending_delivery', detail: check.error ? `${check.reason}: ${check.error}` : check.reason, message, attempts: attempts + 1 };
+    }
     return block(check.reason, check.groupName);
   }
   try {

@@ -50,7 +50,7 @@ export async function loadReviewSubscription(input: {
 
 export type TargetCheck =
   | { ok: true; groupName: string }
-  | { ok: false; reason: 'tenant_mismatch' | 'target_not_group' | 'bot_not_in_group' | 'group_name_mismatch' | 'directory_unavailable'; groupName?: string };
+  | { ok: false; reason: 'tenant_mismatch' | 'target_not_group' | 'bot_not_in_group' | 'group_name_mismatch' | 'directory_unavailable'; groupName?: string; error?: string };
 
 interface ConversationRow {
   channel?: unknown;
@@ -77,8 +77,8 @@ export async function checkReviewTarget(gateway: ReportGateway, subscription: Re
   try {
     const response = await gateway.request('conversations.list', { agentId }, { timeoutMs: 15_000 }) as { conversations?: unknown };
     rows = Array.isArray(response?.conversations) ? response.conversations as ConversationRow[] : [];
-  } catch {
-    return { ok: false, reason: 'directory_unavailable' };
+  } catch (error) {
+    return { ok: false, reason: 'directory_unavailable', error: (error instanceof Error ? error.message : String(error)).slice(0, 200) };
   }
   const group = rows
     .filter((row) => row.channel === 'whatsapp' && row.kind === 'group' && row.accountId === subscription.accountId && row.target === subscription.target)
@@ -108,7 +108,7 @@ const BLOCK_REASONS: Record<string, string> = {
   target_not_group: '配置的目标不是 WhatsApp 群',
   bot_not_in_group: '机器人账号不在这个群里(或目录里没有它)',
   group_name_mismatch: '群名称和配置的不一致',
-  directory_unavailable: '暂时查不到群目录',
+  directory_unavailable: '暂时查不到群目录(会继续重试,目录恢复后自动补发)',
   delivery_failed: '多次发送失败',
 };
 
@@ -116,7 +116,7 @@ const BLOCK_REASONS: Record<string, string> = {
  * Tells the owner a review was held back, by queueing a structured event in the amadeus owner outbox; the owner worker
  * delivers it on the fixed owner path. The review itself never goes anywhere else.
  */
-export async function queueOwnerBlockedNotice(outboxDir: string, input: { sessionKey: string; reason: string; groupName?: string; occurredAt: string }): Promise<void> {
+export async function queueOwnerBlockedNotice(outboxDir: string, input: { sessionKey: string; reason: string; groupName?: string; error?: string; occurredAt: string }): Promise<void> {
   const presentation: OwnerNotificationPresentation = {
     type: 'owner_notification',
     eventType: 'pubg_session_review_blocked',
@@ -126,9 +126,12 @@ export async function queueOwnerBlockedNotice(outboxDir: string, input: { sessio
     eventKey: `pubg-session-review-blocked:${input.sessionKey}`,
     source: 'pubg-session-review',
     headline: '⚠ 时段复盘未投递',
-    summary: `${BLOCK_REASONS[input.reason] ?? input.reason},这份复盘没有发到任何群。`,
+    summary: input.reason === 'directory_unavailable'
+      ? `${BLOCK_REASONS[input.reason]},这份复盘还没有发到任何群。`
+      : `${BLOCK_REASONS[input.reason] ?? input.reason},这份复盘没有发到任何群。`,
     facts: [
       { label: '原因', value: input.reason, evidenceRefs: ['pubg:session-review'] },
+      ...(input.error ? [{ label: '错误', value: input.error, evidenceRefs: ['openclaw:conversations.list'] }] : []),
       ...(input.groupName ? [{ label: '当前群名', value: input.groupName, evidenceRefs: ['openclaw:conversations.list'] }] : []),
     ],
     occurredAt: input.occurredAt,

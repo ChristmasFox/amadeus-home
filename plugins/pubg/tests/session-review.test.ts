@@ -52,9 +52,13 @@ const shareToken = (message: unknown) => String(message).match(/https:\/\/pubg\.
 class FakeGateway implements ReportGateway {
   sent: Array<Record<string, unknown>> = [];
   failSends = 0;
+  failDirectory = 0;
   constructor(public groups: Array<Record<string, unknown>>) {}
   async request(method: string, params: Record<string, unknown>) {
-    if (method === 'conversations.list') return { conversations: this.groups };
+    if (method === 'conversations.list') {
+      if (this.failDirectory > 0) { this.failDirectory -= 1; throw new Error('gateway not ready'); }
+      return { conversations: this.groups };
+    }
     if (method === 'send') {
       if (this.failSends > 0) { this.failSends -= 1; throw new Error('socket closed'); }
       this.sent.push(params);
@@ -183,6 +187,29 @@ test('a failed send is retried with the same text and a fresh link, and gives up
   for (let index = 0; index < SESSION_REVIEW_MAX_ATTEMPTS; index += 1) results.push(...(await runSessionReviewCycle(failing.input)).map((item) => item.result));
   assert.deepEqual(results, ['pending_delivery', 'pending_delivery', 'pending_delivery', 'pending_delivery', 'blocked']);
   assert.equal(failing.gateway.sent.length, 0);
+});
+
+test('a directory outage longer than the attempt limit keeps the review pending, tells the owner once, and sends on recovery', async () => {
+  const outbox = mkdtempSync(join(tmpdir(), 'pubg-owner-outbox-'));
+  try {
+    const { store, gateway, input } = setup({ ownerOutboxDir: outbox });
+    gateway.failDirectory = SESSION_REVIEW_MAX_ATTEMPTS + 2;
+    for (let index = 0; index < SESSION_REVIEW_MAX_ATTEMPTS + 2; index += 1) {
+      assert.deepEqual((await runSessionReviewCycle(input)).map((item) => [item.result, item.detail]), [['pending_delivery', 'directory_unavailable: gateway not ready']]);
+    }
+    assert.equal(store.records.get('pubg-session:squad:m1')?.attempts, SESSION_REVIEW_MAX_ATTEMPTS + 2);
+    const files = readdirSync(outbox).filter((file) => file.endsWith('.pending.json'));
+    assert.equal(files.length, 1);
+    const event = JSON.parse(readFileSync(join(outbox, files[0]!), 'utf8'));
+    assert.equal(validateOwnerNotificationPresentation(event).valid, true);
+    assert.deepEqual(event.facts.map((fact: { value: string }) => fact.value), ['directory_unavailable', 'gateway not ready']);
+    assert.equal(gateway.sent.length, 0);
+    assert.deepEqual((await runSessionReviewCycle(input)).map((item) => item.result), ['sent']);
+    assert.equal(gateway.sent.length, 1);
+    assert.equal(store.records.get('pubg-session:squad:m1')?.status, 'sent');
+  } finally {
+    rmSync(outbox, { recursive: true, force: true });
+  }
 });
 
 test('without a subscription nothing is sent', async () => {
