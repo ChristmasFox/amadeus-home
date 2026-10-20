@@ -147,8 +147,13 @@ test('one message for the whole business day: rich 战绩 card, Kurisu voice, tr
   assert.match(text, /KD 2\.00|KD 2\b/u);
   assert.match(text, /团队合计/u);
   assert.doesNotMatch(text, /\*\*/u);
-  assert.match(text, /\*红莉栖点评\*\nName_b:K\/D 2(\.00)? 全队最高/u);
-  assert.match(text, /\*🎮 全天走势\*\n名次 #3 #7 #2/u);
+  // Key facts are WhatsApp bold: section titles, names, K/D, top-ten placements, the day's totals, best and worst match.
+  assert.match(text, /^\*🏆 10月18日星期日 全天战报\*$/mu);
+  assert.match(text, /\*红莉栖点评\*\n\*Name_b\*:\*K\/D 2\.00\* 全队最高/u);
+  assert.match(text, /\*🎮 全天走势\*\n名次 \*#3\* \*#7\* \*#2\*/u);
+  assert.match(text, /场均名次 \*4\.0\* · \*吃鸡 0\* · \*前十 3\* · 击倒 \*12\*/u);
+  assert.match(text, /^\*最好一局 #2 艾伦格\* · /mu);
+  assert.match(text, /昨天一共 \*3 场排位\*/u);
   assert.match(text, /\*结论\*/u);
   // Ends with the share page link; the page is the 战绩 share of exactly that day's matches.
   const token = shareToken(text);

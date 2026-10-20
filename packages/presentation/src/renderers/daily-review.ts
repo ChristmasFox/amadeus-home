@@ -2,7 +2,7 @@ import type { PubgMetricRow, PubgStatsPresentation } from '../contracts/pubg.js'
 import type { SessionReviewPresentation } from '../contracts/session-review.js';
 import { assertValid } from '../validation/validate.js';
 import { validateSessionReviewPresentation } from '../validation/session-review.js';
-import { formatMetricNumber, renderPubgStats, type PubgRenderOptions } from './pubg.js';
+import { renderPubgStats, type PubgRenderOptions } from './pubg.js';
 import { sessionMapName, sessionPlacement, sessionPlacementStrip } from './session-review.js';
 
 /**
@@ -36,17 +36,31 @@ function whatsappBold(text: string): string {
   return text.replace(/\*\*(.+?)\*\*/gu, '*$1*');
 }
 
+/** The card's first line (🏆 … 全天战报) reads as a section title. */
+function boldHeadline(card: string): string {
+  const [first = '', ...rest] = card.split('\n');
+  return [first.startsWith('*') ? first : `*${first}*`, ...rest].join('\n');
+}
+
+/** In the placement strip the chicken dinners and top-ten finishes stand out. */
+function boldStrip(strip: string): string {
+  return strip.split(' ').map((item) => {
+    const rank = Number(item.replace(/^#/u, ''));
+    return item === '🏆' || (Number.isInteger(rank) && rank >= 1 && rank <= 10) ? `*${item}*` : item;
+  }).join(' ');
+}
+
 function one(value: number | null): string {
   return value === null ? '?' : value.toFixed(1);
 }
 
 function opener(review: SessionReviewPresentation): string {
   const { wins, avgPlacement, baselineAvgPlacement } = review.summary;
-  if (wins >= 2) return `昨天吃了 ${wins} 次鸡。……哼,我承认,这个数据确实不坏。`;
-  if (wins === 1) return '昨天吃到 1 次鸡。别急着庆祝,先看看其他几局是怎么回事。';
-  if (avgPlacement !== null && baselineAvgPlacement !== null && avgPlacement <= baselineAvgPlacement - 2) return '昨天的场均名次比你们平时好。看来偶尔也会把我的话听进去嘛。';
-  if (avgPlacement !== null && baselineAvgPlacement !== null && avgPlacement >= baselineAvgPlacement + 2) return '昨天的场均名次比平时差。不是运气问题——数据在下面,自己看。';
-  return `昨天一共 ${review.matchCount} 场排位,数据我整理好了。别找借口,先看数字。`;
+  if (wins >= 2) return `昨天吃了 *${wins} 次鸡*。……哼,我承认,这个数据确实不坏。`;
+  if (wins === 1) return '昨天吃到 *1 次鸡*。别急着庆祝,先看看其他几局是怎么回事。';
+  if (avgPlacement !== null && baselineAvgPlacement !== null && avgPlacement <= baselineAvgPlacement - 2) return `昨天的场均名次 *${one(avgPlacement)}*,比你们平时的 ${one(baselineAvgPlacement)} 好。看来偶尔也会把我的话听进去嘛。`;
+  if (avgPlacement !== null && baselineAvgPlacement !== null && avgPlacement >= baselineAvgPlacement + 2) return `昨天的场均名次 *${one(avgPlacement)}*,比平时的 ${one(baselineAvgPlacement)} 差。不是运气问题——数据在下面,自己看。`;
+  return `昨天一共 *${review.matchCount} 场排位*,数据我整理好了。别找借口,先看数字。`;
 }
 
 function metric(row: PubgMetricRow, key: string): number | null {
@@ -64,8 +78,8 @@ function remarks(stats: PubgStatsPresentation | null): string[] {
   const worst = rows.at(-1)!;
   if (best.kd === worst.kd) return [];
   return [
-    `${best.row.label}:K/D ${formatMetricNumber('kd', best.kd)} 全队最高——这次算你有点实力。`,
-    `${worst.row.label}:K/D ${formatMetricNumber('kd', worst.kd)}……下次冲之前先想清楚,别把队友当垫背。`,
+    `*${best.row.label}*:*K/D ${best.kd!.toFixed(2)}* 全队最高——这次算你有点实力。`,
+    `*${worst.row.label}*:*K/D ${worst.kd!.toFixed(2)}*……下次冲之前先想清楚,别把队友当垫背。`,
   ];
 }
 
@@ -82,22 +96,22 @@ export function renderDailyReview(input: DailyReviewInput): string {
   ];
   if (input.stats) {
     const options: PubgRenderOptions = { timezone, now: input.now.toISOString(), chatEmphasis: true };
-    sections.push([whatsappBold(renderPubgStats(input.stats, options))]);
+    sections.push([boldHeadline(whatsappBold(renderPubgStats(input.stats, options)))]);
   }
   const lines = remarks(input.stats);
   if (lines.length) sections.push(['*红莉栖点评*', ...lines]);
   const baseline = review.summary.baselineAvgPlacement === null ? '' : `(你们平时 ${one(review.summary.baselineAvgPlacement)})`;
   sections.push([
     '*🎮 全天走势*',
-    `名次 ${sessionPlacementStrip(review.placements)}`,
-    `场均名次 ${one(review.summary.avgPlacement)}${baseline} · 吃鸡 ${review.summary.wins} · 前十 ${review.summary.top10} · 击倒 ${review.summary.teamKnocks}`,
+    `名次 ${boldStrip(sessionPlacementStrip(review.placements))}`,
+    `场均名次 *${one(review.summary.avgPlacement)}*${baseline} · *吃鸡 ${review.summary.wins}* · *前十 ${review.summary.top10}* · 击倒 *${review.summary.teamKnocks}*`,
   ]);
   sections.push([`*一句话:${review.headline}*`]);
   sections.push(review.findings.length
     ? ['*结论*', ...review.findings.map((finding, index) => `${index + 1}. ${finding.text}`)]
     : ['*结论*', '各项都在你们平时的正常波动范围内,没有值得单独拎出来的问题。']);
-  if (review.matchCount > 1 && review.bestMatch) sections.push([`*最好一局* ${sessionPlacement(review.bestMatch.rank)} ${sessionMapName(review.bestMatch.mapName)} · ${review.bestMatch.text}`]);
-  if (review.matchCount > 1 && review.worstMatch) sections.push([`*最差一局* ${sessionPlacement(review.worstMatch.rank)} ${sessionMapName(review.worstMatch.mapName)} · ${review.worstMatch.text}`]);
+  if (review.matchCount > 1 && review.bestMatch) sections.push([`*最好一局 ${sessionPlacement(review.bestMatch.rank)} ${sessionMapName(review.bestMatch.mapName)}* · ${review.bestMatch.text}`]);
+  if (review.matchCount > 1 && review.worstMatch) sections.push([`*最差一局 ${sessionPlacement(review.worstMatch.rank)} ${sessionMapName(review.worstMatch.mapName)}* · ${review.worstMatch.text}`]);
   if (review.suggestion) sections.push([`*下次试试* ${review.suggestion}`]);
   const coverage = review.coverage.telemetry === review.coverage.total
     ? `📎 ${review.coverage.total}/${review.coverage.total} 场有完整遥测`
