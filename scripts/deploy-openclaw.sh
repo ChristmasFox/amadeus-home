@@ -1206,7 +1206,13 @@ elif ((OPENCLAW_ONLY == 0)); then
   printf '%s\n' 'MEDIA_ADAPTER_NETWORK=skipped_missing_service'
 fi
 if ((OPENCLAW_ONLY == 0)); then orb -m "$MACHINE" -u root docker exec openclaw sh -lc "ssh -i /run/secrets/mac_ssh_key -o BatchMode=yes -o ConnectTimeout=8 -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null '$MAC_CONTROL_USER@$MAC_CONTROL_HOST' nas.status" >/dev/null; fi
-orb -m "$MACHINE" -u root bash -lc "docker exec openclaw node dist/index.js channels status --json > '$CHECKPOINT_DIR/channels-status.json'"
+# WhatsApp reconnects a few seconds after the switch; poll (up to ~60s) before
+# the strict linked/running/connected check below instead of one snapshot.
+for attempt in $(seq 1 12); do
+  orb -m "$MACHINE" -u root bash -lc "docker exec openclaw node dist/index.js channels status --json > '$CHECKPOINT_DIR/channels-status.json'"
+  orb -m "$MACHINE" -u root python3 -c "import json,sys; w=json.load(open(sys.argv[1])).get('channels',{}).get('whatsapp',{}); sys.exit(0 if all(w.get(k) is True for k in ('linked','running','connected')) else 1)" "$CHECKPOINT_DIR/channels-status.json" && break
+  sleep 5
+done
 if ((AUTO_RELEASE)); then
   orb -m "$MACHINE" -u root python3 - "$CHECKPOINT_DIR/channels-status.json" <<'PY'
 import json, sys

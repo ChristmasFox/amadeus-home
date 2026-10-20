@@ -181,6 +181,7 @@ assert "--auto-release requires LAB_AUTOMATION_VERIFIED_MAIN_SHA" in deploy
 assert deploy.index("if ((AUTO_RELEASE)); then\n  build_images_and_preflight\nfi") > deploy.index("print('CHECKPOINT='")
 assert "OPENCLAW_CONTAINER_HEALTH=healthy" in deploy
 assert "WHATSAPP_HEALTH=linked,running,connected" in deploy
+assert "poll (up to ~60s) before" in deploy, "WhatsApp health waits for reconnect"
 assert "PUBG_STATS_QUERY=passed" in deploy
 assert "valid_pubg_stats_smoke" in deploy
 assert "AUTO_RELEASE_ROLLBACK=passed" in deploy
