@@ -259,7 +259,7 @@
     },
     "whatsapp": {
       "enabled": true,
-      "reactionLevel": "minimal",
+      "reactionLevel": "extensive",
       "defaultAccount": "secondary",
       "pluginHooks": { "messageReceived": true },
       "accounts": {
