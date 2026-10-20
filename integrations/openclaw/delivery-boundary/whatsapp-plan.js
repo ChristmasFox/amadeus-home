@@ -43,6 +43,11 @@ function createWhatsAppReplyPlan(params) {
     sendImage: async (asset, caption) => receipt(await params.transport.sendMedia({ image: asset.bytes, mimetype: asset.mimeType, ...(caption ? { caption } : {}) }, quote())),
     // Image MIME cannot affect this payload: no image key/optimizer or fallback.
     sendDocument: async (asset) => receipt(await params.transport.sendMedia({ document: asset.bytes, mimetype: asset.mimeType, fileName: asset.fileName }, quote())),
+    // Same native primitive as the ack reaction: one bot slot, replaces 👀.
+    sendReaction: (emoji) => sendReactionWhatsApp(params.transport.chatJid, messageId, emoji, {
+      cfg: params.cfg, accountId: params.route.accountId, fromMe: false,
+      ...(String(params.transport.chatJid ?? '').endsWith('@g.us') && params.transport.senderJid ? { participant: params.transport.senderJid } : {}),
+    }),
   });
   const statusReactionController = params.statusReactionController ?? null;
   const replyPolicy = resolveWhatsAppInboundReplyPolicy({

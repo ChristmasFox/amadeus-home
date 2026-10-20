@@ -53,7 +53,7 @@ refuses to start if the identities or required secret files are missing.
 WhatsApp Web pairing state is runtime data under `/DATA/AppData/openclaw`; it
 is never copied into Git. Channel admission remains open groups with
 `requireMention=false`. The owner retains the full native tool profile minus
-the global `tts` deny (`message` is allowed so WhatsApp `react` can cover the ack 👀; non-owner senders stay on their allowlists without `message`). `messages.statusReactions` stays off so OpenClaw does not `restoreInitial` the ack emoji after the turn and wipe an agent react. Other admitted group senders receive the
+the global `tts,message` deny. WhatsApp contextual reactions do not use the model `message` tool: Kurisu ends a reply with `[react:<emoji>]`, the Amadeus delivery boundary strips it in `DeliveryRuns.decode` and, after the typed reply settles, reacts once on the inbound message through the pinned WhatsApp plan's `sendReaction` (native `sendReactionWhatsApp`). `messages.statusReactions` stays off so `restoreInitial` cannot overwrite that reaction with the ack 👀. Other admitted group senders receive the
 scoped web/image/PUBG capabilities plus bounded read-only M204 host status and
 process queries; those host metrics are served only by the native MacHostAgent
 tools, while guest shell probes and raw agent HTTP substitutes are blocked;

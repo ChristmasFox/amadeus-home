@@ -10,6 +10,7 @@ import { createTextDelivery, validateDeliveryEnvelope, type AttachmentPart, type
 import { deliverySettlementState, settleDelivery, type DeliveryReceipt } from './delivery-settlement.js';
 import { createDeliverySpeech } from './delivery-speech.js';
 import { createWhatsAppAttachmentSender } from './whatsapp-delivery.js';
+import { reactAfterDelivery } from './whatsapp-react.js';
 import type { ResolvedDeliveryAsset } from './delivery-assets.js';
 import { detectImageRequestLanguage, type ImageRequestLanguage } from './image-generation-context.js';
 
@@ -33,6 +34,8 @@ export type WhatsAppDeliveryPort = Readonly<{
   sendVoice(audio: { audio: Buffer; mimeType: string }): Promise<DeliveryReceipt>;
   sendImage(asset: ResolvedDeliveryAsset, caption?: string): Promise<DeliveryReceipt>;
   sendDocument(asset: ResolvedDeliveryAsset): Promise<DeliveryReceipt>;
+  /** Reacts on the inbound message (replaces the ack 👀). */
+  sendReaction?(emoji: string): Promise<unknown>;
   start(): void; stop(): void;
 }>;
 export type DeliveryBoundaryOptions = Readonly<{
@@ -304,6 +307,7 @@ export function registerDeliveryBoundary(api: OpenClawPluginApi, options: Delive
           record: (event) => api.logger.info(`amadeus delivery ${JSON.stringify(event)}`),
         }, settlement);
         if (result.final_status === 'failed') throw new Error(`delivery_failed:${result.failure_stage}`);
+        if (result.final_status !== 'duplicate') void reactAfterDelivery(envelope.runId, port.sendReaction, api.logger);
         if (envelope.origin === 'media_completion' && envelope.runId.startsWith('image_generate:')) {
           const captionSource = deliveryRuns.captionSourceFor(envelope.runId) ?? 'none';
           if (result.final_status === 'duplicate') api.logger.info(`amadeus image completion ${JSON.stringify({ event: 'image_completion_duplicate_ignored', run_id: envelope.runId, delivery_id: envelope.deliveryId, channel: envelope.channel })}`);

@@ -1,4 +1,5 @@
 import { createDeliveryEnvelope, type AttachmentPart, type DeliveryContext, type DeliveryEnvelope } from './delivery-envelope.js';
+import { runReactions, stripReactFromEnvelope } from './whatsapp-react.js';
 import { decodeAgentReply } from './delivery-decoder.js';
 import { normalizeImageCaption } from './image-caption.js';
 import { applyReplyLink } from './reply-links.js';
@@ -110,7 +111,10 @@ export class DeliveryRuns {
     const decoded = decodeAgentReply(run.context, raw);
     run.raw = raw;
     run.decodeStatus = decoded.status;
-    return run.envelope = decoded.envelope;
+    // Strip Kurisu's trailing [react:<emoji>] before any sender sees text.
+    const reacted = stripReactFromEnvelope(decoded.envelope);
+    if (reacted.emoji) runReactions.set(runId, reacted.emoji);
+    return run.envelope = reacted.envelope;
   }
   async prepareToolOnly(runId: string): Promise<DeliveryEnvelope> {
     const run = this.runs.get(runId); if (!run || run.context.origin !== 'media_completion') throw new Error('delivery_completion_run_missing');

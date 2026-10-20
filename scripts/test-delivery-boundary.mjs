@@ -81,7 +81,9 @@ const scope={globalThis:{__amadeusDeliveryBoundaryV2_20260930:{version:2,createW
  buildQuotedMessageOptions:params=>params,listWhatsAppSendResultMessageIds:result=>[result.messageId],markdownToWhatsAppChunks:text=>[text],resolveTextChunkLimit:()=>4000,resolveMarkdownTableMode$1:()=> 'code',resolveChunkMode:()=> 'length',
  resolveWhatsAppInboundReplyPolicy:()=>({suppressTyping:false,disableBlockStreaming:false}),resolveChannelStreamingBlockEnabled:()=>false,
  startAmadeusVoiceReplyLease:()=>({}),startAmadeusWhatsAppTypingIndicator:()=>()=>{},closeAmadeusVoiceReplyLeaseForTurn:()=>{},
- prepareWhatsAppOutboundMedia:async media=>({buffer:media.buffer,mimetype:'audio/ogg; codecs=opus'})};
+ prepareWhatsAppOutboundMedia:async media=>({buffer:media.buffer,mimetype:'audio/ogg; codecs=opus'}),
+ sendReactionWhatsApp:async(...args)=>{reactions.push(args);}};
+const reactions=[];
 vm.runInNewContext(body+'\nglobalThis.createPlan=createWhatsAppReplyPlan;',scope);
 const params={route:{sessionKey:'s',accountId:'secondary'},cfg:{},inbound:{event:{id:'m'},conversation:{id:'chat'},media:[]},transport:{chatJid:'chat',reply:async text=>{provider.push({text});return{providerAccepted:true,messageId:'t'};},sendMedia:async payload=>{provider.push(payload);return{providerAccepted:true,messageId:'a'};}}};
 const plan=scope.globalThis.createPlan(params);
@@ -94,6 +96,7 @@ await port.sendImage({bytes:Buffer.from('image'),mimeType:'image/png'},'same-bub
 await port.sendText('typed text');assert.deepEqual(provider.at(-1),{text:'typed text'});
 await assert.rejects(port.sendText('[[control]]\nNO_REPLY'),/protocol_text_rejected/u);
 await port.sendVoice({audio:Buffer.from('audio'),mimeType:'audio/mpeg'});assert.equal(provider.at(-1).ptt,true);
+await port.sendReaction('😂');assert.deepEqual(reactions.at(-1).slice(0,3),['chat','m','😂']);assert.equal(reactions.at(-1)[3].fromMe,false);assert.equal('participant' in reactions.at(-1)[3],false);
 params.transport.sendMedia=async()=>{throw new Error('document rejected');};await assert.rejects(port.sendDocument({bytes:Buffer.from('document'),mimeType:'image/png',fileName:'file.png'}));
 scope.globalThis.__amadeusDeliveryBoundaryV2_20260930=undefined;assert.throws(()=>scope.globalThis.createPlan(params),/unavailable/u);
 console.log('DELIVERY_BOUNDARY_PINNED_AST_AND_PROVIDER_CONTRACT=passed');

@@ -124,7 +124,7 @@
   },
   "tools": {
     "profile": "full",
-    "deny": ["tts"],
+    "deny": ["tts", "message"],
     "sessions": {
       "visibility": "self"
     },
