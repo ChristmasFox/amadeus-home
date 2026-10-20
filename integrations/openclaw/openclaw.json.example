@@ -228,6 +228,13 @@
       }
     }
   },
+  "messages": {
+    "ackReaction": "👀",
+    "ackReactionScope": "all",
+    "statusReactions": {
+      "enabled": true
+    }
+  },
   "channels": {
     "telegram": {
       "enabled": true,
@@ -252,6 +259,7 @@
     },
     "whatsapp": {
       "enabled": true,
+      "reactionLevel": "minimal",
       "defaultAccount": "secondary",
       "pluginHooks": { "messageReceived": true },
       "accounts": {
