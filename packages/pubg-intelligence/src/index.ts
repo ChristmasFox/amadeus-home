@@ -22,3 +22,4 @@ export * from './match-relative.js';
 export * from './match-story.js';
 export * from './match-insight.js';
 export * from './rhythm.js';
+export * from './highlights.js';

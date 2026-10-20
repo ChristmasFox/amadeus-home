@@ -10,7 +10,8 @@
     "test": "tsx --test tests/**/*.test.ts",
     "ai:e2e": "tsx scripts/real-ai-e2e.ts",
     "archive:e2e": "tsx scripts/verify-real-archive.ts",
-    "smoke:ui": "node scripts/smoke-ui.mjs"
+    "smoke:ui": "node scripts/smoke-ui.mjs",
+    "smoke:highlights": "tsx scripts/smoke-highlights.ts"
   },
   "dependencies": {
     "@agent/pubg-domain": "workspace:*",

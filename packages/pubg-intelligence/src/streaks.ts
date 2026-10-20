@@ -26,6 +26,18 @@ function teamOf(value: unknown): string | null {
 interface Takedown {
   time: number;
   victim: string;
+  eventId: string;
+}
+
+/** Exact source events for a detected chain/wipe; absolute seconds are converted to replay time by the caller. */
+export interface StreakMoment {
+  kind: 'streak' | 'wipe';
+  playerIds: string[];
+  start: number;
+  end: number;
+  eventIds: string[];
+  count: number;
+  observedTeamSize: number | null;
 }
 
 /** Multi-kill counts for one member in one match; a streak of n distinct victims lands in bucket min(n, 4). */
@@ -65,6 +77,7 @@ export interface StreakMatchStats {
   wipes: TeamWipe[];
   /** Null when the squad was not eliminated (won, or the end is not observed). */
   squadWiped: SquadWipedRecord | null;
+  moments?: StreakMoment[];
 }
 
 function emptyPlayer(): PlayerStreakMatch {
@@ -79,6 +92,7 @@ interface DeathInfo {
   /** When the player was taken out: the last knock, else the death. */
   takedownTime: number;
   phase: number | null;
+  eventIds: string[];
 }
 
 /**
@@ -89,7 +103,7 @@ interface DeathInfo {
 export function analyzeStreaks(payload: unknown, trackedIds: ReadonlySet<string>): StreakMatchStats {
   const takedowns = new Map<string, Takedown[]>();
   const teams = new Map<string, Set<string>>();
-  const lastKnock = new Map<string, { time: number; attacker: string; team: string | null }>();
+  const lastKnock = new Map<string, { time: number; attacker: string; team: string | null; eventId?: string }>();
   const deaths = new Map<string, DeathInfo>();
   const playerTeam = new Map<string, string>();
   const note = (character: unknown) => {
@@ -102,7 +116,9 @@ export function analyzeStreaks(payload: unknown, trackedIds: ReadonlySet<string>
     teams.set(team, members);
   };
 
-  for (const raw of parseTelemetryPayload(payload)) {
+  const moments: StreakMoment[] = [];
+  for (const [index, raw] of parseTelemetryPayload(payload).entries()) {
+    const eventId = `telemetry-${index + 1}`;
     const event = obj(raw);
     const type = event._T;
     const time = typeof event._D === 'string' ? Date.parse(event._D) / 1000 : NaN;
@@ -117,8 +133,8 @@ export function analyzeStreaks(payload: unknown, trackedIds: ReadonlySet<string>
       const attacker = idOf(event.attacker);
       const victim = idOf(event.victim);
       if (!attacker || !victim || attacker === victim || teamOf(event.attacker) === teamOf(event.victim)) continue;
-      lastKnock.set(victim, { time, attacker, team: teamOf(event.attacker) });
-      if (trackedIds.has(attacker)) takedowns.set(attacker, [...(takedowns.get(attacker) ?? []), { time, victim }]);
+      lastKnock.set(victim, { time, attacker, team: teamOf(event.attacker), eventId });
+      if (trackedIds.has(attacker)) takedowns.set(attacker, [...(takedowns.get(attacker) ?? []), { time, victim, eventId }]);
     } else if (type === 'LogPlayerKillV2' || type === 'LogPlayerKill') {
       note(event.victim);
       const victim = idOf(event.victim);
@@ -131,8 +147,11 @@ export function analyzeStreaks(payload: unknown, trackedIds: ReadonlySet<string>
       const knocked = knock && idOf(event.dBNOMaker) === knock.attacker ? knock : idOf(event.dBNOMaker) ? { time, attacker: idOf(event.dBNOMaker)!, team: teamOf(event.dBNOMaker) } : null;
       const credit = knocked && knocked.team !== teamOf(event.victim) ? knocked.attacker : enemyKiller;
       const creditTeam = knocked && knocked.team !== teamOf(event.victim) ? knocked.team : enemyKiller ? teamOf(killerRef) : null;
-      deaths.set(victim, { time, creditId: credit, creditTeam, takedownTime: knocked?.time ?? time, phase });
-      if (!knocked && enemyKiller && trackedIds.has(enemyKiller)) takedowns.set(enemyKiller, [...(takedowns.get(enemyKiller) ?? []), { time, victim }]);
+      deaths.set(victim, { time, creditId: credit, creditTeam, takedownTime: knocked?.time ?? time, phase, eventIds: [...(knocked?.eventId ? [knocked.eventId] : []), eventId] });
+      if (!knocked && enemyKiller && trackedIds.has(enemyKiller)) takedowns.set(enemyKiller, [...(takedowns.get(enemyKiller) ?? []), { time, victim, eventId }]);
+    } else if (type === 'LogPlayerRevive') {
+      const victim = idOf(event.victim);
+      if (victim) lastKnock.delete(victim);
     }
   }
 
@@ -144,19 +163,22 @@ export function analyzeStreaks(payload: unknown, trackedIds: ReadonlySet<string>
     entry.takedowns = sorted.length;
     let chain = new Set<string>();
     let chainCount = 0;
+    let chainEvents: Takedown[] = [];
     let previous = -Infinity;
     const close = () => {
       const size = chain.size;
       if (size >= 2) {
+        moments.push({ kind: 'streak', playerIds: [id], start: chainEvents[0]!.time, end: chainEvents.at(-1)!.time, eventIds: chainEvents.map((item) => item.eventId), count: size, observedTeamSize: null });
         entry.chainedTakedowns += chainCount;
         if (size === 2) entry.streaks.two += 1; else if (size === 3) entry.streaks.three += 1; else entry.streaks.fourPlus += 1;
       }
       entry.longest = Math.max(entry.longest, size);
     };
     for (const takedown of sorted) {
-      if (takedown.time - previous > STREAK_GAP_SECONDS) { close(); chain = new Set(); chainCount = 0; }
+      if (takedown.time - previous > STREAK_GAP_SECONDS) { close(); chain = new Set(); chainCount = 0; chainEvents = []; }
       chain.add(takedown.victim);
       chainCount += 1;
+      chainEvents.push(takedown);
       previous = takedown.time;
     }
     close();
@@ -194,6 +216,8 @@ export function analyzeStreaks(payload: unknown, trackedIds: ReadonlySet<string>
       phase: push.at(-1)!.phase,
       durationSeconds: push.at(-1)!.takedownTime - push[0]!.takedownTime,
     });
+    moments.push({ kind: 'wipe', playerIds: [...counts.keys()].sort(), start: push[0]!.takedownTime, end: Math.max(...push.map((item) => item.time)),
+      eventIds: [...new Set([...memberSet].flatMap((member) => deaths.get(member)!.eventIds))], count: push.length, observedTeamSize: memberSet.size });
   }
 
   let squadWiped: SquadWipedRecord | null = null;
@@ -206,7 +230,7 @@ export function analyzeStreaks(payload: unknown, trackedIds: ReadonlySet<string>
       singlePlayer: new Set(ownPush.map((item) => item.creditId)).size === 1 && ownPush.length >= 2,
     };
   }
-  return { players, wipes, squadWiped };
+  return { players, wipes, squadWiped, moments };
 }
 
 export interface StreakPlayerSummary {

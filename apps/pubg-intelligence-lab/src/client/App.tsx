@@ -3,6 +3,7 @@ import { CompareView, FieldView, MatchRelativePanel, Notes, OverviewView, StyleV
 import { MatchStoryView, type MatchStoryData } from './match-story.js';
 import type { CompareSeries } from './compare-panels.js';
 import { RefreshButton } from './refresh-button.js';
+import { HighlightsView } from './highlights-view.js';
 
 interface SquadOption {
   id: string;
@@ -459,8 +460,8 @@ function ResultBlock({ result, onEvidence }: { result: ResearchResponse; onEvide
   );
 }
 
-type WorkspaceTab = 'overview' | 'field' | 'style' | 'compare' | 'match' | 'chat' | 'lab';
-const WORKSPACE_TABS: readonly WorkspaceTab[] = ['overview', 'field', 'style', 'compare', 'match', 'chat', 'lab'];
+type WorkspaceTab = 'overview' | 'field' | 'style' | 'compare' | 'match' | 'highlights' | 'chat' | 'lab';
+const WORKSPACE_TABS: readonly WorkspaceTab[] = ['overview', 'field', 'style', 'compare', 'match', 'highlights', 'chat', 'lab'];
 
 function initialTab(): WorkspaceTab {
   const requested = new URLSearchParams(window.location.search).get('tab');
@@ -470,7 +471,10 @@ function initialTab(): WorkspaceTab {
 export function App() {
   const [bootstrap, setBootstrap] = useState<Bootstrap | null>(null);
   const [squadId, setSquadId] = useState('');
-  const [mode, setMode] = useState<'squad' | 'duo' | 'solo' | 'other' | 'all'>('squad');
+  const [mode, setMode] = useState<'squad' | 'duo' | 'solo' | 'other' | 'all'>(() => {
+    const value = new URLSearchParams(window.location.search).get('mode');
+    return value === 'duo' || value === 'solo' || value === 'other' || value === 'all' ? value : 'squad';
+  });
   const [completeOnly, setCompleteOnly] = useState(true);
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');
@@ -520,7 +524,8 @@ export function App() {
   useEffect(() => {
     void json<Bootstrap>('/api/bootstrap').then((data) => {
       setBootstrap(data);
-      setSquadId(data.selectedSquadId);
+      const requestedSquad = new URLSearchParams(window.location.search).get('squadId');
+      setSquadId(requestedSquad === 'all' || data.squads.some((squad) => squad.id === requestedSquad) ? requestedSquad! : data.selectedSquadId);
       setFrom(data.dateFrom ?? '');
       setTo(data.dateTo ?? '');
     }).catch(() => setError('无法读取本地只读数据快照。'));
@@ -550,8 +555,11 @@ export function App() {
       .then((data) => {
         setTotalMatches(data.total);
         setMatches((current) => offset === 0 ? data.matches : [...current, ...data.matches]);
-        if (offset === 0 && data.matches[0] && !data.matches.some((item) => item.matchId === selectedMatchId)) setSelectedMatchId(data.matches[0].matchId);
-        if (offset === 0 && !data.matches.length) setSelectedMatchId('');
+        const linkedMatch = new URLSearchParams(window.location.search).get('match');
+        if (linkedMatch !== selectedMatchId) {
+          if (offset === 0 && data.matches[0] && !data.matches.some((item) => item.matchId === selectedMatchId)) setSelectedMatchId(data.matches[0].matchId);
+          if (offset === 0 && !data.matches.length) setSelectedMatchId('');
+        }
       })
       .catch((reason: unknown) => { if (!(reason instanceof DOMException && reason.name === 'AbortError')) setError('比赛列表读取失败。'); });
     return () => controller.abort();
@@ -873,10 +881,11 @@ export function App() {
             <small>{({ squad: '四排', duo: '双排', solo: '单排', other: '其他', all: '全部模式' } as const)[mode]} · {completeOnly ? '完整遥测' : '全部战绩'} · {totalMatches} 场</small>
           </button>
           <nav className="workspace-tabs" aria-label="分析视图">
-            {([['overview', '总览', '战绩与队员状态'], ['field', '落点与交战', '遥测分析'], ['style', '打法风格', '每个人的特点'], ['compare', '队员对比', '两人正面比较'], ['match', '单局复盘', detail ? '已选 1 场' : '先选比赛'], ['chat', '研究对话', 'AI 助手'], ['lab', '评估实验', '开发']] as const).map(([key, label, hint]) => <button type="button" key={key} className={tab === key ? 'active' : ''} onClick={() => { setTab(key); window.history.replaceState(null, '', key === 'overview' ? window.location.pathname : `?tab=${key}`); }}><b>{label}</b><small>{hint}</small></button>)}
+            {([['overview', '总览', '战绩与队员状态'], ['field', '落点与交战', '遥测分析'], ['style', '打法风格', '每个人的特点'], ['compare', '队员对比', '两人正面比较'], ['match', '单局复盘', detail ? '已选 1 场' : '先选比赛'], ['highlights', '高光集锦', '跨局精选 · 海报'], ['chat', '研究对话', 'AI 助手'], ['lab', '评估实验', '开发']] as const).map(([key, label, hint]) => <button type="button" key={key} className={tab === key ? 'active' : ''} onClick={() => { setTab(key); window.history.replaceState(null, '', key === 'overview' ? window.location.pathname : `?tab=${key}`); }}><b>{label}</b><small>{hint}</small></button>)}
           </nav>
           {error && <div className="inline-error workspace-error">{error}</div>}
           {tab === 'overview' && <div className="workspace-body"><OverviewView data={analytics} loading={analyticsLoading} /></div>}
+          {tab === 'highlights' && <HighlightsView squadId={squadId} mode={mode} from={from} to={to} />}
           {tab === 'field' && <div className="workspace-body"><FieldView data={telemetryData} loading={telemetryLoading} error={telemetryError} onReload={() => void loadTelemetryAnalytics()} /></div>}
           {tab === 'style' && <div className="workspace-body"><StyleView data={telemetryData} loading={telemetryLoading} error={telemetryError} onReload={() => void loadTelemetryAnalytics()} /></div>}
           {tab === 'compare' && <div className="workspace-body"><CompareView data={telemetryData} loading={telemetryLoading} error={telemetryError} onReload={() => void loadTelemetryAnalytics()} series={compareSeries} /></div>}

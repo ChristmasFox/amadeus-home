@@ -11,7 +11,7 @@ const base = (args.find((value) => /^https?:/u.test(value)) ?? process.env.PUBG_
 const executablePath = process.env.CHROME ?? '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 if (shotsAt) mkdirSync(shotsAt, { recursive: true });
 
-const TABS = ['overview', 'field', 'style', 'compare', 'match', 'chat', 'lab'];
+const TABS = ['overview', 'field', 'style', 'compare', 'match', 'highlights', 'chat', 'lab'];
 const VIEWPORTS = [
   { name: 'desktop', options: { viewport: { width: 1500, height: 1000 } } },
   { name: 'phone', options: { viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, deviceScaleFactor: 2 } },

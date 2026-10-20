@@ -375,6 +375,11 @@ export function MatchStoryView({ data, loading, placement, kills, damage, anonym
     const requested = Number(new URLSearchParams(window.location.search).get('fight'));
     const fight = data?.story?.fights.find((item) => item.index === requested);
     if (fight) { setSelectedFight(fight.index); setZoom(true); setTime(fight.start + Math.min(20, (fight.end - fight.start) / 2)); }
+    const rawTime = new URLSearchParams(window.location.search).get('t');
+    const requestedTime = rawTime === null ? NaN : Number(rawTime);
+    if (Number.isFinite(requestedTime) && requestedTime >= 0 && data?.story) {
+      setTime(Math.min(data.story.durationSeconds, requestedTime)); setZoom(true);
+    }
   }, [data?.matchId]);
   useEffect(() => {
     if (!playing || !story) return undefined;

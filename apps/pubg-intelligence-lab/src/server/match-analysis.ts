@@ -7,6 +7,8 @@ import {
   analyzeLobby,
   analyzeMatchStory,
   analyzeStreaks,
+  identifyMatchHighlights,
+  type MatchHighlight,
   analyzeStyleTelemetry,
   emptyFights,
   extractLandings,
@@ -26,6 +28,7 @@ import {
 } from '@agent/pubg-intelligence';
 
 export interface MatchTelemetryAnalysis {
+  highlights: MatchHighlight[];
   quality: CombatQualityMatchStats;
   deaths: DeathRecord[];
   landings: LandingSample[];
@@ -59,7 +62,9 @@ export function computeMatchAnalysis(raw: Uint8Array, match: NormalizedMatch, me
     style[player.accountId] = { ...raw, minutes: Math.max(0, player.survivalTime) / 60, fights: fightStats.roles[player.accountId] ?? emptyFights() };
   }
   const story = analyzeMatchStory(payload, new Set(trackedPlayerIds));
+  const streaks = analyzeStreaks(payload, new Set(trackedPlayerIds));
   return {
+    highlights: identifyMatchHighlights({ payload, match, memberIds: trackedPlayerIds, story, streaks, telemetry }),
     quality: analyzeCombatQuality(reconstruction),
     deaths: analyzeDeaths(telemetry, trackedPlayerIds),
     landings: landings.filter((landing) => memberRefs.has(landing.playerRef)),
@@ -67,7 +72,7 @@ export function computeMatchAnalysis(raw: Uint8Array, match: NormalizedMatch, me
     fights: fightStats,
     style,
     lobby: analyzeLobby(payload, new Set(trackedPlayerIds)),
-    streaks: analyzeStreaks(payload, new Set(trackedPlayerIds)),
+    streaks,
     downs: story.downs,
     rotation: story.rotation,
   };

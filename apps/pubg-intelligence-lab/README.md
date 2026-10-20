@@ -80,8 +80,44 @@ The page is a two-pane workspace: the left rail holds the data scope (squad, gam
 | **落点与交战** | Key findings, combat quality cards, fight environment and win rates, death analysis, engagement-distance profile, zone pressure per circle, landing preference per map (with contest cost and area names), squad roles |
 | **打法风格** | A "who fights best" panel (fighting-power index, a verdict sentence, stable per-step strengths and weaknesses, and the shots → hits → knocks → finishes funnel), a comparison matrix of play-style axes by member, one card per member (radar, archetype, most distinctive traits with their confidence, weapon and weapon-class preference), the axes on which the squad differs most, and squad overlaps and gaps |
 | **单局复盘** | The single-match review: domain summary, battle reconstruction, tactical candidates, evidence trace |
+| **高光集锦** | Cross-match streaks, observed wipes, comeback candidates and revives; event evidence, exact replay seek and a downloadable PNG poster |
 | **研究对话** | The natural-language research assistant and its evidence ledger |
 | **评估实验** | Offline evaluation registry and counterexample review |
+
+### Cross-match highlights and posters
+
+Open **高光集锦** (`?tab=highlights`) to collect moments from the latest 10/20/50/100 ranked matches, or the most recent
+played night within the selected dates (Asia/Shanghai, 06:00–06:00). It uses the selected squad, mode and dates. The
+complete-telemetry switch does not replace missing matches with older ones: missing archives and failed reads are
+reported separately. `GET /api/highlights?squadId=…&mode=squad&window=recent|night&limit=20&from=YYYY-MM-DD&to=YYYY-MM-DD`
+returns the same scoped collection, coverage and exact match/event references.
+
+- **连续击倒** reuses `streaks.ts`: different opponents, at most 60 seconds between takedowns. Finishing an already
+  knocked player never adds a second takedown.
+- **观测灭队** reuses its final-push detector and includes death references for the observed enemy roster. It does not
+  assume an unobserved full four-player team.
+- **逆风反击** requires a story fight with a recorded own first knock, at least two later distinct enemy knocks,
+  and a positive final knock balance. It is an observed engagement reversal, not a claim of match victory.
+- **队友救援** cites a completed revive. The preceding knock is included when recorded; otherwise the delay is unknown.
+
+Choose a type and moment to inspect its evidence. **跳到这段回放** opens the existing match story at the moment's exact
+second, preserving squad/mode and an older match even outside the first page. **下载 PNG 海报** renders a 1200×1500
+image locally in the browser, including players, date/map, summary, limits and source references. Supported browsers
+also offer **分享海报** through the system file-share sheet; otherwise the PNG downloads. No upload, paid model call,
+production database write, new public share token or new access scope is involved. Persistent favourites and video
+exports remain follow-ups.
+
+Focused acceptance (synthetic data and a separate temporary SQLite/archive, no running Lab required):
+
+```sh
+pnpm --filter @agent/pubg-intelligence build
+pnpm --filter @agent/pubg-intelligence exec tsx --test tests/highlights.test.ts tests/streaks.test.ts
+pnpm --filter @agent/pubg-intelligence-lab exec tsx --test tests/highlights.test.ts
+pnpm --filter @agent/pubg-intelligence-lab smoke:highlights --shots /tmp/pubg-highlights-smoke
+```
+
+The browser smoke checks desktop and phone list → detail → real PNG download → exact replay seek, no sideways
+overflow, no page/HTTP errors, and an unchanged source-snapshot fingerprint. `CHROME` overrides the Chrome executable.
 
 ### Performance and restarts
 

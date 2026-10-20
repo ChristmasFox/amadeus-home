@@ -48,6 +48,7 @@ import {
   wantsCompleteTelemetry,
 } from './snapshot.js';
 import { computeTelemetryAnalytics } from './telemetry-analytics.js';
+import { crossMatchHighlights } from './highlights.js';
 import {
   analyzeMatchReview,
   DEFAULT_TIMEZONE,
@@ -252,6 +253,14 @@ async function handleApi(request: IncomingMessage, response: ServerResponse, sna
   if (request.method === 'POST' && url.pathname === '/api/refresh') {
     const result = startRefresh();
     send(response, result.started ? 202 : 429, result);
+    return;
+  }
+  if (request.method === 'GET' && url.pathname === '/api/highlights') {
+    try { send(response, 200, await crossMatchHighlights(snapshot, url)); }
+    catch (error) {
+      if (error instanceof Error && /^invalid_/u.test(error.message)) send(response, 400, { error: error.message });
+      else throw error;
+    }
     return;
   }
   if (request.method === 'GET' && url.pathname === '/api/matches') {
