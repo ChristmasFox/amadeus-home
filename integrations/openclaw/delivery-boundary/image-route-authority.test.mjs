@@ -532,6 +532,7 @@ ${snippet}`);
   assert.equal(ref.body.output_format, 'png');
   assert.equal(ref.body.quality, 'high');
   assert.equal(ref.body.background, 'opaque');
+  assert.equal(ref.body.response_format, 'b64_json', 'Grok fallback must return inline image data; imgen.x.ai URLs are unreachable');
   assert.deepEqual(Buffer.from(ref.body.image.split(',')[1], 'base64'), referencePng);
   const plain = await capture({ ...referenceReq(),inputImages:[] });
   assert.equal(plain.url, ref.url); assert.equal(plain.body.image, undefined);

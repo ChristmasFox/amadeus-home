@@ -25,7 +25,7 @@ SMOKE = r'''
   const response = await fetch('http://9router:20128/v1/images/generations', {
     method: 'POST',
     headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ model: 'amadeus-image', prompt: 'A simple blue geometric circle on a clean white background, no text.', n: 1, size: '1024x1024' }),
+    body: JSON.stringify({ model: 'amadeus-image', prompt: 'A simple blue geometric circle on a clean white background, no text.', n: 1, size: '1024x1024', response_format: 'b64_json' }),
     signal: AbortSignal.timeout(600000),
   });
   if (!response.ok) throw new Error(`HTTP_${response.status}`);
@@ -53,7 +53,7 @@ def main() -> None:
     parser.add_argument("--machine", default="example-node")
     args = parser.parse_args()
     desired = json.loads(DESIRED.read_text())["image"]
-    if desired["name"] != "amadeus-image" or desired["models"] != ["cx/gpt-image-2.5", "xai/grok-2-image-1212"]:
+    if desired["name"] != "amadeus-image" or desired["models"] != ["cx/gpt-image-2.5", "xai/grok-imagine-image"]:
         raise SystemExit("desired image Combo no longer matches the pinned smoke")
     if not args.apply:
         print("MODE=dry-run; no authenticated image request")

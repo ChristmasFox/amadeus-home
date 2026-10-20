@@ -501,9 +501,10 @@ async function logAmadeusImageTransportFailure(req, model, status) {
 \t\t\t\t\tprompt: req.prompt,
 \t\t\t\t\tn: count,
 \t\t\t\t\tsize,
+\t\t\t\t\tresponse_format: "b64_json",
 \t\t\t\t\t...amadeusReferencePayload
 \t\t\t\t};`,
-    'preserved inline reference in JSON body');
+    'preserved inline reference and inline b64_json response in JSON body');
   output = replaceOnce(output,
 `\t\t\t\treturn {\n\t\t\t\t\timages,\n\t\t\t\t\tmodel,`,
 `\t\t\t\treturn {\n\t\t\t\t\timages,\n\t\t\t\t\tmodel: requestModel,`,

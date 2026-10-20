@@ -4,7 +4,7 @@
 
 `infra/9router/model-capabilities.json` is the Git desired state for the
 `kind=image` `amadeus-image` Combo: `strategy=fallback` with
-`cx/gpt-image-2.5`, then `xai/grok-2-image-1212` as its ordered native 9Router
+`cx/gpt-image-2.5`, then `xai/grok-imagine-image` as its ordered native 9Router
 fallback chain. OpenClaw references only `openai/amadeus-image`. Local Qwen
 fallback stays disabled for Lab unless explicitly enabled; safety refusals and
 invalid requests are terminal. Keep Qwen out of the native 9Router Combo so
