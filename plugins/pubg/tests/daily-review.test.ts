@@ -101,6 +101,27 @@ const STATS: PubgStatsPresentation = {
   ],
 };
 
+/**
+ * WhatsApp only shows bold when the markers sit right: every **…** is on one line, starts at a line start, after a space
+ * or after an emoji, never wraps an emoji at its edge, is followed by a space, a colon or the line end, and the message
+ * does not carry so many that the client gives up (the first version had ~46 and showed none).
+ */
+function assertWhatsAppBoldSafe(text: string): void {
+  const spans = [...text.matchAll(/\*\*([^*\n]+)\*\*/gu)];
+  assert.equal((text.match(/\*\*/gu) ?? []).length, spans.length * 2, 'every ** closes on its own line');
+  assert.ok(spans.length >= 8 && spans.length <= 26, `${spans.length} bold spans`);
+  assert.doesNotMatch(text, /(?<![*])\*(?!\*)/u, 'a lone * would be italic');
+  for (const span of spans) {
+    const before = text[span.index! - 1];
+    const after = text[span.index! + span[0].length];
+    assert.ok(before === undefined || /[\s]/u.test(before), `${span[0]} follows ${JSON.stringify(before)}`);
+    assert.ok(after === undefined || /[\s:：]/u.test(after), `${span[0]} is followed by ${JSON.stringify(after)}`);
+    assert.doesNotMatch(span[1]!, /^\p{Extended_Pictographic}|\p{Extended_Pictographic}$/u, `${span[0]} has an emoji at its edge`);
+    assert.doesNotMatch(span[1]!, /^\s|\s$/u);
+  }
+  assert.doesNotMatch(text, /\*\*[^*\n]+\*\*[:：，,。]?\*\*/u, 'no **a**:**b**');
+}
+
 function setup(overrides: Partial<DailyReviewInput> = {}, now = new Date(DUE.getTime() + MIN)) {
   // Three matches across the day: hours apart, so the old 40-minute gap would have made three reviews out of them.
   const matches = [match('m1', DAY_START + 60 * MIN, 3), match('m2', DAY_START + 9 * 60 * MIN, 7), match('m3', DAY_END - 30 * MIN, 2)];
@@ -138,23 +159,22 @@ test('one message for the whole business day: rich 战绩 card, Kurisu voice, tr
   const sent = gateway.sent[0]!;
   assert.deepEqual([sent.to, sent.accountId, sent.idempotencyKey], [GROUP, 'secondary', `${KEY}:whatsapp:secondary:${GROUP}`]);
   const text = String(sent.message);
-  assert.match(text, /^\*🌅 每日复盘 · 10月18日星期日\*/u);
+  // The text is Markdown for OpenClaw's WhatsApp formatter: **bold** becomes WhatsApp *bold* (a lone *x* would turn into _italic_).
+  assert.match(text, /^🌅 \*\*每日复盘 · 10月18日星期日\*\*$/mu);
   assert.match(text, /10\/18 06:00 → 10\/19 06:00 · 3 场排位/u);
-  // The same card a 昨日战绩 query gets: medals by K/D, titles, rounded localized metrics, team totals; WhatsApp bold.
-  assert.match(text, /🏆 10月18日星期日 全天战报/u);
-  assert.match(text, /🥇 \*Name_b\*/u);
-  assert.match(text, /🥈 \*Name_a\*/u);
-  assert.match(text, /KD 2\.00|KD 2\b/u);
+  // The same card a 昨日战绩 query gets: medals by K/D, titles, rounded localized metrics, team totals.
+  assert.match(text, /^🏆 \*\*10月18日星期日 全天战报\*\*$/mu);
+  assert.match(text, /🥇 \*\*Name_b\*\*/u);
+  assert.match(text, /🥈 \*\*Name_a\*\*/u);
   assert.match(text, /团队合计/u);
-  assert.doesNotMatch(text, /\*\*/u);
-  // Key facts are WhatsApp bold: section titles, names, K/D, top-ten placements, the day's totals, best and worst match.
-  assert.match(text, /^\*🏆 10月18日星期日 全天战报\*$/mu);
-  assert.match(text, /\*红莉栖点评\*\n\*Name_b\*:\*K\/D 2\.00\* 全队最高/u);
-  assert.match(text, /\*🎮 全天走势\*\n名次 \*#3\* \*#7\* \*#2\*/u);
-  assert.match(text, /场均名次 \*4\.0\* · \*吃鸡 0\* · \*前十 3\* · 击倒 \*12\*/u);
-  assert.match(text, /^\*最好一局 #2 艾伦格\* · /mu);
-  assert.match(text, /昨天一共 \*3 场排位\*/u);
-  assert.match(text, /\*结论\*/u);
+  assert.match(text, /• 个人数据： \*\*KD 2\.00\*\* · /u);
+  assert.match(text, /^🗣️ \*\*红莉栖点评\*\*\n\*\*Name_b\*\* · K\/D 2\.00 全队最高/mu);
+  assert.match(text, /^🎮 \*\*全天走势\*\*\n名次 #3 #7 #2$/mu);
+  assert.match(text, /场均名次 \*\*4\.0\*\* · \*\*吃鸡 0\*\* · 前十 3 · 击倒 12/u);
+  assert.match(text, /^\*\*最好一局\*\* #2 艾伦格 · /mu);
+  assert.match(text, /^\*\*昨天一共 3 场排位\*\* —— /mu);
+  assert.match(text, /^\*\*结论\*\*$/mu);
+  assertWhatsAppBoldSafe(text);
   // Ends with the share page link; the page is the 战绩 share of exactly that day's matches.
   const token = shareToken(text);
   assert.ok(token, text);

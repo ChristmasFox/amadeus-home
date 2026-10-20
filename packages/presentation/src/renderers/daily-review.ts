@@ -9,6 +9,11 @@ import { sessionMapName, sessionPlacement, sessionPlacementStrip } from './sessi
  * The once-a-day group message for one business day (06:00 to 06:00): the same rich 战绩 card a 昨日战绩 query gets,
  * then the day's trend and conclusions from the session review, in Kurisu's voice, ending with the share link.
  * Everything is deterministic; the voice lines are picked from the numbers.
+ *
+ * The text is Markdown: OpenClaw's WhatsApp send path parses it and re-renders it as WhatsApp formatting, where
+ * `**bold**` becomes WhatsApp *bold* and a single `*x*` would become _italic_. So bold is always `**…**`, and the
+ * WhatsApp client's own limits are respected on top of that: emoji stay outside the markers, a bold span is followed
+ * by a space, a newline or the end (a colon at most), and only the key facts are bold.
  */
 export interface DailyReviewInput {
   review: SessionReviewPresentation;
@@ -31,23 +36,19 @@ function clock(value: number, timezone: string): string {
   return `${parts.month}/${parts.day} ${parts.hour}:${parts.minute}`;
 }
 
-/** The chat card is written for chat markdown (**bold**); WhatsApp bold is a single asterisk. */
-function whatsappBold(text: string): string {
-  return text.replace(/\*\*(.+?)\*\*/gu, '*$1*');
-}
-
-/** The card's first line (🏆 … 全天战报) reads as a section title. */
-function boldHeadline(card: string): string {
-  const [first = '', ...rest] = card.split('\n');
-  return [first.startsWith('*') ? first : `*${first}*`, ...rest].join('\n');
-}
-
-/** In the placement strip the chicken dinners and top-ten finishes stand out. */
-function boldStrip(strip: string): string {
-  return strip.split(' ').map((item) => {
-    const rank = Number(item.replace(/^#/u, ''));
-    return item === '🏆' || (Number.isInteger(rank) && rank >= 1 && rank <= 10) ? `*${item}*` : item;
-  }).join(' ');
+/**
+ * The 战绩 card as the chat renders it, thinned for the daily message: names, the card title, the team totals and each
+ * player's K/D stay bold; the volume line and the rest of the personal line are plain, titles included.
+ */
+function thinCard(card: string): string {
+  return card.split('\n').map((line) => {
+    if (line.startsWith('• 个人数据：')) {
+      const plain = line.replace(/\*\*/gu, '').replace(/KD (\d+(?:\.\d+)?)/u, '**KD $1**');
+      return plain.replace('• 个人数据：', '• 个人数据： ').replace(/，/gu, ' · ').replace(/： (\*\*KD [\d.]+\*\*) · /u, '： $1 · ');
+    }
+    if (line.startsWith('• ')) return line.replace(/\*\*/gu, '');
+    return line;
+  }).join('\n');
 }
 
 function one(value: number | null): string {
@@ -56,11 +57,11 @@ function one(value: number | null): string {
 
 function opener(review: SessionReviewPresentation): string {
   const { wins, avgPlacement, baselineAvgPlacement } = review.summary;
-  if (wins >= 2) return `昨天吃了 *${wins} 次鸡*。……哼,我承认,这个数据确实不坏。`;
-  if (wins === 1) return '昨天吃到 *1 次鸡*。别急着庆祝,先看看其他几局是怎么回事。';
-  if (avgPlacement !== null && baselineAvgPlacement !== null && avgPlacement <= baselineAvgPlacement - 2) return `昨天的场均名次 *${one(avgPlacement)}*,比你们平时的 ${one(baselineAvgPlacement)} 好。看来偶尔也会把我的话听进去嘛。`;
-  if (avgPlacement !== null && baselineAvgPlacement !== null && avgPlacement >= baselineAvgPlacement + 2) return `昨天的场均名次 *${one(avgPlacement)}*,比平时的 ${one(baselineAvgPlacement)} 差。不是运气问题——数据在下面,自己看。`;
-  return `昨天一共 *${review.matchCount} 场排位*,数据我整理好了。别找借口,先看数字。`;
+  if (wins >= 2) return `**昨天吃了 ${wins} 次鸡** —— 哼,我承认,这个数据确实不坏。`;
+  if (wins === 1) return '**昨天吃到 1 次鸡** —— 别急着庆祝,先看看其他几局是怎么回事。';
+  if (avgPlacement !== null && baselineAvgPlacement !== null && avgPlacement <= baselineAvgPlacement - 2) return `**场均名次 ${one(avgPlacement)}** —— 比你们平时的 ${one(baselineAvgPlacement)} 好。看来偶尔也会把我的话听进去嘛。`;
+  if (avgPlacement !== null && baselineAvgPlacement !== null && avgPlacement >= baselineAvgPlacement + 2) return `**场均名次 ${one(avgPlacement)}** —— 比平时的 ${one(baselineAvgPlacement)} 差。不是运气问题,数据在下面,自己看。`;
+  return `**昨天一共 ${review.matchCount} 场排位** —— 数据我整理好了。别找借口,先看数字。`;
 }
 
 function metric(row: PubgMetricRow, key: string): number | null {
@@ -78,8 +79,8 @@ function remarks(stats: PubgStatsPresentation | null): string[] {
   const worst = rows.at(-1)!;
   if (best.kd === worst.kd) return [];
   return [
-    `*${best.row.label}*:*K/D ${best.kd!.toFixed(2)}* 全队最高——这次算你有点实力。`,
-    `*${worst.row.label}*:*K/D ${worst.kd!.toFixed(2)}*……下次冲之前先想清楚,别把队友当垫背。`,
+    `**${best.row.label}** · K/D ${best.kd!.toFixed(2)} 全队最高——这次算你有点实力。`,
+    `**${worst.row.label}** · K/D ${worst.kd!.toFixed(2)} 垫底……下次冲之前先想清楚,别把队友当垫背。`,
   ];
 }
 
@@ -91,28 +92,28 @@ export function renderDailyReview(input: DailyReviewInput): string {
   const windowStart = input.stats?.sourceRange?.from ? Date.parse(input.stats.sourceRange.from) : Date.parse(review.startAt);
   const windowEnd = input.stats?.sourceRange?.to ? Date.parse(input.stats.sourceRange.to) : Date.parse(review.endAt);
   const sections: string[][] = [
-    [`*🌅 每日复盘 · ${localDay(windowStart, timezone)}*`, `_${clock(windowStart, timezone)} → ${clock(windowEnd, timezone)} · ${review.matchCount} 场排位 · ${maps}_`],
+    [`🌅 **每日复盘 · ${localDay(windowStart, timezone)}**`, `_${clock(windowStart, timezone)} → ${clock(windowEnd, timezone)} · ${review.matchCount} 场排位 · ${maps}_`],
     [opener(review)],
   ];
   if (input.stats) {
     const options: PubgRenderOptions = { timezone, now: input.now.toISOString(), chatEmphasis: true };
-    sections.push([boldHeadline(whatsappBold(renderPubgStats(input.stats, options)))]);
+    sections.push([thinCard(renderPubgStats(input.stats, options)).replace(/^🏆 (.+)$/mu, '🏆 **$1**')]);
   }
   const lines = remarks(input.stats);
-  if (lines.length) sections.push(['*红莉栖点评*', ...lines]);
-  const baseline = review.summary.baselineAvgPlacement === null ? '' : `(你们平时 ${one(review.summary.baselineAvgPlacement)})`;
+  if (lines.length) sections.push(['🗣️ **红莉栖点评**', ...lines]);
+  const baseline = review.summary.baselineAvgPlacement === null ? '' : ` (你们平时 ${one(review.summary.baselineAvgPlacement)})`;
   sections.push([
-    '*🎮 全天走势*',
-    `名次 ${boldStrip(sessionPlacementStrip(review.placements))}`,
-    `场均名次 *${one(review.summary.avgPlacement)}*${baseline} · *吃鸡 ${review.summary.wins}* · *前十 ${review.summary.top10}* · 击倒 *${review.summary.teamKnocks}*`,
+    '🎮 **全天走势**',
+    `名次 ${sessionPlacementStrip(review.placements)}`,
+    `场均名次 **${one(review.summary.avgPlacement)}**${baseline} · **吃鸡 ${review.summary.wins}** · 前十 ${review.summary.top10} · 击倒 ${review.summary.teamKnocks}`,
   ]);
-  sections.push([`*一句话:${review.headline}*`]);
+  sections.push([`**一句话：${review.headline}**`]);
   sections.push(review.findings.length
-    ? ['*结论*', ...review.findings.map((finding, index) => `${index + 1}. ${finding.text}`)]
-    : ['*结论*', '各项都在你们平时的正常波动范围内,没有值得单独拎出来的问题。']);
-  if (review.matchCount > 1 && review.bestMatch) sections.push([`*最好一局 ${sessionPlacement(review.bestMatch.rank)} ${sessionMapName(review.bestMatch.mapName)}* · ${review.bestMatch.text}`]);
-  if (review.matchCount > 1 && review.worstMatch) sections.push([`*最差一局 ${sessionPlacement(review.worstMatch.rank)} ${sessionMapName(review.worstMatch.mapName)}* · ${review.worstMatch.text}`]);
-  if (review.suggestion) sections.push([`*下次试试* ${review.suggestion}`]);
+    ? ['**结论**', ...review.findings.map((finding, index) => `${index + 1}. ${finding.text}`)]
+    : ['**结论**', '各项都在你们平时的正常波动范围内,没有值得单独拎出来的问题。']);
+  if (review.matchCount > 1 && review.bestMatch) sections.push([`**最好一局** ${sessionPlacement(review.bestMatch.rank)} ${sessionMapName(review.bestMatch.mapName)} · ${review.bestMatch.text}`]);
+  if (review.matchCount > 1 && review.worstMatch) sections.push([`**最差一局** ${sessionPlacement(review.worstMatch.rank)} ${sessionMapName(review.worstMatch.mapName)} · ${review.worstMatch.text}`]);
+  if (review.suggestion) sections.push([`**下次试试** ${review.suggestion}`]);
   const coverage = review.coverage.telemetry === review.coverage.total
     ? `📎 ${review.coverage.total}/${review.coverage.total} 场有完整遥测`
     : `📎 ${review.coverage.telemetry}/${review.coverage.total} 场有完整遥测,其余只按基础战绩`;
