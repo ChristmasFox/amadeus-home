@@ -69,6 +69,8 @@ test('bundled PUBG skill has the OpenClaw-required frontmatter', () => {
   assert.match(skill, /Every new PUBG factual request must call the relevant native tool/);
   assert.match(skill, /persistent SQLite cache/);
   assert.match(skill, /refresh: true/);
+  assert.match(skill, /Never answer a\s+record request with `pubg_search_matches`/);
+
   assert.match(skill, /数据更新时间/);
   assert.match(skill, /数据来源时间范围/);
   assert.match(skill, /反过来呢/);

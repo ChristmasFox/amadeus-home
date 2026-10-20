@@ -40,6 +40,14 @@ A bare record request that names no one and has no “我”, such as “今日�
 PUBG tool directly with `team=true` and the period selector. Do not call
 `identity_resolve` first for it.
 
+Record requests (“今日战绩”“今天战绩”“昨日战绩”“昨天战绩”“本周战绩”“查询今日战绩”
+and person-specific variants) always use `pubg_query_stats` (operation
+`report`, `groupBy: "player"`) — that result carries the full card
+`displayText` with per-member stats, titles and team totals. Never answer a
+record request with `pubg_search_matches`: a per-match list
+(“对局列表 共 N 场”) is only for explicit list asks such as “今天打了哪几把”
+“对局列表”, or as the first step of a review.
+
 Never ask the user for a PUBG ID or say that the account is unconfirmed before
 the identity lookup. Preloaded nickname/account mappings are already confirmed
 for this deployment; use the resolved `personId` directly. `pubg_resolve_players` is not a substitute for
