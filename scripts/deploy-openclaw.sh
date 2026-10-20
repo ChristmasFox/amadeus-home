@@ -757,7 +757,7 @@ OPENCLAW_SWITCHED=0
 # delivery-boundary/whatsapp-plan.js, then re-applies every lifecycle patch in
 # the same order, so the result is deterministic and no patch is wiped.
 install_whatsapp_runtime_patches() {
-tar -C "$ROOT_DIR/integrations/openclaw/delivery-boundary" -cf - install.mjs whatsapp-plan.js | \
+tar -C "$ROOT_DIR/integrations/openclaw/delivery-boundary" -cf - install.mjs whatsapp-plan.js whatsapp-status-reaction.js | \
   orb -m "$MACHINE" -u root docker exec -i openclaw sh -ec '
     tmp=$(mktemp -d /tmp/amadeus-delivery-boundary.XXXXXX)
     trap "rm -rf $tmp" EXIT
@@ -783,7 +783,7 @@ tar -C "$ROOT_DIR/scripts" -cf - \
 }
 # Fails (and so rolls back) when the live module lacks any template hook.
 verify_whatsapp_boundary_live() {
-  tar -C "$ROOT_DIR/integrations/openclaw/delivery-boundary" -cf - install.mjs whatsapp-plan.js | \
+  tar -C "$ROOT_DIR/integrations/openclaw/delivery-boundary" -cf - install.mjs whatsapp-plan.js whatsapp-status-reaction.js | \
     orb -m "$MACHINE" -u root docker exec -i openclaw sh -ec '
       tmp=$(mktemp -d /tmp/amadeus-delivery-verify.XXXXXX)
       trap "rm -rf $tmp" EXIT

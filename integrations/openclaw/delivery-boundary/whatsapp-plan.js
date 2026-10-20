@@ -19,6 +19,15 @@ function createWhatsAppReplyPlan(params) {
     return id ? { messageId: id } : {};
   };
   const controlToken = /\[\[[^\]\r\n]+\]\]/u;
+  const statusReactionController = params.statusReactionController ?? null;
+  const directReaction = (emoji) => sendReactionWhatsApp(params.transport.chatJid, messageId, emoji, {
+    cfg: params.cfg, accountId: params.route.accountId, fromMe: false,
+    ...(String(params.transport.chatJid ?? '').endsWith('@g.us') && params.transport.senderJid ? { participant: params.transport.senderJid } : {}),
+  });
+  let contextualEmoji;
+  let statusFinal;
+  let settleContextual;
+  const contextualSettled = new Promise((resolve) => { settleContextual = resolve; });
   const plan = boundary.createWhatsAppPlan({
     sessionKey, messageId, inboundVoice,
     accountId: params.route.accountId,
@@ -43,13 +52,17 @@ function createWhatsAppReplyPlan(params) {
     sendImage: async (asset, caption) => receipt(await params.transport.sendMedia({ image: asset.bytes, mimetype: asset.mimeType, ...(caption ? { caption } : {}) }, quote())),
     // Image MIME cannot affect this payload: no image key/optimizer or fallback.
     sendDocument: async (asset) => receipt(await params.transport.sendMedia({ document: asset.bytes, mimetype: asset.mimeType, fileName: asset.fileName }, quote())),
-    // Same native primitive as the ack reaction: one bot slot, replaces 👀.
-    sendReaction: (emoji) => sendReactionWhatsApp(params.transport.chatJid, messageId, emoji, {
-      cfg: params.cfg, accountId: params.route.accountId, fromMe: false,
-      ...(String(params.transport.chatJid ?? '').endsWith('@g.us') && params.transport.senderJid ? { participant: params.transport.senderJid } : {}),
-    }),
+    // Contextual reply reaction. With staged status reactions it becomes the
+    // controller's terminal state (ordered after every queued stage, no
+    // ✅/👀 restore); without them it is one direct native reaction.
+    sendReaction: (emoji) => {
+      if (!statusReactionController?.finishWithContextual) return directReaction(emoji);
+      // Finalize already settled the stages: land strictly after it.
+      if (statusFinal) return statusFinal.then(() => directReaction(emoji));
+      contextualEmoji = emoji;
+      return contextualSettled;
+    },
   });
-  const statusReactionController = params.statusReactionController ?? null;
   const replyPolicy = resolveWhatsAppInboundReplyPolicy({
     cfg: params.cfg, ctx: params.context,
     blockStreamingEnabled: resolveChannelStreamingBlockEnabled(params.cfg.channels?.whatsapp),
@@ -73,7 +86,14 @@ function createWhatsAppReplyPlan(params) {
   const settleNativeStatus = plan.finalize;
   plan.finalize = (dispatchResult) => {
     const visible = settleNativeStatus(dispatchResult);
-    if (statusReactionController) void finalizeWhatsAppStatusReaction({ controller: statusReactionController, outcome: readAgentRunTerminalOutcome(dispatchResult) === 'failed' || !visible ? 'error' : 'done' });
+    if (statusReactionController) {
+      const outcome = readAgentRunTerminalOutcome(dispatchResult) === 'failed' || !visible ? 'error' : 'done';
+      statusFinal = contextualEmoji && outcome === 'done' && statusReactionController.finishWithContextual
+        ? statusReactionController.finishWithContextual(contextualEmoji)
+        : finalizeWhatsAppStatusReaction({ controller: statusReactionController, outcome });
+      statusFinal = statusFinal.catch(() => undefined);
+      void statusFinal.then(() => settleContextual());
+    }
     if (params.shouldClearGroupHistory) params.groupHistories.set(params.groupHistoryKey, []);
     return visible;
   };

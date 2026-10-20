@@ -232,7 +232,7 @@
     "ackReaction": "👀",
     "ackReactionScope": "all",
     "statusReactions": {
-      "enabled": false
+      "enabled": true
     }
   },
   "channels": {

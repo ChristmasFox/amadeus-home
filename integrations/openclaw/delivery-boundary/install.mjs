@@ -14,14 +14,22 @@ export const PIN = Object.freeze({
   archiveSha512: '7165c4691a4802b72141f6a4410860c3c4406104010ad9b11e662274d2209cdc24f897304ca540c370b2aa3c046d747de58f8af2dd12588641f32a0c79c06c06',
 });
 function parser(hostRoot) { return createRequire(join(hostRoot, 'package.json'))('acorn'); }
-export function installSource(original, template, hostRoot) {
+export function installSource(original, template, hostRoot, statusTemplate) {
   if (createHash('sha256').update(original).digest('hex') !== PIN.moduleSha256) throw new Error('pinned_whatsapp_module_digest_mismatch');
   const ast = parser(hostRoot).parse(original, { ecmaVersion: 'latest', sourceType: 'module' });
   const nodes = ast.body.filter((node) => node.type === 'FunctionDeclaration' && node.id?.name === 'createWhatsAppReplyPlan');
   if (nodes.length !== 1) throw new Error('pinned_whatsapp_boundary_count_mismatch');
   const node = nodes[0];
-  // AST-owned whole-function replacement at ONE documented boundary.
-  const output = original.slice(0, node.start) + template.trim() + original.slice(node.end);
+  const replacements = [{ node, text: template.trim() }];
+  if (statusTemplate !== undefined) {
+    const status = ast.body.filter((item) => item.type === 'FunctionDeclaration' && item.id?.name === 'createWhatsAppStatusReactionController');
+    if (status.length !== 1) throw new Error('pinned_whatsapp_status_reaction_count_mismatch');
+    replacements.push({ node: status[0], text: statusTemplate.trim() });
+  }
+  // AST-owned whole-function replacements at documented boundaries, applied
+  // back to front so earlier offsets stay valid.
+  let output = original;
+  for (const { node: target, text } of replacements.sort((a, b) => b.node.start - a.node.start)) output = output.slice(0, target.start) + text + output.slice(target.end);
   parser(hostRoot).parse(output, { ecmaVersion: 'latest', sourceType: 'module' });
   return output;
 }
@@ -46,11 +54,12 @@ export function boundaryHookKeys(source, hostRoot) {
 }
 // The live module must carry every hook the repository template declares;
 // later lifecycle patches may add code but never drop a boundary hook.
-export function verifyLiveSource(live, template, hostRoot) {
+export function verifyLiveSource(live, template, hostRoot, statusTemplate) {
   const expected = boundaryHookKeys(template, hostRoot);
   const actual = new Set(boundaryHookKeys(live, hostRoot));
   const missing = expected.filter((key) => !actual.has(key));
   if (!live.includes('__amadeusDeliveryBoundaryV2_20260930')) missing.push('boundary_global');
+  if (statusTemplate !== undefined && !live.includes(statusTemplate.trim())) missing.push('status_reaction_controller');
   if (missing.length) throw new Error(`live_whatsapp_boundary_hooks_missing:${missing.join(',')}`);
   return expected;
 }
@@ -117,7 +126,8 @@ export async function main(argv = process.argv.slice(2)) {
   if (JSON.parse(await readFile(join(target, 'package.json'), 'utf8')).version !== PIN.version) throw new Error('pinned_whatsapp_version_mismatch');
   if (argv.includes('--verify')) {
     const template = await readFile(new URL('./whatsapp-plan.js', import.meta.url), 'utf8');
-    const hooks = verifyLiveSource(await readFile(join(target, 'dist', PIN.module), 'utf8'), template, hostRoot);
+    const statusTemplate = await readFile(new URL('./whatsapp-status-reaction.js', import.meta.url), 'utf8');
+    const hooks = verifyLiveSource(await readFile(join(target, 'dist', PIN.module), 'utf8'), template, hostRoot, statusTemplate);
     console.log(`DELIVERY_BOUNDARY_LIVE=verified hooks=${hooks.length}`);
     return;
   }
@@ -126,7 +136,8 @@ export async function main(argv = process.argv.slice(2)) {
   // not cleaned/translated or kept as compatibility. Lifecycle patches follow.
   const original = await upstream(argv.includes('--archive') ? argv[argv.indexOf('--archive') + 1] : undefined);
   const template = await readFile(new URL('./whatsapp-plan.js', import.meta.url), 'utf8');
-  const output = installSource(original, template, hostRoot);
+  const statusTemplate = await readFile(new URL('./whatsapp-status-reaction.js', import.meta.url), 'utf8');
+  const output = installSource(original, template, hostRoot, statusTemplate);
   const path = join(target, 'dist', PIN.module); const mode = (await stat(path)).mode & 0o777;
   const temporary = `${path}.delivery-tmp`; await writeFile(temporary, output); await chmod(temporary, mode); await rename(temporary, path);
   console.log('DELIVERY_BOUNDARY=installed; host=2026.9.4; channel=2026.9.4; contract=2');

@@ -11,14 +11,16 @@ const require = createRequire(new URL('../plugins/amadeus/package.json', import.
 const host = dirname(dirname(dirname(require.resolve('openclaw/plugin-sdk/core'))));
 const original = process.env.AMADEUS_WHATSAPP_UPSTREAM_MODULE ? await readFile(process.env.AMADEUS_WHATSAPP_UPSTREAM_MODULE,'utf8') : await upstream(process.env.AMADEUS_WHATSAPP_ARCHIVE);
 const template = await readFile(new URL('../integrations/openclaw/delivery-boundary/whatsapp-plan.js', import.meta.url),'utf8');
+const statusTemplate = await readFile(new URL('../integrations/openclaw/delivery-boundary/whatsapp-status-reaction.js', import.meta.url),'utf8');
 const acorn=createRequire(host+'/package.json')('acorn');
 function acornParse(source){return acorn.parse(source,{ecmaVersion:'latest',sourceType:'module'});}
-const transformed=installSource(original,template,host);
+const transformed=installSource(original,template,host,statusTemplate);
 // Live-module verification: the installed module carries every template hook;
 // a stale boundary (e.g. without sendReaction) must fail the deploy.
 assert.ok(boundaryHookKeys(template,host).includes('sendReaction'));
-assert.deepEqual(verifyLiveSource(transformed,template,host),boundaryHookKeys(template,host));
-assert.throws(()=>verifyLiveSource(installSource(original,template.replace('sendReaction: (emoji) =>','staleReaction: (emoji) =>'),host),template,host),/hooks_missing:sendReaction/u);
+assert.deepEqual(verifyLiveSource(transformed,template,host,statusTemplate),boundaryHookKeys(template,host));
+assert.throws(()=>verifyLiveSource(installSource(original,template.replace('sendReaction: (emoji) =>','staleReaction: (emoji) =>'),host,statusTemplate),template,host,statusTemplate),/hooks_missing:sendReaction/u);
+assert.throws(()=>verifyLiveSource(installSource(original,template,host),template,host,statusTemplate),/hooks_missing:status_reaction_controller/u);
 assert.throws(()=>verifyLiveSource(original,template,host),/hooks_missing|port_missing/u);
 console.log('DELIVERY_BOUNDARY_LIVE_VERIFY=passed');
 // Exercise the exact pinned OpenClaw accepted + terminal lifecycle functions.
@@ -84,7 +86,8 @@ assert.equal(body.includes('mediaOnlyCoalescer'),false);
 assert.equal(body.includes('mediaUrls'),false);
 assert.equal(body.includes('JSON.parse'),false);
 const provider=[];let port;
-const scope={globalThis:{__amadeusDeliveryBoundaryV2_20260930:{version:2,createWhatsAppPlan(input){port=input;return {replyOptions:{},dispatcherOptions:{},delivery:{observeMessageSent:true,preparePayload:async()=>null,durable:()=>false,deliver:async()=>({visibleReplySent:false})}};}}},
+const scope={globalThis:{__amadeusDeliveryBoundaryV2_20260930:{version:2,createWhatsAppPlan(input){port=input;return {replyOptions:{},dispatcherOptions:{},finalize:()=>true,delivery:{observeMessageSent:true,preparePayload:async()=>null,durable:()=>false,deliver:async()=>({visibleReplySent:false})}};}}},
+ readAgentRunTerminalOutcome:()=> 'completed',finalizeWhatsAppStatusReaction:async({controller,outcome})=>{if(outcome==='done')await controller.setDone();else await controller.setError();await controller.restoreInitial();},
  buildQuotedMessageOptions:params=>params,listWhatsAppSendResultMessageIds:result=>[result.messageId],markdownToWhatsAppChunks:text=>[text],resolveTextChunkLimit:()=>4000,resolveMarkdownTableMode$1:()=> 'code',resolveChunkMode:()=> 'length',
  resolveWhatsAppInboundReplyPolicy:()=>({suppressTyping:false,disableBlockStreaming:false}),resolveChannelStreamingBlockEnabled:()=>false,
  startAmadeusVoiceReplyLease:()=>({}),startAmadeusWhatsAppTypingIndicator:()=>()=>{},closeAmadeusVoiceReplyLeaseForTurn:()=>{},
@@ -104,6 +107,44 @@ await port.sendText('typed text');assert.deepEqual(provider.at(-1),{text:'typed 
 await assert.rejects(port.sendText('[[control]]\nNO_REPLY'),/protocol_text_rejected/u);
 await port.sendVoice({audio:Buffer.from('audio'),mimeType:'audio/mpeg'});assert.equal(provider.at(-1).ptt,true);
 await port.sendReaction('😂');assert.deepEqual(reactions.at(-1).slice(0,3),['chat','m','😂']);assert.equal(reactions.at(-1)[3].fromMe,false);assert.equal('participant' in reactions.at(-1)[3],false);
+// Staged status reactions end on the contextual emoji: never ✅ and never a
+// 👀 restore, in either order of reply-reaction vs dispatch finalize.
+{
+ const { createStatusReactionController } = await import(createRequire(host+'/package.json').resolve('openclaw/plugin-sdk/channel-feedback'));
+ const statusNode=acornParse(transformed).body.find(item=>item.type==='FunctionDeclaration'&&item.id?.name==='createWhatsAppStatusReactionController');
+ const wire=[];
+ const statusScope={createStatusReactionController,logVerbose:()=>{},
+  sendReactionWhatsApp:async(chat,id,emoji,options)=>{wire.push({chat,id,emoji,options});},
+  resolveWhatsAppReactionEligibility:async()=>({status:'enabled',chatId:'g@g.us',messageId:'gm',emoji:'👀',reactionOptions:{fromMe:false,participant:'p@s.whatsapp.net'}})};
+ const planReaction=scope.sendReactionWhatsApp;scope.sendReactionWhatsApp=statusScope.sendReactionWhatsApp;
+ const createStatus=vm.runInNewContext(`${transformed.slice(statusNode.start,statusNode.end)}; createWhatsAppStatusReactionController`,statusScope);
+ const statusArgs={msg:{event:{id:'gm'}},cfg:{messages:{statusReactions:{enabled:true}}}};
+ assert.equal(await createStatus({...statusArgs,cfg:{}}),null,'disabled config keeps the native path');
+ const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
+ const run=async(order)=>{
+  wire.length=0;const ctl=await createStatus(statusArgs);assert.equal(typeof ctl.finishWithContextual,'function');
+  ctl.setQueued();const plan=scope.globalThis.createPlan({...params,statusReactionController:ctl});const statusPort=port;
+  plan.afterRecord();await sleep(800);await plan.replyOptions.onToolStart({name:'web_search'});await sleep(800);
+  let react;
+  if(order==='react-first'){react=statusPort.sendReaction('😂');plan.finalize({});}
+  else if(order==='finalize-first'){plan.finalize({});react=statusPort.sendReaction('😂');}
+  else plan.finalize({});
+  await react;await sleep(order==='none'?1800:0);
+  return wire.map(item=>item.emoji);
+ };
+ for(const order of ['react-first','finalize-first']){
+  const seen=await run(order);
+  assert.equal(seen[0],'👀');assert.ok(seen.includes('🧠'),`thinking stage shown (${order}): ${seen}`);
+  assert.ok(seen.length>=3,`tool stage shown (${order}): ${seen}`);
+  assert.equal(seen.at(-1),'😂',`final reaction is contextual (${order}): ${seen}`);
+  if(order==='react-first') assert.equal(seen.includes('✅'),false,`no done flash: ${seen}`);
+  if(order==='react-first') assert.ok(wire.every(item=>item.chat==='g@g.us'&&item.id==='gm'&&item.options.participant==='p@s.whatsapp.net'),'group key carries participant');
+  else assert.deepEqual(seen.slice(-3),['✅','👀','😂'],'late reaction lands strictly after the native restore');
+ }
+ const plain=await run('none');assert.deepEqual(plain.slice(-2),['✅','👀'],'no contextual emoji keeps native done/restore');
+ scope.sendReactionWhatsApp=planReaction;
+ console.log('WHATSAPP_STATUS_REACTION_CONTEXTUAL_TERMINAL=passed');
+}
 params.transport.sendMedia=async()=>{throw new Error('document rejected');};await assert.rejects(port.sendDocument({bytes:Buffer.from('document'),mimeType:'image/png',fileName:'file.png'}));
 scope.globalThis.__amadeusDeliveryBoundaryV2_20260930=undefined;assert.throws(()=>scope.globalThis.createPlan(params),/unavailable/u);
 console.log('DELIVERY_BOUNDARY_PINNED_AST_AND_PROVIDER_CONTRACT=passed');
