@@ -67,6 +67,11 @@ function createWhatsAppReplyPlan(params) {
     cfg: params.cfg, ctx: params.context,
     blockStreamingEnabled: resolveChannelStreamingBlockEnabled(params.cfg.channels?.whatsapp),
   });
+  // Keep the typing indicator continuous: re-send composing right after each
+  // stage reaction while the turn is still typing (never after stop).
+  if (statusReactionController) statusReactionController.onReactionSent = () => {
+    if (typingStop || voiceLease) Promise.resolve(sendComposing()).catch(() => {});
+  };
   plan.afterRecord = () => { if (statusReactionController) statusReactionController.setThinking(); };
   plan.dispatcherOptions = { ...params.replyPipeline, ...plan.dispatcherOptions };
   if (!plan.delivery || plan.delivery.observeMessageSent !== true) throw new Error('delivery_adapter_contract_invalid');
