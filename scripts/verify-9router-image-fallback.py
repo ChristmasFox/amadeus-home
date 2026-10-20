@@ -86,7 +86,7 @@ def main() -> None:
     desired = json.loads(DESIRED.read_text())["image"]
     if desired != {
         "name": "amadeus-image", "kind": "image", "strategy": "fallback",
-        "models": ["cx/gpt-image-2.5-sunburst", "cx/gpt-image-2.5-flare", "cx/gpt-image-2.5"],
+        "models": ["cx/gpt-image-2.5", "xai/grok-2-image-1212"],
     }:
         raise SystemExit("desired image chain differs from this pinned acceptance fixture")
     result = subprocess.run(

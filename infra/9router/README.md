@@ -4,12 +4,11 @@
 
 `infra/9router/model-capabilities.json` is the Git desired state for the
 `kind=image` `amadeus-image` Combo: `strategy=fallback` with
-`cx/gpt-image-2.5-sunburst`, then `cx/gpt-image-2.5-flare`, then
-`cx/gpt-image-2.5` as its ordered native 9Router fallback chain. OpenClaw references only
-`openai/amadeus-image`. OpenClaw owns the local Qwen fallback after eligible
-operational primary failures; safety refusals and invalid requests are
-terminal. Keep Qwen out of the native 9Router Combo so fallback ownership stays
-single and explicit. Reference edits preserve the original image through the
+`cx/gpt-image-2.5`, then `xai/grok-2-image-1212` as its ordered native 9Router
+fallback chain. OpenClaw references only `openai/amadeus-image`. Local Qwen
+fallback stays disabled for Lab unless explicitly enabled; safety refusals and
+invalid requests are terminal. Keep Qwen out of the native 9Router Combo so
+cloud fallback ownership stays single and explicit. Reference edits preserve the original image through the
 primary path and use the OpenClaw-owned local edit path only when eligible.
 The existing 9Router management API is used through the shared protected
 loopback client in `scripts/nine_router_management.py`. Combo provisioning
@@ -20,7 +19,7 @@ The legacy Codex adapter text `Account may not be entitled (Plus/Pro required)`
 is not treated as an entitlement verdict. The pinned 0.5.95 image adapter
 emits bounded terminal codes such as `image_result_missing`, `sse_incomplete`,
 and `transport_interrupted`; those request-scoped failures continue the native
-three-model fallback without writing `modelLock_*` or a transient cooldown.
+two-model fallback without writing `modelLock_*` or a transient cooldown.
 Only explicit upstream authentication, quota, or permission responses keep
 the existing account-scoped lock behavior. AUTH/COMBO diagnostics contain
 allowlisted status, model, outcome, and cooldown decisions, never prompts or
