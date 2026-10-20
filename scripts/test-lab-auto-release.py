@@ -85,6 +85,38 @@ with tempfile.TemporaryDirectory(prefix="lab-auto-release-notes-") as temporary:
 assert auto.release_note_summary(["plugins/pubg/query.ts"]) == "PUBG 查询与比赛数据分析能力更新。"
 assert auto.release_note_summary(["apps/pubg-intelligence-lab/src/main.tsx"]) == "PUBG Intelligence Lab 研究体验与证据链更新。"
 
+# Release notes list each first-parent change since the previous release commit.
+assert auto.classify_commit("chore(lab): release v1.13.5", "") is None
+assert auto.classify_commit("fix(9router): amadeus-image fallback to grok (#28)", "body") == {
+    "kind": "fix", "text": "生图路由：amadeus-image fallback to grok（#28）"}
+assert auto.classify_commit("Merge pull request #27 from ChristmasFox/claude/active",
+                            "fix(lab): allow WhatsApp react\n") == {"kind": "fix", "text": "allow WhatsApp react（#27）"}
+assert auto.classify_commit("feat(lab): x", "detail\nRelease-Note: 群聊回复后会自动点表情。\n") == {
+    "kind": "feat", "text": "群聊回复后会自动点表情。"}
+assert auto.classify_commit("refactor(lab): tidy OpenClaw patch", "")["kind"] == "other"
+assert "openclaw" not in auto.classify_commit("refactor(lab): tidy OpenClaw patch", "")["text"].lower()
+sample = auto.release_note_body([
+    ("feat(lab): staged reactions", ""), ("fix(9router): grok fallback (#28)", ""),
+    ("docs(agents): dispatch", ""), ("chore(lab): release v1.13.6", "")], "fallback")
+assert sample == ("✨ **新功能**\n- staged reactions\n\n🛠️ **修复**\n- 生图路由：grok fallback（#28）"
+                  "\n\n📦 **其它变更**\n- 协作流程：dispatch"), sample
+assert auto.release_note_body([("chore(lab): release v1.0.0", "")], "Lab 发布流程与运行可靠性更新。") == \
+    "- Lab 发布流程与运行可靠性更新。"
+with tempfile.TemporaryDirectory(prefix="lab-auto-release-range-") as temporary:
+    repo = Path(temporary)
+    run = lambda *a: subprocess.run(["git", "-C", str(repo), *a], check=True, capture_output=True, text=True).stdout
+    run("init", "-q"); run("config", "user.email", "t@t"); run("config", "user.name", "t")
+    for message in ("feat(lab): old", "chore(lab): release v1.0.0", "feat(lab): new thing", "fix(lab): bug"):
+        run("commit", "-q", "--allow-empty", "-m", message)
+    tip = run("rev-parse", "HEAD").strip()
+    assert [s for s, _ in auto.release_commits(repo, tip)] == ["feat(lab): new thing", "fix(lab): bug"]
+    run("commit", "-q", "--allow-empty", "-m", "chore(lab): release v1.0.1")
+    assert [s for s, _ in auto.release_commits(repo, run("rev-parse", "HEAD").strip())] == [
+        "feat(lab): new thing", "fix(lab): bug"]
+    notes = repo / "RELEASE_NOTES.md"
+    auto.write_release_notes(notes, "1.0.1", auto.release_note_body(auto.release_commits(repo, tip), "x"))
+    assert notes.read_text(encoding="utf-8").startswith("# Amadeus 1.0.1\n\n✨ **新功能**\n- new thing\n")
+
 valid_query = {
     "status": "ok",
     "result": {"meta": {
