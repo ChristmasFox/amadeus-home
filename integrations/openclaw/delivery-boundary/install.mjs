@@ -25,6 +25,35 @@ export function installSource(original, template, hostRoot) {
   parser(hostRoot).parse(output, { ecmaVersion: 'latest', sourceType: 'module' });
   return output;
 }
+// Property names of the port object handed to boundary.createWhatsAppPlan by
+// the one createWhatsAppReplyPlan declaration in `source`.
+export function boundaryHookKeys(source, hostRoot) {
+  const ast = parser(hostRoot).parse(source, { ecmaVersion: 'latest', sourceType: 'module' });
+  const nodes = ast.body.filter((node) => node.type === 'FunctionDeclaration' && node.id?.name === 'createWhatsAppReplyPlan');
+  if (nodes.length !== 1) throw new Error('whatsapp_boundary_count_mismatch');
+  const calls = [];
+  const walk = (node) => {
+    if (!node || typeof node.type !== 'string') return;
+    if (node.type === 'CallExpression' && node.callee.type === 'MemberExpression' && node.callee.property?.name === 'createWhatsAppPlan') calls.push(node);
+    for (const value of Object.values(node)) {
+      if (Array.isArray(value)) value.forEach(walk);
+      else if (value && typeof value === 'object' && typeof value.type === 'string') walk(value);
+    }
+  };
+  walk(nodes[0]);
+  if (calls.length !== 1 || calls[0].arguments[0]?.type !== 'ObjectExpression') throw new Error('whatsapp_boundary_port_missing');
+  return calls[0].arguments[0].properties.map((prop) => prop.type === 'Property' ? (prop.key.name ?? String(prop.key.value)) : '...').sort();
+}
+// The live module must carry every hook the repository template declares;
+// later lifecycle patches may add code but never drop a boundary hook.
+export function verifyLiveSource(live, template, hostRoot) {
+  const expected = boundaryHookKeys(template, hostRoot);
+  const actual = new Set(boundaryHookKeys(live, hostRoot));
+  const missing = expected.filter((key) => !actual.has(key));
+  if (!live.includes('__amadeusDeliveryBoundaryV2_20260930')) missing.push('boundary_global');
+  if (missing.length) throw new Error(`live_whatsapp_boundary_hooks_missing:${missing.join(',')}`);
+  return expected;
+}
 async function locate(root, found = []) {
   for (const entry of await readdir(root, { withFileTypes: true })) {
     const path = join(root, entry.name);
@@ -86,6 +115,12 @@ export async function main(argv = process.argv.slice(2)) {
   if (targets.length !== 1) throw new Error('pinned_whatsapp_package_count_mismatch');
   const target = targets[0];
   if (JSON.parse(await readFile(join(target, 'package.json'), 'utf8')).version !== PIN.version) throw new Error('pinned_whatsapp_version_mismatch');
+  if (argv.includes('--verify')) {
+    const template = await readFile(new URL('./whatsapp-plan.js', import.meta.url), 'utf8');
+    const hooks = verifyLiveSource(await readFile(join(target, 'dist', PIN.module), 'utf8'), template, hostRoot);
+    console.log(`DELIVERY_BOUNDARY_LIVE=verified hooks=${hooks.length}`);
+    return;
+  }
   if (!argv.includes('--apply')) { console.log('DELIVERY_BOUNDARY=plan; restore checksum-pinned pristine monitor and install typed reply plan'); return; }
   // Authorized apply restores the pristine single module first. Old edits are
   // not cleaned/translated or kept as compatibility. Lifecycle patches follow.

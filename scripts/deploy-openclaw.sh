@@ -751,6 +751,57 @@ fi
 
 deploy_stage prepare-runtime
 OPENCLAW_SWITCHED=0
+# WhatsApp runtime module (persisted under config/npm/projects, not in the image).
+# Every apply path, including openclaw-only auto-release, restores the
+# checksum-pinned pristine monitor, installs the typed boundary from
+# delivery-boundary/whatsapp-plan.js, then re-applies every lifecycle patch in
+# the same order, so the result is deterministic and no patch is wiped.
+install_whatsapp_runtime_patches() {
+tar -C "$ROOT_DIR/integrations/openclaw/delivery-boundary" -cf - install.mjs whatsapp-plan.js | \
+  orb -m "$MACHINE" -u root docker exec -i openclaw sh -ec '
+    tmp=$(mktemp -d /tmp/amadeus-delivery-boundary.XXXXXX)
+    trap "rm -rf $tmp" EXIT
+    tar -C "$tmp" -xf -
+    node "$tmp/install.mjs" --whatsapp-root /home/node/.openclaw/npm/projects --apply
+  '
+
+orb -m "$MACHINE" -u root docker exec -i openclaw node - \
+  --whatsapp-root /home/node/.openclaw/npm/projects < "$PATCH_RUNTIME"
+orb -m "$MACHINE" -u root docker exec -i openclaw node - \
+  /home/node/.openclaw/npm/projects < "$VOICE_PATCH_RUNTIME"
+orb -m "$MACHINE" -u root docker exec -i openclaw node - \
+  /home/node/.openclaw/npm/projects < "$MEDIA_AGENT_PATCH_RUNTIME"
+tar -C "$ROOT_DIR/scripts" -cf - \
+  patch-openclaw-whatsapp-voice-lifecycle.mjs openclaw-voice-markers.mjs \
+  openclaw-voice-lease.mjs | \
+  orb -m "$MACHINE" -u root docker exec -i openclaw sh -ec '
+    tmp=$(mktemp -d /tmp/amadeus-voice-patch.XXXXXX)
+    trap "rm -rf $tmp" EXIT
+    tar -C "$tmp" -xf -
+    node "$tmp/patch-openclaw-whatsapp-voice-lifecycle.mjs" --whatsapp-root /home/node/.openclaw/npm/projects
+  '
+}
+# Fails (and so rolls back) when the live module lacks any template hook.
+verify_whatsapp_boundary_live() {
+  tar -C "$ROOT_DIR/integrations/openclaw/delivery-boundary" -cf - install.mjs whatsapp-plan.js | \
+    orb -m "$MACHINE" -u root docker exec -i openclaw sh -ec '
+      tmp=$(mktemp -d /tmp/amadeus-delivery-verify.XXXXXX)
+      trap "rm -rf $tmp" EXIT
+      tar -C "$tmp" -xf -
+      node "$tmp/install.mjs" --whatsapp-root /home/node/.openclaw/npm/projects --verify
+    '
+}
+WHATSAPP_MONITOR_GLOB='config/npm/projects/*/node_modules/@openclaw/whatsapp/dist/monitor-DaIAK4fT.js'
+# Auto-release checkpoints stay tiny: keep only the single patched monitor.
+backup_whatsapp_monitor() {
+  orb -m "$MACHINE" -u root python3 - "$OPENCLAW_DATA_DIR" "$WHATSAPP_MONITOR_GLOB" "$CHECKPOINT_DIR/whatsapp-monitor.before.js" <<'PY'
+import glob, os, shutil, sys
+matches = glob.glob(os.path.join(sys.argv[1], sys.argv[2]))
+if len(matches) != 1: raise SystemExit('whatsapp monitor module count mismatch')
+shutil.copy2(matches[0], sys.argv[3]); open(sys.argv[3] + '.path', 'w').write(matches[0])
+print('WHATSAPP_MONITOR_CHECKPOINT=saved')
+PY
+}
 rollback_openclaw_candidate() {
   local status=$? restore_status=0
   if ((OPENCLAW_ONLY && OPENCLAW_SWITCHED && status != 0)); then
@@ -787,6 +838,19 @@ restore(compose_source, compose_destination, True)
 restore(env_source, env_destination, False)
 PY
     restore_status=$?
+    if ((restore_status == 0)); then
+      orb -m "$MACHINE" -u root python3 - "$CHECKPOINT_DIR/whatsapp-monitor.before.js" <<'PY'
+import os, shutil, sys
+from pathlib import Path
+source = Path(sys.argv[1]); marker = Path(str(source) + '.path')
+if source.is_file() and marker.is_file():
+    destination = Path(marker.read_text())
+    temporary = destination.with_name(destination.name + '.rollback-tmp')
+    shutil.copy2(source, temporary); os.replace(temporary, destination)
+    print('WHATSAPP_MONITOR_ROLLBACK=restored')
+PY
+      restore_status=$?
+    fi
     if ((restore_status == 0)); then
       orb -m "$MACHINE" -u root bash -lc "cd '$OPENCLAW_APP_DIR' && docker compose up -d --no-build --no-deps openclaw" >/dev/null
       restore_status=$?
@@ -875,32 +939,8 @@ orb -m "$MACHINE" -u root docker run --rm --user 1000:1000 \
   || fail 'Installed guest VPS account map is not readable by container uid node.'
 printf 'OPENCLAW_VPS_ACCOUNT_MAP_NODE_READ=passed\n'
 
-# One-time delivery cutover: protected checkpoint above precedes every write.
-# Restore the checksum-pinned pristine monitor, then install one typed boundary.
-# Old edits are not translated or propagated. Apply only occurs in this --apply path.
-tar -C "$ROOT_DIR/integrations/openclaw/delivery-boundary" -cf - install.mjs whatsapp-plan.js | \
-  orb -m "$MACHINE" -u root docker exec -i openclaw sh -ec '
-    tmp=$(mktemp -d /tmp/amadeus-delivery-boundary.XXXXXX)
-    trap "rm -rf $tmp" EXIT
-    tar -C "$tmp" -xf -
-    node "$tmp/install.mjs" --whatsapp-root /home/node/.openclaw/npm/projects --apply
-  '
-
-orb -m "$MACHINE" -u root docker exec -i openclaw node - \
-  --whatsapp-root /home/node/.openclaw/npm/projects < "$PATCH_RUNTIME"
-orb -m "$MACHINE" -u root docker exec -i openclaw node - \
-  /home/node/.openclaw/npm/projects < "$VOICE_PATCH_RUNTIME"
-orb -m "$MACHINE" -u root docker exec -i openclaw node - \
-  /home/node/.openclaw/npm/projects < "$MEDIA_AGENT_PATCH_RUNTIME"
-tar -C "$ROOT_DIR/scripts" -cf - \
-  patch-openclaw-whatsapp-voice-lifecycle.mjs openclaw-voice-markers.mjs \
-  openclaw-voice-lease.mjs | \
-  orb -m "$MACHINE" -u root docker exec -i openclaw sh -ec '
-    tmp=$(mktemp -d /tmp/amadeus-voice-patch.XXXXXX)
-    trap "rm -rf $tmp" EXIT
-    tar -C "$tmp" -xf -
-    node "$tmp/patch-openclaw-whatsapp-voice-lifecycle.mjs" --whatsapp-root /home/node/.openclaw/npm/projects
-  '
+install_whatsapp_runtime_patches
+verify_whatsapp_boundary_live
 
 orb -m "$MACHINE" -u root python3 - \
   "$OPENCLAW_APP_DIR" "$OPENCLAW_COMPOSE_FILE" "$OPENCLAW_COMPOSE_B64" "$IMAGE" \
@@ -951,6 +991,9 @@ print('OPENCLAW_COMPOSE_ENV=installed')
 PY
 else
   OPENCLAW_SWITCHED=1
+  backup_whatsapp_monitor
+  install_whatsapp_runtime_patches
+  verify_whatsapp_boundary_live
   orb -m "$MACHINE" -u root python3 - \
     "$OPENCLAW_COMPOSE_FILE" "$OPENCLAW_APP_DIR/.env" "$IMAGE" "$PUBG_TELEMETRY_ARCHIVE_HOST_DIR" \
     < "$ROOT_DIR/scripts/openclaw_telemetry_mount.py"
@@ -1133,6 +1176,8 @@ if ((AUTO_RELEASE)); then
   [[ "$container_health" == healthy ]] || fail "OpenClaw container health is $container_health after automatic release."
   printf '%s\n' 'OPENCLAW_CONTAINER_HEALTH=healthy'
 fi
+# The switched container must load a module carrying every template hook.
+verify_whatsapp_boundary_live
 deploy_stage smoke
 # Every apply path (the OpenClaw-only automatic release and the full Lab deploy) must end with the archive mounted from
 # the configured host directory. A container recreated without it silently archives into an empty root-owned directory

@@ -5,7 +5,7 @@ import { createRequire } from 'node:module';
 import { dirname } from 'node:path';
 import vm from 'node:vm';
 import { patchWhatsAppSource, patchWhatsAppIngressQueueSource } from './patch-openclaw-whatsapp-voice-lifecycle.mjs';
-import { installSource, upstream } from '../integrations/openclaw/delivery-boundary/install.mjs';
+import { installSource, upstream, boundaryHookKeys, verifyLiveSource } from '../integrations/openclaw/delivery-boundary/install.mjs';
 import { CORE_PIN as IMAGE_COMPLETION_PIN, assertPinnedCoreVersion, installCoreCompletionSource } from '../integrations/openclaw/delivery-boundary/core-completion.mjs';
 const require = createRequire(new URL('../plugins/amadeus/package.json', import.meta.url));
 const host = dirname(dirname(dirname(require.resolve('openclaw/plugin-sdk/core'))));
@@ -14,6 +14,13 @@ const template = await readFile(new URL('../integrations/openclaw/delivery-bound
 const acorn=createRequire(host+'/package.json')('acorn');
 function acornParse(source){return acorn.parse(source,{ecmaVersion:'latest',sourceType:'module'});}
 const transformed=installSource(original,template,host);
+// Live-module verification: the installed module carries every template hook;
+// a stale boundary (e.g. without sendReaction) must fail the deploy.
+assert.ok(boundaryHookKeys(template,host).includes('sendReaction'));
+assert.deepEqual(verifyLiveSource(transformed,template,host),boundaryHookKeys(template,host));
+assert.throws(()=>verifyLiveSource(installSource(original,template.replace('sendReaction: (emoji) =>','staleReaction: (emoji) =>'),host),template,host),/hooks_missing:sendReaction/u);
+assert.throws(()=>verifyLiveSource(original,template,host),/hooks_missing|port_missing/u);
+console.log('DELIVERY_BOUNDARY_LIVE_VERIFY=passed');
 // Exercise the exact pinned OpenClaw accepted + terminal lifecycle functions.
 // Only task identity/origin and persisted attachment facts cross this bridge.
 const coreOriginal=await readFile(`${host}/dist/${IMAGE_COMPLETION_PIN.module}`,'utf8');
