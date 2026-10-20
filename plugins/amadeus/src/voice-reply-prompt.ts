@@ -27,6 +27,10 @@ function originFor(context: { trigger?: string; inputProvenance?: { kind?: strin
   if (context.inputProvenance?.kind === 'internal_system') return 'system';
   return 'external_user';
 }
+// Channel-scoped (not persona): the delivery boundary strips the tag and
+// reacts on the inbound message, replacing the ack emoji without a tool call.
+export const WHATSAPP_REACT_INSTRUCTION = 'End the last text part with exactly one contextual reaction tag such as [react:😂], [react:🙄], [react:👍], [react:👎], [react:💩], [react:😮], [react:❤️] or [react:🤦‍♀️]. Exactly one emoji, no explanation; the runtime removes the tag from the visible text and reacts on the user message. Never call a tool to react.';
+
 export function registerVoiceReplyPrompt(api: OpenClawPluginApi, boundaryOptions: DeliveryBoundaryOptions = {}): void {
   const root = api.rootDir ?? resolve(dirname(fileURLToPath(import.meta.url)), '..');
   const skill = readFileSync(resolve(root, 'skills/voice-reply/SKILL.md'), 'utf8');
@@ -64,6 +68,7 @@ export function registerVoiceReplyPrompt(api: OpenClawPluginApi, boundaryOptions
       skill,
       'Return ONLY the DeliveryEnvelope v2 Agent wire object: {"version":2,"silent":false,"parts":[{"kind":"text","text":"<answer>"}]}. No extra keys or surrounding prose/fences. Escape control characters inside JSON strings (use \\n instead of a literal line break). Model-authored parts may only be text or voice; tool attachments are added by settlement, never emit MEDIA paths or tool serialization. User-requested JSON belongs inside a text part. The structured reply planner chooses parts semantically; normal typed input uses text only.',
       ...(origin === 'inbound_voice' ? ['This verified inbound voice run requires a Japanese voice part followed by the explicit visible Chinese/Japanese text part.'] : []),
+      ...(channel === 'whatsapp' ? [WHATSAPP_REACT_INSTRUCTION] : []),
     ].join('\n\n') };
   });
   api.on('before_agent_finalize', (event) => {
