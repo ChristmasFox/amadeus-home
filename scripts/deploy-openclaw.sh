@@ -1350,7 +1350,8 @@ if ((CANDIDATE)); then
 else
   ACCEPTANCE_KEY="amadeus-release:$AMADEUS_VERSION"
   DEPLOYMENT_SUMMARY="${RELEASE_NOTES}
-已部署到当前 CasaOS 主机 ${MACHINE}。"
+
+已部署到 Amadeus M204 & Lab 世界线"
   NOTIFICATION_SOURCE='amadeus-release'
   NOTIFICATION_HEADLINE="Amadeus $AMADEUS_VERSION · 世界线收束"
   NOTIFICATION_SEVERITY='success'
