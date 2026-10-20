@@ -861,11 +861,11 @@ const entry = defineToolPlugin({
     }),
     tool({
       name: 'pubg_search_matches',
-      description: 'Search bounded PUBG matches and return a fresh resultSetId for follow-up facts or review.',
+      description: 'Search bounded PUBG matches and return a fresh resultSetId for follow-up facts or review. Not for 今日/昨日/本周战绩 record requests (use pubg_query_stats).',
       parameters: SearchMatchesParameters,
       factory: ({ config, toolContext }) => makeTool(
         'pubg_search_matches',
-        'Search bounded PUBG matches and return a fresh resultSetId for follow-up facts or review.',
+        'Search bounded PUBG matches and return a fresh resultSetId for follow-up facts or review. Not for 今日/昨日/本周战绩 record requests (use pubg_query_stats).',
         SearchMatchesParameters,
         config,
         toolContext,
