@@ -124,7 +124,7 @@
   },
   "tools": {
     "profile": "full",
-    "deny": ["tts", "message"],
+    "deny": ["tts"],
     "sessions": {
       "visibility": "self"
     },
@@ -232,7 +232,7 @@
     "ackReaction": "👀",
     "ackReactionScope": "all",
     "statusReactions": {
-      "enabled": true
+      "enabled": false
     }
   },
   "channels": {
