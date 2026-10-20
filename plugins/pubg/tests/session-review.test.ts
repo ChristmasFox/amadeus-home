@@ -53,9 +53,11 @@ class FakeGateway implements ReportGateway {
   sent: Array<Record<string, unknown>> = [];
   failSends = 0;
   failDirectory = 0;
+  directoryScopes: unknown[] = [];
   constructor(public groups: Array<Record<string, unknown>>) {}
-  async request(method: string, params: Record<string, unknown>) {
+  async request(method: string, params: Record<string, unknown>, options?: Record<string, unknown>) {
     if (method === 'conversations.list') {
+      this.directoryScopes.push(options?.scopes);
       if (this.failDirectory > 0) { this.failDirectory -= 1; throw new Error('gateway not ready'); }
       return { conversations: this.groups };
     }
@@ -118,6 +120,7 @@ test('a verified group gets exactly one review with a per-session idempotency ke
     { channel: 'whatsapp', to: GROUP, accountId: 'secondary', idempotencyKey: `pubg-session:squad:m1:whatsapp:secondary:${GROUP}` },
   );
   assert.equal(store.records.get('pubg-session:squad:m1')?.status, 'sent');
+  assert.deepEqual(gateway.directoryScopes, [['operator.admin']]);
   // The delivered text links to a share of exactly these matches; the ledger keeps only the placeholder.
   const token = shareToken(gateway.sent[0]!.message);
   assert.ok(token, String(gateway.sent[0]!.message));

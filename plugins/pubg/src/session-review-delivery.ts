@@ -75,7 +75,8 @@ export async function checkReviewTarget(gateway: ReportGateway, subscription: Re
   if (!WHATSAPP_GROUP_JID.test(subscription.target)) return { ok: false, reason: 'target_not_group' };
   let rows: ConversationRow[];
   try {
-    const response = await gateway.request('conversations.list', { agentId }, { timeoutMs: 15_000 }) as { conversations?: unknown };
+    // OpenClaw gates conversations.list behind operator.admin; a plugin call without explicit scopes only gets operator.write.
+    const response = await gateway.request('conversations.list', { agentId }, { timeoutMs: 15_000, scopes: ['operator.admin'] }) as { conversations?: unknown };
     rows = Array.isArray(response?.conversations) ? response.conversations as ConversationRow[] : [];
   } catch (error) {
     return { ok: false, reason: 'directory_unavailable', error: (error instanceof Error ? error.message : String(error)).slice(0, 200) };
