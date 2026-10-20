@@ -60,6 +60,31 @@ from text. This bootstrap applies to Codex and other repository-aware agents.
 - Gate-Prod **不能默认指向现有 `amadeus-gateway` VPS**；云端主机和资源尚未决定。命名本身不构成部署、停服或数据库迁移授权。
 - 以上是文档/沟通约定，无需重命名 npm 包、仓库、容器、数据库或代码符号。“Image Lab”仍是独立的生图功能名称。历史 Goal/checkpoint 不进行无意义的全局替换。
 
+## Codex / Claude 并行工作树与任务分发（2026-10-20）
+
+日常协同开发主要发生在 **Lab** 这条线。`~/amadeus-home` 只保留 **`main`**，供人工查看与 Lab 自动发布对照；**禁止** Codex / Claude 在主树里直接改代码。
+
+| 工作树 | 分支约定 | 谁用 |
+| --- | --- | --- |
+| `~/amadeus-home` | 只跟踪 `main` | 人 / M204 Manager；不做功能开发 |
+| `~/amadeus-home-claude` | 默认 `claude/active`；功能分支 `claude/<topic>` | Claude（zellij `claude`） |
+| `~/amadeus-home-codex` | 默认 `codex/active`；功能分支 `codex/<topic>` | Codex（zellij `codex` / Codex CLI） |
+| Lab release-worktree | detached，由 LaunchAgent 管理 | `com.amadeus.lab-auto-release` 专用，勿手改 |
+
+### 任务分发
+
+- **M204 Manager** 负责协作与任务分发：拆任务、指定工作树、划定可改路径、决定是否直合 `main`。
+- 操作者若指定「交给 Claude」或「交给 Codex」，按指定执行；未指定时由 Manager 按负载与路径冲突选择。
+- 两边默认**并行做 Lab 内互不重叠的路径**；`packages/pubg-domain`、`packages/presentation` 等共享包同一时间只允许一方改。
+- 完成后：路径无冲突的小改可 rebase/merge 进 `main` 并 push（仍遵守上方 solo-development 规则）；有冲突或共享包改动先经 Manager 协调再合入。合入 `main` 且命中 Lab 路径前缀后，现有 Lab 自动发布继续生效。
+- 新会话启动目录必须是对应 worktree，**不要** `cd ~/amadeus-home` 开干。
+
+### 硬规矩
+
+- 两个 worktree **不能**同时 checkout 同一分支；功能开发开自己的 `claude/*` / `codex/*` 分支。
+- 禁止 force-push `main`。Lab auto-release 运行中不要改写已发布 SHA 的历史。
+- Gate-Local 部署仍走 `gate-local-candidate` / autopilot，与本并行规则独立；Lab 并行任务默认不要顺手改 Gate。
+
 ## Lab 自托管 OpenClaw 稳态边界
 
 在 Lab 内，OpenClaw 是唯一 Agent runtime（Gate 是独立的 AI SDK 小队服务，不属于 Lab 的第二编排器）：PUBG 保持原生 plugin/domain，Product Radar、媒体整理、NAS、HomeLab、VPS、KOOK 与 Codex 通知留在原生 `plugins/amadeus`/明确外部服务及 owner outbox。旧 `docs/OPENCLAW_AMADEUS_MIGRATION_GOAL.md` 是已完成历史目标，不是运行时或新任务指令。不要恢复 LangBot/n8n/旧 Runtime、关键词路由、第二个 Agent 或第二套 sender；部署仍须外部备份、secret 保护、真实验收和可恢复 checkpoint。
