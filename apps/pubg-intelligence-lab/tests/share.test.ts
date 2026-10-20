@@ -102,6 +102,16 @@ test('a share link opens only its own review and matches, without the password, 
     const setCookie = String(opened.headers['set-cookie']);
     assert.match(setCookie, new RegExp(`^${SHARE_COOKIE}=${session.token}; Path=/; Max-Age=\\d+; HttpOnly; SameSite=Strict; Secure$`, 'u'));
     const cookie = `${SHARE_COOKIE}=${session.token}`;
+    // The page carries the view inline (no extra round trip) and a step list that shows until the script runs.
+    const inline = opened.body.match(/<script>window\.__SHARE_VIEW__=(.+?)<\/script>/u)?.[1];
+    assert.ok(inline, 'view is inline');
+    assert.deepEqual(JSON.parse(inline!), JSON.parse((await call(url, '/api/share/view', cookie)).body));
+    assert.match(opened.body, /<div id="root"><style>[\s\S]*<li class="done"><i><\/i><span>读取复盘与 2 场对局<\/span><\/li><li class="active"><i><\/i><span>下载页面程序<\/span>/u);
+    // Built assets are named by content hash and may be cached for good; the page shell may not.
+    const asset = opened.body.match(/src="(\/assets\/[^"]+\.js)"/u)?.[1];
+    assert.ok(asset);
+    assert.equal((await call(url, asset!, cookie)).headers['cache-control'], 'public, max-age=31536000, immutable');
+    assert.equal(opened.headers['cache-control'], 'no-store');
 
     const view = JSON.parse((await call(url, '/api/share/view', cookie)).body) as { kind: string; review: { headline: string }; matches: Array<{ matchId: string; available: boolean; placement: number }> };
     assert.equal(view.kind, 'session');

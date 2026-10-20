@@ -145,7 +145,10 @@ export function handleShareLink(request: IncomingMessage, response: ServerRespon
   }
   const { title, description } = shareTitle(record);
   const head = `<meta name="robots" content="noindex,nofollow"><meta property="og:title" content="${escapeHtml(title)}"><meta property="og:description" content="${escapeHtml(description)}"><meta property="og:type" content="website">`;
-  const html = readFileSync(shell, 'utf8').replace(/<title>[^<]*<\/title>/u, `<title>${escapeHtml(title)}</title>${head}`);
+  const view = `<script>window.__SHARE_VIEW__=${inlineJson(shareViewPayload(snapshot, record))}</script>`;
+  const html = readFileSync(shell, 'utf8')
+    .replace(/<title>[^<]*<\/title>/u, `<title>${escapeHtml(title)}</title>${head}${view}`)
+    .replace('<div id="root"></div>', `<div id="root">${bootSteps(record.matchIds.length)}</div>`);
   sendPublic(response, 200, html, 'text/html; charset=utf-8', { 'set-cookie': cookie, ...NO_INDEX });
 }
 
@@ -191,20 +194,43 @@ function teamLine(match: NormalizedMatch, squad: ResearchSquad) {
 }
 
 /** The share API: the review as delivered, its matches, and each of those matches' story. Nothing else. */
+/** What GET /api/share/view returns; the /s/ page also carries it inline so the page needs no extra round trip. */
+export function shareViewPayload(snapshot: Snapshot, share: ReviewShareRecord): Record<string, unknown> {
+  return {
+    kind: share.kind,
+    expiresAt: share.expiresAt,
+    review: JSON.parse(share.presentationJson) as unknown,
+    matches: share.matchIds.map((matchId) => {
+      const match = snapshot.byId.get(matchId);
+      if (!match) return { matchId, available: false };
+      return { matchId, available: true, createdAt: match.createdAt, mapName: match.mapName, mapLabel: mapDisplayName(match.mapName || '未知地图'), durationSeconds: match.duration, ...teamLine(match, squadFor(snapshot, match)) };
+    }),
+  };
+}
+
+/** JSON inside a <script>: nothing in it may close the tag or start a comment. */
+const inlineJson = (value: unknown) => JSON.stringify(value).replace(/</gu, '\\u003c').replace(/\u2028/gu, '\\u2028').replace(/\u2029/gu, '\\u2029');
+
+/**
+ * Shown before the page script has arrived (it is replaced as soon as the app mounts). The steps are the real ones:
+ * the server has checked the link and read the review by the time this HTML exists; the browser still has to fetch
+ * the page program and build the cards.
+ */
+function bootSteps(matchCount: number): string {
+  const step = (state: string, label: string) => `<li class="${state}"><i></i><span>${escapeHtml(label)}</span></li>`;
+  return `<style>.share-boot{min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;background:#0b1112;color:#dce6e2;font:14px/1.5 system-ui,sans-serif;padding:24px}.share-boot .boot-mark{width:43px;height:43px;border:1px solid #41584c;border-radius:12px;display:grid;place-items:center;color:#b8f277;font:800 23px system-ui;animation:sb-pulse 1.5s ease-in-out infinite}.load-steps{list-style:none;margin:0;padding:0;display:grid;gap:9px;min-width:240px}.load-steps li{display:flex;align-items:center;gap:10px;color:#6f817c}.load-steps li i{width:16px;height:16px;flex:none;border-radius:50%;border:2px solid #2c3e3a;box-sizing:border-box}.load-steps li.done{color:#b9c8c2}.load-steps li.done i{border-color:#b8f277;background:#b8f277;box-shadow:inset 0 0 0 3px #0b1112}.load-steps li.active{color:#eef5f1}.load-steps li.active i{border-color:#2c3e3a;border-top-color:#b8f277;animation:sb-spin .8s linear infinite}@keyframes sb-spin{to{transform:rotate(360deg)}}@keyframes sb-pulse{50%{opacity:.4}}</style><div class="share-boot"><div class="boot-mark">P</div><ol class="load-steps">${[
+    step('done', '校验分享链接'),
+    step('done', `读取复盘与 ${matchCount} 场对局`),
+    step('active', '下载页面程序'),
+    step('', '生成队员卡片与对局列表'),
+  ].join('')}</ol></div>`;
+}
+
 export async function serveShareApi(request: IncomingMessage, response: ServerResponse, snapshot: Snapshot, share: ReviewShareRecord): Promise<void> {
   const url = new URL(request.url ?? '/', 'http://127.0.0.1');
   if (request.method !== 'GET' && request.method !== 'HEAD') { sendPublicJson(response, 405, { error: 'method_not_allowed' }); return; }
   if (url.pathname === '/api/share/view') {
-    sendPublicJson(response, 200, {
-      kind: share.kind,
-      expiresAt: share.expiresAt,
-      review: JSON.parse(share.presentationJson) as unknown,
-      matches: share.matchIds.map((matchId) => {
-        const match = snapshot.byId.get(matchId);
-        if (!match) return { matchId, available: false };
-        return { matchId, available: true, createdAt: match.createdAt, mapName: match.mapName, mapLabel: mapDisplayName(match.mapName || '未知地图'), durationSeconds: match.duration, ...teamLine(match, squadFor(snapshot, match)) };
-      }),
-    }, NO_INDEX);
+    sendPublicJson(response, 200, shareViewPayload(snapshot, share), NO_INDEX);
     return;
   }
   const storyRoute = url.pathname.match(/^\/api\/share\/matches\/([^/]+)\/story$/u);

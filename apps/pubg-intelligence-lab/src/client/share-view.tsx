@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { LoadSteps } from './load-steps.js';
 import { MatchStoryView, type MatchStoryData } from './match-story.js';
 
 // Mirrors GET /api/share/view: the review exactly as delivered to the group, and the matches it covers.
@@ -224,14 +225,19 @@ export function ShareApp() {
   useEffect(() => {
     // The token only travels once, in the link; keep it out of history and anything copied from the address bar.
     if (window.location.pathname.startsWith('/s/')) window.history.replaceState(null, '', '/share');
+    const accept = (data: ShareView) => {
+      setView(data);
+      const first = data.matches.find((match) => match.available);
+      // A wide screen shows the story beside the list, so it opens the first match instead of an empty pane.
+      if (first && (data.kind === 'match' || window.matchMedia('(min-width: 1200px)').matches)) setSelected(first.matchId);
+    };
+    // The /s/ page carries the view inline; a reload of /share asks for it.
+    const inline = (window as { __SHARE_VIEW__?: ShareView }).__SHARE_VIEW__;
+    if (inline) { accept(inline); return; }
     void fetch('/api/share/view', { credentials: 'same-origin', cache: 'no-store' })
       .then(async (response) => {
         if (!response.ok) throw new Error(String(response.status));
-        const data = await response.json() as ShareView;
-        setView(data);
-        const first = data.matches.find((match) => match.available);
-        // A wide screen shows the story beside the list, so it opens the first match instead of an empty pane.
-        if (first && (data.kind === 'match' || window.matchMedia('(min-width: 1200px)').matches)) setSelected(first.matchId);
+        accept(await response.json() as ShareView);
       })
       .catch(() => setFailed(true));
   }, []);
@@ -248,7 +254,19 @@ export function ShareApp() {
   if (failed) {
     return <div className="share-shell"><div className="share-empty"><h1>链接无效或已过期</h1><p>分享链接 7 天内有效。需要的话请让队友重新发一份。</p></div></div>;
   }
-  if (!view) return <div className="boot-screen"><div className="boot-mark">P</div><span>正在载入复盘</span></div>;
+  if (!view) {
+    return (
+      <div className="share-boot">
+        <div className="boot-mark">P</div>
+        <LoadSteps steps={[
+          { label: '校验分享链接', state: 'done' },
+          { label: '下载页面程序', state: 'done' },
+          { label: '读取复盘与对局数据', state: 'active' },
+          { label: '生成队员卡片与对局列表', state: 'pending' },
+        ]} />
+      </div>
+    );
+  }
   const selectedMatch = view.matches.find((match) => match.matchId === selected);
   return (
     <div className="share-shell">
@@ -274,7 +292,7 @@ export function ShareApp() {
       {!selectedMatch && view.kind !== 'match' && <section className="share-story-empty">点开左边任意一局，这里显示整局过程。</section>}
       {selectedMatch && (
         <section className="share-story">
-          <MatchStoryView data={story} loading={storyLoading} placement={selectedMatch.placement ?? null} kills={selectedMatch.kills ?? 0} damage={selectedMatch.damage ?? 0} />
+          <MatchStoryView anonymized data={story} loading={storyLoading} placement={selectedMatch.placement ?? null} kills={selectedMatch.kills ?? 0} damage={selectedMatch.damage ?? 0} />
         </section>
       )}
       </div>

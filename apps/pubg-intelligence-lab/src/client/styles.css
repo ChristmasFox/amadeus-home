@@ -1200,3 +1200,19 @@ html.is-share,html.is-share body,html.is-share #root{height:auto;min-height:100v
 /* Wide and tall enough: the window itself never scrolls. The review card keeps its height, the match list (这几场)
    scrolls in the space left under it, and the story pane scrolls on its own. */
 @media(min-width:1200px) and (min-height:700px){html.is-share,html.is-share body,html.is-share #root{height:100%;overflow:hidden}.share-shell{height:100vh;height:100dvh;display:flex;flex-direction:column;padding-bottom:0}.share-top{flex:none}.share-body{flex:1 1 0;min-height:0;padding-bottom:16px}.share-main{height:100%;min-height:0;display:flex;flex-direction:column;gap:16px}.share-main>.share-card{flex:none}.share-main>.share-list{flex:1 1 0;min-height:140px;margin-top:0;overflow-y:auto;overscroll-behavior:contain;align-content:start;padding-right:4px}.share-main>.share-list h2{position:sticky;top:0;z-index:1;margin:0;padding:0 0 9px;background:var(--bg)}.share-side{position:static;height:100%;max-height:none}.share-foot{flex:none;margin:0;padding:4px 28px 10px}}
+
+/* Step-by-step loading (share page): the same look as the server-rendered boot list it replaces. */
+.share-boot{min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;padding:24px}
+.load-progress{display:grid;gap:12px;min-width:240px;max-width:320px}
+.load-progress.compact{min-width:0;max-width:none;padding:6px 0}
+.load-bar{height:3px;border-radius:3px;background:#1f2e2b;overflow:hidden}
+.load-bar i{display:block;height:100%;background:linear-gradient(90deg,#6abda2,#b8f277);border-radius:3px;transition:width .35s ease}
+.load-steps{list-style:none;margin:0;padding:0;display:grid;gap:9px;font-size:13px}
+.load-steps li{display:flex;align-items:center;gap:10px;color:#6f817c;transition:color .2s}
+.load-steps li i{width:16px;height:16px;flex:none;border-radius:50%;border:2px solid #2c3e3a;box-sizing:border-box}
+.load-steps li.done{color:#b9c8c2}
+.load-steps li.done i{border-color:#b8f277;background:#b8f277;box-shadow:inset 0 0 0 3px #0b1112}
+.load-steps li.active{color:#eef5f1}
+.load-steps li.active i{border-top-color:#b8f277;animation:av-spin .8s linear infinite}
+.load-clock{color:#6f817c;font:10px var(--mono)}
+.map-loading{font:11px var(--mono);fill:#cfe0d8;paint-order:stroke;stroke:#0b1112;stroke-width:3px}

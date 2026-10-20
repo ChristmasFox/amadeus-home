@@ -55,7 +55,10 @@ export function servePublicStatic(response: ServerResponse, pathname: string): v
   if (!file && !isAsset && !requested.startsWith('/api/')) file = resolve(CLIENT_DIST, 'index.html');
   if (!file || !existsSync(file)) { sendPublicJson(response, 404, { error: 'not_found' }); return; }
   const extension = file.slice(file.lastIndexOf('.'));
-  sendPublic(response, 200, readFileSync(file), PUBLIC_CONTENT_TYPES[extension] ?? 'application/octet-stream');
+  // Vite names every built asset by its content hash, so a browser (and the CDN) may keep it for good; the page
+  // shell itself stays no-store and points at the current names.
+  const cache = isAsset && /-[A-Za-z0-9_-]{8,}\.(?:js|css)$/u.test(requested) ? { 'cache-control': 'public, max-age=31536000, immutable' } : {};
+  sendPublic(response, 200, readFileSync(file), PUBLIC_CONTENT_TYPES[extension] ?? 'application/octet-stream', cache);
 }
 
 export async function readLimitedBody(request: IncomingMessage, limit: number): Promise<Buffer | null> {

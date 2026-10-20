@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { LoadSteps } from './load-steps.js';
 
 // ---------------------------------------------------------------------------------------------------------------
 // Types mirroring GET /api/matches/:id/story
@@ -229,6 +230,11 @@ function enemyAt(enemy: StoryEnemy, t: number): { x: number; y: number } | null 
 
 function RouteMap({ data, story, time, showEnemies, focusTeams, zoom, showImage }: { data: MatchStoryData; story: Story; time: number; showEnemies: boolean; focusTeams: ReadonlySet<string>; zoom: boolean; showImage: boolean }) {
   const [imageFailed, setImageFailed] = useState(false);
+  const [loaded, setLoaded] = useState<ReadonlySet<string>>(() => new Set());
+  const markLoaded = (href: string) => setLoaded((current) => (current.has(href) ? current : new Set([...current, href])));
+  // The overview is a 1536 px copy (about 0.5 MB instead of 3.5 MB); zooming in adds the full-size artwork.
+  const overview = `/api/maps/${data.mapName}?w=1536`;
+  const full = `/api/maps/${data.mapName}`;
   const sizeMeters = (data.mapSizeKm ?? 8) * 1000;
   // Zoom to where the squad actually moved instead of drawing the whole island.
   const baseView = useMemo(() => {
@@ -274,7 +280,10 @@ function RouteMap({ data, story, time, showEnemies, focusTeams, zoom, showImage 
   return (
     <svg viewBox={`0 0 ${MAP_VIEW} ${MAP_VIEW}`} className="ms-map" role="img" aria-label="行进路线与毒圈">
       <rect width={MAP_VIEW} height={MAP_VIEW} className="map-bg" />
-      {showImage && data.mapName && !imageFailed && <image href={`/api/maps/${data.mapName}`} x={px(0)} y={py(0)} width={pr(sizeMeters)} height={pr(sizeMeters)} preserveAspectRatio="none" className="map-image" onError={() => setImageFailed(true)} />}
+      {showImage && data.mapName && !imageFailed && <image href={overview} x={px(0)} y={py(0)} width={pr(sizeMeters)} height={pr(sizeMeters)} preserveAspectRatio="none" className="map-image" onLoad={() => markLoaded(overview)} onError={() => setImageFailed(true)} />}
+      {/* Zoomed in, the full-size artwork is laid over the overview once it has arrived. */}
+      {showImage && zoom && data.mapName && !imageFailed && <image href={full} x={px(0)} y={py(0)} width={pr(sizeMeters)} height={pr(sizeMeters)} preserveAspectRatio="none" className="map-image" style={{ opacity: loaded.has(full) ? undefined : 0 }} onLoad={() => markLoaded(full)} />}
+      {showImage && data.mapName && !imageFailed && !loaded.has(zoom ? full : overview) && <text x={MAP_VIEW / 2} y={MAP_VIEW / 2} textAnchor="middle" className="map-loading">{zoom && loaded.has(overview) ? '加载高清地图…' : '加载地图底图…'}</text>}
       {gridX.map((value) => <line key={`x${value}`} x1={px(value)} x2={px(value)} y1={0} y2={MAP_VIEW} className="map-grid" />)}
       {gridY.map((value) => <line key={`y${value}`} y1={py(value)} y2={py(value)} x1={0} x2={MAP_VIEW} className="map-grid" />)}
       <text x={10} y={MAP_VIEW - 10} className="map-scale">格线间隔 {step >= 1000 ? `${step / 1000} km` : `${step} m`}</text>
@@ -349,7 +358,7 @@ function teamText(team: string): string {
   return team.startsWith('敌方') ? team : `队${team}`;
 }
 
-export function MatchStoryView({ data, loading, placement, kills, damage }: { data: MatchStoryData | null; loading: boolean; placement: number | null; kills: number; damage: number }) {
+export function MatchStoryView({ data, loading, placement, kills, damage, anonymized = false }: { data: MatchStoryData | null; loading: boolean; placement: number | null; kills: number; damage: number; anonymized?: boolean }) {
   const [time, setTime] = useState(0);
   const [playing, setPlaying] = useState(false);
   const [selectedFight, setSelectedFight] = useState<number | null>(null);
@@ -380,7 +389,17 @@ export function MatchStoryView({ data, loading, placement, kills, damage }: { da
   }, [playing, story, duration]);
 
   const highlights = useMemo(() => (data && story ? buildHighlights(data, story) : []), [data, story]);
-  if (loading && !data) return <Section title="这局发生了什么" hint="正在读取原始遥测…"><div className="av-spinner" /></Section>;
+  if (loading && !data) {
+    return (
+      <Section title="这局发生了什么" hint="正在准备这一局">
+        <LoadSteps compact steps={[
+          { label: anonymized ? '读取本局原始遥测，匿名化敌方队伍' : '读取本局原始遥测', state: 'active' },
+          { label: '生成路线、毒圈与交战时间线', state: 'pending' },
+          { label: '加载地图底图', state: 'pending' },
+        ]} />
+      </Section>
+    );
+  }
   if (!data) return null;
   const name = (id: string) => data.names[id] ?? '队员';
   const jumpToFight = (index: number) => {

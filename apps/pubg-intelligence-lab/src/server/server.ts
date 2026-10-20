@@ -87,11 +87,43 @@ import {
   tacticalPlayerRef,
 } from '@agent/pubg-intelligence';
 import { type LanguageModel } from 'ai';
-import { existsSync, readFileSync, statSync } from 'node:fs';
+import { execFile } from 'node:child_process';
+import { existsSync, mkdirSync, readFileSync, renameSync, statSync } from 'node:fs';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { homedir } from 'node:os';
-import { join, resolve } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
+import { promisify } from 'node:util';
 import { createServer as createViteServer } from 'vite';
+
+const MAP_VARIANT_WIDTHS = new Set([1536]);
+const mapVariants = new Map<string, Promise<string | null>>();
+
+/**
+ * A downscaled JPEG of a map, made once with macOS sips next to the originals and reused; null (serve the original)
+ * where sips is missing or fails.
+ */
+function mapVariant(file: string, name: string, width: number): Promise<string | null> {
+  const out = join(dirname(file), '.variants', `${name}-${width}.jpg`);
+  if (existsSync(out) && statSync(out).mtimeMs >= statSync(file).mtimeMs) return Promise.resolve(out);
+  let pending = mapVariants.get(out);
+  if (!pending) {
+    pending = (async () => {
+      try {
+        mkdirSync(dirname(out), { recursive: true, mode: 0o700 });
+        const temporary = `${out}.${process.pid}.tmp.jpg`;
+        await promisify(execFile)('sips', ['-s', 'format', 'jpeg', '-s', 'formatOptions', 'normal', '-Z', String(width), file, '--out', temporary], { timeout: 30_000 });
+        renameSync(temporary, out);
+        return out;
+      } catch {
+        return null;
+      } finally {
+        mapVariants.delete(out);
+      }
+    })();
+    mapVariants.set(out, pending);
+  }
+  return pending;
+}
 
 async function handleApi(request: IncomingMessage, response: ServerResponse, snapshot: Snapshot): Promise<void> {
   const url = new URL(request.url ?? '/', 'http://127.0.0.1');
@@ -495,8 +527,11 @@ async function handleApi(request: IncomingMessage, response: ServerResponse, sna
     for (const [extension, type] of [['jpg', 'image/jpeg'], ['png', 'image/png']] as const) {
       const file = join(directory, `${mapImageRoute[1]}.${extension}`);
       if (existsSync(file) && statSync(file).isFile()) {
-        response.writeHead(200, { 'content-type': type, 'cache-control': 'private, max-age=86400', 'x-content-type-options': 'nosniff' });
-        response.end(readFileSync(file));
+        // ?w=1536 asks for the overview size the share page draws (about a seventh of the 3072 px original's bytes).
+        const width = Number(url.searchParams.get('w'));
+        const served = MAP_VARIANT_WIDTHS.has(width) ? await mapVariant(file, mapImageRoute[1]!, width) : null;
+        response.writeHead(200, { 'content-type': served ? 'image/jpeg' : type, 'cache-control': 'private, max-age=86400', 'x-content-type-options': 'nosniff' });
+        response.end(readFileSync(served ?? file));
         return;
       }
     }
