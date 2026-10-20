@@ -185,6 +185,8 @@ assert "PUBG_STATS_QUERY=passed" in deploy
 assert "valid_pubg_stats_smoke" in deploy
 assert "AUTO_RELEASE_ROLLBACK=passed" in deploy
 assert "restored_health" in deploy and "[[ \"$restored_health\" == healthy ]]" in deploy
+assert "[[ \"$restored_health\" == starting ]] || break" in deploy, "rollback waits out Docker's starting state"
+assert "for attempt in (1, 2):" in deploy and "PUBG_STATS_QUERY=retry reason=not_verified" in deploy
 assert "lab-auto-enable" not in devctl and "lab-auto-disable" not in devctl
 assert "LAB_DEPLOYMENT=AFTER_MAIN_UPDATE ci=not_required release=automatic" in devctl
 assert "Lab candidate and manual promotion commands are retired" in release_cli

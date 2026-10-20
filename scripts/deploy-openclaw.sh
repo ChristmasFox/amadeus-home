@@ -863,7 +863,14 @@ PY
       orb -m "$MACHINE" -u root curl --fail --silent --show-error --max-time 5 http://127.0.0.1:18789/healthz >/dev/null
       restore_status=$?
       if ((restore_status == 0 && AUTO_RELEASE)); then
-        restored_health="$(orb -m "$MACHINE" -u root docker inspect openclaw --format '{{.State.Health.Status}}' 2>/dev/null || true)"
+        # Docker runs its first health probe one interval (30s) after start;
+        # wait for it instead of reading the transient "starting" state.
+        restored_health=starting
+        for attempt in $(seq 1 60); do
+          restored_health="$(orb -m "$MACHINE" -u root docker inspect openclaw --format '{{.State.Health.Status}}' 2>/dev/null || true)"
+          [[ "$restored_health" == starting ]] || break
+          sleep 2
+        done
         [[ "$restored_health" == healthy ]] || restore_status=1
       fi
     fi
@@ -1219,19 +1226,27 @@ prompt = ('Use the native pubg_query_stats tool with team=true, selector={"type"
           'metrics=["matches","kills","damage"], and refresh=false. Do not guess or use memory. '
           'If the tool returns status ok or partial, reply LAB_STATS_QUERY_OK. Otherwise reply '
           'LAB_STATS_QUERY_FAILED. Do not include player names, identifiers, or statistics in the reply.')
-try:
-    response = subprocess.run(
-        ['orb', '-m', sys.argv[1], '-u', 'root', 'docker', 'exec', 'openclaw', 'node', 'dist/index.js',
-         'agent', '--agent', 'main', '--session-key', 'agent:main:' + sys.argv[2], '--message', prompt,
-         '--json', '--timeout', '180'], capture_output=True, text=True, check=False, timeout=200)
-except subprocess.TimeoutExpired as exc:
-    raise SystemExit('PUBG stats query timed out; automatic rollback will restore the prior image') from exc
-try:
-    payload = json.loads(response.stdout)
-except json.JSONDecodeError as exc:
-    raise SystemExit('PUBG stats query returned invalid structured output; automatic rollback will restore the prior image') from exc
-if response.returncode != 0 or not valid_pubg_stats_smoke(payload):
-    raise SystemExit('PUBG stats query was not verified; automatic rollback will restore the prior image')
+# The model occasionally picks a different selector (e.g. no_matches) even
+# though the tool works; one fresh-session retry separates that from a real
+# regression, which fails both attempts.
+for attempt in (1, 2):
+    try:
+        response = subprocess.run(
+            ['orb', '-m', sys.argv[1], '-u', 'root', 'docker', 'exec', 'openclaw', 'node', 'dist/index.js',
+             'agent', '--agent', 'main', '--session-key', 'agent:main:' + sys.argv[2] + ('' if attempt == 1 else '-retry'), '--message', prompt,
+             '--json', '--timeout', '180'], capture_output=True, text=True, check=False, timeout=200)
+    except subprocess.TimeoutExpired as exc:
+        if attempt == 2: raise SystemExit('PUBG stats query timed out; automatic rollback will restore the prior image') from exc
+        print('PUBG_STATS_QUERY=retry reason=timeout'); continue
+    try:
+        payload = json.loads(response.stdout)
+    except json.JSONDecodeError as exc:
+        if attempt == 2: raise SystemExit('PUBG stats query returned invalid structured output; automatic rollback will restore the prior image') from exc
+        print('PUBG_STATS_QUERY=retry reason=invalid_output'); continue
+    if response.returncode == 0 and valid_pubg_stats_smoke(payload):
+        break
+    if attempt == 2: raise SystemExit('PUBG stats query was not verified; automatic rollback will restore the prior image')
+    print('PUBG_STATS_QUERY=retry reason=not_verified')
 print('PUBG_STATS_QUERY=passed')
 PY
 fi
