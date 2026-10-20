@@ -5,7 +5,7 @@
     "strategy": "fallback",
     "models": [
       "cx/gpt-image-2.5",
-      "xai/grok-2-image-1212"
+      "xai/grok-imagine-image"
     ]
   }
 }
