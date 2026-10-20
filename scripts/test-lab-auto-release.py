@@ -100,6 +100,34 @@ sample = auto.release_note_body([
     ("docs(agents): dispatch", ""), ("chore(lab): release v1.13.6", "")], "fallback")
 assert sample == ("✨ **新功能**\n- staged reactions\n\n🛠️ **修复**\n- 生图路由：grok fallback（#28）"
                   "\n\n📦 **其它变更**\n- 协作流程：dispatch"), sample
+# Chinese summary when no Release-Note trailer; English title on any failure.
+zh = lambda subject, body: "群聊里收到回复后会按语境点表情。"
+assert auto.classify_commit("feat(lab): react in groups (#30)", "body", zh) == {
+    "kind": "feat", "text": "群聊里收到回复后会按语境点表情。（#30）"}
+called = []
+assert auto.classify_commit("feat(lab): x", "Release-Note: 显式说明。", lambda *a: called.append(a))["text"] == "显式说明。"
+assert called == [], "an explicit Release-Note never calls the model"
+def boom(subject, body): raise RuntimeError("router down")
+assert auto.classify_commit("fix(9router): fallback (#28)", "", boom)["text"] == "生图路由：fallback（#28）"
+assert auto.classify_commit("fix(9router): fallback (#28)", "", lambda *a: None)["text"] == "生图路由：fallback（#28）"
+class Result:
+    def __init__(self, code, out): self.returncode, self.stdout, self.stderr = code, out, ""
+seen = {}
+def fake_run(args, **kw):
+    seen.update(args=args, timeout=kw.get("timeout"), script=kw.get("input"))
+    return Result(0, "<think>x</think>\n- “WhatsApp 回复后会自动按语境点表情”\n")
+assert auto.summarize_commit_zh("feat(lab): auto react", "body", run=fake_run) == "WhatsApp 回复后会自动按语境点表情。"
+assert seen["args"][-4:] == ["-i", "openclaw", "node", "-"] and seen["timeout"] == auto.SUMMARY_TIMEOUT_SECONDS
+assert "OPENCLAW_9ROUTER_API_KEY" in seen["script"] and "9router:20128" in seen["script"]
+def timeout_run(args, **kw): raise subprocess.TimeoutExpired(args, kw.get("timeout"))
+assert auto.summarize_commit_zh("feat(lab): x", "", run=timeout_run) is None
+assert auto.summarize_commit_zh("feat(lab): x", "", run=lambda *a, **k: Result(1, "")) is None
+assert auto.summarize_commit_zh("feat(lab): x", "", run=lambda *a, **k: Result(0, "English only")) is None
+now = [0.0]
+limited = auto.budgeted(lambda s, b: "中文。", budget_seconds=10, clock=lambda: now[0])
+assert limited("a", "") == "中文。"; now[0] = 11; assert limited("a", "") is None
+body = auto.release_note_body([("feat(lab): a", ""), ("fix(lab): b", "")], "x", boom)
+assert body == "✨ **新功能**\n- a\n\n🛠️ **修复**\n- b", body
 assert auto.release_note_body([("chore(lab): release v1.0.0", "")], "Lab 发布流程与运行可靠性更新。") == \
     "- Lab 发布流程与运行可靠性更新。"
 with tempfile.TemporaryDirectory(prefix="lab-auto-release-range-") as temporary:

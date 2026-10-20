@@ -215,3 +215,11 @@ source tree 与生产切换目标中删除。迁移脚本只会把外部数据�
 ## 任务完成定义
 
 普通开发完成于 Git 源码与最小充分本地验证；高风险运行时阶段还需要可恢复 checkpoint、相应状态更新、secrets scan 和真实验收。Goal 完成必须以 Goal 文档逐项核对证据，不以局部 test 通过代替。
+
+## Release notes
+
+Every commit by Codex or Claude must end its message with one trailer line
+`Release-Note: <一句中文说明>`: a single short Chinese sentence telling Arthur what
+changed for him (no vendor or model names). Lab auto-release uses it verbatim in
+the 世界线变动 notice; without it the release falls back to a model-written
+Chinese summary, then to the English commit title.

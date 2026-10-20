@@ -200,7 +200,73 @@ def _neutral(text: str) -> str:
     return re.sub(r"openclaw", "Lab 运行时", text, flags=re.IGNORECASE).strip()
 
 
-def classify_commit(subject: str, body: str) -> dict[str, Any] | None:
+SUMMARY_MODEL = "arthur-combo"
+SUMMARY_TIMEOUT_SECONDS = 45
+SUMMARY_BUDGET_SECONDS = 180
+# Runs inside the Lab runtime container through its own 9Router provider
+# (baseUrl + OPENCLAW_9ROUTER_API_KEY), so no credential leaves the container.
+_SUMMARY_NODE = r"""
+const req = JSON.parse(Buffer.from(REQUEST, 'base64').toString('utf8'));
+fetch('http://9router:20128/v1/chat/completions', {
+  method: 'POST', signal: AbortSignal.timeout(req.timeoutMs),
+  headers: { 'content-type': 'application/json', authorization: `Bearer ${process.env.OPENCLAW_9ROUTER_API_KEY}` },
+  body: JSON.stringify({ model: req.model, stream: false, temperature: 0.2, max_tokens: 160, messages: req.messages }),
+}).then(async (r) => {
+  if (!r.ok) throw new Error('http ' + r.status);
+  const raw = await r.text();
+  // Some combo routes answer as SSE even with stream:false.
+  const chunks = raw.trimStart().startsWith('data:')
+    ? raw.split('\n').filter((l) => l.startsWith('data:') && !l.includes('[DONE]')).map((l) => JSON.parse(l.slice(5)))
+    : [JSON.parse(raw)];
+  process.stdout.write(chunks.map((j) => j.choices?.[0]?.message?.content ?? j.choices?.[0]?.delta?.content ?? '').join(''));
+})
+  .catch((e) => { process.stderr.write(String(e?.message ?? e)); process.exit(1); });
+"""
+_CJK = __import__("re").compile(r"[\u4e00-\u9fff]")
+
+
+def _clean_summary(text: str) -> str | None:
+    import re
+    text = re.sub(r"<think>.*?</think>", "", text or "", flags=re.S).strip()
+    line = next((item.strip() for item in text.splitlines() if item.strip()), "")
+    line = re.sub(r"^(?:[-*•]\s*|release-note:\s*)", "", line, flags=re.I).strip().strip("\"'“”「」`").strip()
+    if not line or len(line) > 80 or not _CJK.search(line):
+        return None
+    return line if line.endswith(("。", "！", "？")) else line.rstrip("，,.;；") + "。"
+
+
+def summarize_commit_zh(subject: str, body: str, *, run=subprocess.run) -> str | None:
+    """One Chinese sentence for an owner notice; None on any failure (never raises)."""
+    import base64
+    try:
+        request = {"model": SUMMARY_MODEL, "timeoutMs": (SUMMARY_TIMEOUT_SECONDS - 5) * 1000, "messages": [
+            {"role": "system", "content": "你为家庭实验室发布通知写条目。用一句简短中文（不超过40字）概括这次提交对使用者的变化，"
+                                          "不要提 OpenClaw、模型或供应商名称，不要编号、引号或解释，只输出这一句。"},
+            {"role": "user", "content": f"{subject}\n\n{body[:1500]}"},
+        ]}
+        encoded = base64.b64encode(json.dumps(request, ensure_ascii=False).encode()).decode()
+        script = _SUMMARY_NODE.replace("REQUEST", json.dumps(encoded))
+        result = run(["orb", "-m", os.environ.get("ORBSTACK_MACHINE", "nyannyan"), "-u", "root",
+                      "docker", "exec", "-i", "openclaw", "node", "-"], input=script, text=True,
+                     stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=SUMMARY_TIMEOUT_SECONDS)
+        if result.returncode != 0:
+            return None
+        return _clean_summary(result.stdout)
+    except Exception:
+        return None
+
+
+def budgeted(summarize, budget_seconds: float = SUMMARY_BUDGET_SECONDS, clock=None):
+    """Stop calling the model once the per-release budget is spent."""
+    import time
+    clock = clock or time.monotonic
+    deadline = clock() + budget_seconds
+    def call(subject: str, body: str) -> str | None:
+        return summarize(subject, body) if clock() < deadline else None
+    return call
+
+
+def classify_commit(subject: str, body: str, summarize=None) -> dict[str, Any] | None:
     """Turn one first-parent commit into a release-note entry, or None to skip."""
     lines = [line.strip() for line in body.splitlines()]
     pr = None
@@ -224,6 +290,11 @@ def classify_commit(subject: str, body: str) -> dict[str, Any] | None:
             return None
     explicit = next((line[len(RELEASE_NOTE_TRAILER):].strip() for line in lines
                      if line.lower().startswith(RELEASE_NOTE_TRAILER)), "")
+    if not explicit and summarize is not None:
+        try:
+            explicit = summarize(subject, "\n".join(lines)) or ""
+        except Exception:
+            explicit = ""
     text = _neutral(explicit or desc)
     label = SCOPE_LABELS.get(scope, scope)
     item = f"{label}：{text}" if label and not explicit else text
@@ -247,8 +318,8 @@ def release_commits(root: Path, sha: str) -> list[tuple[str, str]]:
     return list(reversed(commits))
 
 
-def release_note_body(commits: list[tuple[str, str]], fallback: str) -> str:
-    entries = [entry for entry in (classify_commit(s, b) for s, b in commits) if entry]
+def release_note_body(commits: list[tuple[str, str]], fallback: str, summarize=None) -> str:
+    entries = [entry for entry in (classify_commit(s, b, summarize) for s, b in commits) if entry]
     blocks = []
     for kind, heading in NOTE_SECTIONS:
         items = [f"- {entry['text']}" for entry in entries if entry["kind"] == kind]
@@ -291,7 +362,8 @@ def prepare_release(root: Path, source_sha: str, state: dict[str, Any]) -> dict[
     source_parent = git(tree, "rev-parse", f"{source_sha}^")
     source_paths = git(tree, "diff", "--name-only", f"{source_parent}..{source_sha}").splitlines()
     write_release_notes(tree / "RELEASE_NOTES.md", version,
-                        release_note_body(release_commits(tree, source_sha), release_note_summary(source_paths)))
+                        release_note_body(release_commits(tree, source_sha), release_note_summary(source_paths),
+                                          budgeted(summarize_commit_zh)))
     command(["bash", "scripts/amadeus-version.sh", "check"], cwd=tree)
     git(tree, "add", "VERSION", "RELEASE_NOTES.md")
     changed = subprocess.run(["git", "-C", str(tree), "diff", "--cached", "--quiet"])
