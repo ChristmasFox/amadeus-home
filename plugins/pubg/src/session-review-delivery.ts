@@ -111,6 +111,8 @@ const BLOCK_REASONS: Record<string, string> = {
   group_name_mismatch: '群名称和配置的不一致',
   directory_unavailable: '暂时查不到群目录(会继续重试,目录恢复后自动补发)',
   delivery_failed: '多次发送失败',
+  share_link_unavailable: '没有可用的分享页地址(reviewPageBaseUrl)',
+  no_subscription: '没有配置复盘群',
 };
 
 /**
@@ -126,13 +128,13 @@ export async function queueOwnerBlockedNotice(outboxDir: string, input: { sessio
     theme: 'worldline_divergence',
     eventKey: `pubg-session-review-blocked:${input.sessionKey}`,
     source: 'pubg-session-review',
-    headline: '⚠ 时段复盘未投递',
+    headline: '⚠ 每日复盘未投递',
     summary: input.reason === 'directory_unavailable'
-      ? `${BLOCK_REASONS[input.reason]},这份复盘还没有发到任何群。`
-      : `${BLOCK_REASONS[input.reason] ?? input.reason},这份复盘没有发到任何群。`,
+      ? `${BLOCK_REASONS[input.reason]},这份每日复盘还没有发到任何群。`
+      : `${BLOCK_REASONS[input.reason] ?? input.reason},这份每日复盘没有发到任何群。`,
     facts: [
       { label: '原因', value: input.reason, evidenceRefs: ['pubg:session-review'] },
-      ...(input.error ? [{ label: '错误', value: input.error, evidenceRefs: ['openclaw:conversations.list'] }] : []),
+      ...(input.error ? [{ label: '错误', value: input.error, evidenceRefs: ['pubg:session-review'] }] : []),
       ...(input.groupName ? [{ label: '当前群名', value: input.groupName, evidenceRefs: ['openclaw:conversations.list'] }] : []),
     ],
     occurredAt: input.occurredAt,

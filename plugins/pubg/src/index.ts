@@ -5,13 +5,13 @@ import { defineToolPlugin } from 'openclaw/plugin-sdk/tool-plugin';
 import { Static, Type, type TSchema as TypeSchema } from 'typebox';
 import { openClawConversationAdapter } from './adapters/openclaw.js';
 import { registerPubgEvidenceGuard } from './evidence-guard.js';
-import { registerSessionReviewWorker } from './session-review-service.js';
-import { appendQueryShareLink, type QuerySharePlayerRow } from './query-share.js';
+import { registerDailyReviewService } from './daily-review-service.js';
+import { dailyStatsSource } from './daily-review-stats.js';
+import { appendQueryShareLink, querySharePlayers, queryShareTeamTotals } from './query-share.js';
 import { replyGuideFor } from './reply-guides.js';
 import { IdentityStore, type IdentityResolution, type PersonSnapshot } from '@agent/identity';
 import {
   adaptWorldlineNotification,
-  assignStatTitles,
   buildPubgStatusPresentation,
   buildPubgToolPresentation,
   formatDisplayTime,
@@ -779,8 +779,8 @@ function queryShareFor(name: string, config: PluginConfig): ShareAppender | unde
   const squadKey = teamConfigFile ?? '';
   if (!shareSquads.has(squadKey)) shareSquads.set(squadKey, loadTeamConfig({ path: teamConfigFile, required: true }).id);
   return (envelope, displayText, timezone, presentation) => {
-    const players = playersFromPresentation(presentation);
-    const teamTotals = teamTotalsFromDisplayText(displayText);
+    const players = querySharePlayers(presentation);
+    const teamTotals = queryShareTeamTotals(displayText);
     return appendQueryShareLink({
       toolName: name,
       status: envelope.status,
@@ -800,23 +800,6 @@ function queryShareFor(name: string, config: PluginConfig): ShareAppender | unde
       ...(teamTotals ? { teamTotals } : {}),
     });
   };
-}
-
-function playersFromPresentation(presentation: ReturnType<typeof buildPubgToolPresentation>['presentation']): QuerySharePlayerRow[] {
-  if (presentation.type !== 'pubg_stats') return [];
-  const stats = presentation as PubgStatsPresentation;
-  const titles = assignStatTitles(stats.rows);
-  return stats.rows.map((row, index) => ({
-    label: row.label,
-    ...(row.position !== undefined ? { position: row.position } : {}),
-    values: row.values,
-    titles: titles.get(index) ?? [],
-  }));
-}
-
-function teamTotalsFromDisplayText(displayText: string): string | null {
-  const line = displayText.split('\n').map((item) => item.trim()).find((item) => item.startsWith('团队合计：'));
-  return line ?? null;
 }
 
 function makeTool<Schema extends TypeSchema>(
@@ -1024,7 +1007,11 @@ const registerTools = entry.register;
 entry.register = (api) => {
   registerTools(api);
   registerPubgEvidenceGuard(api);
-  registerSessionReviewWorker(api);
+  registerDailyReviewService(api, (config) => dailyStatsSource(
+    () => serviceFor(config as PluginConfig),
+    configString(config as PluginConfig, 'timezone', 'PUBG_TIMEZONE') ?? 'Asia/Shanghai',
+    configString(config as PluginConfig, 'businessDayStart', 'PUBG_BUSINESS_DAY_START') ?? '06:00',
+  ));
 };
 
 export default entry;

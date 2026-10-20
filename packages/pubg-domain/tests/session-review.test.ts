@@ -3,13 +3,11 @@ import test from 'node:test';
 import { renderSessionReview } from '@agent/presentation';
 import {
   buildSessionReview,
-  planSessionReviews,
+  businessDayWindow,
+  dailySquadSession,
+  latestCompleteBusinessDay,
+  localTimeOn,
   sessionBaseline,
-  sessionState,
-  SESSION_GAP_MS,
-  SESSION_LOOKBACK_MS,
-  SESSION_TELEMETRY_GRACE_MS,
-  splitSquadSessions,
   SqlitePubgRepository,
   squadMatches,
   type MatchReviewFacts,
@@ -18,6 +16,8 @@ import {
   type SessionReviewRecord,
   type SessionTeam,
 } from '../src/index.js';
+
+const DAY = businessDayWindow('2026-10-18', 'Asia/Shanghai');
 
 const MIN = 60_000;
 const TEAM: SessionTeam = { id: 'squad', label: '小队', memberIds: ['a', 'b', 'c', 'd'] };
@@ -86,58 +86,37 @@ test('only ranked matches with at least two members on one team count', () => {
   assert.equal(squadMatches([split], TEAM.memberIds).length, 0);
 });
 
-test('the session gap is measured from the end of the previous match, across midnight too', () => {
-  const late = Date.parse('2026-10-18T15:30:00Z'); // 23:30 in Shanghai
+test('a business day runs from 06:00 to 06:00 Shanghai time, and at 09:30 the latest complete one is yesterday', () => {
+  assert.deepEqual(DAY, { businessDay: '2026-10-18', startMs: Date.parse('2026-10-17T22:00:00Z'), endMs: Date.parse('2026-10-18T22:00:00Z') });
+  const runAt = localTimeOn('2026-10-18', '09:30', 'Asia/Shanghai', 1);
+  assert.equal(runAt.toISOString(), '2026-10-19T01:30:00.000Z');
+  assert.equal(latestCompleteBusinessDay(runAt, 'Asia/Shanghai'), '2026-10-18');
+  // 05:59 on the 19th is still the 18th's business day, so the latest complete one is the 17th.
+  assert.equal(latestCompleteBusinessDay(new Date('2026-10-18T21:59:00Z'), 'Asia/Shanghai'), '2026-10-17');
+});
+
+test('the daily session is every squad match that started inside the business day, past midnight included', () => {
   const matches = [
-    match({ id: 'm1', at: late, rank: 5, minutes: 35 }),
-    // Starts 70 minutes after m1 started but only 35 after it ended: same session.
-    match({ id: 'm2', at: late + 70 * MIN, rank: 8 }),
-    match({ id: 'm3', at: late + 70 * MIN + 25 * MIN + SESSION_GAP_MS + MIN, rank: 2 }),
+    match({ id: 'before', at: DAY.startMs - MIN, rank: 5 }),
+    match({ id: 'morning', at: DAY.startMs, rank: 8 }),
+    // Hours apart: the old 40-minute gap would have split these; the day keeps them together.
+    match({ id: 'evening', at: DAY.startMs + 12 * 60 * MIN, rank: 2 }),
+    match({ id: 'late', at: DAY.endMs - 10 * MIN, rank: 3, minutes: 30 }),
+    match({ id: 'next', at: DAY.endMs, rank: 1 }),
   ];
-  const sessions = splitSquadSessions(squadMatches(matches, TEAM.memberIds), TEAM.id);
-  assert.deepEqual(sessions.map((session) => session.matches.map((item) => item.match.matchId)), [['m1', 'm2'], ['m3']]);
-  assert.equal(sessions[0]!.key, 'pubg-session:squad:m1');
-});
-
-test('a session closes only after the gap and a fetch that ran after the gap', () => {
-  const [session] = splitSquadSessions(squadMatches(sessionMatches([{ rank: 3 }, { rank: 5 }]), TEAM.memberIds), TEAM.id);
-  const gapEnd = session!.lastEndMs + SESSION_GAP_MS;
-  const telemetry = new Set(['s0', 's1']);
-  assert.deepEqual(sessionState(session!, { nowMs: gapEnd - MIN, lastFetchFinishedMs: gapEnd, telemetry }), { status: 'open', reason: 'gap_not_elapsed' });
-  assert.deepEqual(sessionState(session!, { nowMs: gapEnd + 10 * MIN, lastFetchFinishedMs: gapEnd - MIN, telemetry }), { status: 'open', reason: 'fetch_not_after_gap' });
-  assert.equal(sessionState(session!, { nowMs: gapEnd + 10 * MIN, lastFetchFinishedMs: gapEnd + 5 * MIN, telemetry }).status, 'ready');
-  const missing = sessionState(session!, { nowMs: gapEnd + 10 * MIN, lastFetchFinishedMs: gapEnd + 5 * MIN, telemetry: new Set(['s0']) });
-  assert.equal(missing.status, 'waiting_telemetry');
-  const afterGrace = sessionState(session!, { nowMs: session!.lastEndMs + SESSION_TELEMETRY_GRACE_MS, lastFetchFinishedMs: gapEnd + 5 * MIN, telemetry: new Set(['s0']) });
-  assert.deepEqual(afterGrace, { status: 'ready', missing: ['s1'] });
-});
-
-test('planning skips sessions from before the switch-on, ignores recorded ones and retries pending deliveries', () => {
-  const old = sessionMatches([{ rank: 4 }], T0 - 3 * 60 * MIN);
-  const recent = sessionMatches([{ rank: 2 }, { rank: 6 }], T0);
-  const ancient = sessionMatches([{ rank: 9 }], T0 - SESSION_LOOKBACK_MS - 24 * 60 * MIN).map((item) => ({ ...item, matchId: `x-${item.matchId}` }));
-  const matches = [...ancient, ...old.map((item) => ({ ...item, matchId: `o-${item.matchId}` })), ...recent];
-  const recentEnd = T0 + 2 * 30 * MIN;
-  const nowMs = recentEnd + SESSION_GAP_MS + 20 * MIN;
-  const base = { matches, team: TEAM, nowMs, lastFetchFinishedMs: nowMs - 5 * MIN, enabledAtMs: T0 - 60 * MIN, telemetry: new Set(['s0', 's1']) };
-  const plans = planSessionReviews({ ...base, record: () => null });
-  assert.deepEqual(plans.map((plan) => [plan.session.key, plan.decision]), [
-    ['pubg-session:squad:o-s0', 'skip'],
-    ['pubg-session:squad:s0', 'review'],
-  ]);
-  const sent: SessionReviewRecord = { squadId: 'squad', sessionKey: 'pubg-session:squad:s0', matchIds: [], lastMatchEndMs: 0, status: 'sent', detail: null, message: null, attempts: 1, updatedAt: '' };
-  assert.deepEqual(planSessionReviews({ ...base, record: (key) => (key === sent.sessionKey ? sent : null) }).map((plan) => plan.decision), ['skip']);
-  const pending = { ...sent, status: 'pending_delivery' as const };
-  assert.deepEqual(planSessionReviews({ ...base, record: (key) => (key === sent.sessionKey ? pending : null) }).map((plan) => plan.decision), ['skip', 'retry']);
+  const session = dailySquadSession(matches, TEAM, DAY)!;
+  assert.equal(session.key, 'pubg-daily:squad:2026-10-18');
+  assert.deepEqual(session.matches.map((item) => item.match.matchId), ['morning', 'evening', 'late']);
+  assert.equal(session.lastEndMs, DAY.endMs + 20 * MIN);
+  assert.equal(dailySquadSession(matches.slice(0, 1), TEAM, DAY), null);
 });
 
 function reviewFor(matches: NormalizedMatch[], facts = new Map<string, MatchReviewFacts | null>()) {
   const all = [...history(), ...matches];
-  const sessions = splitSquadSessions(squadMatches(all, TEAM.memberIds), TEAM.id);
-  const session = sessions.at(-1)!;
+  const session = dailySquadSession(all, TEAM, DAY)!;
   return buildSessionReview({
     session, baseline: sessionBaseline(all, TEAM, session), team: TEAM, facts, timezone: 'Asia/Shanghai',
-    link: 'https://pubg.example.test/s/token', now: new Date(session.lastEndMs + SESSION_GAP_MS),
+    link: 'https://pubg.example.test/s/token', now: new Date(session.lastEndMs + 60 * MIN),
   });
 }
 

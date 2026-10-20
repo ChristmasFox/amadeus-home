@@ -31,6 +31,8 @@ function placement(rank: number | null): string {
   return rank === 1 ? '🏆' : `#${rank}`;
 }
 
+export { placement as sessionPlacement, strip as sessionPlacementStrip };
+
 function strip(placements: Array<number | null>): string {
   if (placements.length <= STRIP_MAX) return placements.map(placement).join(' ');
   const half = STRIP_MAX / 2;

@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { assignStatTitles, type PubgStatsPresentation } from '@agent/presentation';
 import { issueReviewShare, type ReviewShareStore } from '@agent/pubg-domain';
 
 /**
@@ -43,6 +44,63 @@ export interface QuerySharePresentation {
  * so the result can declare it (`replyLink`) for the delivery boundary. Sharing never breaks an answer: any problem
  * simply leaves the text without a link.
  */
+/**
+ * Issues the share page for a query answer and returns its URL; null when the answer names no matches. `sessionKey`
+ * groups the shares of one answer (issuing again revokes the earlier link); by default every answer is its own group.
+ */
+export function issueQueryShare(input: {
+  toolName: string;
+  matchIds: unknown;
+  displayText: string;
+  dataUpdatedAt: string | null;
+  timezone: string;
+  squadId: string;
+  shareBaseUrl: string;
+  store: ReviewShareStore;
+  now: Date;
+  sessionKey?: string;
+  players?: QuerySharePlayerRow[];
+  teamTotals?: string | null;
+}): string | null {
+  const ids = Array.isArray(input.matchIds)
+    ? [...new Set(input.matchIds.filter((id): id is string => typeof id === 'string' && id.length > 0))].slice(0, QUERY_SHARE_MAX_MATCHES)
+    : [];
+  if (!ids.length) return null;
+  const presentation: QuerySharePresentation = {
+    type: 'pubg_query_share',
+    version: 1,
+    toolName: input.toolName,
+    title: input.displayText.split('\n').map((line) => line.trim()).find(Boolean)?.slice(0, 80) ?? 'PUBG 战绩',
+    displayText: input.displayText,
+    dataUpdatedAt: input.dataUpdatedAt,
+    timezone: input.timezone,
+    matchCount: ids.length,
+    ...(input.players?.length ? { players: input.players } : {}),
+    ...(input.teamTotals ? { teamTotals: input.teamTotals } : {}),
+  };
+  const { token } = issueReviewShare(input.store, {
+    squadId: input.squadId, sessionKey: input.sessionKey ?? `pubg-query:${randomUUID()}`, matchIds: ids, presentationJson: JSON.stringify(presentation), now: input.now, kind: 'query',
+  });
+  return `${input.shareBaseUrl.replace(/\/$/u, '')}/s/${token}`;
+}
+
+/** The structured player rows the share page shows for a 战绩 answer, with the same titles the chat card gives. */
+export function querySharePlayers(presentation: { type: string }): QuerySharePlayerRow[] {
+  if (presentation.type !== 'pubg_stats') return [];
+  const stats = presentation as PubgStatsPresentation;
+  const titles = assignStatTitles(stats.rows);
+  return stats.rows.map((row, index) => ({
+    label: row.label,
+    ...(row.position !== undefined ? { position: row.position } : {}),
+    values: row.values,
+    titles: titles.get(index) ?? [],
+  }));
+}
+
+export function queryShareTeamTotals(displayText: string): string | null {
+  return displayText.split('\n').map((item) => item.trim()).find((item) => item.startsWith('团队合计：')) ?? null;
+}
+
 export function appendQueryShareLink(input: {
   toolName: string;
   status: string;
@@ -59,27 +117,9 @@ export function appendQueryShareLink(input: {
 }): { text: string; url?: string } {
   const plain = { text: input.displayText };
   if (!input.shareBaseUrl || !QUERY_SHARE_TOOLS.has(input.toolName) || input.status === 'error') return plain;
-  const ids = Array.isArray(input.matchIds)
-    ? [...new Set(input.matchIds.filter((id): id is string => typeof id === 'string' && id.length > 0))].slice(0, QUERY_SHARE_MAX_MATCHES)
-    : [];
-  if (!ids.length) return plain;
   try {
-    const presentation: QuerySharePresentation = {
-      type: 'pubg_query_share',
-      version: 1,
-      toolName: input.toolName,
-      title: input.displayText.split('\n').map((line) => line.trim()).find(Boolean)?.slice(0, 80) ?? 'PUBG 战绩',
-      displayText: input.displayText,
-      dataUpdatedAt: input.dataUpdatedAt,
-      timezone: input.timezone,
-      matchCount: ids.length,
-      ...(input.players?.length ? { players: input.players } : {}),
-      ...(input.teamTotals ? { teamTotals: input.teamTotals } : {}),
-    };
-    const { token } = issueReviewShare(input.store(), {
-      squadId: input.squadId, sessionKey: `pubg-query:${randomUUID()}`, matchIds: ids, presentationJson: JSON.stringify(presentation), now: input.now, kind: 'query',
-    });
-    const url = `${input.shareBaseUrl.replace(/\/$/u, '')}/s/${token}`;
+    const url = issueQueryShare({ ...input, shareBaseUrl: input.shareBaseUrl, store: input.store() });
+    if (!url) return plain;
     return { text: `${input.displayText}\n\n🔗 ${url}`, url };
   } catch {
     return plain;

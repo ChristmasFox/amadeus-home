@@ -34,52 +34,63 @@ the protected team config and pairs it with a scope-pinned SQLite repository
 adapter. The async Domain service does not use the public SaaS database or
 infer a team from model-supplied arguments.
 
-## Session review to a WhatsApp group
+## Daily review to a WhatsApp group
 
-`pubg-session-review-worker` checks every five minutes for a closed squad
-session and writes one review for it. A session is the squad's ranked matches
-(at least two members on the same team) with gaps under 40 minutes, measured
-from the end of the previous match. It counts as closed only when the gap has
-passed **and** an hourly prefetch finished after the gap; missing telemetry is
-waited for up to 90 minutes after the last match. Every decision is recorded in
-`squad_session_reviews` in the plugin database, keyed by the first match ID, so
-a session is reviewed once. The first run records the switch-on time, and
-sessions that ended earlier are marked skipped instead of being backfilled.
+`pubg-daily-review` sends **one** review a day, at **09:30 Asia/Shanghai**
+(the plugin `timezone`), covering the business day that just ended: yesterday
+06:00 (inclusive) to today 06:00 (exclusive, the plugin `businessDayStart`).
+It aggregates every squad ranked match of that day (at least two members on the
+same team) into one message; there is no gap-based session splitting and no
+polling. The service holds a single timer that sleeps until the next 09:30;
+only a day that could not finish (a failed send, the directory unavailable, or
+no prefetch yet after 06:00 — waited for at most two hours) is tried again,
+every ten minutes, until it is sent or blocked. On start it runs once to catch
+up a day that came due while the gateway was down; `stop()` clears the timer.
 
-Findings compare the session with the squad's own ranked matches from the 30
-days before it (seeded bootstrap over matches). Only differences whose interval
-excludes zero are stated as fact; others appear as "仅本时段观察" or not at all.
+The message is the same rich card a 昨日战绩 question gets from
+`pubg_query_stats` (medals by K/D, titles, localized and rounded metrics, team
+totals), a Kurisu-voiced opener and remarks picked from the numbers, the day's
+placements, findings against the squad's previous 30 days, best and worst
+match, and always ends with the share page `<origin>/s/<token>` for exactly the
+day's matches. Without `reviewPageBaseUrl` the day is blocked and the owner is
+told; it is never sent without the link.
+
+Every decision is recorded in `squad_session_reviews`, keyed
+`pubg-daily:<team>:<business day>`, so a day is sent at most once (the WhatsApp
+send also carries that idempotency key). The first run records the switch-on
+time; days that were already due by then are marked skipped, never backfilled.
+Days without squad matches are recorded as skipped and send nothing.
 
 | Config | Meaning |
 | --- | --- |
-| `sessionReviewMode` | `off` (default), `dry-run` (render and record, never send) or `deliver` |
+| `sessionReviewMode` | The daily review: `off` (default), `dry-run` (render and record, never send) or `deliver` |
 | `reviewGroupTargetFile` | File holding the one WhatsApp group JID (`…@g.us`), kept outside Git |
 | `reviewGroupExpectedName` | The group's current name; delivery is refused when it differs |
 | `reviewGroupAccountId` | WhatsApp account that is a member of the group |
-| `reviewPageBaseUrl` | Intelligence Lab origin; each delivered review links to its own share page `<origin>/s/<token>` (7 days, token issued per send, only its hash stored) |
-| `ownerNotificationOutboxDir` | amadeus owner outbox; a blocked review queues an owner notice there |
+| `reviewPageBaseUrl` | Intelligence Lab origin; required for delivery (7-day link, token issued per send, only its hash stored) |
+| `ownerNotificationOutboxDir` | amadeus owner outbox; a blocked day queues an owner notice there |
 
-Before each send the worker checks that the target is a group JID, that the
-account's OpenClaw conversation directory contains that group and that its name
-matches. A failed check sends nothing to any group and queues an owner notice;
-a failed send is retried with the same text and idempotency key up to five
-times.
+Before each send the service checks that the target is a group JID, that the
+account's OpenClaw conversation directory (read with `operator.admin`) contains
+that group and that its name matches. A wrong target sends nothing and queues an
+owner notice; a directory outage keeps retrying and tells the owner once; a
+failed send is retried up to five times with a fresh link.
 
-`src/session-review-cli.ts` (run with `tsx`) lists groups, previews a session,
-sends a test message or one session by hand, using the same checks and key:
+`src/session-review-cli.ts` (run with `tsx`) lists groups, previews a day's
+message exactly as it would be sent (placeholder link, nothing sent), sends a
+test message, or sends one day by hand with the same checks and key:
 
 ```sh
 export PUBG_GATEWAY_CALL="orb -m <machine> -u root docker exec openclaw openclaw gateway call"
 tsx src/session-review-cli.ts groups
-tsx src/session-review-cli.ts preview --db <snapshot.sqlite> --team <team.json>
-tsx src/session-review-cli.ts send --db <snapshot.sqlite> --team <team.json> \
-  --target-file <file> --expected-name <group name> --account <account id>
+tsx src/session-review-cli.ts preview --db <snapshot.sqlite> --team <team.json> [--day YYYY-MM-DD]
+tsx src/session-review-cli.ts send --db <pubg.sqlite> --team <team.json> --share-base <origin> \
+  --target-file <file> --expected-name <group name> --account <account id> [--day YYYY-MM-DD] [--record]
 ```
 
 Inside the OpenClaw container the CLI is bundled as
-`/app/dist/extensions/pubg/dist/session-review.js`; there it can issue a share
-link (`--share-base <origin>`), record the send in the ledger (`--record`) and
-send a deliberate second copy of a session (`--resend <tag>`).
+`/app/dist/extensions/pubg/dist/session-review.js`; `--record` writes the send
+to the ledger and `--resend <tag>` sends a deliberate second copy of a day.
 
 ### Share links on record answers
 

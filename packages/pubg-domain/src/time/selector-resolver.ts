@@ -352,3 +352,30 @@ export function businessDayLabel(timestamp: number, timezone = DEFAULT_TIMEZONE,
     : { year: parts.year, month: parts.month, day: parts.day };
   return localDateKey(date.year, date.month, date.day);
 }
+
+function parseDay(day: string): { year: number; month: number; day: number } {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/u.exec(day);
+  if (!match) throw new Error(`invalid business day: ${day}`);
+  return { year: Number(match[1]), month: Number(match[2]), day: Number(match[3]) };
+}
+
+/** The business day YYYY-MM-DD as an instant range: its businessDayStart (inclusive) to the next day's (exclusive). */
+export function businessDayWindow(day: string, timezone = DEFAULT_TIMEZONE, businessDayStart = BUSINESS_DAY_START): { businessDay: string; startMs: number; endMs: number } {
+  const range = dateDayRange(parseDay(day), day, { timezone, businessDayStart, now: new Date() });
+  return { businessDay: day, startMs: Date.parse(range.start), endMs: Date.parse(range.end) };
+}
+
+/** The last business day that has fully ended at `now` (at 09:30 on the 20th: the 19th, 06:00 to 06:00). */
+export function latestCompleteBusinessDay(now: Date, timezone = DEFAULT_TIMEZONE, businessDayStart = BUSINESS_DAY_START): string {
+  const current = parseDay(businessDayLabel(now.getTime(), timezone, businessDayStart));
+  const previous = shiftLocalDate(current.year, current.month, current.day, -1, timezone);
+  return localDateKey(previous.year, previous.month, previous.day);
+}
+
+/** The instant of HH:MM local time on the calendar date `days` after YYYY-MM-DD. */
+export function localTimeOn(day: string, clock: string, timezone = DEFAULT_TIMEZONE, days = 0): Date {
+  const date = parseDay(day);
+  const shifted = shiftLocalDate(date.year, date.month, date.day, days, timezone);
+  const [hour = 0, minute = 0] = clock.split(':').map(Number);
+  return utcDateForLocal(shifted.year, shifted.month, shifted.day, hour, minute, timezone);
+}

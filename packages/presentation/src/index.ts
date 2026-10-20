@@ -6,6 +6,7 @@ export * from './pubg-registry.js';
 export * from './renderers/owner.js';
 export * from './renderers/pubg.js';
 export * from './renderers/session-review.js';
+export * from './renderers/daily-review.js';
 export * from './time/format.js';
 export * from './validation/validate.js';
 export * from './validation/session-review.js';

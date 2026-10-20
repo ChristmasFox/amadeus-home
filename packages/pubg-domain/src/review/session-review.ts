@@ -9,13 +9,7 @@ import type {
 import type { NormalizedMatch, NormalizedPlayer } from '../data/model.js';
 import type { Fight, MatchReviewFacts } from './types.js';
 
-/** Same session rule as the Intelligence Lab state panel: a gap longer than this between matches starts a new session. */
-export const SESSION_GAP_MS = 40 * 60_000;
-/** Missing telemetry is waited for until this long after the last match ended; then the review goes out with a coverage note. */
-export const SESSION_TELEMETRY_GRACE_MS = 90 * 60_000;
 export const SESSION_BASELINE_MS = 30 * 24 * 60 * 60_000;
-/** Only sessions that ended this recently are considered, so an outage never floods the chat with old reviews. */
-export const SESSION_LOOKBACK_MS = 36 * 60 * 60_000;
 export const SESSION_MIN_MEMBERS = 2;
 /** Out within this much match time (plane included): roughly "lost someone right after landing". */
 export const SESSION_EARLY_OUT_SECONDS = 420;
@@ -67,54 +61,27 @@ export function squadMatches(matches: readonly NormalizedMatch[], memberIds: rea
   return result.sort((left, right) => left.match.timestamp - right.match.timestamp);
 }
 
-export function sessionKey(teamId: string, firstMatchId: string): string {
-  return `pubg-session:${teamId}:${firstMatchId}`;
+export function dailyReviewKey(teamId: string, businessDay: string): string {
+  return `pubg-daily:${teamId}:${businessDay}`;
 }
-
-/** Splits squad matches into sessions on gaps measured from the previous match's end, so one long match never splits a session. */
-export function splitSquadSessions(matches: readonly SquadMatch[], teamId: string): SquadSession[] {
-  const sessions: SquadSession[] = [];
-  let current: SquadMatch[] = [];
-  const close = () => {
-    if (!current.length) return;
-    sessions.push({
-      key: sessionKey(teamId, current[0]!.match.matchId),
-      matches: current,
-      startMs: current[0]!.match.timestamp,
-      lastEndMs: Math.max(...current.map((item) => item.endMs)),
-    });
-    current = [];
-  };
-  for (const item of [...matches].sort((left, right) => left.match.timestamp - right.match.timestamp)) {
-    const previousEnd = current.length ? Math.max(...current.map((entry) => entry.endMs)) : null;
-    if (previousEnd !== null && item.match.timestamp - previousEnd > SESSION_GAP_MS) close();
-    current.push(item);
-  }
-  close();
-  return sessions;
-}
-
-export type SessionState =
-  | { status: 'open'; reason: 'gap_not_elapsed' | 'fetch_not_after_gap' }
-  | { status: 'waiting_telemetry'; missing: string[]; deadlineMs: number }
-  | { status: 'ready'; missing: string[] };
 
 /**
- * A session is over only when the gap has passed AND a fetch finished after the gap: PUBG lists a match a few minutes
- * after it ends, so without a later fetch we cannot know the squad did not queue again.
+ * The squad's ranked matches that started inside one business day ([startMs, endMs), 06:00 to 06:00 local), as one
+ * review session; null when the squad did not play together that day.
  */
-export function sessionState(session: SquadSession, input: { nowMs: number; lastFetchFinishedMs: number | null; telemetry: ReadonlySet<string> }): SessionState {
-  const gapEnd = session.lastEndMs + SESSION_GAP_MS;
-  if (input.nowMs < gapEnd) return { status: 'open', reason: 'gap_not_elapsed' };
-  if (input.lastFetchFinishedMs === null || input.lastFetchFinishedMs < gapEnd) return { status: 'open', reason: 'fetch_not_after_gap' };
-  const missing = session.matches.map((item) => item.match.matchId).filter((id) => !input.telemetry.has(id));
-  const deadlineMs = session.lastEndMs + SESSION_TELEMETRY_GRACE_MS;
-  if (missing.length && input.nowMs < deadlineMs) return { status: 'waiting_telemetry', missing, deadlineMs };
-  return { status: 'ready', missing };
+export function dailySquadSession(matches: readonly NormalizedMatch[], team: SessionTeam, window: { businessDay: string; startMs: number; endMs: number }): SquadSession | null {
+  const day = squadMatches(matches, team.memberIds).filter((item) => item.match.timestamp >= window.startMs && item.match.timestamp < window.endMs);
+  if (!day.length) return null;
+  return {
+    key: dailyReviewKey(team.id, window.businessDay),
+    matches: day,
+    startMs: day[0]!.match.timestamp,
+    lastEndMs: Math.max(...day.map((item) => item.endMs)),
+  };
 }
 
 // ---------------------------------------------------------------------------------------------------------------
-// Ledger and planning
+// Ledger
 
 export type SessionReviewStatus = 'sent' | 'dry_run' | 'pending_delivery' | 'blocked' | 'skipped';
 
@@ -137,38 +104,6 @@ export interface SessionReviewLedger {
   getSessionReviewMeta(key: string): string | null;
   setSessionReviewMeta(key: string, value: string): void;
   latestPrefetchFinishedMs(): number | null;
-}
-
-export type SessionPlan =
-  | { decision: 'review'; session: SquadSession; state: Extract<SessionState, { status: 'ready' }> }
-  | { decision: 'retry'; session: SquadSession; record: SessionReviewRecord }
-  | { decision: 'skip'; session: SquadSession; reason: 'before_enable' }
-  | { decision: 'wait'; session: SquadSession; state: SessionState };
-
-export interface PlanInput {
-  matches: readonly NormalizedMatch[];
-  team: SessionTeam;
-  nowMs: number;
-  lastFetchFinishedMs: number | null;
-  /** Sessions that ended before the feature was switched on are recorded as skipped, never backfilled. */
-  enabledAtMs: number;
-  telemetry: ReadonlySet<string>;
-  record: (sessionKey: string) => SessionReviewRecord | null;
-}
-
-export function planSessionReviews(input: PlanInput): SessionPlan[] {
-  const sessions = splitSquadSessions(squadMatches(input.matches, input.team.memberIds), input.team.id)
-    .filter((session) => session.lastEndMs >= input.nowMs - SESSION_LOOKBACK_MS);
-  const plans: SessionPlan[] = [];
-  for (const session of sessions) {
-    const record = input.record(session.key);
-    if (record?.status === 'pending_delivery') { plans.push({ decision: 'retry', session, record }); continue; }
-    if (record) continue;
-    if (session.lastEndMs < input.enabledAtMs) { plans.push({ decision: 'skip', session, reason: 'before_enable' }); continue; }
-    const state = sessionState(session, input);
-    plans.push(state.status === 'ready' ? { decision: 'review', session, state } : { decision: 'wait', session, state });
-  }
-  return plans;
 }
 
 /** The squad's own ranked history in the 30 days before the session, used as "平时". */
