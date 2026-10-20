@@ -25,7 +25,6 @@ function createWhatsAppReplyPlan(params) {
     ...(String(params.transport.chatJid ?? '').endsWith('@g.us') && params.transport.senderJid ? { participant: params.transport.senderJid } : {}),
   });
   let contextualEmoji;
-  let typingStopped = false;
   let statusFinal;
   let settleContextual;
   const contextualSettled = new Promise((resolve) => { settleContextual = resolve; });
@@ -34,18 +33,10 @@ function createWhatsAppReplyPlan(params) {
     accountId: params.route.accountId,
     conversationId: params.inbound.conversation.id,
     start: () => {
-      typingStopped = false;
-      const begin = () => {
-        if (typingStopped) return;
-        if (inboundVoice) voiceLease ??= startAmadeusVoiceReplyLease({ sessionKey, messageId, sendComposing });
-        else typingStop ??= startAmadeusWhatsAppTypingIndicator(sendComposing);
-      };
-      // An in-flight reaction (the queued 👀) is a message from us and would
-      // clear composing when it lands, so typing starts once it has landed.
-      const write = statusReactionController?.pendingWrite;
-      if (write) void write.then(begin, begin); else begin();
+      if (inboundVoice) voiceLease ??= startAmadeusVoiceReplyLease({ sessionKey, messageId, sendComposing });
+      else typingStop ??= startAmadeusWhatsAppTypingIndicator(sendComposing);
     },
-    stop: () => { typingStopped = true; typingStop?.(); typingStop = undefined; closeAmadeusVoiceReplyLeaseForTurn(sessionKey, messageId); },
+    stop: () => { typingStop?.(); typingStop = undefined; closeAmadeusVoiceReplyLeaseForTurn(sessionKey, messageId); },
     sendText: async (text) => {
       if (controlToken.test(text)) throw new Error('whatsapp_protocol_text_rejected');
       const chunks = markdownToWhatsAppChunks(text, params.maxMediaTextChunkLimit ?? resolveTextChunkLimit(params.cfg, 'whatsapp'), resolveMarkdownTableMode$1({ cfg: params.cfg, channel: 'whatsapp', accountId: params.route.accountId }), resolveChunkMode(params.cfg, 'whatsapp', params.route.accountId));
@@ -76,11 +67,6 @@ function createWhatsAppReplyPlan(params) {
     cfg: params.cfg, ctx: params.context,
     blockStreamingEnabled: resolveChannelStreamingBlockEnabled(params.cfg.channels?.whatsapp),
   });
-  // Keep the typing indicator continuous: re-send composing right after each
-  // stage reaction while the turn is still typing (never after stop).
-  if (statusReactionController) statusReactionController.onReactionSent = () => {
-    if (typingStop || voiceLease) Promise.resolve(sendComposing()).catch(() => {});
-  };
   plan.afterRecord = () => { if (statusReactionController) statusReactionController.setThinking(); };
   plan.dispatcherOptions = { ...params.replyPipeline, ...plan.dispatcherOptions };
   if (!plan.delivery || plan.delivery.observeMessageSent !== true) throw new Error('delivery_adapter_contract_invalid');

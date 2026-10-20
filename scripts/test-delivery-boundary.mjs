@@ -116,31 +116,20 @@ await port.sendReaction('😂');assert.deepEqual(reactions.at(-1).slice(0,3),['c
  const statusScope={createStatusReactionController,logVerbose:()=>{},
   sendReactionWhatsApp:async(chat,id,emoji,options)=>{wire.push({chat,id,emoji,options});},
   resolveWhatsAppReactionEligibility:async()=>({status:'enabled',chatId:'g@g.us',messageId:'gm',emoji:'👀',reactionOptions:{fromMe:false,participant:'p@s.whatsapp.net'}})};
- const basePort=port;const planReaction=scope.sendReactionWhatsApp;scope.sendReactionWhatsApp=statusScope.sendReactionWhatsApp;
+ const planReaction=scope.sendReactionWhatsApp;scope.sendReactionWhatsApp=statusScope.sendReactionWhatsApp;
  const createStatus=vm.runInNewContext(`${transformed.slice(statusNode.start,statusNode.end)}; createWhatsAppStatusReactionController`,statusScope);
  const statusArgs={msg:{event:{id:'gm'}},cfg:{messages:{statusReactions:{enabled:true}}}};
  assert.equal(await createStatus({...statusArgs,cfg:{}}),null,'disabled config keeps the native path');
  const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
  const run=async(order)=>{
   wire.length=0;const ctl=await createStatus(statusArgs);assert.equal(typeof ctl.finishWithContextual,'function');
-  let releaseAck;const ackGate=new Promise(resolve=>{releaseAck=resolve;});const trace=[];
-  const gatedSend=statusScope.sendReactionWhatsApp;statusScope.sendReactionWhatsApp=async(...args)=>{if(args[2]==='👀'&&!wire.length){await ackGate;}trace.push('reaction:'+args[2]);return gatedSend(...args);};
-  ctl.setQueued();let composing=0;const plan=scope.globalThis.createPlan({...params,transport:{...params.transport,sendComposing:async()=>{composing+=1;trace.push('composing');}},statusReactionController:ctl});const statusPort=port;
-  assert.equal(typeof ctl.onReactionSent,'function','plan re-asserts typing after reactions');
-  port.start();await sleep(20);
-  assert.equal(composing,0,'typing waits while the queued 👀 is in flight');
-  releaseAck();await sleep(20);statusScope.sendReactionWhatsApp=gatedSend;
-  assert.equal(trace[0],'reaction:👀');assert.ok(composing>=1,'typing starts right after the 👀 lands');
-  const startPulses=composing;
+  ctl.setQueued();const plan=scope.globalThis.createPlan({...params,statusReactionController:ctl});const statusPort=port;
   plan.afterRecord();await sleep(800);await plan.replyOptions.onToolStart({name:'web_search'});await sleep(800);
   let react;
-  assert.ok(composing>=startPulses+2,`each stage reaction re-sends composing (${order}): ${composing}`);
-  const stoppedPulses=composing;
   if(order==='react-first'){react=statusPort.sendReaction('😂');plan.finalize({});}
   else if(order==='finalize-first'){plan.finalize({});react=statusPort.sendReaction('😂');}
   else plan.finalize({});
   await react;await sleep(order==='none'?1800:0);
-  assert.equal(composing,stoppedPulses,'terminal reactions never re-send composing');port.stop();
   return wire.map(item=>item.emoji);
  };
  for(const order of ['react-first','finalize-first']){
@@ -153,7 +142,7 @@ await port.sendReaction('😂');assert.deepEqual(reactions.at(-1).slice(0,3),['c
   else assert.deepEqual(seen.slice(-3),['✅','👀','😂'],'late reaction lands strictly after the native restore');
  }
  const plain=await run('none');assert.deepEqual(plain.slice(-2),['✅','👀'],'no contextual emoji keeps native done/restore');
- scope.sendReactionWhatsApp=planReaction;port=basePort;
+ scope.sendReactionWhatsApp=planReaction;
  console.log('WHATSAPP_STATUS_REACTION_CONTEXTUAL_TERMINAL=passed');
 }
 params.transport.sendMedia=async()=>{throw new Error('document rejected');};await assert.rejects(port.sendDocument({bytes:Buffer.from('document'),mimeType:'image/png',fileName:'file.png'}));
