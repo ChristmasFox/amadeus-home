@@ -19,7 +19,11 @@ async function createWhatsAppStatusReactionController(params) {
 		enabled: true,
 		adapter: {
 			setReaction: async (emoji) => {
-				await sendReactionWhatsApp(chatId, messageId, terminalEmoji ?? emoji, reactionOptions);
+				const write = sendReactionWhatsApp(chatId, messageId, terminalEmoji ?? emoji, reactionOptions);
+				const settled = write.then(() => undefined, () => undefined);
+				controller.pendingWrite = settled;
+				void settled.then(() => { if (controller.pendingWrite === settled) controller.pendingWrite = undefined; });
+				await write;
 				// A reaction is a message from us: WhatsApp clears our composing
 				// indicator on receipt, so the reply plan re-asserts it at once.
 				// Terminal writes (done/error/restore/contextual) never re-assert typing.

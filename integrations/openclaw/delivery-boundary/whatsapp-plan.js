@@ -25,6 +25,7 @@ function createWhatsAppReplyPlan(params) {
     ...(String(params.transport.chatJid ?? '').endsWith('@g.us') && params.transport.senderJid ? { participant: params.transport.senderJid } : {}),
   });
   let contextualEmoji;
+  let typingStopped = false;
   let statusFinal;
   let settleContextual;
   const contextualSettled = new Promise((resolve) => { settleContextual = resolve; });
@@ -33,10 +34,18 @@ function createWhatsAppReplyPlan(params) {
     accountId: params.route.accountId,
     conversationId: params.inbound.conversation.id,
     start: () => {
-      if (inboundVoice) voiceLease ??= startAmadeusVoiceReplyLease({ sessionKey, messageId, sendComposing });
-      else typingStop ??= startAmadeusWhatsAppTypingIndicator(sendComposing);
+      typingStopped = false;
+      const begin = () => {
+        if (typingStopped) return;
+        if (inboundVoice) voiceLease ??= startAmadeusVoiceReplyLease({ sessionKey, messageId, sendComposing });
+        else typingStop ??= startAmadeusWhatsAppTypingIndicator(sendComposing);
+      };
+      // An in-flight reaction (the queued 👀) is a message from us and would
+      // clear composing when it lands, so typing starts once it has landed.
+      const write = statusReactionController?.pendingWrite;
+      if (write) void write.then(begin, begin); else begin();
     },
-    stop: () => { typingStop?.(); typingStop = undefined; closeAmadeusVoiceReplyLeaseForTurn(sessionKey, messageId); },
+    stop: () => { typingStopped = true; typingStop?.(); typingStop = undefined; closeAmadeusVoiceReplyLeaseForTurn(sessionKey, messageId); },
     sendText: async (text) => {
       if (controlToken.test(text)) throw new Error('whatsapp_protocol_text_rejected');
       const chunks = markdownToWhatsAppChunks(text, params.maxMediaTextChunkLimit ?? resolveTextChunkLimit(params.cfg, 'whatsapp'), resolveMarkdownTableMode$1({ cfg: params.cfg, channel: 'whatsapp', accountId: params.route.accountId }), resolveChunkMode(params.cfg, 'whatsapp', params.route.accountId));

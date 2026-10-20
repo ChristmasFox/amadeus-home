@@ -123,9 +123,15 @@ await port.sendReaction('😂');assert.deepEqual(reactions.at(-1).slice(0,3),['c
  const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
  const run=async(order)=>{
   wire.length=0;const ctl=await createStatus(statusArgs);assert.equal(typeof ctl.finishWithContextual,'function');
-  ctl.setQueued();let composing=0;const plan=scope.globalThis.createPlan({...params,transport:{...params.transport,sendComposing:async()=>{composing+=1;}},statusReactionController:ctl});const statusPort=port;
+  let releaseAck;const ackGate=new Promise(resolve=>{releaseAck=resolve;});const trace=[];
+  const gatedSend=statusScope.sendReactionWhatsApp;statusScope.sendReactionWhatsApp=async(...args)=>{if(args[2]==='👀'&&!wire.length){await ackGate;}trace.push('reaction:'+args[2]);return gatedSend(...args);};
+  ctl.setQueued();let composing=0;const plan=scope.globalThis.createPlan({...params,transport:{...params.transport,sendComposing:async()=>{composing+=1;trace.push('composing');}},statusReactionController:ctl});const statusPort=port;
   assert.equal(typeof ctl.onReactionSent,'function','plan re-asserts typing after reactions');
-  port.start();const startPulses=composing;
+  port.start();await sleep(20);
+  assert.equal(composing,0,'typing waits while the queued 👀 is in flight');
+  releaseAck();await sleep(20);statusScope.sendReactionWhatsApp=gatedSend;
+  assert.equal(trace[0],'reaction:👀');assert.ok(composing>=1,'typing starts right after the 👀 lands');
+  const startPulses=composing;
   plan.afterRecord();await sleep(800);await plan.replyOptions.onToolStart({name:'web_search'});await sleep(800);
   let react;
   assert.ok(composing>=startPulses+2,`each stage reaction re-sends composing (${order}): ${composing}`);
