@@ -17,8 +17,8 @@ FIXTURE = r'''
  const w=require(base+'/webpack-runtime.js'), codex=w(7648).A;
  const png='iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jC1sAAAAASUVORK5CYII=';
  const input=Object.freeze({model:'amadeus-image',prompt:'synthetic fixture',image:'data:image/png;base64,'+png});
- const models=['cx/gpt-image-2.5-sunburst','cx/gpt-image-2.5-flare','cx/gpt-image-2.5'],calls=[];
- const assertReference=(body,model)=>{assert.equal(body,input);const upstream=codex.buildBody(model.slice(model.indexOf('/')+1),body);assert.equal(upstream.tools[0].action,'edit');assert.equal(upstream.input[0].content.find(x=>x.type==='input_image').image_url,input.image)};
+ const models=['cx/gpt-image-2.5','xai/grok-2-image-1212'],calls=[];
+ const assertReference=(body,model)=>{assert.equal(body,input);if(!model.startsWith('cx/'))return;const upstream=codex.buildBody(model.slice(model.indexOf('/')+1),body);assert.equal(upstream.tools[0].action,'edit');assert.equal(upstream.input[0].content.find(x=>x.type==='input_image').image_url,input.image)};
  const out=await w(18910).Pr({body:input,models,comboName:'amadeus-image',comboStrategy:'fallback',log:{info(){},warn(){}},handleSingleModel:async(body,model)=>{
   assertReference(body,model);calls.push(model);
   return new Response(JSON.stringify({error:{message:'synthetic unavailable'}}),{status:503});
@@ -27,10 +27,10 @@ FIXTURE = r'''
  const successCalls=[];
  const success=await w(18910).Pr({body:input,models,comboName:'amadeus-image',comboStrategy:'fallback',log:{info(){},warn(){}},handleSingleModel:async(body,model)=>{
   assertReference(body,model);successCalls.push(model);
-  if(successCalls.length<3)return new Response(JSON.stringify({error:{message:'synthetic unavailable'}}),{status:502});
+  if(successCalls.length<2)return new Response(JSON.stringify({error:{message:'synthetic unavailable'}}),{status:502});
   return new Response(JSON.stringify({created:1,data:[{b64_json:'c3VjY2Vzcw=='}]}),{status:200});
  }});
- assert.equal(success.status,200);assert.deepEqual(successCalls,models);assert.equal(success.headers.get('x-amadeus-image-model'),models[2]);
+ assert.equal(success.status,200);assert.deepEqual(successCalls,models);assert.equal(success.headers.get('x-amadeus-image-model'),models[1]);
  console.log('REFERENCE_COMBO_BYTE_PRESERVATION=passed primary=edit local_fallback=fail_closed refs=1 http_requests=0');
 })().catch(()=>{console.error('REFERENCE_COMBO_BYTE_PRESERVATION=failed');process.exitCode=1});
 '''
