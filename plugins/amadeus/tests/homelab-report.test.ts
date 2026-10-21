@@ -23,6 +23,11 @@ const host = {
 };
 const input = { host, unavailable: false, conclusion: '✅ 正常', services: { OpenClaw: true, Immich: true, Changedetection: true }, routerOk: true, anomalies: [] };
 
+/** Every bold span is followed by a space, a newline or the end, as the WhatsApp client requires. */
+function boldSpansAreSpaced(text: string): boolean {
+  return text.split('\n').every((line) => line.split('**').every((part, index) => index === 0 || index % 2 === 1 || part === '' || /^\s/u.test(part)));
+}
+
 test('capacities are relabelled as binary units with fixed precision', () => {
   assert.equal(capacityGiB('15.20 GB'), 15.2);
   assert.equal(capacityGiB('7.28 TB'), 7.28 * 1024);
@@ -54,13 +59,13 @@ test('the M204 card is Chinese, grouped, and uses one unit system', () => {
   for (const title of ['💻 **宿主机**', '💾 **存储**', '🧩 **服务**', '🔍 **异常**']) assert.ok(text.includes(title), title);
   assert.ok(text.includes('• CPU：**14.6%** · 今日均值 15.8% · P95 20.9% · 峰值 34.8%（10-21 06:06）'));
   assert.ok(text.includes('• 内存：**15.20 GiB** / 24.00 GiB（63%） · 压力正常'));
-  assert.ok(text.includes('• 交换：8.00 GiB / 9.00 GiB，较今日 00:00 减少 515 MiB'));
+  assert.ok(text.includes('• Swap：8.00 GiB / 9.00 GiB，较今日 00:00 减少 515 MiB'));
   assert.ok(text.includes('• Avalon：已用 7.10 TiB / 7.28 TiB（98%） · 剩余 **179.62 GiB** ⚠️ 空间紧张'));
   assert.ok(text.includes('• Macintosh HD：已用 328.40 GiB / 460.38 GiB（71%） · 剩余 **131.98 GiB**'));
   assert.ok(text.includes('• ✅ OpenClaw、Immich、Changedetection'));
   assert.ok(text.includes('• ✅ 路由器（OpenWrt 独立入口）可达'));
-  assert.doesNotMatch(text, /\bGB\b|\bTB\b|\bMB\b|Pressure|Swap|avg|p95|OpenWrt（独立 endpoint）/u);
-  assert.doesNotMatch(text, /\*\*[^*\n]+\*\*[^\s]/u);
+  assert.doesNotMatch(text, /\bGB\b|\bTB\b|\bMB\b|Pressure|avg|p95|OpenWrt（独立 endpoint）/u);
+  assert.equal(boldSpansAreSpaced(text), true);
 });
 
 test('an SoC power reading whose CPU column is a constant zero is not reported as power', () => {

@@ -94,7 +94,9 @@
       "amadeus_vps_system_status",
       "amadeus_vps_services",
       "amadeus_vps_subscription_overview",
-      "amadeus_vps_subscription_detail"
+      "amadeus_vps_subscription_detail",
+      "amadeus_vps_traffic_fuse",
+      "amadeus_vps_report"
     ],
     "services": ["amadeus-owner-notification-worker"]
   }

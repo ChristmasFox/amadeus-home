@@ -120,7 +120,7 @@ export function renderHomelabReport(input: HomelabReportInput): string {
     : [
       `• CPU：**${percent(cpuNow, 1)}** · ${cpuDetail}`,
       memoryLine,
-      `• 交换：${formatCapacity(capacityGiB(swap.used))} / ${formatCapacity(capacityGiB(swap.total))}${swapChange(swapSummary.delta, history.windowStart)}`,
+      `• Swap：${formatCapacity(capacityGiB(swap.used))} / ${formatCapacity(capacityGiB(swap.total))}${swapChange(swapSummary.delta, history.windowStart)}`,
       `• ${powerLine(row(host.power), powerSummary, cpuNow)}`,
     ];
 

@@ -3,9 +3,14 @@ import { configFor } from '../../config.js';
 import { getVpsLiveStatus, getVpsServices, getVpsServiceInfo, getVpsSubscriptionDetail, getVpsSubscriptionOverview, getVpsSystemStatus, getVpsTrafficFuseStatus, getVpsUsage } from '../../vps.js';
 import { registerTool } from '../../shared/register-tool.js';
 import { withByteText } from '../../shared/units.js';
+import { vpsReport } from '../../vps-report.js';
 import { Type } from 'typebox';
 
 const VpsParameters = Type.Object({}, { additionalProperties: false });
+const VpsReportParameters = Type.Object({
+  notifyOwner: Type.Optional(Type.Boolean()),
+  reportPeriod: Type.Optional(Type.Union([Type.Literal('morning'), Type.Literal('evening')])),
+}, { additionalProperties: false });
 const VpsSubscriptionAccountId = Type.String({ pattern: '^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$' });
 const VpsSubscriptionDetailParameters = Type.Object({ accountId: VpsSubscriptionAccountId }, { additionalProperties: false });
 
@@ -18,4 +23,5 @@ export function registerVps(api: OpenClawPluginApi): void {
   registerTool(api, 'amadeus_vps_traffic_fuse', 'Read the owner-only deterministic daily VPS traffic-fuse state, source coverage, thresholds, verified rate, next Shanghai-midnight recovery, and bounded pending events. This is read-only and never mutates tc.', VpsParameters, async (_params, context, _notifier, signal) => withByteText(await getVpsTrafficFuseStatus(configFor(api), context, signal)));
   registerTool(api, 'amadeus_vps_subscription_overview', 'Owner-only, direct-owner or scheduled-report read-only overview of the six active proxy accounts configured in the private account map, retired legacy history, sanitized REALITY fallback and HY2 authentication security facts, and reconciliation state. Group sessions and non-owner DMs are denied. No subscription or proxy credential is returned.', VpsParameters, async (_params, context, _notifier, signal) => withByteText(await getVpsSubscriptionOverview(configFor(api), context, signal)));
   registerTool(api, 'amadeus_vps_subscription_detail', 'Owner-only, direct-owner read-only facts for one account ID from the private VPS account map. Group sessions and non-owner DMs are denied; credentials are never returned.', VpsSubscriptionDetailParameters, async (params, context, _notifier, signal) => withByteText(await getVpsSubscriptionDetail(configFor(api), (params as { accountId: string }).accountId, context, signal)));
+  registerTool(api, 'amadeus_vps_report', 'Owner-only: build the fixed VPS status card (traffic plan with progress bar, 12-hour window, accounts, host, daily fuse, security, data state) from the read-only VPS tools in one call. notifyOwner=true also sends it to the WhatsApp owner DM; reportPeriod morning/evening is for the scheduled reports. Group sessions and non-owner DMs are denied.', VpsReportParameters, async (params, context, notifier, signal) => vpsReport(configFor(api), context, notifier, params.notifyOwner === true, params.reportPeriod, signal));
 }
