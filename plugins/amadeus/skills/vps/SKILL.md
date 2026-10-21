@@ -143,3 +143,64 @@ Traffic volume, one online-count sample, failed-auth counts, or fallback bytes
 alone do not prove credential theft or VPS compromise. Do not call a credential
 “leaked” or the VPS “compromised” without direct evidence. Provider/proxy
 differences remain unknown while reconciliation is `uncalibrated`.
+
+## Scheduled report layout (owner WhatsApp)
+
+The morning/evening report is read on a phone, so its look is fixed. Put the whole
+card in the notification's `summary` and pass `facts: []` (facts would be printed a
+second time as raw `label：value` bullets). `headline` is `☁️ VPS 晨间报告` or
+`☁️ VPS 晚间报告`. The text is Markdown that OpenClaw re-renders for WhatsApp:
+bold is `**x**`, never a single `*x*`; keep emoji outside the markers and put a space,
+a newline or the end right after each bold span (so `**x** · y`, never `**x**，y`).
+Bold only the key figures, about ten spans.
+
+Language and units: Chinese throughout. Keep only proper nouns and protocol names in
+Latin letters (KiwiVM, Caddy, Xray, Hysteria2, frps, HY2, VLESS, Reality) and never
+print field names such as `liveStatus`, `uncalibrated`, `providerBytes`, `legacy`,
+`partial`, `active`, `null` — say 部分可用 / 未校准 / 整机流量 / 已下线账号 / 运行中 / 未知.
+Every tool result carries `xxxBytesText` next to `xxxBytes`; copy that string
+(`GiB`/`TiB` with two decimals, `MiB` as a whole number) and never convert bytes
+yourself or print raw byte counts or a decimal `GB`. Percentages have one decimal for
+traffic and a whole number for memory/disk. Times are Asia/Shanghai `MM-DD HH:mm`
+without seconds or `CST`/`UTC` suffixes. Load average is `0.24 / 0.05 / 0.02`.
+
+Sections, in this order, one blank line between them, a bullet per line, nothing
+else (no prose paragraph, no "已投递" footer, no event key):
+
+```
+**结论：** ✅ 运行正常 / ⚠️ 需要关注（一句原因）
+
+📊 **流量套餐**
+• 累计 ███░░░░░░░ **8.3%**
+• 已用 **82.51 GiB** / 1000.00 GiB · 剩余 917.49 GiB
+• 周期重置：11-17 17:39
+• 较上次采样 +5.89 GiB
+
+🕛 **最近 12 小时**（10-20 21:29 – 10-21 09:29）
+• 整机 **5.89 GiB** · 订阅账号 2.74 GiB
+• 其他服务/未归因残差（未校准）3.15 GiB，仅为整机减订阅账号的差值，不是精确计量
+• 增长最多：M204-Net-Core 1.68 GiB
+
+👥 **账号累计**（自监控起点）
+• Labmem001 2.39 GiB · Labmem002 3.63 GiB · Labmem003 0 B
+• Labmem004 … · Labmem005 … · M204-Net-Core …
+
+🖥️ **主机**
+• 运行 3 天 16 小时 · 负载 0.24 / 0.05 / 0.02
+• 内存 可用 694.80 MiB / 1023.69 MiB · 根分区 已用 1.93 GiB / 18.20 GiB（11%）
+• 服务 ✅ Caddy、Xray、Hysteria2、frps 全部运行
+
+🛡️ **熔断与安全**
+• 上海今日整机 x.xx GiB（来源与覆盖：…）· 状态 … · 阈值 …
+• Linux 出口限速不能保证提供商计费不超过阈值，入口流量可能已计费
+
+🔎 **数据状态**
+• KiwiVM 实时：部分可用（CPU 限速状态未知）· 账号归因与整机对账：未校准，关系未知
+```
+
+Unknown, stale, error or incomplete values stay visible as 未知 / 窗口不完整 / 数据过期
+in the same slot; never drop a section, never fill a gap with 0. Add
+the Hysteria2 failed-auth, rate-limit and Reality fallback counts to `🛡️` only when
+the overview returned them. List the retired legacy total only when non-zero. A
+problem line starts with ⚠️ and its key figure is bold. Keep the whole card under
+2,800 characters so it goes out as one message.

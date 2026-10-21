@@ -33,6 +33,9 @@ integrating timestamped watts over time, not multiplying a single sample by
 hours. If the reported SoC estimate appears inconsistent with sustained CPU
 activity, say it is unverified and avoid a whole-device power conclusion.
 
-For mobile-facing HomeLab reports, render this as `mW（SoC 估算）` and keep
-`整机输入功耗：未知（需外部墙上电表）` as a separate line. Never shorten the
-estimate to a bare `W` value that could be read as wall-input power.
+For mobile-facing HomeLab reports, the plugin renders the card itself. A reading is
+only shown (as `SoC 约 x mW/W`, labelled SoC-only) while `cpuPowerMw` is above zero or
+the CPU is idle. On this host `cpuPowerMw` and `anePowerMw` read a constant 0 while the
+CPU is busy, so `socPowerMw` is the GPU alone (about 0.1 W); the card then says
+`功耗：暂无可靠数据` and drops the daily avg/p95/peak too. Do not quote that SoC number
+as the machine's power in any answer, and never present any SoC figure as wall-input power.
