@@ -17,6 +17,11 @@ export function hasActiveWhatsAppVoiceLease(channel: unknown, sessionKey: unknow
   const lease = registry.get(sessionKey) as { closed?: boolean; sessionKey?: string; messageId?: string } | undefined;
   return Boolean(lease && lease.closed === false && lease.sessionKey === sessionKey && Boolean(lease.messageId));
 }
+// Only bounded internal error codes (e.g. image_completion_route_missing) are logged, never payload text.
+function failureCode(error: unknown): string {
+  const message = error instanceof Error ? error.message : '';
+  return /^[a-z0-9_:.-]{1,80}$/u.test(message) ? message : 'unknown';
+}
 function originFor(context: { trigger?: string; inputProvenance?: { kind?: string; sourceTool?: string; sourceSessionKey?: string } }): DeliveryOrigin {
   if (context.trigger === 'heartbeat' || context.inputProvenance?.kind === 'heartbeat') return 'heartbeat';
   if (context.trigger === 'cron' || context.inputProvenance?.kind === 'cron' || context.inputProvenance?.sourceTool === 'cron') return 'cron';
@@ -102,8 +107,8 @@ export function registerVoiceReplyPrompt(api: OpenClawPluginApi, boundaryOptions
           api.logger.info(`amadeus image completion ${JSON.stringify({ event: captionSource === 'native_completion' ? 'image_completion_caption_ready' : 'image_completion_caption_fallback', run_id: prepared.runId, delivery_id: prepared.deliveryId, channel, caption_source: captionSource })}`);
           api.logger.info(`amadeus image completion ${JSON.stringify({ event: 'image_completion_delivery_settled', run_id: prepared.runId, delivery_id: prepared.deliveryId, channel, caption_source: captionSource })}`);
           return { cancel: true, reason: 'delivery_settled' };
-        } catch {
-          api.logger.warn('amadeus envelope preparation failed closed');
+        } catch (error) {
+          api.logger.warn(`amadeus envelope preparation failed closed ${JSON.stringify({ run_id: prepared.runId, reason: failureCode(error) })}`);
           return { cancel: true, reason: 'delivery_preparation_failed' };
         }
       }
@@ -130,6 +135,6 @@ export function registerVoiceReplyPrompt(api: OpenClawPluginApi, boundaryOptions
         return { cancel: true, reason: 'delivery_settled' };
       }
       return { payload: { channelData: { amadeusDelivery: envelope } } };
-    } catch { api.logger.warn('amadeus envelope preparation failed closed'); return { cancel: true, reason: 'delivery_preparation_failed' }; }
+    } catch (error) { api.logger.warn(`amadeus envelope preparation failed closed ${JSON.stringify({ run_id: runId, reason: failureCode(error) })}`); return { cancel: true, reason: 'delivery_preparation_failed' }; }
   }, { timeoutMs: 180_000 });
 }
