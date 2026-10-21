@@ -15,6 +15,10 @@ const FACT = /PUBG|绝地求生|吃鸡|战绩|对局|击杀|伤害|KD|K\/D|no_ma
 const TEAM = /全队|整队|队伍|小队|我们|咱们|大家|所有人|全员|team|squad/iu;
 // A bare record request names no one ("昨日战绩", "@Kurisu 今天战绩"); in the squad it means the whole team.
 const BARE_RECORD = /^(?:\s|@\S+\s*)*(?:今天|今日|昨天|昨日|前天|本周|这周|上周|最近)?\s*(?:的)?\s*(?:PUBG|吃鸡)?\s*(?:战绩|战况)\s*[?？!！。.~]*\s*$/iu;
+const BARE_RECORD_TTL_MS = 120_000;
+// Session key -> when the latest inbound message was a bare record request. Module-level on purpose: the plugin is
+// registered several times per process and the dispatch and tool-call hooks may run in different registrations.
+const bareRecordTurns = new Map<string, number>();
 const FOLLOW_UP = /^(?:\s|@\S+\s*)*(?:刷新|更新|再查|查最新|最新|重新查)/u;
 const INTERNAL_EVENT = /^\s*<<<BEGIN_OPENCLAW_INTERNAL_CONTEXT>>>/u;
 const CREATIVE_TOOLS = new Set(['image_generate', 'amadeus_image_upscale']);
@@ -32,6 +36,22 @@ function resultStatus(message: Message): string | undefined {
     const value = JSON.parse(text(message)) as { status?: unknown };
     return typeof value.status === 'string' ? value.status : undefined;
   } catch { return undefined; }
+}
+
+export function isBareRecordRequest(request: unknown): boolean {
+  return typeof request === 'string' && BARE_RECORD.test(request.trim());
+}
+
+/**
+ * A bare record request ("今日战绩") names no one, so it is a whole-team request. The model sometimes carries a
+ * player from earlier chat into the call instead (10-21 00:08: only SG_LabmemNo008 came back), so for such a turn
+ * the subject is forced to the team and any person/player the model added is dropped.
+ */
+export function forceTeamScope(params: Record<string, unknown>): Record<string, unknown> | undefined {
+  const named = ['playerIds', 'playerNames', 'personIds'].some((key) => params[key] !== undefined);
+  if (params.team === true && !named) return undefined;
+  const { playerIds: _playerIds, playerNames: _playerNames, personIds: _personIds, ...rest } = params;
+  return { ...rest, team: true };
 }
 
 export type EvidenceVerdict = 'not_applicable' | 'verified' | 'missing_data' | 'wrong_scope';
@@ -90,6 +110,22 @@ export function droppedReplyFacts(messages: unknown, finalText: string): string[
 }
 
 export function registerPubgEvidenceGuard(api: OpenClawPluginApi): void {
+  api.on('before_dispatch', (event, context) => {
+    const sessionKey = context.sessionKey ?? event.sessionKey;
+    if (!sessionKey) return;
+    if (isBareRecordRequest(event.body ?? event.content)) bareRecordTurns.set(sessionKey, Date.now());
+    else bareRecordTurns.delete(sessionKey);
+  });
+  api.on('before_tool_call', (event, context) => {
+    if (event.toolName !== 'pubg_query_stats') return;
+    const sessionKey = context.sessionKey;
+    const at = sessionKey ? bareRecordTurns.get(sessionKey) : undefined;
+    if (at === undefined || Date.now() - at > BARE_RECORD_TTL_MS) return;
+    const params = forceTeamScope(event.params);
+    if (!params) return;
+    api.logger.warn('pubg bare record request: forcing team=true over a model-chosen person subject');
+    return { params };
+  }, { matcher: ['pubg_query_stats'] });
   const shapeRevised = new Set<string>();
   const pending = new Map<string, { at: number; delivered: boolean }>();
   api.on('before_agent_finalize', (event, context) => {

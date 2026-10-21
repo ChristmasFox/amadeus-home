@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import type { OpenClawPluginApi } from 'openclaw/plugin-sdk/core';
-import { assessPubgEvidence, droppedReplyFacts, registerPubgEvidenceGuard } from '../src/evidence-guard.js';
+import { assessPubgEvidence, droppedReplyFacts, forceTeamScope, isBareRecordRequest, registerPubgEvidenceGuard } from '../src/evidence-guard.js';
 
 const user = (value: string) => ({ role: 'user', content: [{ type: 'text', text: value }] });
 const assistant = (value: string) => ({ role: 'assistant', content: [{ type: 'text', text: value }] });
@@ -115,4 +115,38 @@ test('an image completion or an image request that mentions 吃鸡 is not a PUBG
   assert.equal(assessPubgEvidence([user('生成吃鸡小队图片'), call('image_generate', { prompt: 'squad' }), assistant('开始画了，这次吃鸡小队包你满意。')], '开始画了，这次吃鸡小队包你满意。'), 'not_applicable');
   // A real 战绩 question with no data tool is still caught.
   assert.equal(assessPubgEvidence([user('今天吃鸡几局'), assistant('今天吃鸡 2 局')], '今天吃鸡 2 局'), 'missing_data');
+});
+
+test('bare record request: a person the model carried in from earlier chat is replaced by team=true', () => {
+  const hooks = new Map<string, (event: any, context: any) => any>();
+  const warnings: string[] = [];
+  registerPubgEvidenceGuard({
+    on: (name: string, handler: (event: any, context: any) => any) => { hooks.set(name, handler); },
+    logger: { warn: (message: string) => warnings.push(message) },
+  } as unknown as OpenClawPluginApi);
+  const dispatch = hooks.get('before_dispatch')!;
+  const toolCall = hooks.get('before_tool_call')!;
+  const selector = { type: 'time_range', from: 'a', to: 'b' };
+  const context = { sessionKey: 'group-1' };
+
+  dispatch({ body: '今日战绩' }, context);
+  const forced = toolCall({ toolName: 'pubg_query_stats', params: { selector, playerNames: ['SG_LabmemNo008'], operation: 'report' } }, context);
+  assert.deepEqual(forced.params, { selector, operation: 'report', team: true });
+  assert.equal(toolCall({ toolName: 'pubg_query_stats', params: { selector, team: true } }, context), undefined);
+  assert.equal(toolCall({ toolName: 'pubg_search_matches', params: { playerNames: ['x'] } }, context), undefined);
+  assert.equal(toolCall({ toolName: 'pubg_query_stats', params: { playerNames: ['x'] } }, { sessionKey: 'other' }), undefined);
+
+  for (const body of ['我的今日战绩', '猴今日战绩', '今天SG007战绩', '小队的']) {
+    dispatch({ body }, context);
+    assert.equal(toolCall({ toolName: 'pubg_query_stats', params: { personIds: ['p1'] } }, context), undefined, body);
+  }
+  assert.equal(warnings.length, 1);
+});
+
+test('bare record detection and scope rewrite', () => {
+  for (const request of ['今日战绩', '今天战绩', '昨日战绩', '昨天战绩', '本周战绩', '@Kurisu 今天战绩']) assert.equal(isBareRecordRequest(request), true, request);
+  for (const request of ['我的战绩', '我今日战绩', '猴昨日战绩', '']) assert.equal(isBareRecordRequest(request), false, request);
+  assert.equal(isBareRecordRequest(undefined), false);
+  assert.deepEqual(forceTeamScope({ personIds: ['p'], metrics: ['matches'] }), { metrics: ['matches'], team: true });
+  assert.equal(forceTeamScope({ team: true, metrics: ['matches'] }), undefined);
 });

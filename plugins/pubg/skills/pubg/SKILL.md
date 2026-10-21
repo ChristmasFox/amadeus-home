@@ -38,7 +38,8 @@ returned canonical `personId` as `personIds`. They must never be converted to
 A bare record request that names no one and has no “我”, such as “今日战绩”
 “昨日战绩”“今天战绩” or “@Kurisu 昨天战绩”, is a whole-team request: call the
 PUBG tool directly with `team=true` and the period selector. Do not call
-`identity_resolve` first for it.
+`identity_resolve` first for it. Never carry a player from earlier chat into
+such a request; the plugin also forces `team=true` on a bare record turn.
 
 Record requests (“今日战绩”“今天战绩”“昨日战绩”“昨天战绩”“本周战绩”“查询今日战绩”
 and person-specific variants) always use `pubg_query_stats` (operation
