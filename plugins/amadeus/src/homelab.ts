@@ -19,7 +19,8 @@ function hostRecord(value: unknown): Record<string, unknown> {
 
 async function probe(url: string, signal?: AbortSignal): Promise<{ ok: boolean; data?: unknown }> {
   try {
-    const data = await requestJson(url, { ...(signal ? { signal } : {}), timeoutMs: 8_000 });
+    // Changedetection answers 403 to Accept: application/json on its HTML root page, so probe with a plain GET.
+    const data = await requestJson(url, { ...(signal ? { signal } : {}), timeoutMs: 8_000, headers: { Accept: '*/*' } });
     return { ok: healthy(data), data };
   } catch { return { ok: false }; }
 }
