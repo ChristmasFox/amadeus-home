@@ -15,7 +15,7 @@ test('explicit multiplier is a bounded parameter constraint, not a 4K resolution
 });
 
 let taskCounter=1;
-for(const [mimeType,source] of [['image/png','upscale'],['image/jpeg','upscale'],['image/png','upscale2'],['image/png','generate'],['image/png','upscale4'],['image/png','upscale-invalid-target'],['image/png','completion'],['image/png','completion-fallback'],['image/jpeg','provider-fallback'],['image/png','caption-omitted'],['image/png','caption-malformed'],['image/png','caption-error'],['image/png','attachment-failure'],['image/png','failure']] as const) test(`real hook chain ${source} ${mimeType} -> one typed provider primitive`,async()=>{
+for(const [mimeType,source] of [['image/png','upscale'],['image/jpeg','upscale'],['image/png','upscale2'],['image/png','generate'],['image/png','upscale4'],['image/png','upscale-invalid-target'],['image/png','completion'],['image/png','completion-second-registry'],['image/png','completion-fallback'],['image/jpeg','provider-fallback'],['image/png','caption-omitted'],['image/png','caption-malformed'],['image/png','caption-error'],['image/png','attachment-failure'],['image/png','failure']] as const) test(`real hook chain ${source} ${mimeType} -> one typed provider primitive`,async()=>{
  const root=await mkdtemp(join(tmpdir(),'delivery-runtime-'));await mkdir(join(root,'derived'));
  const bytes=mimeType==='image/png'?Buffer.from([137,80,78,71,13,10,26,10,0,0,0,13,73,72,68,82,0,0,0,1,0,0,0,1]):Buffer.from([255,216,255,224,0,16,1,2,3,4]);
  const id=`img_${(mimeType==='image/png'?'a':'b').repeat(32)}`;const asset={imageId:id,storageKey:'derived/asset.bin',mimeType,width:1,height:1,byteSize:bytes.length,sha256:createHash('sha256').update(bytes).digest('hex'),status:'ready'};
@@ -28,6 +28,9 @@ for(const [mimeType,source] of [['image/png','upscale'],['image/jpeg','upscale']
   const api={rootDir:new URL('../',import.meta.url).pathname,config:{},pluginConfig:{imageAssetServiceBaseUrl:`http://127.0.0.1:${port}`,imageAssetServiceTokenFile:join(root,'token'),imageAssetContainerRoot:root},logger:{info(){},warn(){}},on(name:string,fn:(...args:any[])=>any){hooks.set(name,[...(hooks.get(name)??[]),fn]);},registerTool(factory:any,options:{name:string}){tools.set(options.name,factory);}} as unknown as OpenClawPluginApi;
   const captionInputs:any[]=[];const lifecycleInputs:any[]=[];
   registerVoiceReplyPrompt(api,{captionEnricher:async input=>{captionInputs.push(input);if(source==='caption-error')throw new Error('raw model provider error');if(source==='caption-omitted')return {};return source==='caption-malformed'?{caption:'{"caption":"raw caption protocol"}'}:{caption:`Kurisu caption for ${input.mimeType}`};},lifecycleMessageEnricher:async input=>{lifecycleInputs.push(input);return input.kind==='accepted'?'生成を始めたわ。':'生成に失敗したわ。';}});registerImageAssets(api);
+  // OpenClaw registers the plugin once per registry; the WhatsApp plan uses the latest global boundary while completion hooks may belong to an earlier registration.
+  const laterHooks=new Map<string,Array<(...args:any[])=>any>>();
+  if(source==='completion-second-registry')registerVoiceReplyPrompt({...api,on(name:string,fn:(...args:any[])=>any){laterHooks.set(name,[...(laterHooks.get(name)??[]),fn]);}} as unknown as OpenClawPluginApi,{captionEnricher:async()=>({}),lifecycleMessageEnricher:async input=>{lifecycleInputs.push(input);return input.kind==='accepted'?'生成を始めたわ。':'生成に失敗したわ。';}});
   const boundary=(globalThis as Record<string,unknown>)[DELIVERY_BOUNDARY_GLOBAL] as {acceptImageGeneration(input:any):Promise<void>;failImageGeneration(input:any):Promise<void>;completeImageGeneration(input:any):Promise<any>;finishImageGeneration(input:any):Promise<void>;createWhatsAppPlan(port:WhatsAppDeliveryPort):any};const sends:Array<{kind:string;bytes?:Buffer;text?:string;caption?:string}>=[];
   const sessionKey=`runtime-${source}-${mimeType}`;const taskId=`00000000-0000-4000-8000-${String(taskCounter++).padStart(12,'0')}`;const runId=`run-${sessionKey}`;
   const inboundBody=source==='upscale2'?'请把刚才的图超分 2x':source==='upscale4'?'请把刚才的图超分 4x':source.startsWith('upscale')?'请把刚才的图超分':'请用中文生成一只戴宇航员头盔的橘猫。';
@@ -38,6 +41,7 @@ for(const [mimeType,source] of [['image/png','upscale'],['image/jpeg','upscale']
   plan.replyOptions.onAgentRunStart(runId);
   for(const hook of hooks.get('before_prompt_build')??[])hook({}, {runId,sessionKey,channel:'whatsapp'});
   for(const hook of hooks.get('before_dispatch')??[])hook({channel:'whatsapp',sessionKey,body:inboundBody}, {channelId:'whatsapp',sessionKey,conversationId:'chat',messageId:'inbound',replyToId:'old-image'});
+  for(const hook of laterHooks.get('before_dispatch')??[])hook({channel:'whatsapp',sessionKey,body:inboundBody}, {channelId:'whatsapp',sessionKey,conversationId:'chat',messageId:'inbound',replyToId:'old-image'});
   let result:unknown;
   if(source==='upscale'||source==='upscale2'||source==='upscale4'){
     const tool=tools.get('amadeus_image_upscale')!({sessionKey,messageChannel:'whatsapp'} as OpenClawPluginToolContext);
@@ -48,9 +52,9 @@ for(const [mimeType,source] of [['image/png','upscale'],['image/jpeg','upscale']
     const tool=tools.get('amadeus_image_upscale')!({sessionKey,messageChannel:'whatsapp'} as OpenClawPluginToolContext);
     result=await tool.execute('tool-id',{target:{imageId:'/home/node/.openclaw/workspace/media/inbound/input.png'},resolution:'4k'},undefined);
     const request=requests.find(request=>request.path==='/v1/upscale')!.body as any;assert.equal(request.imageId,undefined);assert.equal(request.conversationId,'chat');assert.equal(request.replyMessageId,'old-image');assert.equal(request.scale,2);
-  }else if(source==='completion'||source==='completion-fallback'||source==='provider-fallback'||source==='caption-omitted'||source==='caption-malformed'||source==='caption-error'||source==='attachment-failure'||source==='failure') result={content:[{type:'text',text:'Background task started (async=true)'}],details:{async:true}};
+  }else if(source==='completion'||source==='completion-second-registry'||source==='completion-fallback'||source==='provider-fallback'||source==='caption-omitted'||source==='caption-malformed'||source==='caption-error'||source==='attachment-failure'||source==='failure') result={content:[{type:'text',text:'Background task started (async=true)'}],details:{async:true}};
   else result={details:{paths:[join(root,'native-generated.bin')],attachments:[{path:join(root,'native-generated.bin'),mimeType}]},content:[{type:'text',text:'tool result text is not an image authority'}]};
-  const detached=source==='completion'||source==='completion-fallback'||source==='provider-fallback'||source==='caption-omitted'||source==='caption-malformed'||source==='caption-error'||source==='attachment-failure'||source==='failure';
+  const detached=source==='completion'||source==='completion-second-registry'||source==='completion-fallback'||source==='provider-fallback'||source==='caption-omitted'||source==='caption-malformed'||source==='caption-error'||source==='attachment-failure'||source==='failure';
   const jobs=detached?[]:(hooks.get('after_tool_call')??[]).map(hook=>hook({toolName:source==='generate'?'image_generate':'amadeus_image_upscale',runId,result},{runId,sessionKey,toolName:source,channelId:'whatsapp'}));
   if(detached){
     assert.equal((result as any).details.async,true);assert.equal(requests.filter(x=>x.path==='/v1/assets/import').length,0);assert.equal(sends.length,0);

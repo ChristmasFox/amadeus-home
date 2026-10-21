@@ -92,12 +92,27 @@ function readRequestContext(contexts: Map<string, TimedRequestContext>, key: str
   return value;
 }
 
+export const COMPLETION_PORTS_GLOBAL = '__amadeusCompletionPorts20261021';
+type CompletionPort = { accountId: string; conversationId: string; send: (envelope: DeliveryEnvelope) => Promise<void>; expiresAt: number };
+function sharedCompletionPorts(): Map<string, CompletionPort> {
+  const registry = globalThis as Record<string, unknown>;
+  const existing = registry[COMPLETION_PORTS_GLOBAL];
+  if (existing instanceof Map) return existing as Map<string, CompletionPort>;
+  const created = new Map<string, CompletionPort>();
+  registry[COMPLETION_PORTS_GLOBAL] = created;
+  return created;
+}
+
 export function registerDeliveryBoundary(api: OpenClawPluginApi, options: DeliveryBoundaryOptions = {}) {
   const speech = createDeliverySpeech(api);
   const captionEnricher = options.captionEnricher ?? createImageCaptionEnricher(api);
   const lifecycleMessageEnricher = options.lifecycleMessageEnricher ?? createImageGenerationMessageEnricher(api);
   const lifecycle = new ImageGenerationLifecycleCoordinator(1024);
-  const completionPorts = new Map<string, { accountId: string; conversationId: string; send: (envelope: DeliveryEnvelope) => Promise<void>; expiresAt: number }>();
+  // OpenClaw registers this plugin once per plugin registry (gateway, worker,
+  // restart-safe recovery, ...). The WhatsApp plan is created through the
+  // latest global boundary while a completion hook may run in an older
+  // registration, so the per-session completion routes must be process-wide.
+  const completionPorts = sharedCompletionPorts();
   const lifecycleMessages = new Map<string, Promise<string>>();
   const sessionRequestContexts = new Map<string, TimedRequestContext>();
   const conversationRequestContexts = new Map<string, TimedRequestContext>();
