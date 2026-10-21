@@ -96,12 +96,6 @@ function unavailable(result: Row): boolean {
   return result.status === 'error' || result.status === 'stale' || result.status === undefined;
 }
 
-function group(items: string[], size: number): string[] {
-  const lines: string[] = [];
-  for (let index = 0; index < items.length; index += size) lines.push(`• ${items.slice(index, index + size).join(' · ')}`);
-  return lines;
-}
-
 export function renderVpsReport(input: VpsReportInput): VpsReportCard {
   const live = row(input.live);
   const usageResult = row(input.usage);
@@ -163,7 +157,7 @@ export function renderVpsReport(input: VpsReportInput): VpsReportCard {
     });
     const since = stamp(overview.monitoringStartedAt);
     const legacy = row(overview.legacy);
-    const lines = [`👥 **账号累计** （${since ? `自监控起点 ${since}` : '自监控起点'}）`, ...group(labels, 3)];
+    const lines = [`👥 **账号累计** （${since ? `自监控起点 ${since}` : '自监控起点'}）`, ...labels.map((label) => `• ${label}`)];
     if ((finite(legacy.totalMonitoredBytes) ?? 0) > 0) lines.push(`• 已下线账号历史用量 ${bytes(legacy.totalMonitoredBytes)}`);
     sections.push(lines);
   }

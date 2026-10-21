@@ -48,8 +48,7 @@ test('the VPS card is grouped, Chinese, bar-led and in one unit system', () => {
   assert.ok(text.includes('• 整机 **5.64 GiB** · 订阅账号 2.73 GiB'));
   assert.ok(text.includes('未归因残差（未校准）2.91 GiB'));
   assert.ok(text.includes('• 增长最多：M204-Net-Core 1.68 GiB'));
-  assert.ok(text.includes('• Labmem001 2.40 GiB · Labmem002 3.63 GiB · Labmem003 0 B'));
-  assert.ok(text.includes('• Labmem004 ≥ 4.66 GiB（不完整）'));
+  assert.ok(text.includes('• Labmem001 2.40 GiB\n• Labmem002 3.63 GiB\n• Labmem003 0 B\n• Labmem004 ≥ 4.66 GiB（不完整）'));
   assert.ok(text.includes('• 运行 3 天 16 小时 · 负载 0.24 / 0.05 / 0.02'));
   assert.ok(text.includes('• 内存 已用 329 MiB / 1024 MiB（32%）'));
   assert.ok(text.includes('• 服务 ✅ Caddy、Xray、Hysteria2、frps 全部运行'));
