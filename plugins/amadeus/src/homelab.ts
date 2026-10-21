@@ -17,9 +17,14 @@ function hostRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === 'object' ? value as Record<string, unknown> : { status: 'unavailable', error: 'host telemetry unavailable' };
 }
 
+function changedetectionHealthy(radarHealth: unknown): boolean {
+  const sensor = radarHealth && typeof radarHealth === 'object' ? (radarHealth as Record<string, unknown>).sensor : undefined;
+  return !!sensor && typeof sensor === 'object' && (sensor as Record<string, unknown>).ok === true;
+}
+
 async function probe(url: string, signal?: AbortSignal): Promise<{ ok: boolean; data?: unknown }> {
   try {
-    // Changedetection answers 403 to Accept: application/json on its HTML root page, so probe with a plain GET.
+    // Plain GET: several roots (qBittorrent, the router login) are HTML pages, not JSON.
     const data = await requestJson(url, { ...(signal ? { signal } : {}), timeoutMs: 8_000, headers: { Accept: '*/*' } });
     return { ok: healthy(data), data };
   } catch { return { ok: false }; }
@@ -41,13 +46,15 @@ export async function homelabStatus(
   const serviceUrls: Record<string, string> = {
     OpenClaw: 'http://openclaw:18789/healthz',
     ProductRadar: `${config.homeLabServiceBaseUrl}:5315/health`,
-    Changedetection: `${config.homeLabServiceBaseUrl}:5000/`,
     Immich: `${config.homeLabServiceBaseUrl}:2283/api/server/ping`,
     Emby: `${config.homeLabServiceBaseUrl}:8096/emby/system/info/public`,
     qBittorrent: `${config.homeLabServiceBaseUrl}:8080/`,
   };
   const services: Record<string, boolean> = {};
-  await Promise.all(Object.entries(serviceUrls).map(async ([name, url]) => { services[name] = (await probe(url, signal)).ok; }));
+  const probes: Record<string, { ok: boolean; data?: unknown }> = {};
+  await Promise.all(Object.entries(serviceUrls).map(async ([name, url]) => { probes[name] = await probe(url, signal); services[name] = probes[name]?.ok ?? false; }));
+  // Port 5000 on the Mac host is macOS AirPlay (403), not Changedetection, so Changedetection is judged by Product Radar's own sensor.
+  services.Changedetection = changedetectionHealthy(probes.ProductRadar?.data);
   const openWrt = await probe(`${config.openWrtBaseUrl}/`, signal);
   services.OpenWrt = openWrt.ok;
   const unavailable = host.status !== 'ok';

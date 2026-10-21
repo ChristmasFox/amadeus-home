@@ -76,6 +76,9 @@ test('failures and incomplete data stay visible and change the conclusion', () =
   assert.ok(degraded.text.includes('• ⚠️ 熔断数据暂时读取失败，不能当作没有限速'));
   assert.ok(degraded.text.includes('✅ Caddy ⚠️ **Xray** 异常'));
   assert.ok(degraded.text.includes('KiwiVM：⚠️ 状态未知'));
+  const notInstalled = renderVpsReport({ ...input, fuse: { status: 'stale', error: { code: 'TRAFFIC_FUSE_UNAVAILABLE' }, data: null } });
+  assert.ok(notInstalled.text.includes('• 流量熔断：⚠️ **尚未在 VPS 上启用**（没有快照），目前没有日流量保护'));
+  assert.equal(notInstalled.text.includes('入口流量可能已被计费'), false);
   const down = renderVpsReport({ ...input, usage: { status: 'error' }, system: { status: 'error' }, overview: { status: 'error' }, services: { status: 'error' }, fuse: { status: 'error' }, live: { status: 'error' } });
   assert.equal(down.failed, true);
   assert.match(down.text, /^\*\*结论：\*\* ❌ 多项数据读取失败/u);

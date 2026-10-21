@@ -212,10 +212,12 @@ export function renderVpsReport(input: VpsReportInput): VpsReportCard {
     safety.push(`• 上海日 **${bytes(watched)}** · 预警 ${bytes(fuse.warningThresholdBytes)} / 熔断 ${bytes(fuse.capThresholdBytes)}`);
     const next = stamp(fuse.nextRecoveryAt);
     safety.push(`• 熔断状态 ${FUSE_BAD.has(state) ? '⚠️ ' : ''}**${FUSE_STATE[state] ?? state}** · ${FUSE_SOURCE[String(fuse.sourceStatus)] ?? '来源未知'}，${FUSE_COVERAGE[String(fuse.coverage)] ?? '覆盖未知'}${finite(fuse.rateBitsPerSecond) !== null && state === 'CAPPED' ? ` · 限速 ${fixed((finite(fuse.rateBitsPerSecond) ?? 0) / 1_000_000, 1)} Mbit/s` : ''}${next && FUSE_BAD.has(state) ? ` · 恢复于 ${next}` : ''}`);
+    safety.push('• Linux 出口限速不能保证服务商计费不超过阈值（入口流量可能已被计费）');
+  } else if (row(fuseResult.error).code === 'TRAFFIC_FUSE_UNAVAILABLE') {
+    safety.push('• 流量熔断：⚠️ **尚未在 VPS 上启用**（没有快照），目前没有日流量保护');
   } else {
     safety.push('• ⚠️ 熔断数据暂时读取失败，不能当作没有限速');
   }
-  safety.push('• Linux 出口限速不能保证服务商计费不超过阈值（入口流量可能已被计费）');
   if (finite(auth.authFailuresWindow) !== null || finite(reality.windowTotalBytes) !== null) {
     safety.push(`• Hysteria2 认证失败 ${fixed(auth.authFailuresWindow, 0)} 次 · 被限流 ${fixed(auth.authRateLimitedWindow, 0)} 次 · Reality 回落流量 ${bytes(reality.windowTotalBytes)}`);
   }
