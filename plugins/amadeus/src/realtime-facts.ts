@@ -13,12 +13,23 @@ export interface SearchAuditRecord {
 // Bare English "status" is intentionally omitted: Lab auto-release PUBG smoke
 // (and many tool replies) say "status ok", which must not force a web_search gate.
 const REALTIME_QUERY = /(?:\b(?:latest|today|newest|just released|version|versions|news|current events|price|prices|system status|server status|service status)\b|最新|今天|刚(?:刚)?发布|版本(?:号)?|新闻|时事|价格|状态|现在)/iu;
+// Lab worldline release announcements are changelogs Arthur forwards to chat.
+// They always include 版本 / version wording, which must not force a web_search
+// revise (that revise recently failed with SessionTranscriptProjectionUnavailableError → ❌ and no reply).
+const LAB_RELEASE_ANNOUNCEMENT = /(?:世界线收束|El Psy Kongroo\.?|Amadeus\s+\d+\.\d+\.\d+\s*[·•])/iu;
 const SEARCH_TOOLS = new Set(['web_search', 'web_fetch']);
 // Native PUBG tools answer from the local SaaS/archive, never from the public web.
 const REALTIME_GATE_EXEMPT = /^(?:pubg_)/u;
 const SEARCH_REQUIRED = '实时事实问题必须先调用 web_search；必要时再调用 web_fetch。回答必须给出来源和查询或页面时间。搜索失败、超时或无结果时，明确说明当前事实无法确认，禁止用旧知识、无来源记忆或猜测冒充当前事实。搜索结果拥有更高优先级；记忆只可作为背景，且必须检查来源、observedAt 和 validUntil。';
 
-export function isRealtimeFactQuery(prompt: string): boolean { return typeof prompt === 'string' && REALTIME_QUERY.test(prompt); }
+export function isLabReleaseAnnouncement(prompt: string): boolean {
+  return typeof prompt === "string" && LAB_RELEASE_ANNOUNCEMENT.test(prompt);
+}
+export function isRealtimeFactQuery(prompt: string): boolean {
+  if (typeof prompt !== "string") return false;
+  if (isLabReleaseAnnouncement(prompt)) return false;
+  return REALTIME_QUERY.test(prompt);
+}
 export function realtimeFactInstruction(): string { return SEARCH_REQUIRED; }
 export function isRealtimeGateExemptTool(toolName: string): boolean { return typeof toolName === 'string' && REALTIME_GATE_EXEMPT.test(toolName); }
 

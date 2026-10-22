@@ -3,7 +3,7 @@ import { mkdtemp, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
-import { RealtimeToolAudit, classifyRealtimeEvidence, isRealtimeFactQuery, isRealtimeGateExemptTool, realtimeToolMustBeBlocked, registerRealtimeFacts } from '../src/realtime-facts.js';
+import { RealtimeToolAudit, classifyRealtimeEvidence, isLabReleaseAnnouncement, isRealtimeFactQuery, isRealtimeGateExemptTool, realtimeToolMustBeBlocked, registerRealtimeFacts } from '../src/realtime-facts.js';
 
 test('realtime query classifier covers version and latest-news wording', () => {
   assert.equal(isRealtimeFactQuery('Claude Opus 最新版本是多少？'), true);
@@ -13,6 +13,26 @@ test('realtime query classifier covers version and latest-news wording', () => {
   const labPubgSmoke = 'Use the native pubg_query_stats tool with team=true. If the tool returns status ok or partial, reply LAB_STATS_QUERY_OK.';
   assert.equal(isRealtimeFactQuery(labPubgSmoke), false);
   assert.equal(isRealtimeFactQuery('What is the system status of the CDN?'), true);
+
+  const labReleaseForward = `Amadeus 1.15.8 · 世界线收束
+
+✨ *新功能*
+
+• main 合并只自动部署候选版；说「正式部署」后再升正式版本并汇总更新说明。
+
+🛠️ *修复*
+
+• 修复了 WhatsApp 中状态表情快速闪烁切换的问题。
+
+已部署到 Amadeus M204 & Lab 世界线
+
+• 版本：1.15.8
+
+El Psy Kongroo.`;
+  assert.equal(isLabReleaseAnnouncement(labReleaseForward), true);
+  // Must not trip realtime gate: bare 版本 in changelog previously forced web_search revise → ❌.
+  assert.equal(isRealtimeFactQuery(labReleaseForward), false);
+
 });
 
 test('realtime gate requires web_search before other tools', () => {
