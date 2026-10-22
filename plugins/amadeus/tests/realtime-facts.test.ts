@@ -3,18 +3,24 @@ import { mkdtemp, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
-import { RealtimeToolAudit, classifyRealtimeEvidence, isRealtimeFactQuery, realtimeToolMustBeBlocked, registerRealtimeFacts } from '../src/realtime-facts.js';
+import { RealtimeToolAudit, classifyRealtimeEvidence, isRealtimeFactQuery, isRealtimeGateExemptTool, realtimeToolMustBeBlocked, registerRealtimeFacts } from '../src/realtime-facts.js';
 
 test('realtime query classifier covers version and latest-news wording', () => {
   assert.equal(isRealtimeFactQuery('Claude Opus 最新版本是多少？'), true);
   assert.equal(isRealtimeFactQuery('今天有什么新闻？'), true);
   assert.equal(isRealtimeFactQuery('解释一下 TypeScript 泛型'), false);
+  // Lab auto-release PUBG smoke historically said "status ok"; bare status must not trip the gate.
+  const labPubgSmoke = 'Use the native pubg_query_stats tool with team=true. If the tool returns status ok or partial, reply LAB_STATS_QUERY_OK.';
+  assert.equal(isRealtimeFactQuery(labPubgSmoke), false);
+  assert.equal(isRealtimeFactQuery('What is the system status of the CDN?'), true);
 });
 
 test('realtime gate requires web_search before other tools', () => {
   assert.equal(realtimeToolMustBeBlocked(true, false, 'memory_search'), true);
   assert.equal(realtimeToolMustBeBlocked(true, false, 'web_fetch'), false);
   assert.equal(realtimeToolMustBeBlocked(true, true, 'memory_search'), false);
+  assert.equal(isRealtimeGateExemptTool('pubg_query_stats'), true);
+  assert.equal(realtimeToolMustBeBlocked(true, false, 'pubg_query_stats'), false);
 });
 
 test('evidence without provenance is unknown and expired evidence is stale', () => {

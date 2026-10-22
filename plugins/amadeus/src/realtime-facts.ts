@@ -10,12 +10,17 @@ export interface SearchAuditRecord {
   timedOut: boolean; httpStatus: number | null; resultSummary: string; errorCode: string | null;
 }
 
-const REALTIME_QUERY = /(?:\b(?:latest|today|newest|just released|version|versions|news|current events|price|prices|status)\b|最新|今天|刚(?:刚)?发布|版本(?:号)?|新闻|时事|价格|状态|现在)/iu;
+// Bare English "status" is intentionally omitted: Lab auto-release PUBG smoke
+// (and many tool replies) say "status ok", which must not force a web_search gate.
+const REALTIME_QUERY = /(?:\b(?:latest|today|newest|just released|version|versions|news|current events|price|prices|system status|server status|service status)\b|最新|今天|刚(?:刚)?发布|版本(?:号)?|新闻|时事|价格|状态|现在)/iu;
 const SEARCH_TOOLS = new Set(['web_search', 'web_fetch']);
+// Native PUBG tools answer from the local SaaS/archive, never from the public web.
+const REALTIME_GATE_EXEMPT = /^(?:pubg_)/u;
 const SEARCH_REQUIRED = '实时事实问题必须先调用 web_search；必要时再调用 web_fetch。回答必须给出来源和查询或页面时间。搜索失败、超时或无结果时，明确说明当前事实无法确认，禁止用旧知识、无来源记忆或猜测冒充当前事实。搜索结果拥有更高优先级；记忆只可作为背景，且必须检查来源、observedAt 和 validUntil。';
 
 export function isRealtimeFactQuery(prompt: string): boolean { return typeof prompt === 'string' && REALTIME_QUERY.test(prompt); }
 export function realtimeFactInstruction(): string { return SEARCH_REQUIRED; }
+export function isRealtimeGateExemptTool(toolName: string): boolean { return typeof toolName === 'string' && REALTIME_GATE_EXEMPT.test(toolName); }
 
 export function classifyRealtimeEvidence(evidence: Pick<RealtimeEvidence, 'source' | 'observedAt' | 'validUntil'>, now = new Date()): RealtimeEvidence {
   const source = typeof evidence.source === 'string' && evidence.source.trim() ? evidence.source.trim() : null;
@@ -26,7 +31,8 @@ export function classifyRealtimeEvidence(evidence: Pick<RealtimeEvidence, 'sourc
 }
 
 export function realtimeToolMustBeBlocked(realtimeQuery: boolean, searched: boolean, toolName: string): boolean {
-  return realtimeQuery && !searched && !SEARCH_TOOLS.has(toolName);
+  if (!realtimeQuery || searched || SEARCH_TOOLS.has(toolName) || isRealtimeGateExemptTool(toolName)) return false;
+  return true;
 }
 function httpStatus(result: unknown): number | null {
   if (!result || typeof result !== 'object') return null;

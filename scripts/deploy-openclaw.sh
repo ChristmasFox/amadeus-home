@@ -1230,7 +1230,7 @@ sys.path.insert(0, sys.argv[3])
 from lab_auto_release_contract import valid_pubg_stats_smoke
 prompt = ('Use the native pubg_query_stats tool with team=true, selector={"type":"last_n_matches","count":5}, '
           'metrics=["matches","kills","damage"], and refresh=false. Do not guess or use memory. '
-          'If the tool returns status ok or partial, reply LAB_STATS_QUERY_OK. Otherwise reply '
+          'If the tool returns ok or partial, reply LAB_STATS_QUERY_OK. Otherwise reply '
           'LAB_STATS_QUERY_FAILED. Do not include player names, identifiers, or statistics in the reply.')
 # The model occasionally picks a different selector (e.g. no_matches) even
 # though the tool works; one fresh-session retry separates that from a real
