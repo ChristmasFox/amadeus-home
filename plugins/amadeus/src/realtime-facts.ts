@@ -66,7 +66,11 @@ export class RealtimeToolAudit {
 export function registerRealtimeFacts(api: OpenClawPluginApi): void {
   const audit = new RealtimeToolAudit();
   const realtimeRuns = new Set<string>(); const searchedRuns = new Set<string>(); const revisionRequested = new Set<string>();
-  api.on('before_prompt_build', (event, context) => { if (context.runId && isRealtimeFactQuery(event.prompt)) realtimeRuns.add(context.runId); return { appendSystemContext: SEARCH_REQUIRED }; });
+  api.on('before_prompt_build', (event, context) => {
+    if (!context.runId || !isRealtimeFactQuery(event.prompt)) return undefined;
+    realtimeRuns.add(context.runId);
+    return { appendSystemContext: SEARCH_REQUIRED };
+  });
   api.on('before_tool_call', (event, context) => {
     const runId = event.runId ?? context.runId;
     if (runId && realtimeToolMustBeBlocked(realtimeRuns.has(runId), searchedRuns.has(runId), event.toolName)) {
