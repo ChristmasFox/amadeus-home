@@ -124,6 +124,7 @@ await port.sendReaction('😂');assert.deepEqual(reactions.at(-1).slice(0,3),['c
  const run=async(order)=>{
   wire.length=0;const ctl=await createStatus(statusArgs);assert.equal(typeof ctl.finishWithContextual,'function');
   ctl.setQueued();const plan=scope.globalThis.createPlan({...params,statusReactionController:ctl});const statusPort=port;
+  assert.equal(plan.replyOptions.allowToolLifecycleWhenProgressHidden, true, 'tool lifecycle must fire while WhatsApp text progress stays hidden');
   plan.afterRecord();await sleep(800);await plan.replyOptions.onToolStart({name:'web_search'});await sleep(800);
   let react;
   if(order==='react-first'){react=statusPort.sendReaction('😂');plan.finalize({});}
@@ -135,7 +136,7 @@ await port.sendReaction('😂');assert.deepEqual(reactions.at(-1).slice(0,3),['c
  for(const order of ['react-first','finalize-first']){
   const seen=await run(order);
   assert.equal(seen[0],'👀');assert.ok(seen.includes('🧠'),`thinking stage shown (${order}): ${seen}`);
-  assert.ok(seen.length>=3,`tool stage shown (${order}): ${seen}`);
+  assert.ok(seen.includes('🔎')||seen.includes('🌐'),`web_search tool stage shown (${order}): ${seen}`);
   assert.equal(seen.at(-1),'😂',`final reaction is contextual (${order}): ${seen}`);
   if(order==='react-first') assert.equal(seen.includes('✅'),false,`no done flash: ${seen}`);
   if(order==='react-first') assert.ok(wire.every(item=>item.chat==='g@g.us'&&item.id==='gm'&&item.options.participant==='p@s.whatsapp.net'),'group key carries participant');

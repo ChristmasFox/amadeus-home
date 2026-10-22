@@ -26,6 +26,9 @@ async function createWhatsAppStatusReactionController(params) {
 		},
 		initialEmoji,
 		emojis: void 0,
+		// Flush tool/thinking stages on the next macrotask so short SearXNG /
+		// pubg tool calls still paint 🔎/🌐/🛠️ before finalize replaces them.
+		timing: { debounceMs: 0 },
 		onError: (err) => {
 			logVerbose(`WhatsApp status-reaction error for chat ${chatId}/${messageId}: ${String(err)}`);
 		}

@@ -78,6 +78,10 @@ function createWhatsAppReplyPlan(params) {
     disableBlockStreaming: true,
     ...(replyPolicy.sourceReplyDeliveryMode ? { sourceReplyDeliveryMode: replyPolicy.sourceReplyDeliveryMode } : {}),
     ...(statusReactionController ? {
+      // WhatsApp hides verbose tool-progress text; without this flag OpenClaw
+      // wraps onToolStart behind shouldEmitToolLifecycle and never calls setTool,
+      // so users only see 👀→🧠 (then stall ⏳) and never the tool emoji (🔎/🌐/🛠️).
+      allowToolLifecycleWhenProgressHidden: true,
       onToolStart: async (payload) => { if (payload.name?.trim()) await statusReactionController.setTool(payload.name.trim()); return false; },
       onCompactionStart: async () => { await statusReactionController.setCompacting(); return false; },
       onCompactionEnd: async () => { statusReactionController.cancelPending(); await statusReactionController.setThinking(); return false; },
