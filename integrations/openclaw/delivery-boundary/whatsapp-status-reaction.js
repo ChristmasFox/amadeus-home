@@ -26,9 +26,8 @@ async function createWhatsAppStatusReactionController(params) {
 		},
 		initialEmoji,
 		emojis: void 0,
-		// Flush tool/thinking stages on the next macrotask so short SearXNG /
-		// pubg tool calls still paint 🔎/🌐/🛠️ before finalize replaces them.
-		timing: { debounceMs: 0 },
+		// Keep OpenClaw default ~700ms debounce so 👀→🧠 do not flash over each other.
+		// Tool emoji still lands via allowToolLifecycleWhenProgressHidden + setTool.
 		onError: (err) => {
 			logVerbose(`WhatsApp status-reaction error for chat ${chatId}/${messageId}: ${String(err)}`);
 		}
