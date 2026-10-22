@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Deploy Lab main runtime changes without a GitHub CI gate."""
+"""Deploy Lab main as candidates; formal SemVer tags only on explicit approval."""
 
 from __future__ import annotations
 
@@ -26,6 +26,8 @@ CHECKPOINT_ROOT = BACKUP_ROOT / "deploy"
 WORKTREE_NAME = "release-worktree"
 CHECK_INTERVAL_SECONDS = 120
 MAX_DEPLOY_ATTEMPTS = 3
+STATE_SCHEMA_V1 = "lab-main-auto-release/v1"
+STATE_SCHEMA = "lab-main-auto-release/v2"
 LAB_PATH_PREFIXES = (
     "plugins/amadeus/",
     "plugins/pubg/",
@@ -86,7 +88,15 @@ def load_state() -> dict[str, Any] | None:
     if path.is_symlink() or not path.is_file() or path.stat().st_mode & 0o077:
         raise AutomationError("Lab auto-release state must be a regular mode-0600 file")
     data = json.loads(path.read_text(encoding="utf-8"))
-    if data.get("schema") != "lab-main-auto-release/v1":
+    schema = data.get("schema")
+    if schema == STATE_SCHEMA_V1:
+        pending = data.get("pending")
+        if isinstance(pending, dict) and "kind" not in pending:
+            pending["kind"] = "formal"
+            data["pending"] = pending
+        data["schema"] = STATE_SCHEMA
+        return data
+    if schema != STATE_SCHEMA:
         raise AutomationError("Lab auto-release state schema is unsupported")
     return data
 
@@ -303,17 +313,35 @@ def classify_commit(subject: str, body: str, summarize=None) -> dict[str, Any] |
     return {"kind": kind, "text": item}
 
 
+def latest_formal_tag(root: Path) -> str | None:
+    """Newest lab/vX.Y.Z tag by version sort, or None."""
+    raw = git(root, "tag", "-l", "lab/v*", "--sort=-v:refname", check=False)
+    for line in raw.splitlines():
+        tag = line.strip()
+        if tag.startswith("lab/v") and tag.count(".") == 2:
+            return tag
+    return None
+
+
 def release_commits(root: Path, sha: str) -> list[tuple[str, str]]:
-    """First-parent commits since the previous Lab release commit, oldest first."""
-    raw = git(root, "log", "--first-parent", "--format=%s%x1f%b%x1e", "-n", "60", sha)
+    """First-parent commits since the previous formal Lab tag (or release commit), oldest first."""
+    tag = latest_formal_tag(root)
+    if tag:
+        raw = git(root, "log", "--first-parent", "--format=%s%x1f%b%x1e", f"{tag}..{sha}")
+    else:
+        raw = git(root, "log", "--first-parent", "--format=%s%x1f%b%x1e", "-n", "60", sha)
     commits: list[tuple[str, str]] = []
     records = [record.strip("\n") for record in raw.split("\x1e") if record.strip()]
     for index, record in enumerate(records):
         subject, _, body = record.partition("\x1f")
         if subject.startswith(RELEASE_SUBJECT_PREFIX):
-            if index == 0:
+            if tag is None and index == 0:
                 continue  # the tip is the release commit itself
-            break
+            if tag is None:
+                break
+            continue  # skip intermediate release chores when ranging from a tag
+        if not subject:
+            continue
         commits.append((subject, body))
     return list(reversed(commits))
 
@@ -348,42 +376,76 @@ def push_main(root: Path) -> None:
     raise AutomationError(f"automated Lab release version push failed ({result.returncode})")
 
 
-def prepare_release(root: Path, source_sha: str, state: dict[str, Any]) -> dict[str, Any] | None:
+def current_version(tree: Path) -> str:
+    return (tree / "VERSION").read_text(encoding="utf-8").strip()
+
+
+def prepare_candidate(root: Path, source_sha: str, state: dict[str, Any]) -> dict[str, Any]:
+    """Queue a candidate deploy of main SHA without bumping VERSION or tagging."""
     tree = checkout_for_sha(root, source_sha)
-    version = release_version_from_commit(root, source_sha)
-    if version is None:
-        bump_output = command(["bash", "scripts/amadeus-version.sh", "bump", "patch"], cwd=tree)
+    version = current_version(tree)
+    state["pending"] = {
+        "kind": "candidate",
+        "sourceSha": source_sha,
+        "releaseSha": source_sha,
+        "version": version,
+        "createdAt": datetime.now(timezone.utc).isoformat(),
+        "attempts": 0,
+        "deployed": False,
+    }
+    save_state(state)
+    return state["pending"]
+
+
+def prepare_formal(root: Path, source_sha: str, state: dict[str, Any], *, bump: str = "patch") -> dict[str, Any] | None:
+    """Bump VERSION, write aggregated notes since last formal tag, push release commit."""
+    tree = checkout_for_sha(root, source_sha)
+    if release_version_from_commit(root, source_sha) is not None:
+        version = release_version_from_commit(root, source_sha)
+        release_sha = source_sha
+    else:
+        if bump not in {"patch", "minor", "major"}:
+            raise AutomationError(f"unsupported formal bump kind: {bump}")
+        commits = release_commits(tree, source_sha)
+        if not commits and latest_formal_tag(tree) is not None:
+            raise AutomationError("no Lab changes since the previous formal tag; refusing empty formal release")
+        bump_output = command(["bash", "scripts/amadeus-version.sh", "bump", bump], cwd=tree)
+        version = None
         for line in bump_output.splitlines():
             if line.startswith("VERSION="):
                 version = line.removeprefix("VERSION=")
                 break
-    if version is None:
-        raise AutomationError("automatic Lab version bump produced no version")
-    source_parent = git(tree, "rev-parse", f"{source_sha}^")
-    source_paths = git(tree, "diff", "--name-only", f"{source_parent}..{source_sha}").splitlines()
-    write_release_notes(tree / "RELEASE_NOTES.md", version,
-                        release_note_body(release_commits(tree, source_sha), release_note_summary(source_paths),
-                                          budgeted(summarize_commit_zh)))
-    command(["bash", "scripts/amadeus-version.sh", "check"], cwd=tree)
-    git(tree, "add", "VERSION", "RELEASE_NOTES.md")
-    changed = subprocess.run(["git", "-C", str(tree), "diff", "--cached", "--quiet"])
-    if changed.returncode == 0:
-        raise AutomationError("automatic Lab version commit contains no changes")
-    git(tree, "-c", "user.name=github-actions[bot]", "-c",
-        "user.email=41898282+github-actions[bot]@users.noreply.github.com",
-        "commit", "-m", f"chore(lab): release v{version}")
-    release_sha = git(tree, "rev-parse", "HEAD")
-    try:
-        push_main(tree)
-    except AutomationError:
-        # A concurrent main merge can win the fast-forward race. The next poll
-        # will check its CI and create one release commit for the new main tip.
-        git(tree, "fetch", REMOTE, BRANCH)
-        remote_main = git(tree, "rev-parse", f"{REMOTE}/{BRANCH}")
-        if not is_ancestor(tree, release_sha, remote_main):
-            return None
-    git(tree, "fetch", REMOTE, BRANCH, "--tags")
+        if version is None:
+            raise AutomationError("formal Lab version bump produced no version")
+        tag = latest_formal_tag(tree)
+        if tag:
+            source_paths = git(tree, "diff", "--name-only", f"{tag}..{source_sha}").splitlines()
+        else:
+            source_paths = git(tree, "diff", "--name-only", f"{source_sha}^..{source_sha}").splitlines()
+        write_release_notes(
+            tree / "RELEASE_NOTES.md",
+            version,
+            release_note_body(commits, release_note_summary(source_paths), budgeted(summarize_commit_zh)),
+        )
+        command(["bash", "scripts/amadeus-version.sh", "check"], cwd=tree)
+        git(tree, "add", "VERSION", "RELEASE_NOTES.md")
+        changed = subprocess.run(["git", "-C", str(tree), "diff", "--cached", "--quiet"])
+        if changed.returncode == 0:
+            raise AutomationError("formal Lab version commit contains no changes")
+        git(tree, "-c", "user.name=github-actions[bot]", "-c",
+            "user.email=41898282+github-actions[bot]@users.noreply.github.com",
+            "commit", "-m", f"chore(lab): release v{version}")
+        release_sha = git(tree, "rev-parse", "HEAD")
+        try:
+            push_main(tree)
+        except AutomationError:
+            git(tree, "fetch", REMOTE, BRANCH)
+            remote_main = git(tree, "rev-parse", f"{REMOTE}/{BRANCH}")
+            if not is_ancestor(tree, release_sha, remote_main):
+                return None
+        git(tree, "fetch", REMOTE, BRANCH, "--tags")
     state["pending"] = {
+        "kind": "formal",
         "sourceSha": source_sha,
         "releaseSha": release_sha,
         "version": version,
@@ -395,10 +457,13 @@ def prepare_release(root: Path, source_sha: str, state: dict[str, Any]) -> dict[
     return state["pending"]
 
 
+
 def discover_pending(root: Path, main_sha: str) -> dict[str, Any] | None:
+    """Recover an already-pushed formal release commit (compat / manual release commit)."""
     if release_version_from_commit(root, main_sha) is None:
         return None
     return {
+        "kind": "formal",
         "sourceSha": git(root, "rev-parse", f"{main_sha}^"),
         "releaseSha": main_sha,
         "version": release_version_from_commit(root, main_sha),
@@ -430,8 +495,15 @@ def deploy_pending(root: Path, pending: dict[str, Any]) -> dict[str, Any]:
     log_dir = STATE_ROOT / "logs"
     ensure_private_dir(log_dir)
     log_path = log_dir / f"deploy-{str(pending['releaseSha'])[:12]}.log"
+    kind = str(pending.get("kind") or "formal")
+    if kind == "candidate":
+        deploy_args = ["bash", "scripts/deploy-openclaw.sh", "--apply", "--candidate", "--openclaw-only", "--build-openclaw"]
+    elif kind == "formal":
+        deploy_args = ["bash", "scripts/deploy-openclaw.sh", "--apply", "--auto-release", "--build-openclaw"]
+    else:
+        raise AutomationError(f"unknown Lab pending kind: {kind}")
     result = subprocess.run(
-        ["bash", "scripts/deploy-openclaw.sh", "--apply", "--auto-release", "--build-openclaw"],
+        deploy_args,
         cwd=tree, env=env, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=21600,
     )
     log_path.write_text(result.stdout or "", encoding="utf-8")
@@ -462,22 +534,30 @@ def ensure_release_manifest(root: Path, pending: dict[str, Any]) -> None:
                        env=env, timeout=120)
     runtime_path.write_text(snapshot + "\n", encoding="utf-8")
     os.chmod(runtime_path, 0o600)
-    manifest_path = RELEASE_STATE_ROOT / f"lab-lab-maintainer-{str(pending['releaseSha'])[:12]}-released.json"
+    kind = str(pending.get("kind") or "formal")
+    status = "candidate" if kind == "candidate" else "released"
+    suffix = "candidate" if kind == "candidate" else "released"
+    manifest_path = RELEASE_STATE_ROOT / f"lab-lab-maintainer-{str(pending['releaseSha'])[:12]}-{suffix}.json"
     if manifest_path.exists():
         deployment["manifest"] = str(manifest_path)
         pending["deployment"] = deployment
         return
-    command([
+    args = [
         "python3", "scripts/release-state.py", "compose",
-        "--product", "lab", "--environment", "lab-maintainer", "--status", "released",
+        "--product", "lab", "--environment", "lab-maintainer", "--status", status,
         "--version", str(pending["version"]), "--git-sha", str(pending["releaseSha"]),
         "--runtime", str(runtime_path), "--checkpoint-ref", checkpoint,
-        "--actor", "lab-main-auto-release", "--approval-ref", "main-ci:" + str(pending["releaseSha"])[:12],
+        "--actor", "lab-main-auto-release",
+        "--approval-ref", ("main-candidate:" if kind == "candidate" else "main-formal:") + str(pending["releaseSha"])[:12],
         "--validation-ref", checkpoint + "/validation",
-        "--release-tag", "lab/v" + str(pending["version"]), "--output", str(manifest_path), "--apply",
-    ], cwd=tree, env=env, timeout=120)
+        "--output", str(manifest_path), "--apply",
+    ]
+    if kind == "formal":
+        args.extend(["--release-tag", "lab/v" + str(pending["version"])])
+    command(args, cwd=tree, env=env, timeout=120)
     deployment["manifest"] = str(manifest_path)
     pending["deployment"] = deployment
+
 
 
 def publish_release(root: Path, pending: dict[str, Any], deployment: dict[str, str]) -> None:
@@ -530,30 +610,30 @@ def release_once(root: Path) -> None:
         main_sha = fetch_main(source_root)
         state = load_state()
         if state is None:
-            state = {"schema": "lab-main-auto-release/v1", "baselineSha": main_sha,
+            state = {"schema": STATE_SCHEMA, "baselineSha": main_sha,
                      "lastProcessedMainSha": main_sha, "pending": None}
             save_state(state)
             print("LAB_AUTO_RELEASE=initialized")
             return
         worktree = managed_worktree(source_root, refresh=True)
-        # Always execute the worker version from current main. The LaunchAgent
-        # may still point to the worktree that was used to install it.
+        # Always re-exec the refreshed main copy. LaunchAgent points at the
+        # managed worktree path; an in-place checkout keeps the same path but
+        # replaces file bytes, so comparing resolve() alone is not enough.
         worker = worktree / "scripts/lab-auto-release.py"
-        current_script = Path(__file__).resolve()
-        if worker.is_file() and worker.resolve() != current_script and os.environ.get("LAB_AUTO_RELEASE_MANAGED") != "1":
+        if worker.is_file() and os.environ.get("LAB_AUTO_RELEASE_MANAGED") != "1":
             env = os.environ.copy()
             env["LAB_AUTO_RELEASE_MANAGED"] = "1"
             output = command([sys.executable, str(worker), "once"], cwd=worktree, env=env, timeout=21600)
             if output:
                 print(output)
             return
-        if os.environ.get("LAB_AUTO_RELEASE_MANAGED") == "1":
-            source_root = worktree
-            main_sha = git(source_root, "rev-parse", f"{REMOTE}/{BRANCH}")
+        source_root = worktree
+        main_sha = git(source_root, "rev-parse", f"{REMOTE}/{BRANCH}")
         pending = state.get("pending")
         if pending is None:
             release_version = release_version_from_commit(source_root, main_sha)
-            if release_version is not None and not state.get("lastProcessedMainSha") == main_sha:
+            if release_version is not None and state.get("lastProcessedMainSha") != main_sha:
+                # Compat: a manually pushed formal release commit still deploys as formal.
                 pending = discover_pending(source_root, main_sha)
                 state["pending"] = pending
                 save_state(state)
@@ -567,19 +647,30 @@ def release_once(root: Path) -> None:
                     save_state(state)
                     print("LAB_AUTO_RELEASE=ignored_no_lab_changes sha=" + main_sha[:12])
                     return
-                pending = prepare_release(source_root, main_sha, state)
-                if pending is None:
-                    print("LAB_AUTO_RELEASE=retry_release_preparation sha=" + main_sha[:12])
-                    return
-                print(f"LAB_RELEASE_COMMIT={pending['releaseSha'][:12]} VERSION={pending['version']}")
-                return
+                # Main Lab changes deploy as candidates only; formal tags need `formal`.
+                pending = prepare_candidate(source_root, main_sha, state)
+                print(
+                    f"LAB_CANDIDATE_QUEUED={pending['releaseSha'][:12]} "
+                    f"VERSION={pending['version']} (unchanged; formal tag deferred)"
+                )
+                # Fall through to deploy in the same poll when possible.
         if pending is None:
             return
         release_sha = str(pending["releaseSha"])
+        kind = str(pending.get("kind") or "formal")
         # GitHub checks never hold a personal Lab release.
         if not pending.get("deployed"):
             if int(pending.get("attempts", 0)) >= MAX_DEPLOY_ATTEMPTS:
-                print("LAB_AUTO_RELEASE=deployment_stopped_after_rollbacks sha=" + release_sha[:12])
+                print(
+                    "LAB_AUTO_RELEASE=deployment_stopped_after_rollbacks "
+                    f"kind={kind} sha=" + release_sha[:12]
+                )
+                if kind == "candidate":
+                    # Do not leave the timer wedged on a dead candidate forever.
+                    state["lastProcessedMainSha"] = release_sha
+                    state["pending"] = None
+                    save_state(state)
+                    print("LAB_AUTO_RELEASE=candidate_abandoned sha=" + release_sha[:12])
                 return
             pending["attempts"] = int(pending.get("attempts", 0)) + 1
             pending["lastAttemptAt"] = datetime.now(timezone.utc).isoformat()
@@ -588,13 +679,16 @@ def release_once(root: Path) -> None:
             try:
                 deployment = deploy_pending(source_root, pending)
             except AutomationError as exc:
-                print("LAB_AUTO_RELEASE=deployment_failed sha=" + release_sha[:12] + " detail=" + str(exc))
+                print(
+                    "LAB_AUTO_RELEASE=deployment_failed kind=" + kind
+                    + " sha=" + release_sha[:12] + " detail=" + str(exc)
+                )
                 return
             pending["deployed"] = True
             pending["deployment"] = deployment
             state["pending"] = pending
             save_state(state)
-            print("LAB_AUTO_RELEASE=live_verified sha=" + release_sha[:12])
+            print("LAB_AUTO_RELEASE=live_verified kind=" + kind + " sha=" + release_sha[:12])
         try:
             ensure_release_manifest(source_root, pending)
             state["pending"] = pending
@@ -602,14 +696,109 @@ def release_once(root: Path) -> None:
         except AutomationError as exc:
             print("LAB_AUTO_RELEASE=manifest_pending sha=" + release_sha[:12] + " detail=" + str(exc))
             return
+        if kind == "formal":
+            publish_release(source_root, pending, pending.get("deployment", {}))
+            state["lastProcessedMainSha"] = release_sha
+            state["pending"] = None
+            save_state(state)
+            print(f"LAB_AUTO_RELEASE=released sha={release_sha[:12]} version={pending['version']}")
+        else:
+            state["lastProcessedMainSha"] = release_sha
+            state["lastCandidateSha"] = release_sha
+            state["pending"] = None
+            save_state(state)
+            print(
+                f"LAB_AUTO_RELEASE=candidate_live sha={release_sha[:12]} "
+                f"version={pending['version']} formal=deferred"
+            )
+    finally:
+        fcntl.flock(lock.fileno(), fcntl.LOCK_UN)
+        lock.close()
+
+
+def formal_release(root: Path, *, bump: str = "patch") -> None:
+    """Arthur-approved formal path: bump VERSION, aggregate notes, deploy, tag."""
+    ensure_private_dir(STATE_ROOT)
+    lock_path = STATE_ROOT / ".lock"
+    if lock_path.is_symlink():
+        raise AutomationError("Lab auto-release lock path must not be a symlink")
+    descriptor = os.open(lock_path, os.O_CREAT | os.O_RDWR | getattr(os, "O_NOFOLLOW", 0), 0o600)
+    if os.fstat(descriptor).st_mode & 0o077:
+        os.close(descriptor)
+        raise AutomationError("Lab auto-release lock must have mode 0600")
+    lock = os.fdopen(descriptor, "r+")
+    try:
+        fcntl.flock(lock.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError:
+        lock.close()
+        print("LAB_AUTO_RELEASE=already_running")
+        return
+    try:
+        source_root = root
+        main_sha = fetch_main(source_root)
+        state = load_state()
+        if state is None:
+            state = {"schema": STATE_SCHEMA, "baselineSha": main_sha,
+                     "lastProcessedMainSha": main_sha, "pending": None}
+            save_state(state)
+        worktree = managed_worktree(source_root, refresh=True)
+        worker = worktree / "scripts/lab-auto-release.py"
+        if worker.is_file() and os.environ.get("LAB_AUTO_RELEASE_MANAGED") != "1":
+            env = os.environ.copy()
+            env["LAB_AUTO_RELEASE_MANAGED"] = "1"
+            output = command(
+                [sys.executable, str(worker), "formal", "--bump", bump],
+                cwd=worktree, env=env, timeout=21600,
+            )
+            if output:
+                print(output)
+            return
+        source_root = worktree
+        main_sha = git(source_root, "rev-parse", f"{REMOTE}/{BRANCH}")
+        pending = state.get("pending")
+        if pending and not pending.get("deployed"):
+            raise AutomationError(
+                "refusing formal while a pending "
+                + str(pending.get("kind") or "release")
+                + " deploy is in flight for "
+                + str(pending.get("releaseSha", ""))[:12]
+            )
+        # Prefer the live candidate tip when it matches main; otherwise formalize current main.
+        source_sha = main_sha
+        if release_version_from_commit(source_root, main_sha) is not None:
+            pending = discover_pending(source_root, main_sha)
+            state["pending"] = pending
+            save_state(state)
+        else:
+            pending = prepare_formal(source_root, source_sha, state, bump=bump)
+            if pending is None:
+                print("LAB_AUTO_RELEASE=retry_formal_preparation sha=" + source_sha[:12])
+                return
+            print(f"LAB_FORMAL_COMMIT={pending['releaseSha'][:12]} VERSION={pending['version']}")
+        # Deploy + tag in this same invocation.
+        release_sha = str(pending["releaseSha"])
+        if not pending.get("deployed"):
+            pending["attempts"] = int(pending.get("attempts", 0)) + 1
+            pending["lastAttemptAt"] = datetime.now(timezone.utc).isoformat()
+            state["pending"] = pending
+            save_state(state)
+            deployment = deploy_pending(source_root, pending)
+            pending["deployed"] = True
+            pending["deployment"] = deployment
+            state["pending"] = pending
+            save_state(state)
+            print("LAB_AUTO_RELEASE=live_verified kind=formal sha=" + release_sha[:12])
+        ensure_release_manifest(source_root, pending)
         publish_release(source_root, pending, pending.get("deployment", {}))
         state["lastProcessedMainSha"] = release_sha
+        state["lastFormalSha"] = release_sha
         state["pending"] = None
         save_state(state)
         print(f"LAB_AUTO_RELEASE=released sha={release_sha[:12]} version={pending['version']}")
     finally:
         fcntl.flock(lock.fileno(), fcntl.LOCK_UN)
         lock.close()
+
 
 
 def install(root: Path, baseline_sha: str | None) -> None:
@@ -621,7 +810,7 @@ def install(root: Path, baseline_sha: str | None) -> None:
         raise AutomationError("Lab timer baseline must be an ancestor of current main")
     ensure_private_dir(STATE_ROOT)
     if load_state() is None:
-        save_state({"schema": "lab-main-auto-release/v1", "baselineSha": baseline_sha,
+        save_state({"schema": STATE_SCHEMA, "baselineSha": baseline_sha,
                     "lastProcessedMainSha": baseline_sha, "pending": None})
     launch_agents = Path.home() / "Library/LaunchAgents"
     launch_agents.mkdir(parents=True, exist_ok=True)
@@ -675,8 +864,14 @@ def uninstall() -> None:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("operation", choices=("once", "install", "uninstall", "status"))
+    parser.add_argument(
+        "operation",
+        choices=("once", "formal", "install", "uninstall", "status"),
+        help="once=auto candidate on main Lab changes; formal=Arthur-approved SemVer tag+deploy",
+    )
     parser.add_argument("--baseline-sha")
+    parser.add_argument("--bump", choices=("patch", "minor", "major"), default="patch",
+                        help="SemVer bump for formal (default: patch)")
     args = parser.parse_args()
     root = Path(__file__).resolve().parents[1]
     if args.operation == "install":
@@ -690,10 +885,19 @@ def main() -> int:
         else:
             pending = state.get("pending") or {}
             print("LAB_AUTO_RELEASE_STATE=ready")
+            print("LAB_AUTO_RELEASE_POLICY=candidate_on_main_formal_on_approval")
             print("LAST_PROCESSED_MAIN_SHA=" + str(state.get("lastProcessedMainSha", "unknown"))[:12])
+            if state.get("lastCandidateSha"):
+                print("LAST_CANDIDATE_SHA=" + str(state.get("lastCandidateSha"))[:12])
+            if state.get("lastFormalSha"):
+                print("LAST_FORMAL_SHA=" + str(state.get("lastFormalSha"))[:12])
             if pending:
+                print("PENDING_KIND=" + str(pending.get("kind", "unknown")))
                 print("PENDING_RELEASE_SHA=" + str(pending.get("releaseSha", "unknown"))[:12])
                 print("PENDING_RELEASE_VERSION=" + str(pending.get("version", "unknown")))
+                print("PENDING_DEPLOYED=" + str(bool(pending.get("deployed"))))
+    elif args.operation == "formal":
+        formal_release(root, bump=args.bump)
     else:
         release_once(root)
     return 0

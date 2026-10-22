@@ -39,7 +39,8 @@ Gate 从本地迁到云端不会改变产品身份；正式实例叫 Gate-Prod�
 
 Both versions use standard SemVer and advance independently. Root
 `package.json.version` remains Monorepo tooling metadata. A normal source commit
-does not bump a product version; a Candidate is not a formal release. Historical
+does not bump a product version; Lab candidates deploy from Git SHA + digest while
+`VERSION` stays at the last formal release until Arthur approves `formal`. Historical
 `v1.10.4` tags remain unchanged. Shared Domain and Presentation commits can
 trigger both products' checks without forcing them to release together. The
 Lab-compatible version command is `scripts/amadeus-version.sh`; Gate uses

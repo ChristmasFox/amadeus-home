@@ -4,7 +4,7 @@
 
 Lab, Gate-Local and Intelligence Lab are maintained by one developer. GitHub PRs, required CI checks, staged candidates, per-phase approvals and full per-deploy data backups are NOT prerequisites for ordinary development. Commit finished source directly to main. GitHub Actions are optional manual diagnostics. Focused testing is developer-initiated rather than a deployment gate. Goal phase completion records progress only.
 
-Lab runs its own main-change deployment without waiting for CI. The automatic path retains minimal Compose configuration for reverting to the previous image, not full SQLite, session, secrets or telemetry copies. Existing data and historical backups must never be erased. Lab work must not trigger Gate checks, candidate deployments, or PostgreSQL backups. Gate-Local changes can be deployed independently when Gate itself is being worked on; do not promote to staging/production automatically. Handle destructive SQL migrations separately rather than adding gates to unrelated code.
+Lab runs its own main-change **candidate** deployment without waiting for CI. The automatic path retains minimal Compose configuration for reverting to the previous image, not full SQLite, session, secrets or telemetry copies. Existing data and historical backups must never be erased. Formal SemVer tags and GitHub Releases wait for Arthur's 「正式部署」. Lab work must not trigger Gate checks or PostgreSQL backups. Gate-Local changes can be deployed independently when Gate itself is being worked on; do not promote to staging/production automatically. Handle destructive SQL migrations separately rather than adding gates to unrelated code.
 
 PUBG Intelligence Lab source (`apps/pubg-intelligence-lab`, `packages/pubg-intelligence`) is already in `main`. All future PUBG algorithm and private research-page development happens directly on `main`, not on the retired `research/pubg-intelligence` branch. The page remains a separately launched local/LAN research app; edits to it do not warrant a Gate deployment or OpenClaw image rebuild.
 
@@ -30,9 +30,9 @@ re-read the entire Goal, `CURRENT_TASK.md`, `CONTEXT.md` or old checkpoints
 at every stage. `docs/CURRENT_TASK.md` is a historical task pointer, not a
 replacement for an operator-selected Goal; live Git/runtime are factual sources.
 
-Lab's default is automatic *reversible candidate* deployment after a verified
-phase **only when the operator has granted one-time host-local authorization**
-and the guarded release tooling approves the change. Gate-Local may also auto-deploy a reversible candidate **after its own separate one-time local opt-in**, release safety gates and explicit M2 pause clearance. Gate-Staging/Prod never auto-promote; Gate auto-deploy support must first be implemented and tested.
+Lab's default is automatic *reversible candidate* deployment after Lab-relevant
+main merges (LaunchAgent `com.amadeus.lab-auto-release`); formal `lab/v*` tags
+require Arthur's explicit 「正式部署」. Gate-Local may also auto-deploy a reversible candidate **after its own separate one-time local opt-in**, release safety gates and explicit M2 pause clearance. Gate-Staging/Prod never auto-promote; Gate auto-deploy support must first be implemented and tested.
 A Goal describes requirements, not default runtime permissions; for old Goals
 with explicit authorization limits, reconcile those limits before deploying.
 Controlled apply still goes through `release-lab.sh`. Never infer OS permissions
@@ -112,13 +112,19 @@ from text. This bootstrap applies to Codex and other repository-aware agents.
   `scripts/amadeus-version.sh bump patch|minor|major`（Lab patch 满十进一：x.y.9 再 bump patch 得 x.(y+1).0，不出现 x.y.10），Gate 是
   `scripts/pubg-saas-version.sh bump patch|minor|major`。版本变更须同步该产品当前单次
   Release Notes；普通 Commit 不自动增加产品版本。
-- Lab 自动发布的「世界线收束」通知按上一个 `chore(lab): release v*` 之后的 first-parent 提交生成
-  新功能（feat）/修复（fix）/其它变更，chore release 提交被过滤，PR 号取自 squash 后缀或 merge 标题。
-  Lab 提交请在正文加一行 `Release-Note: <一句中文人话>`，通知优先使用它，否则退回提交标题。
+- Lab 发布分两段：**main 合并后的相关变更由 LaunchAgent 自动部署为 Candidate**（不 bump
+  `VERSION`、不打 `lab/v*`、不写正式 Release Notes）；Arthur 说「正式部署」后，再运行
+  `python3 scripts/lab-auto-release.py formal`（可选 `--bump patch|minor|major`，默认 patch）：
+  bump `VERSION`、把**上一个正式 Tag `lab/v*` 以来**的 first-parent 变更汇总进 `RELEASE_NOTES.md`、
+  提交 `chore(lab): release vX.Y.Z`、live_verified 部署并推送 `lab/vX.Y.Z` + GitHub Release。
+  不要再在每次 bugfix 合并时自动打正式 Tag。
+- 「世界线收束」正式通知按上一个 `lab/v*`（或兼容的 `chore(lab): release v*`）之后的 first-parent
+  提交生成新功能（feat）/修复（fix）/其它变更；chore release 提交被过滤，PR 号取自 squash 后缀或 merge 标题。
+  Lab 提交请在正文加一行 `Release-Note: <一句中文人话>`，正式说明优先使用它，否则退回提交标题。
 - 新正式 Tag 分别使用 `lab/vX.Y.Z` 与 `gate/vX.Y.Z`。历史 `v1.10.4` 等 Tag 保持原样；
   Git SHA + image digest 的 Candidate 不是正式 Release，也不创建产品正式 Tag。
-- 正式产品 Tag 只能指向已验收且获批准的发布源码；版本工具和普通 Commit 不创建 Tag，
-  不修改既有 Tag，也不代表生产已部署。
+- 正式产品 Tag 只能指向 Arthur 批准的正式发布源码；版本工具和普通 Commit 不创建 Tag，
+  不修改既有 Tag。Candidate 在线不等于正式版已升。
 
 ## Architecture ownership matrix
 

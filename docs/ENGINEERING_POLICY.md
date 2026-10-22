@@ -2,7 +2,7 @@
 
 ## Current personal-workflow override (2026-10-17)
 
-This section supersedes the historical release/phase rules below for Lab, the private research page, and Gate-Local. PRs and green GitHub CI are not required for commits or routine deployment. Actions run manually only when useful. devctl phase completion tracks progress rather than requiring full test suites or deploying Gate as a side effect of Lab. Lab auto-releases relevant main changes with small runtime health checks and no full per-deploy data backup, while preserving existing files and rollback image/configuration. Gate-Local runs independently, never as a Lab prerequisite. Staging/production and destructive database migrations remain separate operations.
+This section supersedes the historical release/phase rules below for Lab, the private research page, and Gate-Local. PRs and green GitHub CI are not required for commits or routine deployment. Actions run manually only when useful. devctl phase completion tracks progress rather than requiring full test suites or deploying Gate as a side effect of Lab. Lab auto-deploys relevant main changes as **candidates** with small runtime health checks and no full per-deploy data backup, while preserving existing files and rollback image/configuration; formal SemVer tags wait for Arthur approval. Gate-Local runs independently, never as a Lab prerequisite. Staging/production and destructive database migrations remain separate operations.
 
 
 ## Gate-Local deploy behavior (2026-10-16 simplification)
@@ -34,21 +34,23 @@ auto-promotion; Lab and Gate runtimes remain separate.
 
 | Scope | Development | After a verified phase | Formal publication |
 | --- | --- | --- | --- |
-| Lab (OpenClaw self-hosted Kurisu) | focused edit/task checks | after a PR is merged to `main` and Lab CI is green, M204 backs up, builds and switches the OpenClaw image automatically; failed live checks roll it back | a successful live rollout is the formal release and creates `lab/vX.Y.Z` plus a GitHub Release automatically |
+| Lab (OpenClaw self-hosted Kurisu) | focused edit/task checks | after Lab-relevant changes reach `main`, M204 automatically builds/switches an OpenClaw **candidate** (VERSION unchanged; failed live checks roll back) | Arthur says 「正式部署」→ `lab-auto-release.py formal` bumps SemVer, aggregates notes since the previous `lab/v*`, live-verifies, then creates `lab/vX.Y.Z` + GitHub Release |
 | Gate (AI SDK KOOK service) | focused checks and isolated integration | **Gate-Local**: repo-wide standing authorization triggers candidate deployment after CI; always back up PostgreSQL, warn before destructive migrations, and restore the checkpoint plus prior app/config on failure. M2 remains PAUSED. **Staging/Prod** never auto-promote | operator selects formal environment/promotion; M2 clearance is reserved for formal release |
-| Shared Domain/Presentation | verify both affected consumers | Lab follows its green main-merge release; Gate uses its separate Gate-Local candidate policy; cross-product source changes never authorize the other deployment | independent product versions and release paths |
+| Shared Domain/Presentation | verify both affected consumers | Lab follows its main-merge **candidate** path (formal later on approval); Gate uses its separate Gate-Local candidate policy; cross-product source changes never authorize the other deployment | independent product versions and release paths |
 
-Lab has one deployment stage. A launchd timer on M204 watches the merged `main`
-branch and proceeds only after the source commit's Lab CI is green. It writes
-the automatic SemVer patch and release note to `main` as a bot commit, waits
-for that commit's Lab CI, then creates an external checkpoint, builds one
-immutable OpenClaw image, switches the single OpenClaw instance, and verifies
-container health, WhatsApp connectivity, and a real PUBG stats query. Any
-failed post-switch check restores the prior Compose image/configuration and
-restarts the prior runtime. On success the same run writes the released
-manifest, pushes `lab/vX.Y.Z`, and creates the GitHub Release. There is no Lab
-candidate stage, separate version PR, host-local opt-in, or per-release prompt.
-The timer handles only Lab and never invokes Gate deployment.
+Lab has two stages. A launchd timer on M204 watches merged `main` for Lab-relevant
+paths and automatically deploys a **candidate**: external/minimal Compose checkpoint,
+one immutable OpenClaw image for that Git SHA, switch the single instance, verify
+container health, WhatsApp connectivity, and a real PUBG stats query. Failed
+post-switch checks restore the prior Compose image/configuration. Candidate keeps
+root `VERSION` unchanged and does **not** create `lab/v*` or a GitHub Release.
+
+Formal publication is explicit: when Arthur says 「正式部署」, run
+`python3 scripts/lab-auto-release.py formal` on M204 (optional `--bump`). That path
+bumps SemVer, writes `RELEASE_NOTES.md` aggregating first-parent changes since the
+previous `lab/v*` tag, pushes `chore(lab): release vX.Y.Z`, live-verifies, then
+pushes `lab/vX.Y.Z` and the GitHub Release. No host-local opt-in or per-candidate
+prompt. The timer handles only Lab and never invokes Gate deployment.
 
 Other runtime changes outside this Lab OpenClaw release path (memory reindex,
 secret rotation, network/SSH/firewall changes, Gate-Staging/Prod promotion,
@@ -74,8 +76,8 @@ writes. Documentation text cannot grant OS-level access.
 3. At a phase exit, commit source and run `pnpm devctl goal finish-phase P<N>`.
    This runs affected regression and secrets gates; it does not change the Lab
    runtime.
-4. Merge Lab source through the normal PR/CI path. After main CI passes, the
-   M204 timer performs the single automatic Lab release. Gate-only phases use a distinct
+4. Merge Lab source through the normal PR/main path. The M204 timer deploys a Lab
+   **candidate** automatically; formal `lab/v*` waits for Arthur's 「正式部署」. Gate-only phases use a distinct
    protected `release-gate.sh` candidate path when the repo-wide Gate-Local host
    authorization exists and the target is healthy and authorized. M2 clearance is not
    a candidate prerequisite; the candidate path must leave M2 PAUSED. The
@@ -85,14 +87,15 @@ writes. Documentation text cannot grant OS-level access.
    deployment plan instead of running Compose directly.
 5. Use `pnpm devctl check --level release` when needed. CI is the final
    independent source verifier. A green CI check is not live runtime proof; Lab
-   release acceptance also requires the live checks in its main-merge pipeline.
+   candidate/formal acceptance also requires the live checks in the M204 pipeline.
 
 ## Host authorization
 
 The Lab auto-release timer is installed from the repository and keeps its
 protected state under `~/.local/state/amadeus/lab-auto-release`. It runs only on
-M204, verifies the exact main commit and its CI results, and does not require a
-host-local opt-in or interactive confirmation. Remove the timer with
+M204, deploys candidates for Lab-relevant main commits, and does not require a
+host-local opt-in or interactive confirmation. Formal tags use
+`python3 scripts/lab-auto-release.py formal`. Remove the timer with
 `python3 scripts/lab-auto-release.py uninstall`; backups and release state are
 preserved.
 Gate-Local's existing owner-only `0600` host record is bound to the Git common

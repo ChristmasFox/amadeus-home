@@ -34,14 +34,17 @@ usage() {
 Usage:
   ./scripts/deploy-openclaw.sh --dry-run --build-auto
   ./scripts/deploy-openclaw.sh --build-only --openclaw-only --build-openclaw
-  ./scripts/deploy-openclaw.sh --apply --auto-release --build-openclaw # single-step Lab main release
+  ./scripts/deploy-openclaw.sh --apply --candidate --openclaw-only --build-openclaw  # main candidate
+#  ./scripts/deploy-openclaw.sh --apply --auto-release --build-openclaw              # formal release
 
 Read-only planning defaults to dry-run. The M204 main-merge automation owns
 Lab image builds and all runtime writes. --build-only performs an isolated
 local image build without switching the runtime.
---auto-release is the single-step Lab main deployment. It builds and switches
-only OpenClaw, requires a CI-verified main release commit, and rolls the prior
-Compose image back automatically if post-switch health or smoke checks fail.
+--candidate is the automatic main-merge Lab deploy: same OpenClaw build/switch
+and health checks, keeps VERSION unchanged, and does not create lab/v* tags.
+--auto-release is the formal Lab release after Arthur approval: VERSION bump
+commit, live verify, then lab/vX.Y.Z + GitHub Release. Both roll back the prior
+Compose image automatically if post-switch health or smoke checks fail.
 USAGE
 }
 
@@ -236,20 +239,21 @@ done
 ((AUTO_RELEASE == 0)) || OPENCLAW_ONLY=1
 
 if ((CANDIDATE)); then
-  fail 'Lab candidate deployment is retired; Lab runtime changes deploy once after a green main merge.'
+  ((OPENCLAW_ONLY == 1)) || fail 'Lab candidate apply is OpenClaw-only; full Lab candidate is not used.'
+  ((AUTO_RELEASE == 0)) || fail '--candidate cannot combine with --auto-release (use formal --auto-release).'
 fi
 
 if ((OPENCLAW_ONLY)); then
-  ((AUTO_RELEASE == 1 || BUILD_ONLY == 1)) || fail '--openclaw-only requires --auto-release or build-only.'
+  ((AUTO_RELEASE == 1 || CANDIDATE == 1 || BUILD_ONLY == 1)) || fail '--openclaw-only requires --auto-release, --candidate, or build-only.'
   ((BUILD == 0 && BUILD_RADAR == 0 && AUTO_BUILD == 0)) \
     || fail '--openclaw-only excludes full, Product Radar, and build-auto modes.'
   if ((BUILD_ONLY)); then
     ((APPLY == 0 && BUILD_OPENCLAW == 1 && NO_BUILD == 0)) \
       || fail '--build-only --openclaw-only requires --build-openclaw without --apply or --no-build.'
   elif ((APPLY)); then
-    if ((AUTO_RELEASE)); then
+    if ((AUTO_RELEASE || CANDIDATE)); then
       ((BUILD_OPENCLAW == 1 && NO_BUILD == 0 && AUTO_BUILD == 0)) \
-        || fail 'Automatic release must build a fresh OpenClaw image.'
+        || fail 'Automatic Lab deploy must build a fresh OpenClaw image.'
     else
       ((BUILD_OPENCLAW == 0 && NO_BUILD == 1 && AUTO_BUILD == 0)) \
         || fail 'OpenClaw-only apply requires a prebuilt --image and --no-build.'
@@ -262,7 +266,7 @@ if ((OPENCLAW_ONLY)); then
   [[ -z "$RADAR_IMAGE" ]] || fail '--openclaw-only does not accept --radar-image.'
 fi
 if ((AUTO_RELEASE)); then
-  ((CANDIDATE == 0 && OPENCLAW_ONLY == 1)) || fail '--auto-release is the single OpenClaw-only Lab main release mode.'
+  ((CANDIDATE == 0 && OPENCLAW_ONLY == 1)) || fail '--auto-release is the formal OpenClaw-only Lab release mode.'
   if ((APPLY)); then
     ((BUILD_OPENCLAW == 1 && NO_BUILD == 0 && BUILD == 0 && BUILD_RADAR == 0 && AUTO_BUILD == 0)) \
       || fail '--auto-release requires a fresh --build-openclaw image.'
@@ -271,10 +275,24 @@ if ((AUTO_RELEASE)); then
   fi
   if ((APPLY)); then
     [[ "${LAB_AUTOMATION_VERIFIED_MAIN_SHA:-}" == "$(git -C "$ROOT_DIR" rev-parse HEAD)" ]] \
-      || fail '--auto-release requires LAB_AUTOMATION_VERIFIED_MAIN_SHA to match the clean, CI-verified main HEAD.'
+      || fail '--auto-release requires LAB_AUTOMATION_VERIFIED_MAIN_SHA to match the clean main HEAD.'
     if ! git -C "$ROOT_DIR" merge-base --is-ancestor HEAD origin/main 2>/dev/null; then
       fail '--auto-release source must be reachable from origin/main.'
     fi
+  fi
+fi
+if ((CANDIDATE)); then
+  ((OPENCLAW_ONLY == 1 && AUTO_RELEASE == 0)) || fail '--candidate is the OpenClaw-only Lab main candidate mode.'
+  if ((APPLY)); then
+    ((BUILD_OPENCLAW == 1 && NO_BUILD == 0 && BUILD == 0 && BUILD_RADAR == 0 && AUTO_BUILD == 0)) \
+      || fail '--candidate requires a fresh --build-openclaw image.'
+    [[ "${LAB_AUTOMATION_VERIFIED_MAIN_SHA:-}" == "$(git -C "$ROOT_DIR" rev-parse HEAD)" ]] \
+      || fail '--candidate requires LAB_AUTOMATION_VERIFIED_MAIN_SHA to match the clean main HEAD.'
+    if ! git -C "$ROOT_DIR" merge-base --is-ancestor HEAD origin/main 2>/dev/null; then
+      fail '--candidate source must be reachable from origin/main.'
+    fi
+  else
+    ((BUILD_OPENCLAW == 1)) || fail '--candidate dry-run requires --build-openclaw.'
   fi
 fi
 
@@ -325,7 +343,7 @@ RELEASE_NOTES="$(printf '%s\n' "$RELEASE_NOTES" | sed '/^[[:space:]]*El Psy Kong
 if ((BUILD_ONLY && OPENCLAW_ONLY)); then
   IMAGE="${IMAGE:-local/openclaw-amadeus:git-$COMMIT-$STAMP}"
 elif ((APPLY)); then
-  if ((AUTO_RELEASE)); then
+  if ((AUTO_RELEASE || CANDIDATE)); then
     IMAGE="local/openclaw-amadeus:git-$COMMIT-$STAMP"
   elif ((OPENCLAW_ONLY)); then
     :
@@ -377,8 +395,8 @@ fi
 if ((APPLY == 1 && OPENCLAW_ONLY == 0 && BUILD_RADAR == 1 && BUILD_OPENCLAW == 0)); then
   fail 'Refusing Product Radar-only apply: the Lab-default deployment also restarts OpenClaw. Use --dry-run or prepare a reviewed full two-image Lab deployment.'
 fi
-if ((APPLY && AUTO_RELEASE == 0)); then
-  fail 'Direct Lab runtime apply is retired; the M204 main-merge release automation owns Lab deployment.'
+if ((APPLY && AUTO_RELEASE == 0 && CANDIDATE == 0)); then
+  fail 'Direct Lab runtime apply is retired; use Lab auto-release candidate (main) or formal approval.'
 fi
 
 shown_image="$IMAGE"
@@ -390,9 +408,11 @@ printf 'MODE=%s\n' "$deployment_mode"
 printf 'BUILD_MODE=%s\n' "$BUILD_MODE"
 printf 'AMADEUS_VERSION=%s\n' "$AMADEUS_VERSION"
 if ((AUTO_RELEASE)); then
-  printf '%s\n' 'DEPLOYMENT_PHASE=automatic-release'
+  printf '%s\n' 'DEPLOYMENT_PHASE=formal-release'
+elif ((CANDIDATE)); then
+  printf '%s\n' 'DEPLOYMENT_PHASE=candidate'
 else
-  printf 'DEPLOYMENT_PHASE=%s\n' "$([[ $CANDIDATE -eq 1 ]] && printf candidate || printf release)"
+  printf 'DEPLOYMENT_PHASE=%s\n' release
 fi
 printf 'DEPLOYMENT_SCOPE=%s\n' "$([[ $OPENCLAW_ONLY -eq 1 ]] && printf openclaw-only || printf lab-default)"
 printf 'QWEN_IMAGE_LOCAL_ONLY=%s\n' "$QWEN_IMAGE_LOCAL_ONLY"
@@ -422,7 +442,7 @@ if ((OPENCLAW_ONLY == 0)); then [[ -n "$RADAR_IMAGE" ]] || fail 'Apply requires 
 git -C "$ROOT_DIR" diff --check
 git -C "$ROOT_DIR" diff --quiet || fail 'Refusing apply with unstaged changes; commit reviewed source first.'
 git -C "$ROOT_DIR" diff --cached --quiet || fail 'Refusing apply with staged-but-uncommitted changes.'
-if ((CANDIDATE && OPENCLAW_ONLY == 0)); then assert_candidate_version_unchanged; else assert_release_version_advanced; fi
+if ((CANDIDATE)); then assert_candidate_version_unchanged; else assert_release_version_advanced; fi
 
 if ((APPLY)); then
   python3 "$ROOT_DIR/scripts/provision-9router-image-combo.py" --verify-live --machine "$MACHINE"
@@ -537,9 +557,9 @@ fi
 
 }
 
-# The automatic Lab main release verifies its checkpoint before compiling the
-# immutable image. The legacy build-only command remains checkpoint-free.
-if ((BUILD_ONLY || AUTO_RELEASE == 0)); then
+# Automated Lab deploys (candidate + formal) verify the checkpoint before compiling
+# the immutable image. The legacy build-only command remains checkpoint-free.
+if ((BUILD_ONLY || (AUTO_RELEASE == 0 && CANDIDATE == 0))); then
   build_images_and_preflight
 fi
 
@@ -551,7 +571,7 @@ fi
 
 deploy_stage checkpoint
 CHECKPOINT_ID="amadeus-openclaw-$STAMP"
-if ((AUTO_RELEASE)); then
+if ((AUTO_RELEASE || CANDIDATE)); then
   CHECKPOINT_DIR="$OPENCLAW_DATA_DIR/data/deploy-recovery/$CHECKPOINT_ID"
 else
   CHECKPOINT_DIR="$SKULD_BACKUP_ROOT/deploy/$CHECKPOINT_ID"
@@ -561,7 +581,7 @@ RADAR_COMPOSE_FILE="$RADAR_APP_DIR/docker-compose.yml"
 RADAR_ENV_FILE="$RADAR_APP_DIR/.env"
 MEDIA_COMPOSE_FILE="$MEDIA_ADAPTER_APP_DIR/docker-compose.yml"
 
-if ((OPENCLAW_ONLY && AUTO_RELEASE == 0)); then
+if ((OPENCLAW_ONLY && AUTO_RELEASE == 0 && CANDIDATE == 0)); then
   STORAGE_PREFLIGHT_LIB_ONLY=1
   # shellcheck disable=SC1091
   source "$ROOT_DIR/scripts/storage-preflight.sh"
@@ -648,7 +668,7 @@ else
 fi
 # Automatic deploys preserve only tiny Compose rollback metadata.
 # They never copy SQLite, sessions, secrets, or complete telemetry archives.
-if ((AUTO_RELEASE)); then
+if ((AUTO_RELEASE || CANDIDATE)); then
   CHECKPOINT_ARGS=(
     "$CHECKPOINT_DIR"
     "$OPENCLAW_COMPOSE_FILE" openclaw-compose.before.yml
@@ -745,7 +765,7 @@ print(f'PUBG_TELEMETRY_ARCHIVE_BACKUP=verified files={len(source_tree[1])}')
 PY
 fi
 
-if ((AUTO_RELEASE)); then
+if ((AUTO_RELEASE || CANDIDATE)); then
   build_images_and_preflight
 fi
 
@@ -1237,7 +1257,7 @@ fi
 deploy_stage health
 for attempt in $(seq 1 40); do
   if orb -m "$MACHINE" -u root curl --fail --silent --show-error --max-time 3 http://127.0.0.1:18789/healthz >/dev/null 2>&1; then
-    if ((AUTO_RELEASE)); then
+    if ((AUTO_RELEASE || CANDIDATE)); then
       container_health="$(orb -m "$MACHINE" -u root docker inspect openclaw --format '{{.State.Health.Status}}' 2>/dev/null || true)"
       [[ "$container_health" == healthy ]] && break
     else
@@ -1247,9 +1267,9 @@ for attempt in $(seq 1 40); do
   sleep 2
 done
 orb -m "$MACHINE" -u root curl --fail --silent --show-error --max-time 5 http://127.0.0.1:18789/healthz >/dev/null
-if ((AUTO_RELEASE)); then
+if ((AUTO_RELEASE || CANDIDATE)); then
   container_health="$(orb -m "$MACHINE" -u root docker inspect openclaw --format '{{.State.Health.Status}}')"
-  [[ "$container_health" == healthy ]] || fail "OpenClaw container health is $container_health after automatic release."
+  [[ "$container_health" == healthy ]] || fail "OpenClaw container health is $container_health after automatic Lab deploy."
   printf '%s\n' 'OPENCLAW_CONTAINER_HEALTH=healthy'
 fi
 # The switched container must load a module carrying every template hook.
@@ -1282,14 +1302,14 @@ for attempt in $(seq 1 12); do
   orb -m "$MACHINE" -u root python3 -c "import json,sys; w=json.load(open(sys.argv[1])).get('channels',{}).get('whatsapp',{}); sys.exit(0 if all(w.get(k) is True for k in ('linked','running','connected')) else 1)" "$CHECKPOINT_DIR/channels-status.json" && break
   sleep 5
 done
-if ((AUTO_RELEASE)); then
+if ((AUTO_RELEASE || CANDIDATE)); then
   orb -m "$MACHINE" -u root python3 - "$CHECKPOINT_DIR/channels-status.json" <<'PY'
 import json, sys
 from pathlib import Path
 channels = json.loads(Path(sys.argv[1]).read_text()).get('channels', {})
 whatsapp = channels.get('whatsapp', {})
 if not all(whatsapp.get(key) is True for key in ('linked', 'running', 'connected')):
-    raise SystemExit('WhatsApp is not linked, running and connected after automatic release')
+    raise SystemExit('WhatsApp is not linked, running and connected after automatic Lab deploy')
 print('WHATSAPP_HEALTH=linked,running,connected')
 PY
   smoke_key="lab-release-$(git -C "$ROOT_DIR" rev-parse --short=12 HEAD)-$STAMP"
@@ -1461,7 +1481,7 @@ done
 [[ "$owner_notification_status" == sent ]] || fail 'Owner deployment notification remained pending after 30 seconds.'
 
 deploy_stage post-deploy
-if ((AUTO_RELEASE)); then
+if ((AUTO_RELEASE || CANDIDATE)); then
   POST_DEPLOY_EVIDENCE_DIR="$HOME/.local/state/amadeus/lab-auto-release/evidence/$CHECKPOINT_ID"
 else
   POST_DEPLOY_EVIDENCE_DIR="$SKULD_BACKUP_ROOT/deploy/$CHECKPOINT_ID"
@@ -1519,9 +1539,9 @@ printf '%s\n' "LOG_POLICY=$log_policy_status"
 printf '%s\n' "POST_DEPLOY_MAINTENANCE=$post_deploy_maintenance"
 printf '%s\n' "AMADEUS_NETWORK=$AMADEUS_NETWORK_NAME"
 if ((CANDIDATE)); then
-  printf '%s\n' 'Single OpenClaw candidate runtime ready for real acceptance; not a release.'
+  printf '%s\n' "Lab candidate $AMADEUS_VERSION@$SOURCE_REVISION live-verified; formal tag deferred until Arthur approval."
 elif ((AUTO_RELEASE)); then
-  printf '%s\n' "Lab $AMADEUS_VERSION automatic main deployment passed its live health checks."
+  printf '%s\n' "Lab $AMADEUS_VERSION formal deployment passed its live health checks."
 else
   printf '%s\n' "Amadeus $AMADEUS_VERSION migration completed."
 fi

@@ -530,7 +530,7 @@ def finish_phase(phase: str, dry_run: bool) -> None:
     if checksum((ROOT / data["goalPath"]).read_bytes()) != data["goalSha256"]:
         die("Goal changed: review amended acceptance requirements before phase exit")
     if lab:
-        print("LAB_DEPLOYMENT=AFTER_MAIN_UPDATE ci=not_required release=automatic")
+        print("LAB_DEPLOYMENT=AFTER_MAIN_UPDATE ci=not_required candidate=automatic formal=on_approval")
     if gate and not lab:
         print("GATE_DEPLOYMENT=NOT_BLOCKING; deploy Gate-Local separately when needed")
     data["completedPhases"].append(phase)
@@ -580,7 +580,7 @@ def main() -> None:
         check(args.level, state(), args.dry_run)
     else:
         if args.option == "status":
-            print("LAB_AUTO_RELEASE_POLICY=after-main-merge-ci")
+            print("LAB_AUTO_RELEASE_POLICY=candidate_on_main_formal_on_approval")
             gate_state, gate_reason = gate_auto_status()
             print("GATE_AUTO_STATUS=" + gate_state)
             print("GATE_AUTO_REASON=" + gate_reason)

@@ -70,7 +70,16 @@ with tempfile.TemporaryDirectory(prefix="lab-auto-release-state-") as temporary:
         state = {"schema": "lab-main-auto-release/v1", "baselineSha": "a" * 40,
                  "lastProcessedMainSha": "a" * 40, "pending": None}
         auto.save_state(state)
-        assert auto.load_state() == state
+        loaded = auto.load_state()
+        assert loaded["schema"] == auto.STATE_SCHEMA
+        assert loaded["baselineSha"] == state["baselineSha"]
+        assert loaded["pending"] is None
+        # v1 pending without kind becomes formal on load
+        pending_v1 = {"sourceSha": "b" * 40, "releaseSha": "c" * 40, "version": "1.2.3",
+                      "createdAt": "t", "attempts": 0, "deployed": False}
+        auto.save_state({**state, "pending": pending_v1})
+        loaded = auto.load_state()
+        assert loaded["pending"]["kind"] == "formal"
         assert (auto.STATE_ROOT / "state.json").stat().st_mode & 0o777 == 0o600
         assert auto.STATE_ROOT.stat().st_mode & 0o777 == 0o700
     finally:
@@ -136,7 +145,11 @@ with tempfile.TemporaryDirectory(prefix="lab-auto-release-range-") as temporary:
     run("init", "-q"); run("config", "user.email", "t@t"); run("config", "user.name", "t")
     for message in ("feat(lab): old", "chore(lab): release v1.0.0", "feat(lab): new thing", "fix(lab): bug"):
         run("commit", "-q", "--allow-empty", "-m", message)
+    # Formal boundary is the lab/v* tag (not every release chore on main).
+    release_sha = run("rev-parse", "HEAD~2").strip()  # chore(lab): release v1.0.0
+    run("tag", "-a", "lab/v1.0.0", release_sha, "-m", "Lab 1.0.0")
     tip = run("rev-parse", "HEAD").strip()
+    assert auto.latest_formal_tag(repo) == "lab/v1.0.0"
     assert [s for s, _ in auto.release_commits(repo, tip)] == ["feat(lab): new thing", "fix(lab): bug"]
     run("commit", "-q", "--allow-empty", "-m", "chore(lab): release v1.0.1")
     assert [s for s, _ in auto.release_commits(repo, run("rev-parse", "HEAD").strip())] == [
@@ -176,9 +189,14 @@ release_cli = (ROOT / "scripts/release-cli.sh").read_text(encoding="utf-8")
 assert "checks_for_commit" not in runner
 assert "GitHub checks never hold a personal Lab release." in runner
 assert "RETRY_SECONDS" not in runner and "MAX_DEPLOY_ATTEMPTS = 3" in runner
+assert '"--apply", "--candidate", "--openclaw-only", "--build-openclaw"' in runner
 assert '"--apply", "--auto-release", "--build-openclaw"' in runner
+assert "prepare_candidate" in runner and "formal_release" in runner
+assert "candidate_on_main_formal_on_approval" in runner
+assert "--candidate requires LAB_AUTOMATION_VERIFIED_MAIN_SHA" in deploy
 assert "--auto-release requires LAB_AUTOMATION_VERIFIED_MAIN_SHA" in deploy
-assert deploy.index("if ((AUTO_RELEASE)); then\n  build_images_and_preflight\nfi") > deploy.index("print('CHECKPOINT='")
+assert "Lab candidate deployment is retired" not in deploy
+assert deploy.index("if ((AUTO_RELEASE || CANDIDATE)); then\n  build_images_and_preflight\nfi") > deploy.index("print('CHECKPOINT='")
 assert "OPENCLAW_CONTAINER_HEALTH=healthy" in deploy
 assert "WHATSAPP_HEALTH=linked,running,connected" in deploy
 assert "poll (up to ~60s) before" in deploy, "WhatsApp health waits for reconnect"
@@ -189,6 +207,6 @@ assert "restored_health" in deploy and "[[ \"$restored_health\" == healthy ]]" i
 assert "[[ \"$restored_health\" == starting ]] || break" in deploy, "rollback waits out Docker's starting state"
 assert "for attempt in (1, 2):" in deploy and "PUBG_STATS_QUERY=retry reason=not_verified" in deploy
 assert "lab-auto-enable" not in devctl and "lab-auto-disable" not in devctl
-assert "LAB_DEPLOYMENT=AFTER_MAIN_UPDATE ci=not_required release=automatic" in devctl
+assert "LAB_DEPLOYMENT=AFTER_MAIN_UPDATE ci=not_required candidate=automatic formal=on_approval" in devctl
 assert "Lab candidate and manual promotion commands are retired" in release_cli
-print("LAB_AUTO_RELEASE_TEST=passed ci-gate=none version=automatic rollback=single-stage")
+print("LAB_AUTO_RELEASE_TEST=passed ci-gate=none candidate=automatic formal=on_approval rollback=single-stage")
