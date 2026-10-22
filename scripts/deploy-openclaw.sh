@@ -734,7 +734,11 @@ for name in ('backup-manifest.json', 'checkpoint.json'):
 print('CHECKPOINT=' + str(checkpoint))
 PY
 
-if ((OPENCLAW_ONLY && AUTO_RELEASE == 0)); then
+if ((AUTO_RELEASE || CANDIDATE)); then
+  # Automatic/candidate checkpoints only keep Compose rollback metadata.
+  orb -m "$MACHINE" -u root test -s "$CHECKPOINT_DIR/openclaw-compose.before.yml"
+  orb -m "$MACHINE" -u root test -s "$CHECKPOINT_DIR/openclaw-compose.env.before"
+elif ((OPENCLAW_ONLY)); then
   orb -m "$MACHINE" -u root test -s "$CHECKPOINT_DIR/openclaw-compose.before.yml"
   orb -m "$MACHINE" -u root test -s "$CHECKPOINT_DIR/openclaw-agent.sqlite.before"
   orb -m "$MACHINE" -u root test -d "$CHECKPOINT_DIR/openclaw-workspace.before"
@@ -764,7 +768,6 @@ if source_tree != backup_tree: raise SystemExit('PUBG telemetry archive backup v
 print(f'PUBG_TELEMETRY_ARCHIVE_BACKUP=verified files={len(source_tree[1])}')
 PY
 fi
-
 if ((AUTO_RELEASE || CANDIDATE)); then
   build_images_and_preflight
 fi
