@@ -9,17 +9,28 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 export const MARKER = 'amadeus-whatsapp-image-burst-v1';
-export const IMAGE_BURST_DEBOUNCE_MS = 2500;
+export const IMAGE_BURST_DEBOUNCE_MS = 3000;
+export const IMAGE_ALBUM_DEBOUNCE_MS = 6000;
 
 const helpers = `// ${MARKER}
 const AMADEUS_IMAGE_BURST_DEBOUNCE_MS = ${IMAGE_BURST_DEBOUNCE_MS};
+const AMADEUS_IMAGE_ALBUM_DEBOUNCE_MS = ${IMAGE_ALBUM_DEBOUNCE_MS};
 function amadeusIsImageBurstCandidate(msg) {
 	const media = msg?.payload?.media;
 	if (!media || !String(media.type ?? "").toLowerCase().startsWith("image/")) return false;
 	return !(msg.payload.location || msg.quote?.id || msg.quote?.body);
 }
 function amadeusImageBurstDebounceMs(msg, configured) {
-	return amadeusIsImageBurstCandidate(msg) ? Math.max(configured, AMADEUS_IMAGE_BURST_DEBOUNCE_MS) : configured;
+	if (!amadeusIsImageBurstCandidate(msg)) return configured;
+	return Math.max(configured, msg.payload.albumId ? AMADEUS_IMAGE_ALBUM_DEBOUNCE_MS : AMADEUS_IMAGE_BURST_DEBOUNCE_MS);
+}
+// WhatsApp tags every image of an album with the parent album message.
+function amadeusAlbumIdOf(raw) {
+	const association = raw?.message?.messageContextInfo?.messageAssociation;
+	if (!association) return void 0;
+	const type = association.associationType;
+	if (type !== 1 && type !== "MEDIA_ALBUM") return void 0;
+	return association.parentMessageKey?.id ?? "album";
 }
 function amadeusPayloadMediaList(payload) {
 	if (Array.isArray(payload?.mediaList) && payload.mediaList.length > 0) return payload.mediaList;
@@ -37,6 +48,7 @@ export function patchWhatsAppMonitorSource(original) {
   if (original.includes(MARKER)) return original;
   let result = replaceOnce(original, 'function createWhatsAppInboundMessageDebouncer(options) {', `${helpers}function createWhatsAppInboundMessageDebouncer(options) {`, 'debouncer helper insertion');
   result = replaceOnce(result, '\t\t\tdebounceMs: options.resolveDebounceMs()\n\t\t};\n\t\tconst key = buildKey(message);', '\t\t\tdebounceMs: amadeusImageBurstDebounceMs(input, options.resolveDebounceMs())\n\t\t};\n\t\tconst key = buildKey(message);', 'image burst debounce window');
+  result = replaceOnce(result, '\t\t\t\tchannelStructuredContext: channelStructuredContext.length > 0 ? channelStructuredContext : void 0,\n\t\t\t\tmedia\n\t\t\t},', '\t\t\t\tchannelStructuredContext: channelStructuredContext.length > 0 ? channelStructuredContext : void 0,\n\t\t\t\tmedia,\n\t\t\t\talbumId: media ? amadeusAlbumIdOf(msg) : void 0\n\t\t\t},', 'album id on inbound payload');
   result = replaceOnce(result, '\t\t\t\t\t\t\t\t...last.payload,\n\t\t\t\t\t\t\t\tbody: combinedBody,', '\t\t\t\t\t\t\t\t...last.payload,\n\t\t\t\t\t\t\t\tmediaList: orderedEntries.flatMap((entry) => amadeusPayloadMediaList(entry.payload) ?? []),\n\t\t\t\t\t\t\t\tbody: combinedBody,', 'merged burst media list');
   result = replaceOnce(result, 'const shouldDebounce = (msg) => shouldDebounceTextInbound({', 'const shouldDebounce = (msg) => amadeusIsImageBurstCandidate(msg) || shouldDebounceTextInbound({', 'image burst debounce gate');
   result = replaceOnce(

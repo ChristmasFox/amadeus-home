@@ -36,6 +36,10 @@ LAB_PATH_PREFIXES = (
     "packages/pubg-intelligence/",
     "integrations/openclaw/",
     "infra/docker/casaos/openclaw/",
+    # Version-pinned OpenClaw/WhatsApp runtime patches and their shared helpers.
+    "scripts/patch-openclaw-",
+    "scripts/test-patch-openclaw-",
+    "scripts/openclaw-voice-",
 )
 LAB_PATH_FILES = {
     "package.json", "pnpm-lock.yaml", "pnpm-workspace.yaml",

@@ -23,6 +23,10 @@ contract = importlib.util.module_from_spec(contract_spec)
 contract_spec.loader.exec_module(contract)
 
 
+# Runtime patch scripts change the deployed OpenClaw image/plugin, so they are Lab changes.
+for lab_path in ("scripts/patch-openclaw-whatsapp-image-burst.mjs", "scripts/test-patch-openclaw-whatsapp-image-burst.mjs", "scripts/openclaw-voice-lease.mjs"):
+    assert any(lab_path.startswith(prefix) for prefix in auto.LAB_PATH_PREFIXES), lab_path
+assert not any("scripts/pubg-saas-version.sh".startswith(prefix) for prefix in auto.LAB_PATH_PREFIXES)
 
 with tempfile.TemporaryDirectory(prefix="lab-auto-release-git-") as temporary:
     repo = Path(temporary)

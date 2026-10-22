@@ -4,7 +4,7 @@ import { spawnSync } from 'node:child_process';
 import { mkdtemp, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { MARKER, IMAGE_BURST_DEBOUNCE_MS, patchWhatsAppMonitorSource } from './patch-openclaw-whatsapp-image-burst.mjs';
+import { MARKER, IMAGE_BURST_DEBOUNCE_MS, IMAGE_ALBUM_DEBOUNCE_MS, patchWhatsAppMonitorSource } from './patch-openclaw-whatsapp-image-burst.mjs';
 
 const fixture = `function createWhatsAppInboundMessageDebouncer(options) {
 	const combined = {
@@ -22,6 +22,16 @@ const fixture = `function createWhatsAppInboundMessageDebouncer(options) {
 		};
 		const key = buildKey(message);
 	};
+}
+function makeInbound(msg, media) {
+		const channelStructuredContext = [];
+		const inboundMessage = {
+			payload: {
+				channelStructuredContext: channelStructuredContext.length > 0 ? channelStructuredContext : void 0,
+				media
+			},
+		};
+		return inboundMessage;
 }
 const shouldDebounce = (msg) => shouldDebounceTextInbound({ text: msg.payload.body });
 async function build(params) {
@@ -41,7 +51,7 @@ assert.equal(patchWhatsAppMonitorSource(patched), patched);
 assert.throws(() => patchWhatsAppMonitorSource('function createWhatsAppInboundMessageDebouncer(options) {}'), /anchor count=0/);
 
 const calls = [];
-const run = new Function('shouldDebounceTextInbound', 'toInboundMediaFactsWithMetadata', `${patched}; return { shouldDebounce, build, amadeusImageBurstDebounceMs, amadeusPayloadMediaList };`)(
+const run = new Function('shouldDebounceTextInbound', 'toInboundMediaFactsWithMetadata', `${patched}; return { shouldDebounce, build, amadeusImageBurstDebounceMs, amadeusPayloadMediaList, amadeusAlbumIdOf, makeInbound };`)(
   () => false,
   async (list) => { calls.push(list); return list; },
 );
@@ -51,6 +61,15 @@ assert.equal(run.shouldDebounce({ payload: { body: 'hi' } }), false);
 assert.equal(run.shouldDebounce({ payload: { media: { type: 'audio/ogg' } } }), false);
 assert.equal(run.shouldDebounce(image({ quote: { id: 'q' } })), false);
 assert.equal(run.amadeusImageBurstDebounceMs(image(), 0), IMAGE_BURST_DEBOUNCE_MS);
+const album = image();
+album.payload.albumId = 'parent-1';
+assert.equal(run.amadeusImageBurstDebounceMs(album, 0), IMAGE_ALBUM_DEBOUNCE_MS);
+const rawAlbum = { message: { messageContextInfo: { messageAssociation: { associationType: 1, parentMessageKey: { id: 'parent-1' } } } } };
+assert.equal(run.amadeusAlbumIdOf(rawAlbum), 'parent-1');
+assert.equal(run.amadeusAlbumIdOf({ message: {} }), undefined);
+assert.equal(run.amadeusAlbumIdOf({ message: { messageContextInfo: { messageAssociation: { associationType: 2 } } } }), undefined);
+assert.equal(run.makeInbound(rawAlbum, { type: 'image/jpeg' }).payload.albumId, 'parent-1');
+assert.equal(run.makeInbound(rawAlbum, undefined).payload.albumId, undefined);
 assert.equal(run.amadeusImageBurstDebounceMs(image(), 9000), 9000);
 assert.equal(run.amadeusImageBurstDebounceMs({ payload: { body: 'hi' } }, 0), 0);
 
