@@ -1270,6 +1270,30 @@ print('GROUP_CAPABILITY_TOOL_POLICY=scoped')
 print('DM_SESSION_SCOPE=per-account-channel-peer')
 PY
 
+
+# Keep private SearXNG off the Clash HTTP proxy (hostname match; CIDR alone is not enough for undici).
+ensure_openclaw_searxng_no_proxy() {
+  orb -m "$MACHINE" -u root python3 - "$OPENCLAW_COMPOSE_FILE" <<EOF
+from pathlib import Path
+import sys
+path = Path(sys.argv[1])
+text = path.read_text()
+changed = False
+if "9router,searxng,product-radar" not in text and "9router,product-radar" in text:
+    text = text.replace("9router,product-radar", "9router,searxng,product-radar")
+    changed = True
+if changed:
+    tmp = Path(str(path) + ".tmp")
+    tmp.write_text(text)
+    tmp.chmod(0o644)
+    tmp.replace(path)
+    print("OPENCLAW_NO_PROXY=searxng_added")
+else:
+    print("OPENCLAW_NO_PROXY=searxng_present")
+EOF
+}
+
+ensure_openclaw_searxng_no_proxy
 deploy_stage switch
 if ((OPENCLAW_ONLY)); then
   orb -m "$MACHINE" -u root bash -lc "cd '$OPENCLAW_APP_DIR' && docker compose up -d --no-build --no-deps openclaw >/dev/null"
