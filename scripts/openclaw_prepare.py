@@ -387,6 +387,24 @@ def main() -> None:
     config.setdefault("commands", {})["ownerAllowFrom"] = [owner_target_value]
 
     tools = config.setdefault("tools", {})
+    # Lab requires a working web_search provider for the realtime-facts gate.
+    # DuckDuckGo is key-free and matches OpenClaw 2026.9.4; install is ensured by deploy.
+    web = tools.setdefault("web", {})
+    search = web.setdefault("search", {})
+    search["provider"] = "duckduckgo"
+    search.setdefault("maxResults", 5)
+    search.setdefault("timeoutSeconds", 30)
+    plugins = config.setdefault("plugins", {})
+    allow = plugins.setdefault("allow", [])
+    for name in ("openai", "browser", "duckduckgo"):
+        if name not in allow:
+            allow.append(name)
+    entries = plugins.setdefault("entries", {})
+    duck = entries.setdefault("duckduckgo", {})
+    duck["enabled"] = True
+    duck.setdefault("config", {}).setdefault("webSearch", {})
+    entries.setdefault("openai", {}).setdefault("enabled", True)
+    entries.setdefault("browser", {}).setdefault("enabled", True)
     tools["toolsBySender"] = {"*": {"allow": NON_OWNER_TOOL_ALLOWLIST}}
     for key in owner_tool_policy_keys(owner_phone(owner_target_value)):
         tools["toolsBySender"][key] = {"allow": ["*"]}

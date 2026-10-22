@@ -86,3 +86,8 @@ infra/9router/runtime-policy.json
 
 # Private, resumable Goal state (never commit transcripts or execution metadata)
 /.agent/runtime/
+
+# Vendored OpenClaw web_search provider for Lab 2026.9.4
+!integrations/openclaw/vendor/
+!integrations/openclaw/vendor/openclaw-duckduckgo-plugin-2026.9.4.tar.gz
+.scratch/

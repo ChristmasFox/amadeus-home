@@ -129,6 +129,13 @@
   },
   "tools": {
     "profile": "full",
+    "web": {
+      "search": {
+        "provider": "duckduckgo",
+        "maxResults": 5,
+        "timeoutSeconds": 30
+      }
+    },
     "deny": ["tts", "message"],
     "sessions": {
       "visibility": "self"
@@ -154,11 +161,23 @@
   },
   "plugins": {
     "enabled": true,
-    "allow": ["pubg", "amadeus", "whatsapp", "telegram", "memory-core"],
+    "allow": ["pubg", "amadeus", "whatsapp", "telegram", "memory-core", "openai", "browser", "duckduckgo"],
     "slots": {
       "memory": "memory-core"
     },
     "entries": {
+      "duckduckgo": {
+        "enabled": true,
+        "config": {
+          "webSearch": {}
+        }
+      },
+      "openai": {
+        "enabled": true
+      },
+      "browser": {
+        "enabled": true
+      },
       "memory-core": {
         "enabled": true,
         "config": {

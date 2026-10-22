@@ -1062,6 +1062,71 @@ elif ((OPENCLAW_ONLY == 0)); then
   printf '%s\n' 'MEDIA_ADAPTER=absent (external service was not restored; media tool acceptance remains pending)' >&2
 fi
 if ((OPENCLAW_ONLY == 0)); then orb -m "$MACHINE" -u root docker compose --project-directory "$RADAR_APP_DIR" -f "$RADAR_COMPOSE_FILE" config >/dev/null; fi
+# Ensure Lab web_search has a key-free provider. OpenClaw 2026.9.4 ships no
+# stock key-free search plugin; DuckDuckGo is vendored and installed into the
+# persisted state volume when missing. Config is also repaired here because
+# --openclaw-only auto-release skips openclaw_prepare.py.
+DUCKDUCKGO_PLUGIN_TGZ="$ROOT_DIR/integrations/openclaw/vendor/openclaw-duckduckgo-plugin-2026.9.4.tar.gz"
+[[ -f "$DUCKDUCKGO_PLUGIN_TGZ" ]] || fail "Missing vendored DuckDuckGo plugin: $DUCKDUCKGO_PLUGIN_TGZ"
+orb -m "$MACHINE" -u root python3 - "$OPENCLAW_DATA_DIR/config/openclaw.json" <<'PY'
+import json, os, sys, time
+from pathlib import Path
+path = Path(sys.argv[1])
+config = json.loads(path.read_text())
+changed = False
+tools = config.setdefault("tools", {})
+web = tools.setdefault("web", {})
+search = web.setdefault("search", {})
+if search.get("provider") != "duckduckgo":
+    search["provider"] = "duckduckgo"
+    changed = True
+search.setdefault("maxResults", 5)
+search.setdefault("timeoutSeconds", 30)
+plugins = config.setdefault("plugins", {})
+allow = plugins.setdefault("allow", [])
+for name in ("openai", "browser", "duckduckgo"):
+    if name not in allow:
+        allow.append(name)
+        changed = True
+entries = plugins.setdefault("entries", {})
+duck = entries.setdefault("duckduckgo", {})
+if duck.get("enabled") is not True:
+    duck["enabled"] = True
+    changed = True
+duck.setdefault("config", {}).setdefault("webSearch", {})
+entries.setdefault("openai", {}).setdefault("enabled", True)
+entries.setdefault("browser", {}).setdefault("enabled", True)
+if changed:
+    stamp = time.strftime("%Y%m%d%H%M%S")
+    backup = path.with_name(path.name + f".bak-websearch-{stamp}")
+    backup.write_bytes(path.read_bytes())
+    os.chmod(backup, 0o600)
+    tmp = path.with_name(path.name + ".tmp-websearch")
+    tmp.write_text(json.dumps(config, ensure_ascii=False, indent=2) + "\n")
+    os.chmod(tmp, 0o600)
+    os.chown(tmp, 1000, 1000)
+    os.replace(tmp, path)
+    os.chown(path, 1000, 1000)
+    print("WEB_SEARCH_CONFIG=repaired")
+else:
+    print("WEB_SEARCH_CONFIG=present")
+PY
+orb -m "$MACHINE" -u root bash -lc 'install -d -o 1000 -g 1000 -m 0755 /DATA/AppData/openclaw/config/tmp'
+orb -m "$MACHINE" -u root bash -lc 'cat > /DATA/AppData/openclaw/config/tmp/duckduckgo.tgz' < "$DUCKDUCKGO_PLUGIN_TGZ"
+orb -m "$MACHINE" -u root bash -lc 'chown 1000:1000 /DATA/AppData/openclaw/config/tmp/duckduckgo.tgz; chmod 0644 /DATA/AppData/openclaw/config/tmp/duckduckgo.tgz'
+if ! orb -m "$MACHINE" -u root test -f "$OPENCLAW_DATA_DIR/config/extensions/duckduckgo/openclaw.plugin.json"; then
+  if orb -m "$MACHINE" -u root docker inspect openclaw >/dev/null 2>&1; then
+    orb -m "$MACHINE" -u root docker cp /DATA/AppData/openclaw/config/tmp/duckduckgo.tgz openclaw:/tmp/duckduckgo.tgz
+    orb -m "$MACHINE" -u root docker exec -u node openclaw node /app/openclaw.mjs plugins install /tmp/duckduckgo.tgz --accept-capabilities --acknowledge-install-policy-warning --force >/dev/null
+  else
+    orb -m "$MACHINE" -u root bash -lc "cd '$OPENCLAW_APP_DIR' && docker compose run --rm --no-deps --user 1000:1000 --entrypoint node openclaw /app/openclaw.mjs plugins install /home/node/.openclaw/tmp/duckduckgo.tgz --accept-capabilities --acknowledge-install-policy-warning --force" >/dev/null
+  fi
+  orb -m "$MACHINE" -u root test -f "$OPENCLAW_DATA_DIR/config/extensions/duckduckgo/openclaw.plugin.json" || fail 'DuckDuckGo web_search plugin failed to install'
+  printf '%s\n' 'WEB_SEARCH_PLUGIN=installed'
+else
+  printf '%s\n' 'WEB_SEARCH_PLUGIN=present'
+fi
+
 deploy_stage openclaw-cli-preflight
 # Rebuild the pinned host's persisted plugin index from the candidate image
 # after a consistent state SQLite backup, but before any plugin/Skill preflight
@@ -1118,6 +1183,10 @@ if 'allow' in config.get('tools', {}):
     raise SystemExit('strict tools.allow list would hide future native tools')
 if 'amadeus' not in config.get('plugins', {}).get('allow', []):
     raise SystemExit('Amadeus plugin is not in the OpenClaw plugin allowlist')
+if 'duckduckgo' not in config.get('plugins', {}).get('allow', []):
+    raise SystemExit('duckduckgo web_search provider plugin is not in the OpenClaw plugin allowlist')
+if (config.get('tools', {}).get('web') or {}).get('search', {}).get('provider') != 'duckduckgo':
+    raise SystemExit('tools.web.search.provider must be duckduckgo for Lab realtime web_search')
 sender_policies = config.get('tools', {}).get('toolsBySender', {})
 if sender_policies.get('*', {}).get('allow') != ['web_search', 'web_fetch']:
     raise SystemExit('non-owner sender tool policy is not read-only web access')
