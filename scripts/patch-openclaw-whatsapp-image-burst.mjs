@@ -8,29 +8,31 @@ import { chmod, readdir, readFile, rename, stat, writeFile } from 'node:fs/promi
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-export const MARKER = 'amadeus-whatsapp-image-burst-v1';
-export const IMAGE_BURST_DEBOUNCE_MS = 3000;
-export const IMAGE_ALBUM_DEBOUNCE_MS = 6000;
+export const MARKER = 'amadeus-whatsapp-image-burst-v2';
+// Sliding quiet window: phones upload images one by one (observed gaps ~7s), so
+// every new image restarts the wait; a hard cap bounds the total delay.
+export const IMAGE_BURST_QUIET_MS = 10_000;
+export const IMAGE_BURST_MAX_MS = 30_000;
+export const IMAGE_BURST_TEXT_JOIN_MS = 1500;
 
 const helpers = `// ${MARKER}
-const AMADEUS_IMAGE_BURST_DEBOUNCE_MS = ${IMAGE_BURST_DEBOUNCE_MS};
-const AMADEUS_IMAGE_ALBUM_DEBOUNCE_MS = ${IMAGE_ALBUM_DEBOUNCE_MS};
+const AMADEUS_IMAGE_BURST_QUIET_MS = ${IMAGE_BURST_QUIET_MS};
+const AMADEUS_IMAGE_BURST_MAX_MS = ${IMAGE_BURST_MAX_MS};
+const AMADEUS_IMAGE_BURST_TEXT_JOIN_MS = ${IMAGE_BURST_TEXT_JOIN_MS};
 function amadeusIsImageBurstCandidate(msg) {
 	const media = msg?.payload?.media;
 	if (!media || !String(media.type ?? "").toLowerCase().startsWith("image/")) return false;
 	return !(msg.payload.location || msg.quote?.id || msg.quote?.body);
 }
-function amadeusImageBurstDebounceMs(msg, configured) {
-	if (!amadeusIsImageBurstCandidate(msg)) return configured;
-	return Math.max(configured, msg.payload.albumId ? AMADEUS_IMAGE_ALBUM_DEBOUNCE_MS : AMADEUS_IMAGE_BURST_DEBOUNCE_MS);
+function amadeusIsPlainText(msg) {
+	const payload = msg?.payload;
+	if (!payload || payload.media || payload.location || msg.quote?.id || msg.quote?.body) return false;
+	const text = String(payload.commandBody ?? payload.body ?? "").trim();
+	return text.length > 0 && !text.startsWith("/");
 }
-// WhatsApp tags every image of an album with the parent album message.
-function amadeusAlbumIdOf(raw) {
-	const association = raw?.message?.messageContextInfo?.messageAssociation;
-	if (!association) return void 0;
-	const type = association.associationType;
-	if (type !== 1 && type !== "MEDIA_ALBUM") return void 0;
-	return association.parentMessageKey?.id ?? "album";
+// Wait for \`wanted\` ms of quiet, never beyond the burst's hard cap (min 1ms so the buffer still flushes together).
+function amadeusBurstWindowMs(configured, wanted, startedAt, now) {
+	return Math.max(configured, Math.max(1, Math.min(wanted, startedAt + AMADEUS_IMAGE_BURST_MAX_MS - now)));
 }
 function amadeusPayloadMediaList(payload) {
 	if (Array.isArray(payload?.mediaList) && payload.mediaList.length > 0) return payload.mediaList;
@@ -47,8 +49,10 @@ function replaceOnce(source, before, after, label) {
 export function patchWhatsAppMonitorSource(original) {
   if (original.includes(MARKER)) return original;
   let result = replaceOnce(original, 'function createWhatsAppInboundMessageDebouncer(options) {', `${helpers}function createWhatsAppInboundMessageDebouncer(options) {`, 'debouncer helper insertion');
-  result = replaceOnce(result, '\t\t\tdebounceMs: options.resolveDebounceMs()\n\t\t};\n\t\tconst key = buildKey(message);', '\t\t\tdebounceMs: amadeusImageBurstDebounceMs(input, options.resolveDebounceMs())\n\t\t};\n\t\tconst key = buildKey(message);', 'image burst debounce window');
-  result = replaceOnce(result, '\t\t\t\tchannelStructuredContext: channelStructuredContext.length > 0 ? channelStructuredContext : void 0,\n\t\t\t\tmedia\n\t\t\t},', '\t\t\t\tchannelStructuredContext: channelStructuredContext.length > 0 ? channelStructuredContext : void 0,\n\t\t\t\tmedia,\n\t\t\t\talbumId: media ? amadeusAlbumIdOf(msg) : void 0\n\t\t\t},', 'album id on inbound payload');
+  result = replaceOnce(result, 'const pendingKeys = /* @__PURE__ */ new Map();', 'const pendingKeys = /* @__PURE__ */ new Map();\n\tconst amadeusBurstStarts = /* @__PURE__ */ new Map();', 'burst start tracking');
+  result = replaceOnce(result, '\t\tconst message = {\n\t\t\t...input,\n\t\t\tdebounceMs: options.resolveDebounceMs()\n\t\t};\n\t\tconst key = buildKey(message);', '\t\tconst configuredDebounceMs = options.resolveDebounceMs();\n\t\tconst message = {\n\t\t\t...input,\n\t\t\tdebounceMs: configuredDebounceMs\n\t\t};\n\t\tconst key = buildKey(message);\n\t\tif (key) {\n\t\t\tconst burstStart = amadeusBurstStarts.get(key);\n\t\t\tconst now = Date.now();\n\t\t\tif (amadeusIsImageBurstCandidate(input)) {\n\t\t\t\tamadeusBurstStarts.set(key, burstStart ?? now);\n\t\t\t\tmessage.debounceMs = amadeusBurstWindowMs(configuredDebounceMs, AMADEUS_IMAGE_BURST_QUIET_MS, burstStart ?? now, now);\n\t\t\t} else if (burstStart !== void 0 && amadeusIsPlainText(input)) {\n\t\t\t\tmessage.debounceMs = amadeusBurstWindowMs(configuredDebounceMs, AMADEUS_IMAGE_BURST_TEXT_JOIN_MS, burstStart, now);\n\t\t\t}\n\t\t}', 'image burst sliding window');
+  result = replaceOnce(result, 'const shouldDebounce = (msg) => options.shouldDebounce?.(msg) ?? true;', 'const shouldDebounce = (msg) => (msg.debounceKey !== void 0 && amadeusBurstStarts.has(msg.debounceKey) && amadeusIsPlainText(msg)) || (options.shouldDebounce?.(msg) ?? true);', 'text joins pending image burst');
+  result = replaceOnce(result, 'for (const entry of entries) releaseKey(entry);', 'for (const entry of entries) {\n\t\t\t\treleaseKey(entry);\n\t\t\t\tif (entry.debounceKey) amadeusBurstStarts.delete(entry.debounceKey);\n\t\t\t}', 'burst start release');
   result = replaceOnce(result, '\t\t\t\t\t\t\t\t...last.payload,\n\t\t\t\t\t\t\t\tbody: combinedBody,', '\t\t\t\t\t\t\t\t...last.payload,\n\t\t\t\t\t\t\t\tmediaList: orderedEntries.flatMap((entry) => amadeusPayloadMediaList(entry.payload) ?? []),\n\t\t\t\t\t\t\t\tbody: combinedBody,', 'merged burst media list');
   result = replaceOnce(result, 'const shouldDebounce = (msg) => shouldDebounceTextInbound({', 'const shouldDebounce = (msg) => amadeusIsImageBurstCandidate(msg) || shouldDebounceTextInbound({', 'image burst debounce gate');
   result = replaceOnce(
