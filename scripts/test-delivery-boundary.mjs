@@ -85,18 +85,20 @@ const body=transformed.slice(node.start,node.end);
 assert.equal(body.includes('mediaOnlyCoalescer'),false);
 assert.equal(body.includes('mediaUrls'),false);
 assert.equal(body.includes('JSON.parse'),false);
-const provider=[];let port;
+const provider=[];let port;const counts={typing:0,lease:0};
 const scope={globalThis:{__amadeusDeliveryBoundaryV2_20260930:{version:2,createWhatsAppPlan(input){port=input;return {replyOptions:{},dispatcherOptions:{},finalize:()=>true,delivery:{observeMessageSent:true,preparePayload:async()=>null,durable:()=>false,deliver:async()=>({visibleReplySent:false})}};}}},
  readAgentRunTerminalOutcome:()=> 'completed',finalizeWhatsAppStatusReaction:async({controller,outcome})=>{if(outcome==='done')await controller.setDone();else await controller.setError();await controller.restoreInitial();},
  buildQuotedMessageOptions:params=>params,listWhatsAppSendResultMessageIds:result=>[result.messageId],markdownToWhatsAppChunks:text=>[text],resolveTextChunkLimit:()=>4000,resolveMarkdownTableMode$1:()=> 'code',resolveChunkMode:()=> 'length',
  resolveWhatsAppInboundReplyPolicy:()=>({suppressTyping:false,disableBlockStreaming:false}),resolveChannelStreamingBlockEnabled:()=>false,
- startAmadeusVoiceReplyLease:()=>({}),startAmadeusWhatsAppTypingIndicator:()=>()=>{},closeAmadeusVoiceReplyLeaseForTurn:()=>{},
+ startAmadeusVoiceReplyLease:()=>{counts.lease++;return {};},startAmadeusWhatsAppTypingIndicator:()=>{counts.typing++;return ()=>{};},closeAmadeusVoiceReplyLeaseForTurn:()=>{},
  prepareWhatsAppOutboundMedia:async media=>({buffer:media.buffer,mimetype:'audio/ogg; codecs=opus'}),
  sendReactionWhatsApp:async(...args)=>{reactions.push(args);}};
 const reactions=[];
 vm.runInNewContext(body+'\nglobalThis.createPlan=createWhatsAppReplyPlan;',scope);
 const params={route:{sessionKey:'s',accountId:'secondary'},cfg:{},inbound:{event:{id:'m'},conversation:{id:'chat'},media:[]},transport:{chatJid:'chat',reply:async text=>{provider.push({text});return{providerAccepted:true,messageId:'t'};},sendMedia:async payload=>{provider.push(payload);return{providerAccepted:true,messageId:'a'};}}};
 const plan=scope.globalThis.createPlan(params);
+// Without a status-reaction controller the text turn keeps the native composing dots.
+assert.equal(plan.replyOptions.suppressTyping,false);port.start();assert.equal(counts.typing,1);assert.equal(counts.lease,0);
 assert.equal(plan.delivery.observeMessageSent,true);assert.equal(typeof plan.delivery.preparePayload,'function');assert.equal(typeof plan.delivery.deliver,'function');
 for(const mimeType of ['image/png','image/jpeg']){
  const bytes=Buffer.from('original lossless file '+mimeType);await port.sendDocument({bytes,mimeType,fileName:'upscale.png'});const actual=provider.at(-1);
@@ -125,6 +127,9 @@ await port.sendReaction('😂');assert.deepEqual(reactions.at(-1).slice(0,3),['c
   wire.length=0;const ctl=await createStatus(statusArgs);assert.equal(typeof ctl.finishWithContextual,'function');
   ctl.setQueued();const plan=scope.globalThis.createPlan({...params,statusReactionController:ctl});const statusPort=port;
   assert.equal(plan.replyOptions.allowToolLifecycleWhenProgressHidden, true, 'tool lifecycle must fire while WhatsApp text progress stays hidden');
+  // Option A: reactions are the only progress indicator on text turns.
+  assert.equal(plan.replyOptions.suppressTyping,true);const typingBefore=counts.typing;statusPort.start();assert.equal(counts.typing,typingBefore,'status reactions suppress the composing dots');
+  const leaseBefore=counts.lease;scope.globalThis.createPlan({...params,inbound:{...params.inbound,media:[{kind:'audio'}]},statusReactionController:ctl});port.start();assert.equal(counts.lease,leaseBefore+1,'voice turns keep the composing lease');port=statusPort;
   plan.afterRecord();await sleep(800);await plan.replyOptions.onToolStart({name:'web_search'});await sleep(800);
   let react;
   if(order==='react-first'){react=statusPort.sendReaction('😂');plan.finalize({});}

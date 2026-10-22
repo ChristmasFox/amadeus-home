@@ -34,7 +34,11 @@ function createWhatsAppReplyPlan(params) {
     conversationId: params.inbound.conversation.id,
     start: () => {
       if (inboundVoice) voiceLease ??= startAmadeusVoiceReplyLease({ sessionKey, messageId, sendComposing });
-      else typingStop ??= startAmadeusWhatsAppTypingIndicator(sendComposing);
+      // Option A: with staged status reactions the 👀→🧠→tool→terminal chain is the
+      // only progress indicator, so text turns skip the composing dots (they fight
+      // the reaction changes). Voice turns keep the lease: its composing covers TTS
+      // preparation and is not a text-turn typing indicator.
+      else if (!statusReactionController) typingStop ??= startAmadeusWhatsAppTypingIndicator(sendComposing);
     },
     stop: () => { typingStop?.(); typingStop = undefined; closeAmadeusVoiceReplyLeaseForTurn(sessionKey, messageId); },
     sendText: async (text) => {
@@ -74,7 +78,7 @@ function createWhatsAppReplyPlan(params) {
     ...plan.replyOptions,
     ...(params.turnAdoptionLifecycle ? { turnAdoptionLifecycle: params.turnAdoptionLifecycle } : {}),
     onModelSelected: params.onModelSelected,
-    suppressTyping: replyPolicy.suppressTyping,
+    suppressTyping: statusReactionController ? true : replyPolicy.suppressTyping,
     disableBlockStreaming: true,
     ...(replyPolicy.sourceReplyDeliveryMode ? { sourceReplyDeliveryMode: replyPolicy.sourceReplyDeliveryMode } : {}),
     ...(statusReactionController ? {
