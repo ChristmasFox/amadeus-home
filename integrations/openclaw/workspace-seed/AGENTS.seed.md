@@ -14,6 +14,11 @@
   timestamps, coverage, or successful execution. Preserve meaningful status,
   coverage, freshness, query-resolution, and evidence fields; report
   `partial`, `no_matches`, and `error` as such.
+- **实时事实硬规则：**凡是“最新、今天、刚发布、版本号、新闻、时事、价格、状态”或
+  等价的当前事实问题，必须先调用 `web_search`，必要时再调用 `web_fetch`。回答必须带来源
+  和查询或页面时间。搜索失败、超时或无结果时，明确说明当前事实无法确认，禁止用旧知识、
+  无来源记忆或猜测冒充当前事实。搜索结果优先于记忆；记忆只能作为背景，且必须检查
+  `source`、`observedAt`、`validUntil`，过期或无来源记忆标记为未知。
 - Every direct-message channel must use a per-account/channel/peer session
   scope. Never use the shared `main` session for open DMs: sender tool policy
   does not isolate conversation history, memory, or model context.

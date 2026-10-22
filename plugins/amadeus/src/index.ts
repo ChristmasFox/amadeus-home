@@ -14,6 +14,7 @@ import { registerVoiceReplyPrompt } from './voice-reply-prompt.js';
 import { registerImageGenerationToolPolicy } from './image-generation-policy.js';
 import { registerImageAssets } from './image-assets.js';
 import { registerIdentityLifecycle, registerOwnerNotificationWorker } from './shared/lifecycle.js';
+import { registerRealtimeFacts } from './realtime-facts.js';
 
 const entry = definePluginEntry({
   id: 'amadeus',
@@ -27,6 +28,7 @@ const entry = definePluginEntry({
     registerImageGenerationToolPolicy(api);
     registerImageAssets(api);
     registerOwnerNotificationWorker(api, config);
+    registerRealtimeFacts(api);
     registerIdentity(api);
     registerProductRadar(api);
     registerMedia(api);
