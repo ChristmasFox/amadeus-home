@@ -58,7 +58,13 @@ test('Amadeus registers typed inbound identity context hooks', () => {
     let result: unknown;
     for (const handler of hooks.get(name) ?? []) {
       const next = handler(...args);
-      if (next !== undefined) result = next;
+      if (next === undefined) continue;
+      // OpenClaw concatenates appendSystemContext from every before_prompt_build hook.
+      const prior = result as { appendSystemContext?: string } | undefined;
+      const added = next as { appendSystemContext?: string };
+      result = name === 'before_prompt_build' && typeof prior?.appendSystemContext === 'string' && typeof added.appendSystemContext === 'string'
+        ? { ...prior, ...added, appendSystemContext: `${prior.appendSystemContext}\n\n${added.appendSystemContext}` }
+        : next;
     }
     return result;
   };
