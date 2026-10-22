@@ -68,7 +68,9 @@ const root = await mkdtemp(join(tmpdir(), 'whatsapp-image-burst-'));
 const dist = join(root, 'project/node_modules/@openclaw/whatsapp/dist');
 await mkdir(dist, { recursive: true });
 await writeFile(join(dist, 'monitor-fixture.js'), fixture);
-const cli = () => spawnSync(process.execPath, ['scripts/patch-openclaw-whatsapp-image-burst.mjs', root], { encoding: 'utf8' });
+// Same invocation as deploy-openclaw.sh: the script arrives on stdin.
+const source = await readFile('scripts/patch-openclaw-whatsapp-image-burst.mjs', 'utf8');
+const cli = () => spawnSync(process.execPath, ['-', root], { encoding: 'utf8', input: source });
 const one = cli();
 assert.equal(one.status, 0, one.stderr);
 assert.match(one.stdout, /WHATSAPP_IMAGE_BURST_PATCH=applied/);

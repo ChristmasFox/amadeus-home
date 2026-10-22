@@ -91,7 +91,13 @@ async function main(argv) {
   console.log(`WHATSAPP_IMAGE_BURST_PATCH=${applied > 0 ? 'applied' : 'already-applied'}`);
 }
 
-if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
+// Deployment pipes this file to `node -`, where argv[1] is "-" and there is no file URL.
+function isEntrypoint() {
+  if (process.argv[1] === '-') return true;
+  try { return Boolean(process.argv[1]) && fileURLToPath(import.meta.url) === process.argv[1]; } catch { return false; }
+}
+
+if (isEntrypoint()) {
   main(process.argv.slice(2)).catch((error) => {
     console.error(`WHATSAPP_IMAGE_BURST_PATCH=failed ${error.message}`);
     process.exitCode = 1;
