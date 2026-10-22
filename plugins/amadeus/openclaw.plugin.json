@@ -35,6 +35,7 @@
       "imageAssetServiceBaseUrl": { "type": "string", "maxLength": 512 },
       "imageAssetServiceTokenFile": { "type": "string", "maxLength": 1024 },
       "imageAssetContainerRoot": { "type": "string", "maxLength": 1024 },
+      "searxngBaseUrl": { "type": "string", "maxLength": 512 },
       "kiwiVmBaseUrl": { "type": "string", "maxLength": 512 },
       "kiwiVmCredentialsFile": { "type": "string", "maxLength": 1024 },
       "vpsSshHost": { "type": "string", "maxLength": 256 },
@@ -51,6 +52,7 @@
   "skills": [
     "skills/amadeus",
     "skills/image-upscale",
+    "skills/web-image",
     "skills/identity",
     "skills/voice-reply",
     "skills/product-radar",
@@ -80,6 +82,7 @@
       "amadeus_macos_host_status",
       "amadeus_macos_host_processes",
       "amadeus_image_upscale",
+      "amadeus_web_image",
       "identity_resolve",
       "identity_get_person",
       "identity_bind_channel",

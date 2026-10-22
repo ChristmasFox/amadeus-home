@@ -10,6 +10,7 @@ import { assetPath, readRegisteredAsset, type AssetMetadata } from './delivery-a
 import { createAttachmentPart, type AttachmentPart } from './delivery-envelope.js';
 import { normalizeImageCaption, type ImageCaptionEnricher } from './image-caption.js';
 import type { ImageRequestLanguage } from './image-generation-context.js';
+import { findWebImages, webImageCaption, type WebImageDeps } from './web-image.js';
 
 const ImageUpscaleParameters = Type.Object({
   target: Type.Optional(Type.Object({
@@ -21,6 +22,12 @@ const ImageUpscaleParameters = Type.Object({
 }, { additionalProperties: false });
 
 type ImageUpscaleParameters = Static<typeof ImageUpscaleParameters>;
+
+const WebImageParameters = Type.Object({
+  query: Type.String({ minLength: 1, maxLength: 200, description: 'What to find, as a short image-search query (the subject, in the language most likely to match the images).' }),
+  count: Type.Optional(Type.Integer({ minimum: 1, maximum: 4, description: 'How many different images to send (default 1).' })),
+}, { additionalProperties: false });
+type WebImageParameters = Static<typeof WebImageParameters>;
 type ImageAssetOrigin = {
   channel?: string;
   conversationId?: string;
@@ -321,6 +328,34 @@ export async function upscaleImage(config: AmadeusConfig, input: ImageUpscalePar
   };
 }
 
+/** Test seam: replaces DNS/fetch/SearXNG without touching the network. */
+export const webImageDeps: { current: WebImageDeps } = { current: {} };
+
+export async function findAndImportWebImages(config: AmadeusConfig, input: WebImageParameters, context: OpenClawPluginToolContext, signal?: AbortSignal): Promise<unknown> {
+  const query = input.query.trim();
+  if (!query) throw new Error('web_image_query_required');
+  const found = await findWebImages(config.searxngBaseUrl, query, input.count ?? 1, webImageDeps.current, signal);
+  if (!found.length) return { status: 'error', message: 'No downloadable image was found for this query; say so plainly and do not claim an image was sent.' };
+  const origin = originForContext(context, currentContextFor(context.sessionKey));
+  const images: Array<Record<string, unknown>> = [];
+  const attachments: AttachmentPart[] = [];
+  for (const item of found) {
+    const asset = await importImageBytes(config, item.bytes, item.mimeType, 'web_search', origin, signal);
+    const caption = webImageCaption(item.candidate);
+    let part: AttachmentPart;
+    try { part = imageAssetAttachment(asset, 'inline', caption); } catch { part = imageAssetAttachment(asset, 'inline', `来源：${item.candidate.pageUrl}`); }
+    attachments.push(part);
+    images.push({ imageId: asset.imageId, title: item.candidate.title, sourceUrl: item.candidate.pageUrl, width: asset.width, height: asset.height, mimeType: asset.mimeType });
+  }
+  return {
+    status: 'ok',
+    query,
+    images,
+    contentText: `Downloaded ${images.length} image(s); they are attached to the reply automatically with their source link as the caption. Reply briefly and do not repeat the links.`,
+    deliveryAttachments: attachments,
+  };
+}
+
 export type GeneratedCompletionAttachment = Readonly<{ type?: string; path?: string; mimeType?: string }>;
 export type CompletionImageInput = Readonly<{ type: 'image'; data: string; mimeType: string }>;
 export type GeneratedCompletionAssetOptions = Readonly<{
@@ -459,7 +494,7 @@ export function registerImageAssets(api: OpenClawPluginApi): void {
     return { params: repaired };
   }, { matcher: ['image_generate'] });
   api.on('after_tool_call', (event, hookContext) => {
-    if (event.error || (event.toolName !== 'image_generate' && event.toolName !== 'amadeus_image_upscale')) return;
+    if (event.error || (event.toolName !== 'image_generate' && event.toolName !== 'amadeus_image_upscale' && event.toolName !== 'amadeus_web_image')) return;
     const runId = event.runId ?? hookContext.runId ?? (hookContext.sessionKey ? deliveryRuns.runIdFor(hookContext.sessionKey) : undefined);
     if (!runId) throw new Error('image_delivery_run_missing');
     const config = configFor(api);
@@ -468,6 +503,10 @@ export function registerImageAssets(api: OpenClawPluginApi): void {
     // Enqueue the promise synchronously: the pinned after-tool hook is observed,
     // not awaited by core. Final settlement must await registration itself.
     const job = (async (): Promise<readonly AttachmentPart[]> => {
+      if (event.toolName === 'amadeus_web_image') {
+        const parts = resultObject(event.result)?.deliveryAttachments;
+        return Array.isArray(parts) ? parts.slice(0, 4).filter((part) => part && typeof part === 'object').map((part) => createAttachmentPart(part as Omit<AttachmentPart, 'kind'>)) : [];
+      }
       if (event.toolName === 'amadeus_image_upscale') {
         const result = resultObject(event.result);
         const part = result?.deliveryAttachment;
@@ -480,8 +519,9 @@ export function registerImageAssets(api: OpenClawPluginApi): void {
     })();
     deliveryRuns.addAssets(runId, job);
     return job.then(() => undefined);
-  }, { matcher: ['image_generate', 'amadeus_image_upscale'], timeoutMs: 60_000 });
+  }, { matcher: ['image_generate', 'amadeus_image_upscale', 'amadeus_web_image'], timeoutMs: 60_000 });
 
+  registerTool(api, 'amadeus_web_image', 'Find real photos on the internet (SearXNG image search), download them safely, and attach them to the reply with their source page link as the caption. Use when the person wants an actual existing image from the web rather than a generated one.', WebImageParameters, async (params, context, _notifier, signal) => findAndImportWebImages(configFor(api), params, context, signal));
   registerTool(api, 'amadeus_image_upscale', 'Upscale one existing image on the configured host service. Default to scale:2; an explicit user 4x/4倍 request uses scale:4. 4K/2K are resolution profiles, not multipliers. The current inbound turn also constrains an unambiguous explicit multiplier. Reply context wins over the current conversation’s recent image.', ImageUpscaleParameters, async (params, context, _notifier, signal) => upscaleImage(configFor(api), params, context, signal));
 }
 

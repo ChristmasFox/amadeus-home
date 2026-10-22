@@ -36,6 +36,8 @@ test('Amadeus manifest exposes the native Identity contract', async () => {
   ]) assert.equal(tools.has(name), true, `missing VPS manifest tool: ${name}`);
   for (const name of ['amadeus_market_overview', 'amadeus_market_quote', 'amadeus_market_intraday', 'amadeus_market_session', 'amadeus_market_movers', 'amadeus_market_constituents', 'amadeus_macos_host_status', 'amadeus_macos_host_processes']) assert.equal(tools.has(name), true, `missing market/host manifest tool: ${name}`);
   assert.equal(tools.has('amadeus_image_upscale'), true, 'missing image upscale manifest tool');
+  assert.equal(tools.has('amadeus_web_image'), true, 'missing web image manifest tool');
+  assert.equal(manifest.skills?.includes('skills/web-image'), true);
   assert.equal(tools.has('amadeus_briefing'), false, 'retired technology briefing tool is still exposed');
   assert.equal(manifest.skills?.includes('skills/identity'), true);
   assert.equal(manifest.skills?.includes('skills/market'), true);

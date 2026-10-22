@@ -35,6 +35,8 @@ export interface AmadeusConfig {
   imageAssetServiceBaseUrl: string;
   imageAssetServiceTokenFile: string;
   imageAssetContainerRoot: string;
+  /** SearXNG used by the web image search tool (same instance as web_search). */
+  searxngBaseUrl: string;
   kiwiVmBaseUrl: string;
   kiwiVmCredentialsFile: string;
   vpsSshHost: string;
@@ -118,6 +120,7 @@ export function configFor(api: OpenClawPluginApi): AmadeusConfig {
     imageAssetServiceBaseUrl: file('imageAssetServiceBaseUrl', 'AMADEUS_IMAGE_SERVICE_BASE_URL', 'http://host.docker.internal:18792').replace(/\/$/u, ''),
     imageAssetServiceTokenFile: imageAssetServiceTokenFile ?? '/run/secrets/amadeus_image_service_token',
     imageAssetContainerRoot: file('imageAssetContainerRoot', 'AMADEUS_IMAGE_ASSET_CONTAINER_ROOT', '/var/lib/amadeus/image-assets').replace(/\/$/u, ''),
+    searxngBaseUrl: file('searxngBaseUrl', 'SEARXNG_BASE_URL', 'http://searxng:8080').replace(/\/$/u, ''),
     kiwiVmBaseUrl: file('kiwiVmBaseUrl', 'KIWIVM_BASE_URL', 'https://api.64clouds.com/v1').replace(/\/$/u, ''),
     kiwiVmCredentialsFile: file('kiwiVmCredentialsFile', 'KIWIVM_CREDENTIALS_FILE', '/run/secrets/kiwivm_credentials.json'),
     vpsSshHost: file('vpsSshHost', 'VPS_SSH_HOST', 'amadeus-gateway'),

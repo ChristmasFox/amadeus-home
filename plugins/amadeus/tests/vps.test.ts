@@ -31,6 +31,7 @@ function config(directory: string): AmadeusConfig {
     macHostAgentTokenFile: join(directory, 'machostagent-token'),
     macHostName: 'operator-mac',
     imageAssetServiceBaseUrl: 'http://host.docker.internal:18792',
+    searxngBaseUrl: 'http://searxng:8080',
     imageAssetServiceTokenFile: join(directory, 'image-service-token'),
     imageAssetContainerRoot: join(directory, 'image-assets'),
     kiwiVmBaseUrl: 'https://api.64clouds.com/v1',
