@@ -1,38 +1,51 @@
 #!/usr/bin/env node
-// Pinned @openclaw/whatsapp 2026.9.4: an album / rapid burst of images arrives as
-// one inbound event per image, and media events are never debounced, so each
-// image starts its own turn and the model answers the first one alone. Debounce
-// image events per sender (text is untouched) and carry every image of the
-// merged burst into the single dispatched turn, not just the last one.
+// Pinned @openclaw/whatsapp 2026.9.4: a multi-image send arrives as one parent
+// `albumMessage {expectedImageCount}` plus one image message per picture, each
+// tagged `messageContextInfo.messageAssociation {MEDIA_ALBUM, parentMessageKey}`.
+// Every image used to start its own turn (the phone also uploads them seconds
+// apart). Hold only album children, keyed by their parent, until the expected
+// count has arrived (short timeout as a fallback) and dispatch ONE turn with
+// all images. Single images carry no association and are never delayed.
 import { chmod, readdir, readFile, rename, stat, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-export const MARKER = 'amadeus-whatsapp-image-burst-v2';
-// Sliding quiet window: phones upload images one by one (observed gaps ~7s), so
-// every new image restarts the wait; a hard cap bounds the total delay.
-export const IMAGE_BURST_QUIET_MS = 10_000;
-export const IMAGE_BURST_MAX_MS = 30_000;
-export const IMAGE_BURST_TEXT_JOIN_MS = 1500;
+export const MARKER = 'amadeus-whatsapp-image-album-v3';
+// Fallback only: the parent normally announces how many images to wait for.
+export const ALBUM_QUIET_MS = 8000;
+export const ALBUM_MAX_MS = 20_000;
 
 const helpers = `// ${MARKER}
-const AMADEUS_IMAGE_BURST_QUIET_MS = ${IMAGE_BURST_QUIET_MS};
-const AMADEUS_IMAGE_BURST_MAX_MS = ${IMAGE_BURST_MAX_MS};
-const AMADEUS_IMAGE_BURST_TEXT_JOIN_MS = ${IMAGE_BURST_TEXT_JOIN_MS};
-function amadeusIsImageBurstCandidate(msg) {
-	const media = msg?.payload?.media;
-	if (!media || !String(media.type ?? "").toLowerCase().startsWith("image/")) return false;
-	return !(msg.payload.location || msg.quote?.id || msg.quote?.body);
+const AMADEUS_ALBUM_QUIET_MS = ${ALBUM_QUIET_MS};
+const AMADEUS_ALBUM_MAX_MS = ${ALBUM_MAX_MS};
+const amadeusAlbumParents = new Map();
+function amadeusUnwrapMessage(message) {
+	return message?.ephemeralMessage?.message ?? message?.viewOnceMessage?.message ?? message;
 }
-function amadeusIsPlainText(msg) {
-	const payload = msg?.payload;
-	if (!payload || payload.media || payload.location || msg.quote?.id || msg.quote?.body) return false;
-	const text = String(payload.commandBody ?? payload.body ?? "").trim();
-	return text.length > 0 && !text.startsWith("/");
+// Child images name their album; the parent message announces the expected count.
+function amadeusAlbumIdOf(raw) {
+	const association = amadeusUnwrapMessage(raw?.message)?.messageContextInfo?.messageAssociation;
+	if (!association) return void 0;
+	const type = association.associationType;
+	if (type !== 1 && type !== "MEDIA_ALBUM") return void 0;
+	const parentId = association.parentMessageKey?.id;
+	return parentId ? \`\${raw.key?.remoteJid ?? ""}:\${parentId}\` : void 0;
 }
-// Wait for \`wanted\` ms of quiet, never beyond the burst's hard cap (min 1ms so the buffer still flushes together).
-function amadeusBurstWindowMs(configured, wanted, startedAt, now) {
-	return Math.max(configured, Math.max(1, Math.min(wanted, startedAt + AMADEUS_IMAGE_BURST_MAX_MS - now)));
+function amadeusRememberAlbumParent(raw) {
+	const album = amadeusUnwrapMessage(raw?.message)?.albumMessage;
+	const id = raw?.key?.id;
+	if (!album || !id) return;
+	const expected = Number(album.expectedImageCount ?? 0) + Number(album.expectedVideoCount ?? 0);
+	if (!(expected > 0)) return;
+	const now = Date.now();
+	for (const [key, value] of amadeusAlbumParents) if (now - value.at > 600000) amadeusAlbumParents.delete(key);
+	amadeusAlbumParents.set(\`\${raw.key?.remoteJid ?? ""}:\${id}\`, { expected, at: now });
+}
+function amadeusIsAlbumChild(msg) {
+	return Boolean(msg?.payload?.albumId) && Boolean(msg?.payload?.media);
+}
+function amadeusAlbumWindowMs(configured, startedAt, now) {
+	return Math.max(configured, Math.max(1, Math.min(AMADEUS_ALBUM_QUIET_MS, startedAt + AMADEUS_ALBUM_MAX_MS - now)));
 }
 function amadeusPayloadMediaList(payload) {
 	if (Array.isArray(payload?.mediaList) && payload.mediaList.length > 0) return payload.mediaList;
@@ -49,28 +62,15 @@ function replaceOnce(source, before, after, label) {
 export function patchWhatsAppMonitorSource(original) {
   if (original.includes(MARKER)) return original;
   let result = replaceOnce(original, 'function createWhatsAppInboundMessageDebouncer(options) {', `${helpers}function createWhatsAppInboundMessageDebouncer(options) {`, 'debouncer helper insertion');
-  result = replaceOnce(result, 'const pendingKeys = /* @__PURE__ */ new Map();', 'const pendingKeys = /* @__PURE__ */ new Map();\n\tconst amadeusBurstStarts = /* @__PURE__ */ new Map();', 'burst start tracking');
-  result = replaceOnce(result, '\t\tconst message = {\n\t\t\t...input,\n\t\t\tdebounceMs: options.resolveDebounceMs()\n\t\t};\n\t\tconst key = buildKey(message);', '\t\tconst configuredDebounceMs = options.resolveDebounceMs();\n\t\tconst message = {\n\t\t\t...input,\n\t\t\tdebounceMs: configuredDebounceMs\n\t\t};\n\t\tconst key = buildKey(message);\n\t\tif (key) {\n\t\t\tconst burstStart = amadeusBurstStarts.get(key);\n\t\t\tconst now = Date.now();\n\t\t\tif (amadeusIsImageBurstCandidate(input)) {\n\t\t\t\tamadeusBurstStarts.set(key, burstStart ?? now);\n\t\t\t\tmessage.debounceMs = amadeusBurstWindowMs(configuredDebounceMs, AMADEUS_IMAGE_BURST_QUIET_MS, burstStart ?? now, now);\n\t\t\t} else if (burstStart !== void 0 && amadeusIsPlainText(input)) {\n\t\t\t\tmessage.debounceMs = amadeusBurstWindowMs(configuredDebounceMs, AMADEUS_IMAGE_BURST_TEXT_JOIN_MS, burstStart, now);\n\t\t\t}\n\t\t}', 'image burst sliding window');
-  result = replaceOnce(result, 'const shouldDebounce = (msg) => options.shouldDebounce?.(msg) ?? true;', 'const shouldDebounce = (msg) => (msg.debounceKey !== void 0 && amadeusBurstStarts.has(msg.debounceKey) && amadeusIsPlainText(msg)) || (options.shouldDebounce?.(msg) ?? true);', 'text joins pending image burst');
-  result = replaceOnce(result, 'for (const entry of entries) releaseKey(entry);', 'for (const entry of entries) {\n\t\t\t\treleaseKey(entry);\n\t\t\t\tif (entry.debounceKey) amadeusBurstStarts.delete(entry.debounceKey);\n\t\t\t}', 'burst start release');
-  result = replaceOnce(result, '\t\t\t\t\t\t\t\t...last.payload,\n\t\t\t\t\t\t\t\tbody: combinedBody,', '\t\t\t\t\t\t\t\t...last.payload,\n\t\t\t\t\t\t\t\tmediaList: orderedEntries.flatMap((entry) => amadeusPayloadMediaList(entry.payload) ?? []),\n\t\t\t\t\t\t\t\tbody: combinedBody,', 'merged burst media list');
-  result = replaceOnce(result, 'const shouldDebounce = (msg) => shouldDebounceTextInbound({', 'const shouldDebounce = (msg) => amadeusIsImageBurstCandidate(msg) || shouldDebounceTextInbound({', 'image burst debounce gate');
-  result = replaceOnce(
-    result,
-    `const media = await toInboundMediaFactsWithMetadata(params.msg.payload.media ? [{
-		path: params.msg.payload.media?.path,
-		url: params.msg.payload.media?.url ?? params.msg.payload.media?.path,
-		contentType: params.msg.payload.media?.type,
-		kind: params.msg.payload.media?.kind
-	}] : void 0,`,
-    `const media = await toInboundMediaFactsWithMetadata(amadeusPayloadMediaList(params.msg.payload)?.map((item) => ({
-		path: item.path,
-		url: item.url ?? item.path,
-		contentType: item.type,
-		kind: item.kind
-	})),`,
-    'inbound media facts',
-  );
+  result = replaceOnce(result, 'const pendingKeys = /* @__PURE__ */ new Map();', 'const pendingKeys = /* @__PURE__ */ new Map();\n\tconst amadeusAlbumState = /* @__PURE__ */ new Map();', 'album state');
+  result = replaceOnce(result, '\t\tconst message = {\n\t\t\t...input,\n\t\t\tdebounceMs: options.resolveDebounceMs()\n\t\t};\n\t\tconst key = buildKey(message);', '\t\tconst configuredDebounceMs = options.resolveDebounceMs();\n\t\tconst message = {\n\t\t\t...input,\n\t\t\tdebounceMs: configuredDebounceMs\n\t\t};\n\t\tconst baseKey = buildKey(message);\n\t\tconst albumChild = Boolean(baseKey) && amadeusIsAlbumChild(input);\n\t\tconst key = albumChild ? `${baseKey}\\u0000album:${input.payload.albumId}` : baseKey;\n\t\tlet albumComplete = false;\n\t\tif (albumChild) {\n\t\t\tconst state = amadeusAlbumState.get(key) ?? { startedAt: Date.now(), count: 0 };\n\t\t\tstate.count++;\n\t\t\tamadeusAlbumState.set(key, state);\n\t\t\tconst expected = amadeusAlbumParents.get(input.payload.albumId)?.expected;\n\t\t\talbumComplete = expected !== void 0 && state.count >= expected;\n\t\t\tmessage.debounceMs = amadeusAlbumWindowMs(configuredDebounceMs, state.startedAt, Date.now());\n\t\t}', 'album child key and window');
+  result = replaceOnce(result, '\t\tawait debouncer.enqueue(message);\n\t};', '\t\tawait debouncer.enqueue(message);\n\t\tif (albumComplete) {\n\t\t\tamadeusAlbumState.delete(key);\n\t\t\tawait debouncer.flushKey(key);\n\t\t}\n\t};', 'album complete flush');
+  result = replaceOnce(result, 'for (const entry of entries) releaseKey(entry);', 'for (const entry of entries) {\n\t\t\t\treleaseKey(entry);\n\t\t\t\tif (entry.debounceKey) amadeusAlbumState.delete(entry.debounceKey);\n\t\t\t}', 'album state release');
+  result = replaceOnce(result, '\t\t\t\t\t\t\t\t...last.payload,\n\t\t\t\t\t\t\t\tbody: combinedBody,', '\t\t\t\t\t\t\t\t...last.payload,\n\t\t\t\t\t\t\t\tmediaList: orderedEntries.flatMap((entry) => amadeusPayloadMediaList(entry.payload) ?? []),\n\t\t\t\t\t\t\t\tbody: combinedBody,', 'merged album media list');
+  result = replaceOnce(result, 'const shouldDebounce = (msg) => shouldDebounceTextInbound({', 'const shouldDebounce = (msg) => amadeusIsAlbumChild(msg) || shouldDebounceTextInbound({', 'album debounce gate');
+  result = replaceOnce(result, '\t\t\t\tchannelStructuredContext: channelStructuredContext.length > 0 ? channelStructuredContext : void 0,\n\t\t\t\tmedia\n\t\t\t},', '\t\t\t\tchannelStructuredContext: channelStructuredContext.length > 0 ? channelStructuredContext : void 0,\n\t\t\t\tmedia,\n\t\t\t\talbumId: media ? amadeusAlbumIdOf(msg) : void 0\n\t\t\t},', 'album id on inbound payload');
+  result = replaceOnce(result, '\t\tfor (const msg of upsert.messages ?? []) {\n\t\t\trememberBaileysMessage(msg.key?.remoteJid, msg.key?.id, msg.message);', '\t\tfor (const msg of upsert.messages ?? []) {\n\t\t\tamadeusRememberAlbumParent(msg);\n\t\t\trememberBaileysMessage(msg.key?.remoteJid, msg.key?.id, msg.message);', 'album parent announcement');
+  result = replaceOnce(result, 'const media = await toInboundMediaFactsWithMetadata(params.msg.payload.media ? [{\n\t\tpath: params.msg.payload.media?.path,\n\t\turl: params.msg.payload.media?.url ?? params.msg.payload.media?.path,\n\t\tcontentType: params.msg.payload.media?.type,\n\t\tkind: params.msg.payload.media?.kind\n\t}] : void 0,', 'const media = await toInboundMediaFactsWithMetadata(amadeusPayloadMediaList(params.msg.payload)?.map((item) => ({\n\t\tpath: item.path,\n\t\turl: item.url ?? item.path,\n\t\tcontentType: item.type,\n\t\tkind: item.kind\n\t})),', 'inbound media facts');
   return result;
 }
 

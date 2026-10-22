@@ -5,7 +5,7 @@ import { spawnSync } from 'node:child_process';
 import { mkdtemp, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { MARKER, IMAGE_BURST_QUIET_MS, IMAGE_BURST_MAX_MS, patchWhatsAppMonitorSource } from './patch-openclaw-whatsapp-image-burst.mjs';
+import { MARKER, ALBUM_QUIET_MS, ALBUM_MAX_MS, patchWhatsAppMonitorSource } from './patch-openclaw-whatsapp-image-burst.mjs';
 
 // Mirrors the pinned monitor's debouncer wiring (same anchors), driven by a
 // minimal copy of the core keyed debouncer semantics.
@@ -56,6 +56,19 @@ const fixture = `function createWhatsAppInboundMessageDebouncer(options) {
 	return { enqueue };
 }
 const shouldDebounce = (msg) => shouldDebounceTextInbound({ text: msg.payload.commandBody ?? msg.payload.body, hasMedia: Boolean(msg.payload.media?.path || msg.payload.media?.type) });
+async function handleMessagesUpsert(upsert) {
+		for (const msg of upsert.messages ?? []) {
+			rememberBaileysMessage(msg.key?.remoteJid, msg.key?.id, msg.message);
+		}
+}
+function makeInbound(msg, media, channelStructuredContext) {
+		return {
+			payload: {
+				channelStructuredContext: channelStructuredContext.length > 0 ? channelStructuredContext : void 0,
+				media
+			},
+		};
+}
 async function build(params) {
 	const media = await toInboundMediaFactsWithMetadata(params.msg.payload.media ? [{
 		path: params.msg.payload.media?.path,
@@ -77,6 +90,7 @@ function createInboundDebouncer(params) {
   const buffers = new Map();
   const flush = (key) => { const b = buffers.get(key); if (!b) return; buffers.delete(key); clearTimeout(b.timeout); params.onFlush(b.items); };
   return {
+    flushKey: async (key) => flush(key),
     async enqueue(item) {
       const key = params.buildKey(item);
       const ms = params.resolveDebounceMs(item);
@@ -91,8 +105,8 @@ function createInboundDebouncer(params) {
 }
 
 const calls = [];
-const factory = new Function('createInboundDebouncer', 'shouldDebounceTextInbound', 'toInboundMediaFactsWithMetadata', `${patched}; return { createWhatsAppInboundMessageDebouncer, shouldDebounce, build, amadeusBurstWindowMs, amadeusPayloadMediaList };`);
-const run = factory(createInboundDebouncer, ({ text, hasMedia }) => !hasMedia && Boolean(text), async (list) => { calls.push(list); return list; });
+const factory = new Function('createInboundDebouncer', 'shouldDebounceTextInbound', 'toInboundMediaFactsWithMetadata', 'rememberBaileysMessage', `${patched}; return { createWhatsAppInboundMessageDebouncer, shouldDebounce, build, handleMessagesUpsert, makeInbound, amadeusAlbumIdOf };`);
+const run = factory(createInboundDebouncer, ({ text, hasMedia }) => !hasMedia && Boolean(text), async (list) => { calls.push(list); return list; }, () => {});
 
 mock.timers.enable({ apis: ['setTimeout', 'Date'] });
 const dispatched = [];
@@ -103,53 +117,72 @@ const debouncer = run.createWhatsAppInboundMessageDebouncer({
 });
 let t = 0;
 const msg = (id, extra) => ({ platform: { key: 'secondary:chat:sender' }, event: { id, timestamp: t }, payload: { body: id, ...extra } });
-const image = (id, path) => msg(id, { media: { type: 'image/jpeg', path } });
+const image = (id, path, albumId) => msg(id, { media: { type: 'image/jpeg', path }, ...(albumId ? { albumId } : {}) });
 const advance = async (ms) => { mock.timers.tick(ms); t += ms; await Promise.resolve(); };
+const CHAT = '232620529074198@lid';
+// Shapes copied from Arthur's real 2026-10-23 00:56 messages (media fields omitted).
+const parent = (id, expectedImageCount) => ({ key: { remoteJid: CHAT, fromMe: false, id }, message: { messageContextInfo: {}, albumMessage: { expectedImageCount, expectedVideoCount: 0 } } });
+const child = (id, parentId) => ({ key: { remoteJid: CHAT, fromMe: false, id }, message: { imageMessage: { mimetype: 'image/jpeg' }, messageContextInfo: { messageAssociation: { associationType: 'MEDIA_ALBUM', parentMessageKey: { remoteJid: CHAT, fromMe: true, id: parentId } } } } });
+const albumId = (parentId) => `${CHAT}:${parentId}`;
 
-// 1. Phone uploads: two images 7s apart -> exactly one dispatch carrying both.
-await debouncer.enqueue(image('A1', '/m/1.jpg'));
-await advance(7000);
-assert.equal(dispatched.length, 0, 'first image must keep waiting for the next one');
-await debouncer.enqueue(image('A2', '/m/2.jpg'));
-await advance(IMAGE_BURST_QUIET_MS - 1);
-assert.equal(dispatched.length, 0, 'the window restarts with each image');
-await advance(1);
-assert.equal(dispatched.length, 1);
+// Marker extraction: children name the album; protobuf enum numbers work too; plain images and other associations do not.
+assert.equal(run.amadeusAlbumIdOf(child('c1', 'P1')), albumId('P1'));
+assert.equal(run.amadeusAlbumIdOf({ key: { remoteJid: CHAT }, message: { messageContextInfo: { messageAssociation: { associationType: 1, parentMessageKey: { id: 'P1' } } } } }), albumId('P1'));
+assert.equal(run.amadeusAlbumIdOf({ key: { remoteJid: CHAT }, message: { imageMessage: {}, messageContextInfo: {} } }), undefined);
+assert.equal(run.amadeusAlbumIdOf({ key: { remoteJid: CHAT }, message: { messageContextInfo: { messageAssociation: { associationType: 'OTHER', parentMessageKey: { id: 'P1' } } } } }), undefined);
+assert.equal(run.makeInbound(child('c1', 'P1'), { type: 'image/jpeg' }, []).payload.albumId, albumId('P1'));
+assert.equal(run.makeInbound(child('c1', 'P1'), undefined, []).payload.albumId, undefined);
+
+// 1. A single image carries no marker: zero wait.
+await debouncer.enqueue(image('S1', '/m/single.jpg'));
+assert.deepEqual(dispatched.map((d) => d.media), [['/m/single.jpg']]);
+assert.equal(dispatched[0].batched, false);
+
+// 2. Album announced for 2 images; the second arrives ~7s after the first (Arthur's case): one dispatch, exactly when complete.
+dispatched.length = 0;
+await run.handleMessagesUpsert({ messages: [parent('P1', 2)] });
+await debouncer.enqueue(image('A1', '/m/1.jpg', albumId('P1')));
+await advance(6700);
+assert.equal(dispatched.length, 0, 'first album image waits for its sibling');
+await debouncer.enqueue(image('A2', '/m/2.jpg', albumId('P1')));
+assert.equal(dispatched.length, 1, 'complete album dispatches immediately, no extra quiet window');
 assert.deepEqual(dispatched[0].media, ['/m/1.jpg', '/m/2.jpg']);
 assert.equal(dispatched[0].batched, true);
+await advance(ALBUM_QUIET_MS * 2);
+assert.equal(dispatched.length, 1, 'no second run afterwards');
 
-// 2. Three images ~8s apart and a trailing caption text join the same dispatch.
+// 3. Messages that are not part of the album are never held back.
 dispatched.length = 0;
-for (const [id, wait] of [['B1', 8000], ['B2', 8000], ['B3', 2000]]) { await debouncer.enqueue(image(id, `/m/${id}.jpg`)); await advance(wait); }
-await debouncer.enqueue(msg('请比较这三张图', {}));
-assert.equal(dispatched.length, 0, 'text inside the window must not run on its own');
-await advance(1500);
-assert.equal(dispatched.length, 1);
-assert.deepEqual(dispatched[0].media, ['/m/B1.jpg', '/m/B2.jpg', '/m/B3.jpg']);
-assert.match(dispatched[0].body, /请比较这三张图$/u);
+await run.handleMessagesUpsert({ messages: [parent('P2', 3)] });
+await debouncer.enqueue(image('B1', '/m/b1.jpg', albumId('P2')));
+await debouncer.enqueue(msg('hello', {}));
+await debouncer.enqueue(image('Z1', '/m/z.jpg'));
+assert.deepEqual(dispatched.map((d) => d.media), [[], ['/m/z.jpg']]);
 
-// 3. A steady trickle cannot postpone the reply past the hard cap.
+// 4. A missing sibling cannot hold the album forever: quiet timeout flushes what arrived.
+dispatched.length = 0;
+await advance(ALBUM_QUIET_MS - 1);
+assert.equal(dispatched.length, 0);
+await advance(1);
+assert.deepEqual(dispatched.map((d) => d.media), [['/m/b1.jpg']]);
+
+// 5. Unknown parent (announcement lost): still merged by the album id within the quiet window; two albums stay separate.
+dispatched.length = 0;
+await debouncer.enqueue(image('C1', '/m/c1.jpg', albumId('P3')));
+await debouncer.enqueue(image('D1', '/m/d1.jpg', albumId('P4')));
+await advance(3000);
+await debouncer.enqueue(image('C2', '/m/c2.jpg', albumId('P3')));
+await advance(ALBUM_QUIET_MS);
+assert.deepEqual(dispatched.map((d) => d.media).sort(), [['/m/c1.jpg', '/m/c2.jpg'], ['/m/d1.jpg']]);
+
+// 6. The window never extends beyond the hard cap.
 dispatched.length = 0;
 const start = Date.now();
-for (let i = 0; i < 12 && dispatched.length === 0; i++) { await debouncer.enqueue(image(`C${i}`, `/m/c${i}.jpg`)); await advance(9000); }
+await run.handleMessagesUpsert({ messages: [parent('P5', 99)] });
+for (let i = 0; i < 6 && dispatched.length === 0; i++) { await debouncer.enqueue(image(`E${i}`, `/m/e${i}.jpg`, albumId('P5'))); await advance(7000); }
 assert.equal(dispatched.length, 1);
-assert.ok(dispatched[0].at - start <= IMAGE_BURST_MAX_MS + 10_000, `cap exceeded: ${dispatched[0].at - start}`);
-
-// 4. Plain text with no pending image burst is untouched (dispatched immediately, no delay).
-dispatched.length = 0;
-await debouncer.enqueue(msg('hello', {}));
-assert.equal(dispatched.length, 1);
-
-// 5. Text before any image never waits, and a different sender's key is independent.
-dispatched.length = 0;
-await debouncer.enqueue(image('D1', '/m/d1.jpg'));
-await debouncer.enqueue({ ...image('E1', '/m/e1.jpg'), platform: { key: 'secondary:chat:other' } });
-await advance(IMAGE_BURST_QUIET_MS);
-assert.deepEqual(dispatched.map((d) => d.media), [['/m/d1.jpg'], ['/m/e1.jpg']]);
+assert.ok(dispatched[0].at - start <= ALBUM_MAX_MS + 7000, `cap exceeded: ${dispatched[0].at - start}`);
 mock.timers.reset();
-
-assert.equal(run.amadeusBurstWindowMs(0, 10_000, 0, 25_000), 5000);
-assert.equal(run.amadeusBurstWindowMs(0, 10_000, 0, 40_000), 1);
 
 // Media list feeds the inbound facts.
 const first = { type: 'image/jpeg', path: '/m/1.jpg' };
