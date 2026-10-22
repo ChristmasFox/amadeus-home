@@ -1082,12 +1082,32 @@ elif ((OPENCLAW_ONLY == 0)); then
   printf '%s\n' 'MEDIA_ADAPTER=absent (external service was not restored; media tool acceptance remains pending)' >&2
 fi
 if ((OPENCLAW_ONLY == 0)); then orb -m "$MACHINE" -u root docker compose --project-directory "$RADAR_APP_DIR" -f "$RADAR_COMPOSE_FILE" config >/dev/null; fi
-# Ensure Lab web_search has a key-free provider. OpenClaw 2026.9.4 ships no
-# stock key-free search plugin; DuckDuckGo is vendored and installed into the
-# persisted state volume when missing. Config is also repaired here because
-# --openclaw-only auto-release skips openclaw_prepare.py.
-DUCKDUCKGO_PLUGIN_TGZ="$ROOT_DIR/integrations/openclaw/vendor/openclaw-duckduckgo-plugin-2026.9.4.tar.gz"
-[[ -f "$DUCKDUCKGO_PLUGIN_TGZ" ]] || fail "Missing vendored DuckDuckGo plugin: $DUCKDUCKGO_PLUGIN_TGZ"
+# Ensure Lab web_search has a working key-free provider. DuckDuckGo's HTML
+# scraper is bot-challenged in production, so Lab runs a private SearXNG
+# container (amadeus_network, no host port) and the vendored @openclaw/searxng-plugin.
+# Config is repaired here because --openclaw-only auto-release skips openclaw_prepare.py.
+SEARXNG_PLUGIN_TGZ="$ROOT_DIR/integrations/openclaw/vendor/openclaw-searxng-plugin-2026.9.4.tar.gz"
+SEARXNG_IMAGE_TAG="local/searxng:2026.10.19"
+SEARXNG_UPSTREAM_IMAGE="searxng/searxng@sha256:5ed0323b5f5f8701264ef65e239a2bd83cb57098f2b971fa30bf79c06eeae271"
+SEARXNG_SRC_DIR="$ROOT_DIR/infra/docker/casaos/searxng"
+SEARXNG_APP_DIR=/var/lib/casaos/apps/searxng
+SEARXNG_DATA_DIR=/DATA/AppData/searxng
+[[ -f "$SEARXNG_PLUGIN_TGZ" ]] || fail "Missing vendored SearXNG plugin: $SEARXNG_PLUGIN_TGZ"
+if ! orb -m "$MACHINE" -u root docker image inspect "$SEARXNG_IMAGE_TAG" >/dev/null 2>&1; then
+  docker --context orbstack pull --platform linux/arm64 "$SEARXNG_UPSTREAM_IMAGE" >/dev/null
+  docker --context orbstack tag "$SEARXNG_UPSTREAM_IMAGE" "$SEARXNG_IMAGE_TAG"
+  docker --context orbstack save "$SEARXNG_IMAGE_TAG" | orb -m "$MACHINE" -u root docker load >/dev/null
+fi
+orb -m "$MACHINE" -u root bash -lc "install -d -m 0755 '$SEARXNG_DATA_DIR' '$SEARXNG_APP_DIR'; [ -f '$SEARXNG_DATA_DIR/searxng.env' ] || { umask 077; echo SEARXNG_SECRET=\$(openssl rand -hex 32) > '$SEARXNG_DATA_DIR/searxng.env'; }; chmod 600 '$SEARXNG_DATA_DIR/searxng.env'"
+orb -m "$MACHINE" -u root bash -lc "cat > '$SEARXNG_DATA_DIR/settings.yml'; chmod 644 '$SEARXNG_DATA_DIR/settings.yml'" < "$SEARXNG_SRC_DIR/settings.yml"
+orb -m "$MACHINE" -u root bash -lc "cat > '$SEARXNG_APP_DIR/docker-compose.yml'" < "$SEARXNG_SRC_DIR/docker-compose.example.yml"
+orb -m "$MACHINE" -u root bash -lc "cd '$SEARXNG_APP_DIR' && docker compose up -d --no-build" >/dev/null
+for _ in $(seq 1 30); do
+  [[ "$(orb -m "$MACHINE" -u root docker inspect --format '{{.State.Health.Status}}' searxng 2>/dev/null)" == healthy ]] && break
+  sleep 2
+done
+[[ "$(orb -m "$MACHINE" -u root docker inspect --format '{{.State.Health.Status}}' searxng 2>/dev/null)" == healthy ]] || fail 'SearXNG container is not healthy'
+printf '%s\n' 'SEARXNG=healthy'
 orb -m "$MACHINE" -u root python3 - "$OPENCLAW_DATA_DIR/config/openclaw.json" <<'PY'
 import json, os, sys, time
 from pathlib import Path
@@ -1097,23 +1117,26 @@ changed = False
 tools = config.setdefault("tools", {})
 web = tools.setdefault("web", {})
 search = web.setdefault("search", {})
-if search.get("provider") != "duckduckgo":
-    search["provider"] = "duckduckgo"
+if search.get("provider") != "searxng":
+    search["provider"] = "searxng"
     changed = True
 search.setdefault("maxResults", 5)
 search.setdefault("timeoutSeconds", 30)
 plugins = config.setdefault("plugins", {})
 allow = plugins.setdefault("allow", [])
-for name in ("openai", "browser", "duckduckgo"):
+for name in ("openai", "browser", "searxng"):
     if name not in allow:
         allow.append(name)
         changed = True
 entries = plugins.setdefault("entries", {})
-duck = entries.setdefault("duckduckgo", {})
-if duck.get("enabled") is not True:
-    duck["enabled"] = True
+searx = entries.setdefault("searxng", {})
+if searx.get("enabled") is not True:
+    searx["enabled"] = True
     changed = True
-duck.setdefault("config", {}).setdefault("webSearch", {})
+web_search = searx.setdefault("config", {}).setdefault("webSearch", {})
+if web_search.get("baseUrl") != "http://searxng:8080":
+    web_search["baseUrl"] = "http://searxng:8080"
+    changed = True
 entries.setdefault("openai", {}).setdefault("enabled", True)
 entries.setdefault("browser", {}).setdefault("enabled", True)
 if changed:
@@ -1132,16 +1155,16 @@ else:
     print("WEB_SEARCH_CONFIG=present")
 PY
 orb -m "$MACHINE" -u root bash -lc 'install -d -o 1000 -g 1000 -m 0755 /DATA/AppData/openclaw/config/tmp'
-orb -m "$MACHINE" -u root bash -lc 'cat > /DATA/AppData/openclaw/config/tmp/duckduckgo.tgz' < "$DUCKDUCKGO_PLUGIN_TGZ"
-orb -m "$MACHINE" -u root bash -lc 'chown 1000:1000 /DATA/AppData/openclaw/config/tmp/duckduckgo.tgz; chmod 0644 /DATA/AppData/openclaw/config/tmp/duckduckgo.tgz'
-if ! orb -m "$MACHINE" -u root test -f "$OPENCLAW_DATA_DIR/config/extensions/duckduckgo/openclaw.plugin.json"; then
+orb -m "$MACHINE" -u root bash -lc 'cat > /DATA/AppData/openclaw/config/tmp/searxng.tgz' < "$SEARXNG_PLUGIN_TGZ"
+orb -m "$MACHINE" -u root bash -lc 'chown 1000:1000 /DATA/AppData/openclaw/config/tmp/searxng.tgz; chmod 0644 /DATA/AppData/openclaw/config/tmp/searxng.tgz'
+if ! orb -m "$MACHINE" -u root test -f "$OPENCLAW_DATA_DIR/config/extensions/searxng/openclaw.plugin.json"; then
   if orb -m "$MACHINE" -u root docker inspect openclaw >/dev/null 2>&1; then
-    orb -m "$MACHINE" -u root docker cp /DATA/AppData/openclaw/config/tmp/duckduckgo.tgz openclaw:/tmp/duckduckgo.tgz
-    orb -m "$MACHINE" -u root docker exec -u node openclaw node /app/openclaw.mjs plugins install /tmp/duckduckgo.tgz --accept-capabilities --acknowledge-install-policy-warning --force >/dev/null
+    orb -m "$MACHINE" -u root docker cp /DATA/AppData/openclaw/config/tmp/searxng.tgz openclaw:/tmp/searxng.tgz
+    orb -m "$MACHINE" -u root docker exec -u node openclaw node /app/openclaw.mjs plugins install /tmp/searxng.tgz --accept-capabilities --acknowledge-install-policy-warning --force >/dev/null
   else
-    orb -m "$MACHINE" -u root bash -lc "cd '$OPENCLAW_APP_DIR' && docker compose run --rm --no-deps --user 1000:1000 --entrypoint node openclaw /app/openclaw.mjs plugins install /home/node/.openclaw/tmp/duckduckgo.tgz --accept-capabilities --acknowledge-install-policy-warning --force" >/dev/null
+    orb -m "$MACHINE" -u root bash -lc "cd '$OPENCLAW_APP_DIR' && docker compose run --rm --no-deps --user 1000:1000 --entrypoint node openclaw /app/openclaw.mjs plugins install /home/node/.openclaw/tmp/searxng.tgz --accept-capabilities --acknowledge-install-policy-warning --force" >/dev/null
   fi
-  orb -m "$MACHINE" -u root test -f "$OPENCLAW_DATA_DIR/config/extensions/duckduckgo/openclaw.plugin.json" || fail 'DuckDuckGo web_search plugin failed to install'
+  orb -m "$MACHINE" -u root test -f "$OPENCLAW_DATA_DIR/config/extensions/searxng/openclaw.plugin.json" || fail 'SearXNG web_search plugin failed to install'
   printf '%s\n' 'WEB_SEARCH_PLUGIN=installed'
 else
   printf '%s\n' 'WEB_SEARCH_PLUGIN=present'
@@ -1203,10 +1226,10 @@ if 'allow' in config.get('tools', {}):
     raise SystemExit('strict tools.allow list would hide future native tools')
 if 'amadeus' not in config.get('plugins', {}).get('allow', []):
     raise SystemExit('Amadeus plugin is not in the OpenClaw plugin allowlist')
-if 'duckduckgo' not in config.get('plugins', {}).get('allow', []):
-    raise SystemExit('duckduckgo web_search provider plugin is not in the OpenClaw plugin allowlist')
-if (config.get('tools', {}).get('web') or {}).get('search', {}).get('provider') != 'duckduckgo':
-    raise SystemExit('tools.web.search.provider must be duckduckgo for Lab realtime web_search')
+if 'searxng' not in config.get('plugins', {}).get('allow', []):
+    raise SystemExit('searxng web_search provider plugin is not in the OpenClaw plugin allowlist')
+if (config.get('tools', {}).get('web') or {}).get('search', {}).get('provider') != 'searxng':
+    raise SystemExit('tools.web.search.provider must be searxng for Lab realtime web_search')
 sender_policies = config.get('tools', {}).get('toolsBySender', {})
 if sender_policies.get('*', {}).get('allow') != ['web_search', 'web_fetch']:
     raise SystemExit('non-owner sender tool policy is not read-only web access')

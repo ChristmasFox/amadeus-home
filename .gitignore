@@ -90,4 +90,5 @@ infra/9router/runtime-policy.json
 # Vendored OpenClaw web_search provider for Lab 2026.9.4
 !integrations/openclaw/vendor/
 !integrations/openclaw/vendor/openclaw-duckduckgo-plugin-2026.9.4.tar.gz
+!integrations/openclaw/vendor/openclaw-searxng-plugin-2026.9.4.tar.gz
 .scratch/

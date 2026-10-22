@@ -1,0 +1,35 @@
+# CasaOS template. Copy to /var/lib/casaos/apps/searxng/docker-compose.yml.
+# Self-hosted SearXNG for Lab web_search (OpenClaw plugin `searxng`).
+# Reachable only as http://searxng:8080 on amadeus_network; no host port.
+# The image is pulled on the Mac (docker save | load) by deploy-openclaw.sh.
+services:
+  searxng:
+    image: ${SEARXNG_IMAGE:-local/searxng:2026.10.19}
+    container_name: searxng
+    restart: unless-stopped
+    init: true
+    logging:
+      driver: ${DOCKER_LOG_DRIVER:-local}
+      options:
+        max-size: "10m"
+        max-file: "3"
+    env_file:
+      - ${SEARXNG_ENV_FILE:-/DATA/AppData/searxng/searxng.env}
+    environment:
+      SEARXNG_BASE_URL: http://searxng:8080/
+      TZ: Asia/Shanghai
+    volumes:
+      - ${SEARXNG_SETTINGS_FILE:-/DATA/AppData/searxng/settings.yml}:/etc/searxng/settings.yml:ro
+    networks:
+      - amadeus_network
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8080/healthz"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+networks:
+  amadeus_network:
+    external: true
+    name: ${AMADEUS_NETWORK_NAME:-amadeus_network}

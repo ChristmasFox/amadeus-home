@@ -131,7 +131,7 @@
     "profile": "full",
     "web": {
       "search": {
-        "provider": "duckduckgo",
+        "provider": "searxng",
         "maxResults": 5,
         "timeoutSeconds": 30
       }
@@ -161,15 +161,17 @@
   },
   "plugins": {
     "enabled": true,
-    "allow": ["pubg", "amadeus", "whatsapp", "telegram", "memory-core", "openai", "browser", "duckduckgo"],
+    "allow": ["pubg", "amadeus", "whatsapp", "telegram", "memory-core", "openai", "browser", "searxng"],
     "slots": {
       "memory": "memory-core"
     },
     "entries": {
-      "duckduckgo": {
+      "searxng": {
         "enabled": true,
         "config": {
-          "webSearch": {}
+          "webSearch": {
+            "baseUrl": "http://searxng:8080"
+          }
         }
       },
       "openai": {
