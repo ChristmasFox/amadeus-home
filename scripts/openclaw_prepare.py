@@ -388,7 +388,7 @@ def main() -> None:
     config.setdefault("commands", {})["ownerAllowFrom"] = [owner_target_value]
 
     tools = config.setdefault("tools", {})
-    # Lab requires a working web_search provider for the realtime-facts gate.
+    # web_search is model-chosen (soft hint in plugins/amadeus realtime-facts); it needs a working provider.
     # DuckDuckGo HTML scraping is bot-challenged in production, so the default is the
     # self-hosted SearXNG container (amadeus_network); install is ensured by deploy.
     web = tools.setdefault("web", {})

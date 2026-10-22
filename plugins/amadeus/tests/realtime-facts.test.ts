@@ -3,45 +3,7 @@ import { mkdtemp, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
-import { RealtimeToolAudit, classifyRealtimeEvidence, isLabReleaseAnnouncement, isRealtimeFactQuery, isRealtimeGateExemptTool, realtimeToolMustBeBlocked, registerRealtimeFacts } from '../src/realtime-facts.js';
-
-test('realtime query classifier covers version and latest-news wording', () => {
-  assert.equal(isRealtimeFactQuery('Claude Opus 最新版本是多少？'), true);
-  assert.equal(isRealtimeFactQuery('今天有什么新闻？'), true);
-  assert.equal(isRealtimeFactQuery('解释一下 TypeScript 泛型'), false);
-  // Lab auto-release PUBG smoke historically said "status ok"; bare status must not trip the gate.
-  const labPubgSmoke = 'Use the native pubg_query_stats tool with team=true. If the tool returns status ok or partial, reply LAB_STATS_QUERY_OK.';
-  assert.equal(isRealtimeFactQuery(labPubgSmoke), false);
-  assert.equal(isRealtimeFactQuery('What is the system status of the CDN?'), true);
-
-  const labReleaseForward = `Amadeus 1.15.8 · 世界线收束
-
-✨ *新功能*
-
-• main 合并只自动部署候选版；说「正式部署」后再升正式版本并汇总更新说明。
-
-🛠️ *修复*
-
-• 修复了 WhatsApp 中状态表情快速闪烁切换的问题。
-
-已部署到 Amadeus M204 & Lab 世界线
-
-• 版本：1.15.8
-
-El Psy Kongroo.`;
-  assert.equal(isLabReleaseAnnouncement(labReleaseForward), true);
-  // Must not trip realtime gate: bare 版本 in changelog previously forced web_search revise → ❌.
-  assert.equal(isRealtimeFactQuery(labReleaseForward), false);
-
-});
-
-test('realtime gate requires web_search before other tools', () => {
-  assert.equal(realtimeToolMustBeBlocked(true, false, 'memory_search'), true);
-  assert.equal(realtimeToolMustBeBlocked(true, false, 'web_fetch'), false);
-  assert.equal(realtimeToolMustBeBlocked(true, true, 'memory_search'), false);
-  assert.equal(isRealtimeGateExemptTool('pubg_query_stats'), true);
-  assert.equal(realtimeToolMustBeBlocked(true, false, 'pubg_query_stats'), false);
-});
+import { RealtimeToolAudit, classifyRealtimeEvidence, registerRealtimeFacts } from '../src/realtime-facts.js';
 
 test('evidence without provenance is unknown and expired evidence is stale', () => {
   const now = new Date('2026-10-22T00:00:00.000Z');
@@ -68,7 +30,7 @@ test('search audit records success, timeout and bounded result summary', async (
   assert.equal(Object.hasOwn(lines[0]!, 'result'), false);
 });
 
-test('registered hooks inject the rule and gate a realtime run before audit completion', async () => {
+test('registered hooks give a soft hint, never block or revise, and still audit', async () => {
   const hooks = new Map<string, (...args: any[]) => any>();
   const logs: string[] = [];
   const api = {
@@ -77,14 +39,13 @@ test('registered hooks inject the rule and gate a realtime run before audit comp
   } as any;
   registerRealtimeFacts(api);
   const context = { runId: 'run-hook', sessionKey: 'session-hook' };
-  const prompt = await hooks.get('before_prompt_build')!({ prompt: 'Claude Opus 最新版本？', messages: [] }, context);
-  assert.match(prompt.appendSystemContext, /web_search/u);
-  const blocked = await hooks.get('before_tool_call')!({ toolName: 'memory_search', params: {}, runId: 'run-hook' }, context);
-  assert.equal(blocked.block, true);
-  const allowed = await hooks.get('before_tool_call')!({ toolName: 'web_search', params: {}, runId: 'run-hook', toolCallId: 'call-hook' }, context);
-  assert.equal(allowed, undefined);
+  for (const text of ['Claude Opus 最新版本？', 'Amadeus 1.15.8 · 世界线收束\n版本：1.15.8', '解释一下 TypeScript 泛型']) {
+    const prompt = await hooks.get('before_prompt_build')!({ prompt: text, messages: [] }, context);
+    assert.match(prompt.appendSystemContext, /web_search/u);
+  }
+  assert.equal(hooks.has('before_agent_finalize'), false);
+  assert.equal(await hooks.get('before_tool_call')!({ toolName: 'memory_search', params: {}, runId: 'run-hook' }, context), undefined);
+  assert.equal(await hooks.get('before_tool_call')!({ toolName: 'web_search', params: {}, runId: 'run-hook', toolCallId: 'call-hook' }, context), undefined);
   await hooks.get('after_tool_call')!({ toolName: 'web_search', params: {}, runId: 'run-hook', toolCallId: 'call-hook', result: { statusCode: 200 } }, context);
-  const afterSearch = await hooks.get('before_tool_call')!({ toolName: 'memory_search', params: {}, runId: 'run-hook' }, context);
-  assert.equal(afterSearch, undefined);
   assert.ok(logs.some(value => value.includes('realtime_tool_audit')));
 });

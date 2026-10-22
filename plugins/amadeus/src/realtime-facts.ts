@@ -10,28 +10,11 @@ export interface SearchAuditRecord {
   timedOut: boolean; httpStatus: number | null; resultSummary: string; errorCode: string | null;
 }
 
-// Bare English "status" is intentionally omitted: Lab auto-release PUBG smoke
-// (and many tool replies) say "status ok", which must not force a web_search gate.
-const REALTIME_QUERY = /(?:\b(?:latest|today|newest|just released|version|versions|news|current events|price|prices|system status|server status|service status)\b|最新|今天|刚(?:刚)?发布|版本(?:号)?|新闻|时事|价格|状态|现在)/iu;
-// Lab worldline release announcements are changelogs Arthur forwards to chat.
-// They always include 版本 / version wording, which must not force a web_search
-// revise (that revise recently failed with SessionTranscriptProjectionUnavailableError → ❌ and no reply).
-const LAB_RELEASE_ANNOUNCEMENT = /(?:世界线收束|El Psy Kongroo\.?|Amadeus\s+\d+\.\d+\.\d+\s*[·•])/iu;
 const SEARCH_TOOLS = new Set(['web_search', 'web_fetch']);
-// Native PUBG tools answer from the local SaaS/archive, never from the public web.
-const REALTIME_GATE_EXEMPT = /^(?:pubg_)/u;
-const SEARCH_REQUIRED = '实时事实问题必须先调用 web_search；必要时再调用 web_fetch。回答必须给出来源和查询或页面时间。搜索失败、超时或无结果时，明确说明当前事实无法确认，禁止用旧知识、无来源记忆或猜测冒充当前事实。搜索结果拥有更高优先级；记忆只可作为背景，且必须检查来源、observedAt 和 validUntil。';
-
-export function isLabReleaseAnnouncement(prompt: string): boolean {
-  return typeof prompt === "string" && LAB_RELEASE_ANNOUNCEMENT.test(prompt);
-}
-export function isRealtimeFactQuery(prompt: string): boolean {
-  if (typeof prompt !== "string") return false;
-  if (isLabReleaseAnnouncement(prompt)) return false;
-  return REALTIME_QUERY.test(prompt);
-}
-export function realtimeFactInstruction(): string { return SEARCH_REQUIRED; }
-export function isRealtimeGateExemptTool(toolName: string): boolean { return typeof toolName === 'string' && REALTIME_GATE_EXEMPT.test(toolName); }
+// Soft guidance only: the model decides whether a turn needs the web. No keyword
+// classifier, tool block or finalize revision (those misfired on changelogs and
+// the revise hook fails with a transcript-projection error → ❌ and no reply).
+const SEARCH_HINT = '当问题依赖当前事实（最新版本、新闻、价格、服务状态等）且你无法确定时，可调用 web_search，必要时再调用 web_fetch，并在回答里给出来源和查询或页面时间。搜索失败、超时或无结果时，明确说明当前事实无法确认，不要用旧知识或猜测冒充当前事实。不依赖当前事实的问题不必搜索。';
 
 export function classifyRealtimeEvidence(evidence: Pick<RealtimeEvidence, 'source' | 'observedAt' | 'validUntil'>, now = new Date()): RealtimeEvidence {
   const source = typeof evidence.source === 'string' && evidence.source.trim() ? evidence.source.trim() : null;
@@ -41,10 +24,6 @@ export function classifyRealtimeEvidence(evidence: Pick<RealtimeEvidence, 'sourc
   return { source, observedAt, validUntil, freshness };
 }
 
-export function realtimeToolMustBeBlocked(realtimeQuery: boolean, searched: boolean, toolName: string): boolean {
-  if (!realtimeQuery || searched || SEARCH_TOOLS.has(toolName) || isRealtimeGateExemptTool(toolName)) return false;
-  return true;
-}
 function httpStatus(result: unknown): number | null {
   if (!result || typeof result !== 'object') return null;
   const value = result as Record<string, unknown>;
@@ -82,32 +61,14 @@ export class RealtimeToolAudit {
 
 export function registerRealtimeFacts(api: OpenClawPluginApi): void {
   const audit = new RealtimeToolAudit();
-  const realtimeRuns = new Set<string>(); const searchedRuns = new Set<string>(); const revisionRequested = new Set<string>();
-  api.on('before_prompt_build', (event, context) => {
-    if (!context.runId || !isRealtimeFactQuery(event.prompt)) return undefined;
-    realtimeRuns.add(context.runId);
-    return { appendSystemContext: SEARCH_REQUIRED };
-  });
+  api.on('before_prompt_build', () => ({ appendSystemContext: SEARCH_HINT }));
   api.on('before_tool_call', (event, context) => {
-    const runId = event.runId ?? context.runId;
-    if (runId && realtimeToolMustBeBlocked(realtimeRuns.has(runId), searchedRuns.has(runId), event.toolName)) {
-      api.logger.warn(JSON.stringify({ event: 'realtime_search_gate_blocked', runId, tool: event.toolName }));
-      return { block: true, blockReason: 'realtime_fact_requires_web_search_first' };
-    }
-    if (SEARCH_TOOLS.has(event.toolName)) audit.start({ session: context.sessionKey ?? 'unknown', ...(runId ? { runId } : {}), tool: event.toolName, ...(event.toolCallId ? { toolCallId: event.toolCallId } : {}) });
+    if (SEARCH_TOOLS.has(event.toolName)) audit.start({ session: context.sessionKey ?? 'unknown', ...((event.runId ?? context.runId) ? { runId: (event.runId ?? context.runId)! } : {}), tool: event.toolName, ...(event.toolCallId ? { toolCallId: event.toolCallId } : {}) });
     return undefined;
   });
   api.on('after_tool_call', async (event, context) => {
     if (!SEARCH_TOOLS.has(event.toolName)) return;
     const record = await audit.finish({ session: context.sessionKey ?? 'unknown', ...(event.runId ? { runId: event.runId } : {}), tool: event.toolName, ...(event.toolCallId ? { toolCallId: event.toolCallId } : {}), ...(event.result !== undefined ? { result: event.result } : {}), ...(event.error ? { error: event.error } : {}), ...(event.durationMs !== undefined ? { durationMs: event.durationMs } : {}) });
     api.logger.info(JSON.stringify({ event: 'realtime_tool_audit', ...(record ?? { tool: event.toolName, success: false }) }));
-    if (event.toolName === 'web_search' && !event.error && event.runId) searchedRuns.add(event.runId);
   });
-  api.on('before_agent_finalize', (event) => {
-    if (!event.runId || !realtimeRuns.has(event.runId) || searchedRuns.has(event.runId)) return;
-    if (!revisionRequested.has(event.runId)) { revisionRequested.add(event.runId); api.logger.warn(JSON.stringify({ event: 'realtime_search_missing_before_finalize', runId: event.runId })); return { action: 'revise', reason: 'realtime_fact_search_required', retry: { instruction: SEARCH_REQUIRED, idempotencyKey: `realtime-search:${event.runId}`, maxAttempts: 1 } }; }
-    api.logger.error(JSON.stringify({ event: 'realtime_search_missing_after_retry', runId: event.runId }));
-    return undefined;
-  });
-  api.on('agent_end', (event) => { if (!event.runId) return; realtimeRuns.delete(event.runId); searchedRuns.delete(event.runId); revisionRequested.delete(event.runId); });
 }
