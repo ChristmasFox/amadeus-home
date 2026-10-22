@@ -498,6 +498,8 @@ deploy_stage verify
   node --check scripts/patch-openclaw-voice-failure.mjs
   node --check scripts/patch-openclaw-whatsapp-media-agent.mjs
   node scripts/test-patch-openclaw-whatsapp-media-agent.mjs
+  node --check scripts/patch-openclaw-whatsapp-image-burst.mjs
+  node scripts/test-patch-openclaw-whatsapp-image-burst.mjs
   node scripts/test-openclaw-bilingual-voice.mjs
   pnpm test:model-capability-adapter
   pnpm check:secrets
@@ -595,6 +597,7 @@ PREPARE="$ROOT_DIR/scripts/openclaw_prepare.py"
 PATCH_RUNTIME="$ROOT_DIR/scripts/patch-openclaw-channel-identity.mjs"
 VOICE_PATCH_RUNTIME="$ROOT_DIR/scripts/patch-openclaw-voice-failure.mjs"
 MEDIA_AGENT_PATCH_RUNTIME="$ROOT_DIR/scripts/patch-openclaw-whatsapp-media-agent.mjs"
+IMAGE_BURST_PATCH_RUNTIME="$ROOT_DIR/scripts/patch-openclaw-whatsapp-image-burst.mjs"
 VOICE_LIFECYCLE_PATCH_RUNTIME="$ROOT_DIR/scripts/patch-openclaw-whatsapp-voice-lifecycle.mjs"
 for source in \
   "$ROOT_DIR/infra/docker/casaos/openclaw/docker-compose.example.yml" \
@@ -608,7 +611,7 @@ for source in \
   "$ROOT_DIR/integrations/openclaw/workspace-seed/AGENTS.seed.md" \
   "$ROOT_DIR/integrations/openclaw/workspace-seed/SOUL.seed.md" \
   "$ROOT_DIR/integrations/openclaw/workspace-seed/USER.seed.md" \
-  "$ROOT_DIR/integrations/openclaw/workspace-seed/MEMORY.seed.md" "$PREPARE" "$PATCH_RUNTIME" "$VOICE_PATCH_RUNTIME" "$MEDIA_AGENT_PATCH_RUNTIME"; do
+  "$ROOT_DIR/integrations/openclaw/workspace-seed/MEMORY.seed.md" "$PREPARE" "$PATCH_RUNTIME" "$VOICE_PATCH_RUNTIME" "$MEDIA_AGENT_PATCH_RUNTIME" "$IMAGE_BURST_PATCH_RUNTIME"; do
   [[ -f "$source" ]] || fail "Missing deployment source: $source"
 done
 
@@ -794,6 +797,8 @@ orb -m "$MACHINE" -u root docker exec -i openclaw node - \
   /home/node/.openclaw/npm/projects < "$VOICE_PATCH_RUNTIME"
 orb -m "$MACHINE" -u root docker exec -i openclaw node - \
   /home/node/.openclaw/npm/projects < "$MEDIA_AGENT_PATCH_RUNTIME"
+orb -m "$MACHINE" -u root docker exec -i openclaw node - \
+  /home/node/.openclaw/npm/projects < "$IMAGE_BURST_PATCH_RUNTIME"
 tar -C "$ROOT_DIR/scripts" -cf - \
   patch-openclaw-whatsapp-voice-lifecycle.mjs openclaw-voice-markers.mjs \
   openclaw-voice-lease.mjs | \
