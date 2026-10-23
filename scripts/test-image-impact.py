@@ -24,9 +24,10 @@ assert state("openclaw", "plugins/pubg/src/index.ts") == "REBUILD"
 assert state("gate", "plugins/pubg/src/index.ts") == "REUSE"
 assert state("radar", "plugins/pubg/src/index.ts") == "REUSE"
 # Shared presentation/domain now live on npm (@rine-kit/*); in-repo path no longer rebuilds images.
-assert state("openclaw", "packages/presentation/src/index.ts") == "REUSE"
-assert state("radar", "packages/presentation/src/index.ts") == "REUSE"
-assert state("gate", "packages/presentation/src/index.ts") == "REUSE"
+# packages/presentation removed in rine-kit cutover; presentation is now @rine-kit/presentation.
+assert state("openclaw", "docs/ARCHITECTURE.md") == "REUSE"
+assert state("radar", "docs/ARCHITECTURE.md") == "REUSE"
+assert state("gate", "docs/ARCHITECTURE.md") == "REUSE"
 assert state("gate", "apps/pubg-saas/src/gateway.ts") == "REBUILD"
 assert state("openclaw", "docs/CURRENT_TASK.md") == "REUSE"
 assert state("gate", "scripts/new-deploy-note.sh") == "REUSE"
