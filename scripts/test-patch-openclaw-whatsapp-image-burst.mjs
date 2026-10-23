@@ -5,11 +5,25 @@ import { spawnSync } from 'node:child_process';
 import { mkdtemp, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { MARKER, ALBUM_QUIET_MS, ALBUM_MAX_MS, patchWhatsAppMonitorSource } from './patch-openclaw-whatsapp-image-burst.mjs';
+import { MARKER, ALBUM_QUIET_MS, ALBUM_EXPECTED_MAX_MS, patchWhatsAppMonitorSource } from './patch-openclaw-whatsapp-image-burst.mjs';
 
 // Mirrors the pinned monitor's debouncer wiring (same anchors), driven by a
 // minimal copy of the core keyed debouncer semantics.
-const fixture = `function createWhatsAppInboundMessageDebouncer(options) {
+const fixture = `function inspectWhatsAppIngressMessage(message) {
+	const remoteJid = message.key?.remoteJid?.trim();
+	const id = message.key?.id?.trim();
+	if (!remoteJid || !id) throw new Error("missing key");
+	return {
+		eventId: remoteJid + "/" + id,
+		laneKey: remoteJid
+	};
+}
+function createWhatsAppIngressMonitor(params) {
+	return {
+		inspect: (admission) => inspectWhatsAppIngressMessage(admission.message),
+	};
+}
+function createWhatsAppInboundMessageDebouncer(options) {
 	const pendingKeys = /* @__PURE__ */ new Map();
 	const buildKey = (msg) => msg.platform.key;
 	const shouldDebounce = (msg) => options.shouldDebounce?.(msg) ?? true;
@@ -105,15 +119,16 @@ function createInboundDebouncer(params) {
 }
 
 const calls = [];
-const factory = new Function('createInboundDebouncer', 'shouldDebounceTextInbound', 'toInboundMediaFactsWithMetadata', 'rememberBaileysMessage', `${patched}; return { createWhatsAppInboundMessageDebouncer, shouldDebounce, build, handleMessagesUpsert, makeInbound, amadeusAlbumIdOf };`);
+const factory = new Function('createInboundDebouncer', 'shouldDebounceTextInbound', 'toInboundMediaFactsWithMetadata', 'rememberBaileysMessage', `${patched}; return { createWhatsAppInboundMessageDebouncer, shouldDebounce, build, handleMessagesUpsert, makeInbound, amadeusAlbumIdOf, inspectWhatsAppIngressMessage, createWhatsAppIngressMonitor };`);
 const run = factory(createInboundDebouncer, ({ text, hasMedia }) => !hasMedia && Boolean(text), async (list) => { calls.push(list); return list; }, () => {});
 
 mock.timers.enable({ apis: ['setTimeout', 'Date'] });
 const dispatched = [];
+const dispatchHook = { fn: (m) => dispatched.push({ at: Date.now(), body: m.payload.body, media: (m.payload.mediaList ?? (m.payload.media ? [m.payload.media] : [])).map((x) => x.path), batched: m.event.isBatched === true }) };
 const debouncer = run.createWhatsAppInboundMessageDebouncer({
   resolveDebounceMs: () => 0,
   shouldDebounce: run.shouldDebounce,
-  onMessage: (m) => dispatched.push({ at: Date.now(), body: m.payload.body, media: (m.payload.mediaList ?? (m.payload.media ? [m.payload.media] : [])).map((x) => x.path), batched: m.event.isBatched === true }),
+  onMessage: (m) => dispatchHook.fn(m),
 });
 let t = 0;
 const msg = (id, extra) => ({ platform: { key: 'secondary:chat:sender' }, event: { id, timestamp: t }, payload: { body: id, ...extra } });
@@ -151,6 +166,17 @@ assert.equal(dispatched[0].batched, true);
 await advance(ALBUM_QUIET_MS * 2);
 assert.equal(dispatched.length, 1, 'no second run afterwards');
 
+// 2b. The siblings' media downloads can be more than the old 8s quiet window apart (Arthur's 08:56 album): still one dispatch.
+dispatched.length = 0;
+await run.handleMessagesUpsert({ messages: [parent('P6', 2)] });
+await debouncer.enqueue(image('F1', '/m/f1.jpg', albumId('P6')));
+await advance(9000);
+assert.equal(dispatched.length, 0);
+await debouncer.enqueue(image('F2', '/m/f2.jpg', albumId('P6')));
+assert.deepEqual(dispatched.map((d) => d.media), [['/m/f1.jpg', '/m/f2.jpg']]);
+await advance(ALBUM_EXPECTED_MAX_MS);
+assert.equal(dispatched.length, 1);
+
 // 3. Messages that are not part of the album are never held back.
 dispatched.length = 0;
 await run.handleMessagesUpsert({ messages: [parent('P2', 3)] });
@@ -159,9 +185,9 @@ await debouncer.enqueue(msg('hello', {}));
 await debouncer.enqueue(image('Z1', '/m/z.jpg'));
 assert.deepEqual(dispatched.map((d) => d.media), [[], ['/m/z.jpg']]);
 
-// 4. A missing sibling cannot hold the album forever: quiet timeout flushes what arrived.
+// 4. A missing sibling cannot hold the album forever: the announced-count cap flushes what arrived.
 dispatched.length = 0;
-await advance(ALBUM_QUIET_MS - 1);
+await advance(ALBUM_EXPECTED_MAX_MS - 1);
 assert.equal(dispatched.length, 0);
 await advance(1);
 assert.deepEqual(dispatched.map((d) => d.media), [['/m/b1.jpg']]);
@@ -179,9 +205,49 @@ assert.deepEqual(dispatched.map((d) => d.media).sort(), [['/m/c1.jpg', '/m/c2.jp
 dispatched.length = 0;
 const start = Date.now();
 await run.handleMessagesUpsert({ messages: [parent('P5', 99)] });
-for (let i = 0; i < 6 && dispatched.length === 0; i++) { await debouncer.enqueue(image(`E${i}`, `/m/e${i}.jpg`, albumId('P5'))); await advance(7000); }
+for (let i = 0; i < 9 && dispatched.length === 0; i++) { await debouncer.enqueue(image(`E${i}`, `/m/e${i}.jpg`, albumId('P5'))); await advance(7000); }
 assert.equal(dispatched.length, 1);
-assert.ok(dispatched[0].at - start <= ALBUM_MAX_MS + 7000, `cap exceeded: ${dispatched[0].at - start}`);
+assert.ok(dispatched[0].at - start <= ALBUM_EXPECTED_MAX_MS + 7000, `cap exceeded: ${dispatched[0].at - start}`);
+
+// 7. Durable ingress lanes: a held turn keeps its lane until adoption, so album images need lanes of their own.
+const lanes = (laneKeyOf, downloadMs) => {
+  const chains = new Map();
+  const waiting = [];
+  dispatched.length = 0;
+  const originalOnMessage = dispatchHook.fn;
+  dispatchHook.fn = (m) => { originalOnMessage(m); while (waiting.length) waiting.pop()(); };
+  const process = (raw, path) => {
+    const key = laneKeyOf(raw);
+    const next = (chains.get(key) ?? Promise.resolve()).then(async () => {
+      await new Promise((resolve) => setTimeout(resolve, downloadMs));
+      const adopted = new Promise((resolve) => waiting.push(resolve));
+      await debouncer.enqueue(image(raw.key.id, path, run.amadeusAlbumIdOf(raw)));
+      await adopted;
+    });
+    chains.set(key, next);
+  };
+  return { process, restore: () => { dispatchHook.fn = originalOnMessage; } };
+};
+const settle = async (ms) => { for (let spent = 0; spent < ms; spent += 100) { await advance(100); for (let i = 0; i < 20; i++) await Promise.resolve(); } };
+await run.handleMessagesUpsert({ messages: [parent('P7', 2)] });
+const albumChildren = [child('G1', 'P7'), child('G2', 'P7')];
+const plainLane = lanes((raw) => raw.key.remoteJid, 300);
+albumChildren.forEach((raw, index) => plainLane.process(raw, `/m/g${index + 1}.jpg`));
+await settle(ALBUM_EXPECTED_MAX_MS * 2 + 2000);
+assert.equal(dispatched.length >= 2, true, 'with the chat as lane the siblings are serialized and split (the observed bug)');
+plainLane.restore();
+await run.handleMessagesUpsert({ messages: [parent('P8', 2)] });
+const albumLane = lanes((raw) => run.inspectWhatsAppIngressMessage(raw).laneKey, 8800);
+[child('H1', 'P8'), child('H2', 'P8')].forEach((raw, index) => albumLane.process(raw, `/m/h${index + 1}.jpg`));
+await settle(ALBUM_EXPECTED_MAX_MS + 1000);
+assert.deepEqual(dispatched.map((d) => d.media), [['/m/h1.jpg', '/m/h2.jpg']], 'album images share one dispatch when each has its own lane');
+albumLane.restore();
+// Lane keys: plain messages keep the chat lane, album children each get their own, a claim made under the old lane key is still accepted.
+assert.equal(run.inspectWhatsAppIngressMessage({ key: { remoteJid: CHAT, id: 'x' }, message: { conversation: 'hi' } }).laneKey, CHAT);
+assert.equal(run.inspectWhatsAppIngressMessage(child('c1', 'P1')).laneKey, `album:${albumId('P1')}:c1`);
+const monitor = run.createWhatsAppIngressMonitor({});
+assert.equal(monitor.inspect({ message: child('c1', 'P1') }, { phase: 'claim', claimedLaneKey: CHAT }).laneKey, CHAT);
+assert.equal(monitor.inspect({ message: child('c1', 'P1') }, { phase: 'claim', claimedLaneKey: `album:${albumId('P1')}:c1` }).laneKey, `album:${albumId('P1')}:c1`);
 mock.timers.reset();
 
 // Media list feeds the inbound facts.

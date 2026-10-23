@@ -10,14 +10,18 @@ import { chmod, readdir, readFile, rename, stat, writeFile } from 'node:fs/promi
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-export const MARKER = 'amadeus-whatsapp-image-album-v3';
-// Fallback only: the parent normally announces how many images to wait for.
-export const ALBUM_QUIET_MS = 8000;
+export const MARKER = 'amadeus-whatsapp-image-album-v4';
+// The parent announces how many images to wait for; wait for all of them (their
+// downloads can be many seconds apart) up to a generous cap. Without an
+// announcement fall back to a quiet window.
+export const ALBUM_QUIET_MS = 12_000;
 export const ALBUM_MAX_MS = 20_000;
+export const ALBUM_EXPECTED_MAX_MS = 45_000;
 
 const helpers = `// ${MARKER}
 const AMADEUS_ALBUM_QUIET_MS = ${ALBUM_QUIET_MS};
 const AMADEUS_ALBUM_MAX_MS = ${ALBUM_MAX_MS};
+const AMADEUS_ALBUM_EXPECTED_MAX_MS = ${ALBUM_EXPECTED_MAX_MS};
 const amadeusAlbumParents = new Map();
 function amadeusUnwrapMessage(message) {
 	return message?.ephemeralMessage?.message ?? message?.viewOnceMessage?.message ?? message;
@@ -44,8 +48,24 @@ function amadeusRememberAlbumParent(raw) {
 function amadeusIsAlbumChild(msg) {
 	return Boolean(msg?.payload?.albumId) && Boolean(msg?.payload?.media);
 }
-function amadeusAlbumWindowMs(configured, startedAt, now) {
+function amadeusAlbumWindowMs(configured, startedAt, now, expected) {
+	if (expected !== void 0) return Math.max(configured, Math.max(1, startedAt + AMADEUS_ALBUM_EXPECTED_MAX_MS - now));
 	return Math.max(configured, Math.max(1, Math.min(AMADEUS_ALBUM_QUIET_MS, startedAt + AMADEUS_ALBUM_MAX_MS - now)));
+}
+// The durable ingress lane is the chat; a deferred (held) turn keeps its lane busy until adoption,
+// so sibling album images would not even be processed until the first one was flushed.
+// Every album image gets a lane of its own so they all reach the debouncer together.
+function amadeusAlbumLaneKey(message, remoteJid) {
+	const albumId = amadeusAlbumIdOf(message);
+	return albumId ? \`album:\${albumId}:\${message.key?.id ?? ""}\` : remoteJid;
+}
+function amadeusInspectForClaim(facts, message, context) {
+	const remoteJid = message?.key?.remoteJid?.trim();
+	if (context?.phase === "claim" && remoteJid && context.claimedLaneKey === remoteJid) return { ...facts, laneKey: remoteJid };
+	return facts;
+}
+function amadeusAlbumLog(text) {
+	try { console.info(\`[amadeus-album] \${text}\`); } catch {}
 }
 function amadeusPayloadMediaList(payload) {
 	if (Array.isArray(payload?.mediaList) && payload.mediaList.length > 0) return payload.mediaList;
@@ -62,8 +82,10 @@ function replaceOnce(source, before, after, label) {
 export function patchWhatsAppMonitorSource(original) {
   if (original.includes(MARKER)) return original;
   let result = replaceOnce(original, 'function createWhatsAppInboundMessageDebouncer(options) {', `${helpers}function createWhatsAppInboundMessageDebouncer(options) {`, 'debouncer helper insertion');
+  result = replaceOnce(result, '\t\tlaneKey: remoteJid\n\t};', '\t\tlaneKey: amadeusAlbumLaneKey(message, remoteJid)\n\t};', 'album ingress lane');
+  result = replaceOnce(result, 'inspect: (admission) => inspectWhatsAppIngressMessage(admission.message),', 'inspect: (admission, context) => amadeusInspectForClaim(inspectWhatsAppIngressMessage(admission.message), admission.message, context),', 'album claim inspect');
   result = replaceOnce(result, 'const pendingKeys = /* @__PURE__ */ new Map();', 'const pendingKeys = /* @__PURE__ */ new Map();\n\tconst amadeusAlbumState = /* @__PURE__ */ new Map();', 'album state');
-  result = replaceOnce(result, '\t\tconst message = {\n\t\t\t...input,\n\t\t\tdebounceMs: options.resolveDebounceMs()\n\t\t};\n\t\tconst key = buildKey(message);', '\t\tconst configuredDebounceMs = options.resolveDebounceMs();\n\t\tconst message = {\n\t\t\t...input,\n\t\t\tdebounceMs: configuredDebounceMs\n\t\t};\n\t\tconst baseKey = buildKey(message);\n\t\tconst albumChild = Boolean(baseKey) && amadeusIsAlbumChild(input);\n\t\tconst key = albumChild ? `${baseKey}\\u0000album:${input.payload.albumId}` : baseKey;\n\t\tlet albumComplete = false;\n\t\tif (albumChild) {\n\t\t\tconst state = amadeusAlbumState.get(key) ?? { startedAt: Date.now(), count: 0 };\n\t\t\tstate.count++;\n\t\t\tamadeusAlbumState.set(key, state);\n\t\t\tconst expected = amadeusAlbumParents.get(input.payload.albumId)?.expected;\n\t\t\talbumComplete = expected !== void 0 && state.count >= expected;\n\t\t\tmessage.debounceMs = amadeusAlbumWindowMs(configuredDebounceMs, state.startedAt, Date.now());\n\t\t}', 'album child key and window');
+  result = replaceOnce(result, '\t\tconst message = {\n\t\t\t...input,\n\t\t\tdebounceMs: options.resolveDebounceMs()\n\t\t};\n\t\tconst key = buildKey(message);', '\t\tconst configuredDebounceMs = options.resolveDebounceMs();\n\t\tconst message = {\n\t\t\t...input,\n\t\t\tdebounceMs: configuredDebounceMs\n\t\t};\n\t\tconst baseKey = buildKey(message);\n\t\tconst albumChild = Boolean(baseKey) && amadeusIsAlbumChild(input);\n\t\tconst key = albumChild ? `${baseKey}\\u0000album:${input.payload.albumId}` : baseKey;\n\t\tlet albumComplete = false;\n\t\tif (albumChild) {\n\t\t\tconst state = amadeusAlbumState.get(key) ?? { startedAt: Date.now(), count: 0 };\n\t\t\tstate.count++;\n\t\t\tamadeusAlbumState.set(key, state);\n\t\t\tconst expected = amadeusAlbumParents.get(input.payload.albumId)?.expected;\n\t\t\talbumComplete = expected !== void 0 && state.count >= expected;\n\t\t\tmessage.debounceMs = amadeusAlbumWindowMs(configuredDebounceMs, state.startedAt, Date.now(), expected);\n\t\t\tamadeusAlbumLog(`image ${state.count}/${expected ?? \'?\'} wait=${albumComplete ? 0 : message.debounceMs}ms`);\n\t\t}', 'album child key and window');
   result = replaceOnce(result, '\t\tawait debouncer.enqueue(message);\n\t};', '\t\tawait debouncer.enqueue(message);\n\t\tif (albumComplete) {\n\t\t\tamadeusAlbumState.delete(key);\n\t\t\tawait debouncer.flushKey(key);\n\t\t}\n\t};', 'album complete flush');
   result = replaceOnce(result, 'for (const entry of entries) releaseKey(entry);', 'for (const entry of entries) {\n\t\t\t\treleaseKey(entry);\n\t\t\t\tif (entry.debounceKey) amadeusAlbumState.delete(entry.debounceKey);\n\t\t\t}', 'album state release');
   result = replaceOnce(result, '\t\t\t\t\t\t\t\t...last.payload,\n\t\t\t\t\t\t\t\tbody: combinedBody,', '\t\t\t\t\t\t\t\t...last.payload,\n\t\t\t\t\t\t\t\tmediaList: orderedEntries.flatMap((entry) => amadeusPayloadMediaList(entry.payload) ?? []),\n\t\t\t\t\t\t\t\tbody: combinedBody,', 'merged album media list');
