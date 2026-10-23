@@ -1,9 +1,9 @@
-import { estimateMemoryEmbeddingTokens } from '@agent/memory';
+import { estimateMemoryEmbeddingTokens } from '@rine-kit/agent-memory';
 import type {
   MemoryEmbeddingBatch,
   MemoryEmbeddingClient,
   MemoryEmbeddingContract,
-} from '@agent/memory';
+} from '@rine-kit/agent-memory';
 
 export type GateMemoryEmbeddingContract = MemoryEmbeddingContract;
 export type GateMemoryEmbeddingBatch = MemoryEmbeddingBatch;

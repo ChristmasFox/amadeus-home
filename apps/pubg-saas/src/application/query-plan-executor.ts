@@ -5,14 +5,14 @@ import {
   resolvePreviousPeriodSelector,
   type Selector,
   type Metric,
-} from '@agent/pubg-domain/core';
+} from '@rine-kit/pubg-domain/core';
 import type {
   GetPeriodReviewInput,
   SearchMatchesInput,
   StatsToolInput,
   TeamDamageQueryInput,
   ToolEnvelope,
-} from '@agent/pubg-domain/core';
+} from '@rine-kit/pubg-domain/core';
 import type { AuthorizedPublicQuery } from './public-query-authorizer.js';
 import {
   normalizePreviousQueryPlan,

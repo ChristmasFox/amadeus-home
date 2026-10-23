@@ -15,7 +15,7 @@ on:
       - "infra/docker/casaos/9router/test-runtime-policy.mjs"
       - "scripts/test-init-pubg-team.mjs"
       - "scripts/check-community-fixtures.mjs"
-      - "packages/pubg-domain/config/default-team.json"
+      - "plugins/pubg/config/default-team.json"
       - ".github/workflows/community-pubg-onboarding.yml"
   workflow_dispatch:
 

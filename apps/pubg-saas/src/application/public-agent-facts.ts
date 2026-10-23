@@ -1,5 +1,5 @@
-import { formatDisplayTime } from '@agent/presentation';
-import { BUSINESS_DAY_START, DEFAULT_TIMEZONE } from '@agent/pubg-domain/core';
+import { formatDisplayTime } from '@rine-kit/presentation';
+import { BUSINESS_DAY_START, DEFAULT_TIMEZONE } from '@rine-kit/pubg-domain/core';
 
 type PublicRosterPlayer = { id: string; name: string; aliases?: readonly string[] };
 

@@ -3,8 +3,8 @@ import { mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'n
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
-import { validateOwnerNotificationPresentation, type PubgStatsPresentation } from '@agent/presentation';
-import { reviewShareOpen, reviewShareTokenHash, type NormalizedMatch, type ReviewShareRecord, type SessionReviewRecord, type TelemetryFeatureKey, type TelemetryFeatureRecord } from '@agent/pubg-domain';
+import { validateOwnerNotificationPresentation, type PubgStatsPresentation } from '@rine-kit/presentation';
+import { reviewShareOpen, reviewShareTokenHash, type NormalizedMatch, type ReviewShareRecord, type SessionReviewRecord, type TelemetryFeatureKey, type TelemetryFeatureRecord } from '@rine-kit/pubg-domain';
 import { nextDailyRunAt } from '../src/daily-review-service.js';
 import {
   DAILY_REVIEW_FETCH_GRACE_MS,

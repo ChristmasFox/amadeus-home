@@ -1,5 +1,5 @@
-import { buildPubgToolPresentation, type PubgStatsPresentation } from '@agent/presentation';
-import type { PubgDomainService, StatsToolInput } from '@agent/pubg-domain';
+import { buildPubgToolPresentation, type PubgStatsPresentation } from '@rine-kit/presentation';
+import type { PubgDomainService, StatsToolInput } from '@rine-kit/pubg-domain';
 import type { DailyStatsSource } from './daily-review.js';
 
 /**

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { reviewShareOpen, reviewShareTokenHash, SqlitePubgRepository } from '@agent/pubg-domain';
+import { reviewShareOpen, reviewShareTokenHash, SqlitePubgRepository } from '@rine-kit/pubg-domain';
 import { appendQueryShareLink, QUERY_SHARE_MAX_MATCHES } from '../src/query-share.js';
 
 const TEXT = '📊 今日战绩\n场次 3 · 吃鸡 1\n数据更新时间：22:05';

@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import test from 'node:test';
 import { Pool } from 'pg';
-import { DEFAULT_REVIEW_FEATURE_VERSION, DEFAULT_TELEMETRY_PARSER_VERSION, PubgDomainService } from '@agent/pubg-domain';
+import { DEFAULT_REVIEW_FEATURE_VERSION, DEFAULT_TELEMETRY_PARSER_VERSION, PubgDomainService } from '@rine-kit/pubg-domain';
 import {
   PostgresPubgRepository,
   PublicSyncWorker,

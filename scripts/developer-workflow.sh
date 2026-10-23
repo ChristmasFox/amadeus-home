@@ -78,12 +78,8 @@ for path in "${FILES[@]-}"; do
   [[ -n "$path" ]] || continue
   if is_env_path "$path"; then env_count=$((env_count + 1)); continue; fi
   case "$path" in
-    packages/pubg-domain/src/*) has_pubg=1; has_pubg_private=1; has_pubg_domain=1; has_pubg_saas=1 ;;
     plugins/pubg/*) has_pubg=1; has_pubg_private=1 ;;
-    packages/pubg-domain/*) has_pubg=1; has_pubg_domain=1; has_pubg_saas=1 ;;
-    packages/agent-memory/*) has_pubg_saas=1; has_gate_specific=1 ;;
     apps/pubg-saas/src/*|apps/pubg-saas/tests/*|apps/pubg-saas/tsconfig.json) has_pubg=1; has_pubg_saas=1; has_gate_specific=1 ;;
-    packages/presentation/*) has_presentation=1; has_pubg_saas=1; has_amadeus=1; has_product=1 ;;
     packages/identity/*) has_identity=1 ;;
     plugins/amadeus/*) has_amadeus=1 ;;
     apps/product-radar/src/*|apps/product-radar/tests/*|apps/product-radar/scripts/*|apps/product-radar/tsconfig.json) has_product=1 ;;
@@ -251,8 +247,7 @@ if ((has_identity || has_amadeus)); then
   printf '+ pnpm test:amadeus\n'; pnpm test:amadeus
 fi
 if ((has_presentation)); then
-  printf '+ pnpm --filter @agent/presentation typecheck\n'; pnpm --filter @agent/presentation typecheck
-  printf '+ pnpm --filter @agent/presentation test\n'; pnpm --filter @agent/presentation test
+  printf '+ presentation now comes from @rine-kit/presentation on npm (no local package build)\n'
 fi
 if ((has_product)); then
   printf '+ pnpm typecheck:product-radar\n'; pnpm typecheck:product-radar

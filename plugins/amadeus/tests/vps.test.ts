@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
 import type { AmadeusConfig } from '../src/config.js';
-import { adaptWorldlineNotification } from '@agent/presentation';
+import { adaptWorldlineNotification } from '@rine-kit/presentation';
 import { getVpsUsage, parseVpsServicesProbe, parseVpsSystemProbe, parseVpsTrafficFuseProbe, trafficFuseWorldlineIntent, type VpsTrafficFuseEvent } from '../src/vps.js';
 
 function config(directory: string): AmadeusConfig {

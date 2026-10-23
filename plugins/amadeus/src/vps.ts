@@ -2,7 +2,7 @@ import { spawn } from 'node:child_process';
 import { lstat, mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import type { OpenClawPluginToolContext } from 'openclaw/plugin-sdk/core';
-import type { WorldlineNotificationIntent } from '@agent/presentation';
+import type { WorldlineNotificationIntent } from '@rine-kit/presentation';
 import type { AmadeusConfig } from './config.js';
 import { readRequiredFile } from './config.js';
 import { requestFormJson } from './http.js';

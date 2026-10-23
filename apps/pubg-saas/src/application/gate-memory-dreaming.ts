@@ -1,12 +1,12 @@
 import { Pool } from 'pg';
-import { DEFAULT_TIMEZONE } from '@agent/pubg-domain/core';
-import { runMemoryDreamingScheduler, runMemoryDreamingStages } from '@agent/memory';
+import { DEFAULT_TIMEZONE } from '@rine-kit/pubg-domain/core';
+import { runMemoryDreamingScheduler, runMemoryDreamingStages } from '@rine-kit/agent-memory';
 import type {
   DreamingReport,
   MemoryDreamingRunStore,
   MemoryDreamingStageWorker,
   MemoryDreamingWorkStatus,
-} from '@agent/memory';
+} from '@rine-kit/agent-memory';
 import type { GateMemoryConsolidationWorker } from './gate-memory-consolidation.js';
 
 export interface GateMemoryDreamingRunIdentity {

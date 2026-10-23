@@ -8,7 +8,7 @@ import {
   type ReviewShareRecord,
   SqlitePubgRepository,
   type TeamConfig,
-} from '@agent/pubg-domain';
+} from '@rine-kit/pubg-domain';
 import {
   type BattleTelemetryDocument,
   buildResearchSquads,
@@ -21,14 +21,15 @@ import {
   NaturalLanguageResearchPlanner,
   redactSensitiveText,
   type ResearchSquad,
-} from '@agent/pubg-intelligence';
-import { RawTelemetryArchive } from '@agent/pubg-intelligence/archive';
-import { assertArchiveOutsideRepository } from '@agent/pubg-intelligence/backfill';
+} from '@rine-kit/pubg-intelligence';
+import { RawTelemetryArchive } from '@rine-kit/pubg-intelligence/archive';
+import { assertArchiveOutsideRepository } from '@rine-kit/pubg-intelligence/backfill';
 import { type LanguageModel } from 'ai';
 import {
   existsSync,
   mkdirSync,
   readFileSync,
+  readdirSync,
   realpathSync,
   statSync,
 } from 'node:fs';
@@ -166,7 +167,22 @@ export async function openSnapshot(modelOverride?: Exclude<LanguageModel, string
   const selectedSquad = defaultSquad(matches, squads);
   const model = modelOverride ?? createResearchModel();
   // Per-match analysis is CPU-heavy: workers keep the server responsive, and the disk cache survives restarts.
-  const packageDist = (name: string) => join(repositoryRoot, 'packages', name, 'dist', 'src');
+  const packageDist = (name: string) => {
+    // Shared algorithms live in @rine-kit/* on npm (pnpm layout under node_modules/.pnpm).
+    const candidates = [
+      join(repositoryRoot, 'node_modules', '@rine-kit', name, 'dist', 'src'),
+      join(repositoryRoot, 'apps', 'pubg-intelligence-lab', 'node_modules', '@rine-kit', name, 'dist', 'src'),
+    ];
+    try {
+      const pnpm = join(repositoryRoot, 'node_modules', '.pnpm');
+      for (const entry of readdirSync(pnpm)) {
+        if (entry.startsWith(`@rine-kit+${name}@`)) {
+          candidates.push(join(pnpm, entry, 'node_modules', '@rine-kit', name, 'dist', 'src'));
+        }
+      }
+    } catch { /* ignore */ }
+    return candidates.find((candidate) => existsSync(candidate)) ?? candidates[0]!;
+  };
   let analysisSource = '';
   try { analysisSource = readFileSync(fileURLToPath(new URL('./match-analysis.ts', import.meta.url)), 'utf8'); } catch { /* compiled layout: the packages' hash still covers the analysis code */ }
   const analysisCache = new AnalysisCache(join(dirname(experimentPath), 'analysis-cache'), analysisVersion([packageDist('pubg-intelligence'), packageDist('pubg-domain')], [analysisSource]));

@@ -16,8 +16,8 @@ The Lab model configuration is server-only: `PUBG_INTELLIGENCE_AI_BASE_URL`, `PU
 
 ## BUILD_VERIFIED
 
-- `pnpm --filter @agent/pubg-intelligence build`
-- `pnpm --filter @agent/pubg-intelligence test` — see current `STATUS.md` ledger for the expanded archive and assistant fixtures.
+- `pnpm --filter @rine-kit/pubg-intelligence build`
+- `pnpm --filter @rine-kit/pubg-intelligence test` — see current `STATUS.md` ledger for the expanded archive and assistant fixtures.
 - `pnpm --filter @agent/pubg-intelligence-lab typecheck`
 - `pnpm --filter @agent/pubg-intelligence-lab test` — 4 passed.
 - `pnpm --filter @agent/pubg-intelligence-lab build`

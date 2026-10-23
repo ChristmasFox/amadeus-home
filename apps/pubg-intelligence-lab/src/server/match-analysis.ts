@@ -1,4 +1,4 @@
-import { parseTelemetryPayload, type NormalizedMatch } from '@agent/pubg-domain';
+import { parseTelemetryPayload, type NormalizedMatch } from '@rine-kit/pubg-domain';
 import {
   analyzeCombatQuality,
   analyzeDeaths,
@@ -25,7 +25,7 @@ import {
   type PlayerStyleMatch,
   type StoryDown,
   type StreakMatchStats,
-} from '@agent/pubg-intelligence';
+} from '@rine-kit/pubg-intelligence';
 
 export interface MatchTelemetryAnalysis {
   highlights: MatchHighlight[];

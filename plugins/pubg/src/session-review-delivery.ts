@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { assertValid, validateOwnerNotificationPresentation, type OwnerNotificationPresentation } from '@agent/presentation';
+import { assertValid, validateOwnerNotificationPresentation, type OwnerNotificationPresentation } from '@rine-kit/presentation';
 
 /** The same request surface the amadeus owner notifier uses; in the plugin it is api.runtime.gateway. */
 export interface ReportGateway {

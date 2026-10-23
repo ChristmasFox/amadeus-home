@@ -248,7 +248,7 @@ class GateAutopilotContracts(unittest.TestCase):
         self.assertEqual(gate.classify_changed_scope(["plugins/amadeus/src/owner.ts"])[0], "lab_only")
         self.assertEqual(gate.classify_changed_scope(PATHS + ["plugins/amadeus/src/owner.ts"]),
                          ("gate_only", None))
-        self.assertEqual(gate.classify_changed_scope(["packages/pubg-domain/src/index.ts"]),
+        self.assertEqual(gate.classify_changed_scope(["packages/identity/src/index.ts"]),
                          ("gate_only", None))
         self.assertEqual(gate.classify_changed_scope(["docs/GATE_MEMORY.md"])[0], "non_runtime")
 

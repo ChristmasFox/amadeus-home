@@ -21,7 +21,7 @@ import {
   summarizeRotation,
   summarizeStreaks,
   summarizeZone,
-} from '@agent/pubg-intelligence';
+} from '@rine-kit/pubg-intelligence';
 
 export interface TelemetryAnalyticsQuery {
   squad: ResearchSquad;

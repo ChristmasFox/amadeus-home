@@ -6,8 +6,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 import { MockLanguageModelV4 } from 'ai/test';
-import { SqlitePubgRepository } from '@agent/pubg-domain';
-import { RawTelemetryArchive } from '@agent/pubg-intelligence/archive';
+import { SqlitePubgRepository } from '@rine-kit/pubg-domain';
+import { RawTelemetryArchive } from '@rine-kit/pubg-intelligence/archive';
 import { startServer } from '../src/server/server.js';
 
 const require = createRequire(import.meta.url);

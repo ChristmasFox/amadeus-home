@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 import { Pool } from 'pg';
-import { createTeamContext, TelemetryWorker } from '@agent/pubg-domain';
+import { createTeamContext, TelemetryWorker } from '@rine-kit/pubg-domain';
 import { migratePublicDatabase, PostgresPubgRepository } from '../src/index.js';
 
 const databaseUrl = process.env.PUBG_SAAS_TEST_DATABASE_URL;

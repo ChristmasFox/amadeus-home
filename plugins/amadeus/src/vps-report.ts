@@ -5,7 +5,7 @@
  * the key figures with a space after each span, emoji outside the markers, binary units from shared/units, Shanghai
  * time, Chinese wording. Unknown, stale or incomplete values stay visible as such and are never filled with zero.
  */
-import { adaptWorldlineNotification } from '@agent/presentation';
+import { adaptWorldlineNotification } from '@rine-kit/presentation';
 import type { OpenClawPluginToolContext } from 'openclaw/plugin-sdk/core';
 import type { AmadeusConfig } from './config.js';
 import { isGroupContext } from './machost.js';

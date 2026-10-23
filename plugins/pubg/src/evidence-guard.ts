@@ -1,5 +1,5 @@
 import type { OpenClawPluginApi } from 'openclaw/plugin-sdk/core';
-import { missingReplyFacts, type PubgPresentation } from '@agent/presentation';
+import { missingReplyFacts, type PubgPresentation } from '@rine-kit/presentation';
 
 // This is an outbound evidence policy, not an intent router: it neither chooses
 // a tool nor answers a PUBG question. It only prevents unsupported match facts

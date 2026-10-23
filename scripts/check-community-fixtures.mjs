@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
-const path = join(root, 'packages/pubg-domain/config/default-team.json');
+const path = join(root, 'plugins/pubg/config/default-team.json');
 const team = JSON.parse(readFileSync(path, 'utf8'));
 if (!/^example_[a-z0-9_-]+$/.test(team.id) ||
     team.platform !== 'steam' || !Array.isArray(team.players) || team.players.length !== 4) {

@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import test from 'node:test';
 import type { OpenClawPluginToolContext } from 'openclaw/plugin-sdk/core';
 import { IdentityStore } from '@agent/identity';
-import { createTeamContext, PubgDomainService, SqlitePubgRepository, SqlitePubgRepositoryAdapter, type TeamConfig } from '@agent/pubg-domain';
+import { createTeamContext, PubgDomainService, SqlitePubgRepository, SqlitePubgRepositoryAdapter, type TeamConfig } from '@rine-kit/pubg-domain';
 import { prepareIdentitySubject, type PluginConfig } from '../src/index.js';
 
 const TEAM: TeamConfig = {

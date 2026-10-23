@@ -49,7 +49,7 @@ SENSITIVE = (
     "integrations/openclaw/workspace/AGENTS.md", "VERSION", "RELEASE_NOTES.md",
     "apps/pubg-saas/src/infrastructure/postgres/migrations/",
 )
-SOURCE_ROOTS = ("plugins/", "packages/pubg-domain/", "packages/presentation/", "packages/identity/",
+SOURCE_ROOTS = ("plugins/", "packages/identity/",
                 "apps/product-radar/", "integrations/openclaw/")
 LEVELS = ("edit", "task", "phase", "release")
 
@@ -126,7 +126,7 @@ def scope_kind(paths: list[str]) -> tuple[bool, bool, str]:
     selection are separate decisions.
     """
     lab = any(p.startswith(SOURCE_ROOTS) for p in paths)
-    gate = any(p.startswith(("apps/pubg-saas/", "packages/agent-memory/", "packages/pubg-domain/", "packages/presentation/", "packages/identity/")) for p in paths)
+    gate = any(p.startswith(("apps/pubg-saas/", "packages/identity/")) for p in paths)
     if not lab:
         return lab, gate, "not-affected"
     # Workspace prompts and Skills are runtime inputs, even when Markdown.
@@ -377,11 +377,8 @@ def execute(command: list[str], label: str, dry_run: bool) -> None:
 
 PACKAGE_DIRS = (
     ("apps/pubg-saas/", "@agent/pubg-saas"),
-    ("packages/agent-memory/", "@agent/memory"),
     ("plugins/amadeus/", "@agent/amadeus-plugin"),
     ("plugins/pubg/", "@agent/pubg-plugin"),
-    ("packages/pubg-domain/", "@agent/pubg-domain"),
-    ("packages/presentation/", "@agent/presentation"),
     ("packages/identity/", "@agent/identity"),
     ("apps/product-radar/", "@agent/product-radar"),
 )

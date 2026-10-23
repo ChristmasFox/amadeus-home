@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import type { MatchReviewFacts, NormalizedMatch, TelemetryFeatureRecord } from '@agent/pubg-domain';
-import { summarizeGateCachedFeatures } from '../src/gate-api.js';
+import type { MatchReviewFacts, NormalizedMatch, TelemetryFeatureRecord } from '@rine-kit/pubg-domain';
+import { summarizeGateCachedFeatures } from '../src/application/pubg-intelligence-gate-api.js';
 
 const parserVersion = 'telemetry-parser-6';
 const featureVersion = 'review-features-6';

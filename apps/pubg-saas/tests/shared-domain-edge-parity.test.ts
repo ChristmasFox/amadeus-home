@@ -5,12 +5,12 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 import { Pool } from 'pg';
-import { buildPubgToolPresentation, type PubgToolName } from '@agent/presentation';
+import { buildPubgToolPresentation, type PubgToolName } from '@rine-kit/presentation';
 import {
   CanonicalQuerySchema, createTeamContext, DeterministicQueryEngine, PubgDomainService, SqlitePubgRepository,
   SqlitePubgRepositoryAdapter, TelemetryWorker, type Coverage, type PubgRepositoryPort, type SourceInfo, type TeamConfig,
   type Metric, type ReviewEvidence, type TeamDamageQueryInput, type ToolEnvelope,
-} from '@agent/pubg-domain';
+} from '@rine-kit/pubg-domain';
 import { migratePublicDatabase, PostgresPubgRepository } from '../src/index.js';
 const databaseUrl = process.env.PUBG_SAAS_TEST_DATABASE_URL;
 interface EdgeFixture {
@@ -19,7 +19,7 @@ interface EdgeFixture {
   cases: Array<{ id: string; now?: string; query: Record<string, unknown>; coverage?: Partial<Coverage>; expected: { status: string; matchIds: string[]; metrics: Record<string, Record<string, number | null>> } }>;
   telemetry: Record<string, unknown[]>; damageExpected: Record<string, [number, number]>;
 }
-const original = JSON.parse(readFileSync(new URL('../../../packages/pubg-domain/tests/fixtures/shared-edge-cases.json', import.meta.url), 'utf8')) as EdgeFixture;
+const original = JSON.parse(readFileSync(new URL('./fixtures/shared-edge-cases.json', import.meta.url), 'utf8')) as EdgeFixture;
 
 function presentEnvelope(envelope: ToolEnvelope, toolName: PubgToolName, teamDamage?: { aggregateByActor?: boolean }) {
   return buildPubgToolPresentation(toolName, {

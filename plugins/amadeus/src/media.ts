@@ -1,5 +1,5 @@
 import type { OpenClawPluginToolContext } from 'openclaw/plugin-sdk/core';
-import { adaptWorldlineNotification } from '@agent/presentation';
+import { adaptWorldlineNotification } from '@rine-kit/presentation';
 import type { AmadeusConfig } from './config.js';
 import { requestJson } from './http.js';
 import { ownerEvent, type OwnerNotifier } from './owner.js';

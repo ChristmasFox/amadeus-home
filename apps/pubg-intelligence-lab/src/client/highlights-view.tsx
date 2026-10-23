@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import type { HighlightKind, MatchHighlight } from '@agent/pubg-intelligence';
+import type { HighlightKind, MatchHighlight } from '@rine-kit/pubg-intelligence';
 import { drawHighlightPoster, exportHighlightPoster, highlightClock, highlightDate } from './highlight-poster.js';
 import './highlights.css';
 

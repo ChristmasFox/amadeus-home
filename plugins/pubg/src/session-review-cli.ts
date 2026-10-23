@@ -18,7 +18,7 @@ import { execFile } from 'node:child_process';
 import { realpathSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 import { promisify } from 'node:util';
-import { createTeamContext, latestCompleteBusinessDay, loadTeamConfig, PubgDomainService, SqlitePubgRepository, SqlitePubgRepositoryAdapter } from '@agent/pubg-domain';
+import { createTeamContext, latestCompleteBusinessDay, loadTeamConfig, PubgDomainService, SqlitePubgRepository, SqlitePubgRepositoryAdapter } from '@rine-kit/pubg-domain';
 import {
   checkReviewTarget,
   loadReviewSubscription,

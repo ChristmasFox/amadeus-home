@@ -1,6 +1,6 @@
 import { loadBattleTelemetry } from './match-views.js';
 import { safePlayerName, type Snapshot } from './snapshot.js';
-import { type NormalizedMatch } from '@agent/pubg-domain';
+import { type NormalizedMatch } from '@rine-kit/pubg-domain';
 import {
   battlePlayerRef,
   type BattleTelemetryDocument,
@@ -9,7 +9,7 @@ import {
   type ResearchAssistantEvidence,
   type ResearchAssistantToolset,
   type ResearchSquad,
-} from '@agent/pubg-intelligence';
+} from '@rine-kit/pubg-intelligence';
 import { createHash } from 'node:crypto';
 
 export interface ScopedPlayerAlias {

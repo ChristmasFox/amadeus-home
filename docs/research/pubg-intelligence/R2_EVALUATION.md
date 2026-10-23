@@ -96,9 +96,9 @@ The match-only `no-joint-engagement-observed` counterexample has a precise match
 
 ## Verification evidence
 
-- `pnpm --filter @agent/pubg-domain test` — 41 passed, including the documented `common.isGame` phase boundaries.
-- `pnpm --filter @agent/pubg-intelligence test` — 41 passed, including overlap grouping, no-time-only merging, timeline/reversal evidence, and persistent review labels.
-- `pnpm --filter @agent/pubg-intelligence typecheck` and `build`.
+- `pnpm --filter @rine-kit/pubg-domain test` — 41 passed, including the documented `common.isGame` phase boundaries.
+- `pnpm --filter @rine-kit/pubg-intelligence test` — 41 passed, including overlap grouping, no-time-only merging, timeline/reversal evidence, and persistent review labels.
+- `pnpm --filter @rine-kit/pubg-intelligence typecheck` and `build`.
 - `pnpm --filter @agent/pubg-intelligence-lab test` — 4 passed, including archived-only reconstruction and review write/read.
 - `pnpm --filter @agent/pubg-intelligence-lab typecheck` and `build`.
 - `pnpm check:secrets` and `git diff --check` are run at the source commit boundary.

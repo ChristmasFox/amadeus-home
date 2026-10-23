@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto';
 import test from 'node:test';
 import { Pool } from 'pg';
 import { MockLanguageModelV4 } from 'ai/test';
-import { TelemetryWorker } from '@agent/pubg-domain/core';
+import { TelemetryWorker } from '@rine-kit/pubg-domain/core';
 import {
   AccountClaimService,
   KookIngressQueue,

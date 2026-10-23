@@ -45,4 +45,4 @@ export function gateMemoryEmbeddingStatus(
     return 'misconfigured';
   }
 }
-import { MEMORY_FEATURE_DEFAULTS } from '@agent/memory';
+import { MEMORY_FEATURE_DEFAULTS } from '@rine-kit/agent-memory';

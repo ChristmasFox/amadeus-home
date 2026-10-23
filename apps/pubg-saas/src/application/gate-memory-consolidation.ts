@@ -7,7 +7,7 @@ import {
   normalizeMemoryCandidates,
   type MemoryCandidateDraft,
   type NormalizedMemoryCandidate,
-} from '@agent/memory';
+} from '@rine-kit/agent-memory';
 import type { KookIngressJob } from './kook-ingress-queue.js';
 import { canonicalizeGateMemoryKey } from './gate-memory-store.js';
 

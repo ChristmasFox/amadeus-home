@@ -17,15 +17,12 @@ class DevctlContracts(unittest.TestCase):
     def test_gate_only_never_lab_deploys(self):
         self.assertEqual(devctl.scope_kind(["apps/pubg-saas/src/gateway.ts"]), (False, True, "not-affected"))
 
-    def test_agent_memory_package_is_gate_only_and_gets_affected_checks(self):
-        path = "packages/agent-memory/src/recall/fusion.ts"
-        self.assertEqual(devctl.scope_kind([path]), (False, True, "not-affected"))
-        self.assertEqual(devctl.affected_package(path), ("packages/agent-memory/", "@agent/memory"))
+    def test_identity_package_is_shared_and_gets_affected_checks(self):
+        path = "packages/identity/src/index.ts"
+        self.assertEqual(devctl.scope_kind([path]), (True, True, "eligible"))
+        self.assertEqual(devctl.affected_package(path), ("packages/identity/", "@agent/identity"))
         self.assertEqual(devctl.typechecks_for_task([path])[0][1],
-                         ["pnpm", "--filter", "@agent/memory", "typecheck"])
-
-    def test_shared_domain_requires_both_products(self):
-        self.assertEqual(devctl.scope_kind(["packages/pubg-domain/src/index.ts"]), (True, True, "eligible"))
+                         ["pnpm", "--filter", "@agent/identity", "typecheck"])
 
     def test_workspace_persona_requires_candidate(self):
         self.assertEqual(devctl.scope_kind(["integrations/openclaw/workspace/SOUL.md"])[2], "eligible")

@@ -2,9 +2,9 @@ import { createHash } from 'node:crypto';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { SqlitePubgRepository } from '@agent/pubg-domain';
-import { RawTelemetryArchive } from '@agent/pubg-intelligence/archive';
-import { highlightMatch, highlightTelemetry } from '../../../packages/pubg-intelligence/tests/highlight-fixture.js';
+import { SqlitePubgRepository } from '@rine-kit/pubg-domain';
+import { RawTelemetryArchive } from '@rine-kit/pubg-intelligence/archive';
+import { highlightMatch, highlightTelemetry } from './fixtures/highlight-fixture.js';
 import { startServer } from '../src/server/server.js';
 
 /** Isolated, synthetic archive: three analysed matches, one missing match, and one excluded normal match. */

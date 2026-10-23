@@ -3,11 +3,11 @@ import { randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import { Pool } from 'pg';
-import type { Coverage, ResultSetRecord, SessionContextRecord, SourceInfo, TeamContext, TelemetryFeatureRecord } from '@agent/pubg-domain';
-import { createTeamContext, DeterministicQueryEngine, PubgDomainService, SqlitePubgRepository, SqlitePubgRepositoryAdapter } from '@agent/pubg-domain';
+import type { Coverage, ResultSetRecord, SessionContextRecord, SourceInfo, TeamContext, TelemetryFeatureRecord } from '@rine-kit/pubg-domain';
+import { createTeamContext, DeterministicQueryEngine, PubgDomainService, SqlitePubgRepository, SqlitePubgRepositoryAdapter } from '@rine-kit/pubg-domain';
 import { migratePublicDatabase, PostgresPubgRepository } from '../src/index.js';
 
-const golden = JSON.parse(readFileSync(new URL('../../../packages/pubg-domain/tests/fixtures/shared-domain-golden.json', import.meta.url), 'utf8')) as {
+const golden = JSON.parse(readFileSync(new URL('./fixtures/shared-domain-golden.json', import.meta.url), 'utf8')) as {
   contract: string;
   matches: Array<Record<string, unknown>>;
   query: Record<string, unknown>;

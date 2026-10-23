@@ -10,9 +10,9 @@ importers:
 
   apps/product-radar:
     dependencies:
-      '@agent/presentation':
-        specifier: workspace:*
-        version: link:../../packages/presentation
+      '@rine-kit/presentation':
+        specifier: 0.1.0
+        version: 0.1.0
       sharp:
         specifier: 0.35.4
         version: 0.35.4(@types/node@22.18.6)
@@ -29,15 +29,15 @@ importers:
 
   apps/pubg-intelligence-lab:
     dependencies:
-      '@agent/pubg-domain':
-        specifier: workspace:*
-        version: link:../../packages/pubg-domain
-      '@agent/pubg-intelligence':
-        specifier: workspace:*
-        version: link:../../packages/pubg-intelligence
       '@ai-sdk/openai-compatible':
         specifier: 3.0.67
         version: 3.0.67(zod@4.5.4)
+      '@rine-kit/pubg-domain':
+        specifier: 0.1.0
+        version: 0.1.0
+      '@rine-kit/pubg-intelligence':
+        specifier: 0.1.0
+        version: 0.1.0
       ai:
         specifier: 7.0.137
         version: 7.0.137(zod@4.5.4)
@@ -78,21 +78,21 @@ importers:
 
   apps/pubg-saas:
     dependencies:
-      '@agent/memory':
-        specifier: workspace:*
-        version: link:../../packages/agent-memory
-      '@agent/presentation':
-        specifier: workspace:*
-        version: link:../../packages/presentation
-      '@agent/pubg-domain':
-        specifier: workspace:*
-        version: link:../../packages/pubg-domain
-      '@agent/pubg-intelligence':
-        specifier: workspace:*
-        version: link:../../packages/pubg-intelligence
       '@ai-sdk/openai-compatible':
         specifier: 3.0.67
         version: 3.0.67(zod@4.5.4)
+      '@rine-kit/agent-memory':
+        specifier: 0.1.0
+        version: 0.1.0
+      '@rine-kit/presentation':
+        specifier: 0.1.0
+        version: 0.1.0
+      '@rine-kit/pubg-domain':
+        specifier: 0.1.0
+        version: 0.1.0
+      '@rine-kit/pubg-intelligence':
+        specifier: 0.1.0
+        version: 0.1.0
       ai:
         specifier: 7.0.137
         version: 7.0.137(zod@4.5.4)
@@ -119,72 +119,7 @@ importers:
         specifier: 5.9.2
         version: 5.9.2
 
-  packages/agent-memory:
-    devDependencies:
-      '@types/node':
-        specifier: 22.18.6
-        version: 22.18.6
-      tsx:
-        specifier: 4.23.13
-        version: 4.23.13
-      typescript:
-        specifier: 5.9.2
-        version: 5.9.2
-
   packages/identity:
-    devDependencies:
-      '@types/node':
-        specifier: 22.18.6
-        version: 22.18.6
-      tsx:
-        specifier: 4.23.13
-        version: 4.23.13
-      typescript:
-        specifier: 5.9.2
-        version: 5.9.2
-
-  packages/presentation:
-    devDependencies:
-      '@types/node':
-        specifier: 22.18.6
-        version: 22.18.6
-      tsx:
-        specifier: 4.23.13
-        version: 4.23.13
-      typescript:
-        specifier: 5.9.2
-        version: 5.9.2
-
-  packages/pubg-domain:
-    dependencies:
-      '@agent/presentation':
-        specifier: workspace:*
-        version: link:../presentation
-      zod:
-        specifier: 4.5.4
-        version: 4.5.4
-    devDependencies:
-      '@types/node':
-        specifier: 22.18.6
-        version: 22.18.6
-      tsx:
-        specifier: 4.23.13
-        version: 4.23.13
-      typescript:
-        specifier: 5.9.2
-        version: 5.9.2
-
-  packages/pubg-intelligence:
-    dependencies:
-      '@agent/pubg-domain':
-        specifier: workspace:*
-        version: link:../pubg-domain
-      ai:
-        specifier: 7.0.137
-        version: 7.0.137(zod@4.5.4)
-      zod:
-        specifier: 4.5.4
-        version: 4.5.4
     devDependencies:
       '@types/node':
         specifier: 22.18.6
@@ -205,9 +140,9 @@ importers:
       '@agent/identity':
         specifier: workspace:*
         version: link:../../packages/identity
-      '@agent/presentation':
-        specifier: workspace:*
-        version: link:../../packages/presentation
+      '@rine-kit/presentation':
+        specifier: 0.1.0
+        version: 0.1.0
       '@types/node':
         specifier: 22.18.6
         version: 22.18.6
@@ -232,15 +167,15 @@ importers:
       '@agent/identity':
         specifier: workspace:*
         version: link:../../packages/identity
-      '@agent/presentation':
-        specifier: workspace:*
-        version: link:../../packages/presentation
-      '@agent/pubg-domain':
-        specifier: workspace:*
-        version: link:../../packages/pubg-domain
-      '@agent/pubg-intelligence':
-        specifier: workspace:*
-        version: link:../../packages/pubg-intelligence
+      '@rine-kit/presentation':
+        specifier: 0.1.0
+        version: 0.1.0
+      '@rine-kit/pubg-domain':
+        specifier: 0.1.0
+        version: 0.1.0
+      '@rine-kit/pubg-intelligence':
+        specifier: 0.1.0
+        version: 0.1.0
       '@types/node':
         specifier: 22.18.6
         version: 22.18.6
@@ -1167,6 +1102,18 @@ packages:
 
   '@protobufjs/utf8@1.1.2':
     resolution: {integrity: sha512-b1UQwcEZ4yCnMCD8DAL1VlbvBJE9/IX4FTIp7BG1xYpf29SLazLSrqUkj4w7Y5y7cCVP6E5tcqqcI0xemPkHug==}
+
+  '@rine-kit/agent-memory@0.1.0':
+    resolution: {integrity: sha512-Iua0BnaWsYMU+qDGQNchNhkRhwybElHio8qQSyoqmlSD32qPUbY6szcKpoq7BWJes61SVH7xlEO0cCa0GEldaw==}
+
+  '@rine-kit/presentation@0.1.0':
+    resolution: {integrity: sha512-m4RaH2v/SycKObd1s3OTRBFpHrsrHhJgZkgQdwyxk5L8VhTpx3DPhj0Zk+XE07yqoe+M7v8dZPr/w+nsqL4P+Q==}
+
+  '@rine-kit/pubg-domain@0.1.0':
+    resolution: {integrity: sha512-Z5piwbjEJtM3B05hMV8kyn2B94IwkkRdkxcCvwnLfjwY6bmMIMVekRllhFYCU0qOkHTxtNW0E2Jy5frTm+/VWg==}
+
+  '@rine-kit/pubg-intelligence@0.1.0':
+    resolution: {integrity: sha512-EI8GBclebMBv0EFtur7jtka5yWnoA6Dkfyq7p6U50VvD3Zb8zSZ3i1QgpnVLH1zjUXpGUSMwRDmm7wahd3fuhA==}
 
   '@rolldown/pluginutils@1.0.0-rc.3':
     resolution: {integrity: sha512-eybk3TjzzzV97Dlj5c+XrBFW57eTNhzod66y9HrBlzJ6NsCrWCp/2kaPS3K9wJmurBC0Tdw4yPjXKZqlznim3Q==}
@@ -2888,6 +2835,9 @@ packages:
   zod@4.5.4:
     resolution: {integrity: sha512-sC95tT5iHHH9gtpj6A81kh+NEaRAUFN+qlUPDUbRfOMvNf5QCBqsb3WgvnpVtK5Y+4UfA6KqufotuTvMGiTlsA==}
 
+  zod@4.6.7:
+    resolution: {integrity: sha512-g8W2D2kU6a8untc053fX1uVBKzM7yqAxW/3zwk83+6RyF2+SKOuV+c0wBDhUwzV1PaGapmZH+rmcUzPf+3CGwg==}
+
 snapshots:
 
   '@agentclientprotocol/sdk@1.4.0(zod@4.4.3)':
@@ -2900,6 +2850,13 @@ snapshots:
       '@ai-sdk/provider-utils': 5.0.58(zod@4.5.4)
       '@vercel/oidc': 3.2.0
       zod: 4.5.4
+
+  '@ai-sdk/gateway@4.0.110(zod@4.6.7)':
+    dependencies:
+      '@ai-sdk/provider': 4.0.26
+      '@ai-sdk/provider-utils': 5.0.58(zod@4.6.7)
+      '@vercel/oidc': 3.2.0
+      zod: 4.6.7
 
   '@ai-sdk/openai-compatible@3.0.67(zod@4.5.4)':
     dependencies:
@@ -2915,6 +2872,15 @@ snapshots:
       eventsource-parser: 3.1.1
       undici: 7.29.1
       zod: 4.5.4
+
+  '@ai-sdk/provider-utils@5.0.58(zod@4.6.7)':
+    dependencies:
+      '@ai-sdk/provider': 4.0.26
+      '@standard-schema/spec': 1.1.0
+      '@workflow/serde': 4.1.0
+      eventsource-parser: 3.1.1
+      undici: 7.29.1
+      zod: 4.6.7
 
   '@ai-sdk/provider@4.0.26':
     dependencies:
@@ -3579,6 +3545,21 @@ snapshots:
 
   '@protobufjs/utf8@1.1.2': {}
 
+  '@rine-kit/agent-memory@0.1.0': {}
+
+  '@rine-kit/presentation@0.1.0': {}
+
+  '@rine-kit/pubg-domain@0.1.0':
+    dependencies:
+      '@rine-kit/presentation': 0.1.0
+      zod: 4.6.7
+
+  '@rine-kit/pubg-intelligence@0.1.0':
+    dependencies:
+      '@rine-kit/pubg-domain': 0.1.0
+      ai: 7.0.137(zod@4.6.7)
+      zod: 4.6.7
+
   '@rolldown/pluginutils@1.0.0-rc.3': {}
 
   '@rollup/rollup-android-arm-eabi@4.64.7':
@@ -3820,6 +3801,13 @@ snapshots:
       '@ai-sdk/provider': 4.0.26
       '@ai-sdk/provider-utils': 5.0.58(zod@4.5.4)
       zod: 4.5.4
+
+  ai@7.0.137(zod@4.6.7):
+    dependencies:
+      '@ai-sdk/gateway': 4.0.110(zod@4.6.7)
+      '@ai-sdk/provider': 4.0.26
+      '@ai-sdk/provider-utils': 5.0.58(zod@4.6.7)
+      zod: 4.6.7
 
   ajv-formats@3.0.1(ajv@8.20.0):
     optionalDependencies:
@@ -5279,3 +5267,5 @@ snapshots:
   zod@4.4.3: {}
 
   zod@4.5.4: {}
+
+  zod@4.6.7: {}

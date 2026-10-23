@@ -31,7 +31,7 @@
 - FashionSigLIP：LaunchAgent、`:18400/health`、Apple MPS 和模型 cache 通过。
 - checkpoint `backup-manifest.json`：13 items，8 个非 secret 文件有 SHA-256，3 个 sensitive item 只保留 metadata；secret 内容未打印/未 checksum。
 - temp restore rehearsal、SQLite integrity、owner outbox contract：通过。
-- live Product Radar container runtime import：`@agent/presentation` / 11 formal Worldline themes：通过。
+- live Product Radar container runtime import：`@rine-kit/presentation` / 11 formal Worldline themes：通过。
 
 ## Boundaries
 

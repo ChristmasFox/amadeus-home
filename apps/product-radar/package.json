@@ -21,7 +21,7 @@
     "typescript": "5.9.2"
   },
   "dependencies": {
-    "@agent/presentation": "workspace:*",
+    "@rine-kit/presentation": "0.1.0",
     "sharp": "0.35.4"
   }
 }

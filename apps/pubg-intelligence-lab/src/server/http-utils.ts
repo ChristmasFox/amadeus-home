@@ -1,5 +1,5 @@
 import { MAX_REQUEST_BYTES } from './snapshot.js';
-import { DEFAULT_TIMEZONE } from '@agent/pubg-domain';
+import { DEFAULT_TIMEZONE } from '@rine-kit/pubg-domain';
 import { type IncomingMessage, type ServerResponse } from 'node:http';
 import { networkInterfaces } from 'node:os';
 

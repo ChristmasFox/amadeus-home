@@ -7,7 +7,7 @@ import {
   memorySearchTokens as tokenizeMemorySearch,
   rankMemoryEntries,
   validateMemoryDraft,
-} from '@agent/memory';
+} from '@rine-kit/agent-memory';
 import type {
   MemoryDraft,
   MemoryEntry,
@@ -18,7 +18,7 @@ import type {
   MemoryUsageSignalKind,
   MemoryWriteState,
   MemoryWriteMetadata,
-} from '@agent/memory';
+} from '@rine-kit/agent-memory';
 import type { KookIngressJob } from './kook-ingress-queue.js';
 import type { GateMemoryEmbeddingClient, GateMemoryEmbeddingContract } from './gate-memory-embedding.js';
 import { estimateGateEmbeddingTokens } from './gate-memory-embedding.js';

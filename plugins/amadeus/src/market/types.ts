@@ -97,7 +97,7 @@ export interface MarketFailure {
   auth: LongbridgeAuthStatus;
   message: string;
 }
-import type { OwnerNotificationPresentation } from '@agent/presentation';
+import type { OwnerNotificationPresentation } from '@rine-kit/presentation';
 
 export const MARKET_PROVIDER = 'longbridge' as const;
 export const MARKET_PROVIDER_COUNT = 1 as const;

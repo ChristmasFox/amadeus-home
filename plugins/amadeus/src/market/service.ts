@@ -1,5 +1,5 @@
 import type { AmadeusConfig } from '../config.js';
-import { adaptWorldlineNotification } from '@agent/presentation';
+import { adaptWorldlineNotification } from '@rine-kit/presentation';
 import { LongbridgeOAuth } from './auth.js';
 import { createLongbridgeClient, type LongbridgeClient } from './client.js';
 import { buildMarketNotification } from './presentation.js';

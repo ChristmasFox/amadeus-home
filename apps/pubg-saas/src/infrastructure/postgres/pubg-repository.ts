@@ -13,8 +13,8 @@ import type {
   SyncState,
   UpsertMatchesResult,
   MatchWriteMetadata,
-} from '@agent/pubg-domain/core';
-import { normalizeRecords, parseTeamContext } from '@agent/pubg-domain/core';
+} from '@rine-kit/pubg-domain/core';
+import { normalizeRecords, parseTeamContext } from '@rine-kit/pubg-domain/core';
 import type { Pool, PoolClient, QueryResultRow } from 'pg';
 import { createHash } from 'node:crypto';
 import { parseStoredTeamLeaderboardMetric, type TeamLeaderboardMetric } from '../../contracts/team-preferences.js';

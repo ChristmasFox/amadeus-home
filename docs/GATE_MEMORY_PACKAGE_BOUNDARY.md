@@ -1,6 +1,6 @@
 # Gate memory package boundary
 
-This document records the current source boundary for `@agent/memory` and its
+This document records the current source boundary for `@rine-kit/agent-memory` and its
 Gate adapter. Gate-specific authorization and persistence stay in the SaaS app.
 
 ## Current ownership
@@ -9,17 +9,17 @@ Gate adapter. Gate-specific authorization and persistence stay in the SaaS app.
 | --- | --- | --- |
 | Trusted identity and read/write authorization | `PublicQueryAuthorizer` plus `KookIngressJob` | KOOK bot, actor, direct-message/channel scope, team binding revision, active lease |
 | Long-term memory storage and lexical search | `application/gate-memory-store.ts` | PostgreSQL `gate_memory_entries`, ingress lease checks, KOOK scope SQL, embedding job/budget tables |
-| Recall selection and semantic/lexical fusion | `@agent/memory` `MemoryRecallService`; `application/gate-memory-retriever.ts` adapter | Supplies Gate authorization, PostgreSQL search, embedding calls and content-free usage-signal persistence |
-| Explicit remember/correct/forget | `@agent/memory` `MemoryWriteService`; `application/gate-memory-writer.ts` adapter | AI SDK intent classifier plus Gate receipts, ingress scope, PostgreSQL writes and KOOK replies |
+| Recall selection and semantic/lexical fusion | `@rine-kit/agent-memory` `MemoryRecallService`; `application/gate-memory-retriever.ts` adapter | Supplies Gate authorization, PostgreSQL search, embedding calls and content-free usage-signal persistence |
+| Explicit remember/correct/forget | `@rine-kit/agent-memory` `MemoryWriteService`; `application/gate-memory-writer.ts` adapter | AI SDK intent classifier plus Gate receipts, ingress scope, PostgreSQL writes and KOOK replies |
 | Automatic learning admission and per-user controls | `application/gate-memory-consolidation.ts` consent service | KOOK DM identity, transcript/event joins, consent versions, PostgreSQL leases and admission rows |
-| Light/REM candidate normalization and source-evidence matching | `@agent/memory` `normalizeMemoryCandidates` | Gate schema parsing, key canonicalization, sensitive-text rejection and idempotency salt |
-| Light/REM/Deep stage order and bounded drain | `@agent/memory` Dreaming runner | Gate worker adapter loads consent-scoped sources, invokes the planner and persists candidates |
-| Deep promotion policy | `@agent/memory` deterministic evidence policy plus the Gate worker adapter | Gate adapter loads consent-scoped evidence, usage signals, tombstones, and revision CAS state |
-| Nightly schedule calculation and durable run claim | `@agent/memory` schedule functions; `application/gate-memory-dreaming.ts`, `PostgresGateMemoryDreamingRunStore`, migration `0031` | Gate Bot identity, timezone config, PostgreSQL idempotency row and Gateway lifecycle |
+| Light/REM candidate normalization and source-evidence matching | `@rine-kit/agent-memory` `normalizeMemoryCandidates` | Gate schema parsing, key canonicalization, sensitive-text rejection and idempotency salt |
+| Light/REM/Deep stage order and bounded drain | `@rine-kit/agent-memory` Dreaming runner | Gate worker adapter loads consent-scoped sources, invokes the planner and persists candidates |
+| Deep promotion policy | `@rine-kit/agent-memory` deterministic evidence policy plus the Gate worker adapter | Gate adapter loads consent-scoped evidence, usage signals, tombstones, and revision CAS state |
+| Nightly schedule calculation and durable run claim | `@rine-kit/agent-memory` schedule functions; `application/gate-memory-dreaming.ts`, `PostgresGateMemoryDreamingRunStore`, migration `0031` | Gate Bot identity, timezone config, PostgreSQL idempotency row and Gateway lifecycle |
 | Host-facing memory plugin | `application/gate-memory-plugin.ts` implements `AgentMemoryPlugin<KookIngressJob>` | Binds each call to the current trusted ingress lease and composes Gate adapters |
 | Embedding config and provider | `infrastructure/ai/gate-memory-embedding-{config,provider}.ts` | Gate environment names and Gate public-egress policy; provider construction belongs in the adapter |
 | Embedding indexing and generations | `application/gate-memory-index-{worker,generation}.ts` | PostgreSQL migrations, Gate binding-version SQL, Gate batch admin command |
-| Runtime defaults and wiring | `@agent/memory` `AgentMemoryRuntime`; `application/gate-memory-feature-flags.ts`, `gateway.ts` | Gate environment flags, model, pool and lifecycle |
+| Runtime defaults and wiring | `@rine-kit/agent-memory` `AgentMemoryRuntime`; `application/gate-memory-feature-flags.ts`, `gateway.ts` | Gate environment flags, model, pool and lifecycle |
 | User commands and privacy text | `application/kook-management-handler.ts`, `gate-memory-admin.ts` | KOOK command syntax, owner/admin process and runtime config |
 | Schema and migrations | `infrastructure/postgres/migrations/0021` through `0031` (`0025` remains optional) | Gate PostgreSQL migration runner and deployment lifecycle |
 
@@ -64,7 +64,7 @@ and local-time schedule calculation.
 Gate must retain identity, authorization, transcript/event provenance, consent
 commands, PostgreSQL adapters/migrations, provider configuration and runtime
 wiring. The current `KookIngressJob`, Pool types, Gate SQL and environment keys
-must not cross into `@agent/memory`.
+must not cross into `@rine-kit/agent-memory`.
 
 At the original baseline `gateway.ts` ran Light every 30 seconds and REM every
 six hours. P2 removed direct Light/REM promotion. P3 adds deterministic Deep

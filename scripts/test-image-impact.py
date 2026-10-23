@@ -21,14 +21,16 @@ def state(target: str, *paths: str) -> str:
 
 assert state("openclaw", "scripts/patch-openclaw-memory-core.mjs") == "REBUILD"
 assert state("openclaw", "plugins/pubg/src/index.ts") == "REBUILD"
-assert state("openclaw", "packages/pubg-domain/src/index.ts") == "REBUILD"
-assert state("gate", "packages/pubg-domain/src/index.ts") == "REBUILD"
-assert state("radar", "packages/pubg-domain/src/index.ts") == "REUSE"
-for target in ("openclaw", "radar", "gate"):
-    assert state(target, "packages/presentation/src/index.ts") == "REBUILD"
+assert state("gate", "plugins/pubg/src/index.ts") == "REUSE"
+assert state("radar", "plugins/pubg/src/index.ts") == "REUSE"
+# Shared presentation/domain now live on npm (@rine-kit/*); in-repo path no longer rebuilds images.
+assert state("openclaw", "packages/presentation/src/index.ts") == "REUSE"
+assert state("radar", "packages/presentation/src/index.ts") == "REUSE"
+assert state("gate", "packages/presentation/src/index.ts") == "REUSE"
 assert state("gate", "apps/pubg-saas/src/gateway.ts") == "REBUILD"
 assert state("openclaw", "docs/CURRENT_TASK.md") == "REUSE"
 assert state("gate", "scripts/new-deploy-note.sh") == "REUSE"
+assert state("gate", "pnpm-lock.yaml") == "REBUILD"
 
 with tempfile.TemporaryDirectory(prefix="image-impact-unknown-") as temporary:
     repo = Path(temporary)
@@ -39,4 +41,4 @@ with tempfile.TemporaryDirectory(prefix="image-impact-unknown-") as temporary:
 
 sources, understood = impact.copy_sources("--chown=node:node --chmod=0555 scripts/openclaw-voice-*.mjs /opt/")
 assert understood and sources == ["scripts/openclaw-voice-*.mjs"]
-print("IMAGE_IMPACT_TEST=passed memory_patch=lab domain=lab+gate presentation=all docs=reuse unknown=conservative")
+print("IMAGE_IMPACT_TEST=passed memory_patch=lab plugins=lab npm-shared=reuse docs=reuse unknown=conservative")

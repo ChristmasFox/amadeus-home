@@ -1,4 +1,4 @@
-import { MemoryRecallService } from '@agent/memory';
+import { MemoryRecallService } from '@rine-kit/agent-memory';
 import type {
   MemoryRecallPolicyOptions,
   MemoryRecallResult,
@@ -6,7 +6,7 @@ import type {
   MemoryRetrievalMetric,
   MemoryRetrievalMode,
   MemoryRetrievalReason,
-} from '@agent/memory';
+} from '@rine-kit/agent-memory';
 import type { GateMemoryEmbeddingClient } from './gate-memory-embedding.js';
 import type { GateMemoryEntry, GateMemoryStore } from './gate-memory-store.js';
 import type { KookIngressJob } from './kook-ingress-queue.js';

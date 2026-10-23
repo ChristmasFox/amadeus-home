@@ -335,7 +335,7 @@ provides the tenant/team scope; tool arguments cannot select either.
 The tool reads at most 30 matches in a requested 7- or 30-day window and fetches
 at most four team-scoped current-version feature records concurrently through
 `PostgresPubgRepository`. It performs no API refresh and writes no database
-state. The versioned pure Gate API is `@agent/pubg-intelligence/gate` 1.0.0
+state. The versioned pure Gate API is `apps/pubg-saas/src/application/pubg-intelligence-gate-api.ts` 1.0.0 (Gate-only; shared analytics live in `@rine-kit/pubg-intelligence`)
 (`gate-compact-facts-v1`). PostgreSQL stores compact review facts with the raw
 event stream removed, so the output is limited to integrity-checked fight
 outcomes and explicitly phased directed friendly-damage aggregates. Missing or
@@ -394,7 +394,7 @@ evidence event references, distinguish partial unavailable telemetry from known
 zero, and serve versioned cache facts after reopening the separate stores.
 The repository acceptance also proves roster revocation waits for a bounded
 authorized read, persisted telemetry renders through the KOOK team-damage
-response, and `@agent/pubg-domain/core` does not load `node:sqlite` or the
+response, and `@rine-kit/pubg-domain/core` does not load `node:sqlite` or the
 legacy importer. The private Domain's 36 tests run without public PostgreSQL. These synthetic
 parity gates do not replace the Goal's P4 deidentified prompt benchmark, P5
 200-team resource/latency tests, P6 restore/independence drills or real KOOK

@@ -1,5 +1,5 @@
 import type { OpenClawPluginApi } from 'openclaw/plugin-sdk/core';
-import { loadTeamConfig, SqlitePubgRepository } from '@agent/pubg-domain';
+import { loadTeamConfig, SqlitePubgRepository } from '@rine-kit/pubg-domain';
 import { loadReviewSubscription, type ReportGateway, type ReportSubscription } from './session-review-delivery.js';
 import { DAILY_REVIEW_RETRY_MS, nextDailyReviewAt, runDailyReview, type DailyOutcome, type DailyReviewMode, type DailyStatsSource } from './daily-review.js';
 

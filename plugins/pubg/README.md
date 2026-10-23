@@ -2,7 +2,7 @@
 
 This is the only PUBG business entry in the migrated OpenClaw runtime. It
 registers ten deterministic tools and delegates all data, query, SQLite, and
-Telemetry work to `@agent/pubg-domain`.
+Telemetry work to `@rine-kit/pubg-domain`.
 
 OpenClaw owns Telegram, WhatsApp, and future channel transport. The plugin
 keeps a small adapter boundary in `src/adapters/`: the current OpenClaw

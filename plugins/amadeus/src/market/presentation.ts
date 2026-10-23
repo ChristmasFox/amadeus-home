@@ -1,4 +1,4 @@
-import { adaptWorldlineNotification, type OwnerNotificationPresentation } from '@agent/presentation';
+import { adaptWorldlineNotification, type OwnerNotificationPresentation } from '@rine-kit/presentation';
 import { directionGlyph, formatCompact, formatPercent, formatPrice, formatSigned } from './format.js';
 import type { MarketQuote } from './types.js';
 

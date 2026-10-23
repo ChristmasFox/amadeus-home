@@ -14,8 +14,8 @@
     "smoke:highlights": "tsx scripts/smoke-highlights.ts"
   },
   "dependencies": {
-    "@agent/pubg-domain": "workspace:*",
-    "@agent/pubg-intelligence": "workspace:*",
+    "@rine-kit/pubg-domain": "0.1.0",
+    "@rine-kit/pubg-intelligence": "0.1.0",
     "@ai-sdk/openai-compatible": "3.0.67",
     "ai": "7.0.137",
     "react": "19.2.4",

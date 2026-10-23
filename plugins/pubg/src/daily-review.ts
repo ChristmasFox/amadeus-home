@@ -1,4 +1,4 @@
-import { renderDailyReview, type PubgStatsPresentation, type SessionReviewPresentation } from '@agent/presentation';
+import { renderDailyReview, type PubgStatsPresentation, type SessionReviewPresentation } from '@rine-kit/presentation';
 import {
   buildSessionReview,
   businessDayWindow,
@@ -19,7 +19,7 @@ import {
   type SquadSession,
   type TelemetryFeatureKey,
   type TelemetryFeatureRecord,
-} from '@agent/pubg-domain';
+} from '@rine-kit/pubg-domain';
 import { issueQueryShare, querySharePlayers, queryShareTeamTotals } from './query-share.js';
 import {
   checkReviewTarget,

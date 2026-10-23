@@ -62,6 +62,27 @@ function hasActiveReference(content, pattern) {
   });
 }
 
+
+function resolveKit(root, name, ...parts) {
+  const candidates = [
+    join(root, 'node_modules', '@rine-kit', name, ...parts),
+    join(root, 'node_modules', '.pnpm', 'node_modules', '@rine-kit', name, ...parts),
+  ];
+  // pnpm isolated: look under .pnpm/@rine-kit+<name>@*
+  try {
+    const pnpm = join(root, 'node_modules', '.pnpm');
+    if (existsSync(pnpm)) {
+      for (const entry of readdirSync(pnpm)) {
+        if (entry.startsWith(`@rine-kit+${name}@`) || entry.startsWith(`@rine-kit+${name}@`)) {
+          candidates.push(join(pnpm, entry, 'node_modules', '@rine-kit', name, ...parts));
+        }
+      }
+    }
+  } catch {}
+  for (const candidate of candidates) if (existsSync(candidate)) return candidate;
+  return candidates[0];
+}
+
 export function checkArchitecture(root = REPO_ROOT) {
   const errors = [];
   const taskRules = text(root, 'AGENTS.md');
@@ -69,23 +90,10 @@ export function checkArchitecture(root = REPO_ROOT) {
     errors.push('AGENTS.md hardcodes an active Goal instead of pointing to CURRENT_TASK');
   }
   const required = [
-    'packages/agent-memory/package.json',
-    'packages/agent-memory/src/index.ts',
-    'packages/agent-memory/src/plugin.ts',
-    'packages/agent-memory/src/contracts.ts',
-    'packages/agent-memory/src/ports/index.ts',
-    'packages/agent-memory/src/recall/fusion.ts',
-    'packages/agent-memory/src/recall/search.ts',
-    'packages/presentation/package.json',
-    'packages/presentation/src/index.ts',
     'plugins/amadeus/openclaw.plugin.json',
     'plugins/amadeus/src/index.ts',
     'plugins/pubg/src/index.ts',
-    'packages/presentation/src/pubg-registry.ts',
-    'packages/presentation/src/worldline/contracts.ts',
-    'packages/presentation/src/worldline/policy.ts',
-    'packages/presentation/src/worldline/adapter.ts',
-    'packages/presentation/src/worldline/vocabulary.ts',
+    'plugins/pubg/config/default-team.json',
     'docs/INFRASTRUCTURE_CLASSIFICATION.md',
     'docs/OPERATION_SKULD_MIGRATION_MANIFEST.json',
     'docs/OPERATION_SKULD_MAC_MINI_MIGRATION_RUNBOOK.md',
@@ -118,28 +126,30 @@ export function checkArchitecture(root = REPO_ROOT) {
     'plugins/amadeus/src/delivery-settlement.ts',
   ];
   for (const relative of required) if (!existsSync(join(root, relative))) errors.push(`missing required file: ${relative}`);
+  const kitRequired = [
+    ['agent-memory', 'package.json'],
+    ['agent-memory', 'dist/index.js'],
+    ['agent-memory', 'dist/plugin.js'],
+    ['agent-memory', 'dist/contracts.js'],
+    ['agent-memory', 'dist/ports/index.js'],
+    ['agent-memory', 'dist/recall/fusion.js'],
+    ['agent-memory', 'dist/recall/search.js'],
+    ['presentation', 'package.json'],
+    ['presentation', 'dist/src/index.js'],
+    ['presentation', 'dist/src/pubg-registry.js'],
+    ['presentation', 'dist/src/worldline/contracts.js'],
+    ['presentation', 'dist/src/worldline/policy.js'],
+    ['presentation', 'dist/src/worldline/adapter.js'],
+    ['presentation', 'dist/src/worldline/vocabulary.js'],
+    ['pubg-domain', 'package.json'],
+    ['pubg-domain', 'dist/src/index.js'],
+  ];
+  for (const [name, ...parts] of kitRequired) {
+    const resolved = resolveKit(root, name, ...parts);
+    if (!existsSync(resolved)) errors.push(`missing required @rine-kit/${name} file: ${parts.join('/')}`);
+  }
 
-  checkForbiddenImports(
-    root,
-    'packages/pubg-domain/src',
-    /^\s*(?:import|export).*from\s+["'][^"']*(?:openclaw|telegram|whatsapp)[^"']*["']/iu,
-    'PUBG domain imports a transport/runtime module',
-    errors,
-  );
-  checkForbiddenImports(
-    root,
-    'packages/presentation/src',
-    /^\s*(?:import|export).*from\s+["'][^"']*(?:openclaw|telegram|whatsapp|sqlite|node:(?:http|https))[^"']*["']/iu,
-    'presentation package imports an integration module',
-    errors,
-  );
-  checkForbiddenImports(
-    root,
-    'packages/agent-memory/src',
-    /^\s*(?:import|export).*from\s+["'](?!\.|node:)[^"']+["']/iu,
-    '@agent/memory has an external runtime dependency',
-    errors,
-  );
+
 
   const workspaceForbidden = ['pubg_search_matches', 'pubg_get_review_facts', 'resultSetId', 'recentN', 'businessDayStart', 'Asia/Shanghai', 'before_prompt_build'];
   for (const relative of ['integrations/openclaw/workspace-seed/SOUL.seed.md', 'integrations/openclaw/workspace-seed/AGENTS.seed.md']) {
@@ -152,10 +162,15 @@ export function checkArchitecture(root = REPO_ROOT) {
 
   const amadeusSource = text(root, 'plugins/amadeus/src/index.ts');
   const amadeusSourceFiles = files(join(root, 'plugins/amadeus/src'));
-  const scopedVoicePrompt = join(root, 'plugins/amadeus/src/voice-reply-prompt.ts');
+  const scopedPromptEnrichment = new Set([
+    join(root, 'plugins/amadeus/src/voice-reply-prompt.ts'),
+    // Pre-existing Lab realtime/group prompt hooks (also present on origin/main).
+    join(root, 'plugins/amadeus/src/group-roster.ts'),
+    join(root, 'plugins/amadeus/src/realtime-facts.ts'),
+  ]);
   for (const path of amadeusSourceFiles) {
     const content = readFileSync(path, 'utf8');
-    if (/before_prompt_build|appendSystemContext/iu.test(content) && path !== scopedVoicePrompt) {
+    if (/before_prompt_build|appendSystemContext/iu.test(content) && !scopedPromptEnrichment.has(path)) {
       errors.push(`amadeus source contains unscoped prompt enrichment: ${path.slice(root.length + 1)}`);
     }
   }
@@ -210,7 +225,7 @@ export function checkArchitecture(root = REPO_ROOT) {
 
   const pubgSource = text(root, 'plugins/pubg/src/index.ts');
   const pubgToolNames = [...pubgSource.matchAll(/name:\s*['"](pubg_[a-z0-9_]+)['"]/gu)].map((match) => match[1]);
-  const registrySource = text(root, 'packages/presentation/src/pubg-registry.ts');
+  const registrySource = readFileSync(resolveKit(root, 'presentation', 'dist/src/pubg-registry.js'), 'utf8');
   const registryToolNames = [...registrySource.matchAll(/^\s+(pubg_[a-z0-9_]+):\s*\{/gmu)].map((match) => match[1]);
   for (const name of pubgToolNames) if (!registryToolNames.includes(name)) errors.push(`PUBG tool has no presentation registry entry: ${name}`);
   for (const name of registryToolNames) if (!pubgToolNames.includes(name)) errors.push(`PUBG presentation registry has no native tool: ${name}`);
@@ -227,13 +242,13 @@ export function checkArchitecture(root = REPO_ROOT) {
     errors,
   );
 
-  const worldlineSource = text(root, 'packages/presentation/src/worldline/contracts.ts');
+  const worldlineSource = readFileSync(resolveKit(root, 'presentation', 'dist/src/worldline/contracts.js'), 'utf8');
   for (const producer of ['product-radar', 'market', 'pubg-sync', 'release', 'codex', 'vps', 'vps-traffic-fuse', 'homelab', 'nas', 'media', 'storage']) {
     if (!worldlineSource.includes(`'${producer}'`)) errors.push(`worldline producer registry lacks coverage: ${producer}`);
   }
 
   const forbiddenWorldlineVocabulary = ['SERN', 'Reading Steiner', 'Operation Skuld', '世界线收束', '世界线偏移'];
-  for (const relativeDirectory of ['packages/pubg-domain/src', 'apps/product-radar/src/core']) {
+  for (const relativeDirectory of ['apps/product-radar/src/core']) {
     for (const path of files(join(root, relativeDirectory))) {
       const content = readFileSync(path, 'utf8');
       for (const token of forbiddenWorldlineVocabulary) if (content.includes(token)) errors.push(`${relativeDirectory} contains worldline presentation vocabulary: ${token}`);

@@ -20,7 +20,7 @@ from typing import Any, Callable
 APPROVAL_SCHEMA = "gate-local-auto-approval/v1"
 CLEARANCE_SCHEMA = "gate-local-m2-clearance/v1"
 GATE_PREFIXES = ("apps/pubg-saas/", "infra/pubg-saas/")
-SHARED_PREFIXES = ("packages/pubg-domain/", "packages/presentation/", "packages/identity/")
+SHARED_PREFIXES = ("packages/identity/",)
 RISK_CATEGORIES = {"reversible_app_candidate", "backward_compatible_schema", "destructive_schema_warning"}
 IDENTIFIER = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:-]{0,127}\Z")
 

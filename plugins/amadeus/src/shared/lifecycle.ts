@@ -1,5 +1,5 @@
 import type { OpenClawPluginApi } from 'openclaw/plugin-sdk/core';
-import { adaptWorldlineNotification } from '@agent/presentation';
+import { adaptWorldlineNotification } from '@rine-kit/presentation';
 import { configFor, type AmadeusConfig } from '../config.js';
 import {
   forgetTrustedInboundReply,

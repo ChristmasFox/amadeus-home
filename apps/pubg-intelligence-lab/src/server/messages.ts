@@ -1,4 +1,4 @@
-import { classifyResearchQuestion, type ResearchAssistantResult } from '@agent/pubg-intelligence';
+import { classifyResearchQuestion, type ResearchAssistantResult } from '@rine-kit/pubg-intelligence';
 
 const CONVERSATION_PROMPT = '我目前只研究当前选定小队的 PUBG 对局。可以问“最近伤害趋势”“按地图比较前十率”“比较队员击杀”，或选一场比赛复盘团战。你想先看哪项？';
 

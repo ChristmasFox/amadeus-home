@@ -1,4 +1,4 @@
-import { cpSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 import assert from 'node:assert/strict';
@@ -16,14 +16,16 @@ const copies = [
   'integrations/openclaw/workspace-seed/SOUL.seed.md', 'integrations/openclaw/workspace-seed/AGENTS.seed.md',
   'integrations/openclaw/workspace-seed/USER.seed.md', 'integrations/openclaw/workspace-seed/MEMORY.seed.md',
   'integrations/openclaw/workspace-seed/README.md',
-  'packages/presentation/src', 'packages/presentation/package.json',
-  'packages/agent-memory/src', 'packages/agent-memory/package.json',
-  'plugins/pubg/src',
-  'packages/pubg-domain/src',
+  'plugins/pubg/src', 'plugins/pubg/config/default-team.json',
   'apps/pubg-saas/src',
 ];
 try {
   for (const relative of copies) cpSync(join(root, relative), join(fixture, relative), { recursive: true });
+  mkdirSync(join(fixture, 'node_modules'), { recursive: true });
+  symlinkSync(join(root, 'node_modules', '.pnpm'), join(fixture, 'node_modules', '.pnpm'), 'dir');
+  // Also link any hoisted @rine-kit if present
+  try { symlinkSync(join(root, 'node_modules', '@rine-kit'), join(fixture, 'node_modules', '@rine-kit'), 'dir'); } catch {}
+
   assert.deepEqual(checkArchitecture(fixture), []);
   const agentRules = join(fixture, 'AGENTS.md');
   writeFileSync(agentRules, "当前 Goal 是 `docs/OLD_PERFORMANCE_GOAL.md`。\n" + readFileSync(agentRules, 'utf8'));
@@ -58,7 +60,8 @@ try {
   const registryErrors = checkArchitecture(fixture);
   assert.ok(registryErrors.some((error) => error.includes('PUBG tool has no presentation registry entry: pubg_unmapped_tool')));
 
-  const domainPath = join(fixture, 'packages/pubg-domain/src/worldline-leak.ts');
+  const domainPath = join(fixture, 'apps/product-radar/src/core/worldline-leak.ts');
+  mkdirSync(join(fixture, 'apps/product-radar/src/core'), { recursive: true });
   writeFileSync(domainPath, 'export const leaked = "SERN";\n');
   const vocabularyErrors = checkArchitecture(fixture);
   assert.ok(vocabularyErrors.some((error) => error.includes('contains worldline presentation vocabulary')));

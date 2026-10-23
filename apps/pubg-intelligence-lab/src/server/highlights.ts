@@ -1,5 +1,5 @@
-import { businessDayLabel, businessDayWindow } from '@agent/pubg-domain';
-import { HIGHLIGHT_RULE_VERSION, rankCrossMatchHighlights } from '@agent/pubg-intelligence';
+import { businessDayLabel, businessDayWindow } from '@rine-kit/pubg-domain';
+import { HIGHLIGHT_RULE_VERSION, rankCrossMatchHighlights } from '@rine-kit/pubg-intelligence';
 import { analyzeMatchTelemetry } from './match-views.js';
 import { archivedIds, inMode, inSquad, requestedMode, selectSquad, type Snapshot } from './snapshot.js';
 import { safeDateBounds } from './http-utils.js';

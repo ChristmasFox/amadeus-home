@@ -4,8 +4,8 @@ import {
   reviewShareTokenHash,
   type NormalizedMatch,
   type ReviewShareRecord,
-} from '@agent/pubg-domain';
-import { mapDisplayName, type ResearchSquad } from '@agent/pubg-intelligence';
+} from '@rine-kit/pubg-domain';
+import { mapDisplayName, type ResearchSquad } from '@rine-kit/pubg-intelligence';
 import { existsSync, readFileSync, statSync } from 'node:fs';
 import { type IncomingMessage, type ServerResponse } from 'node:http';
 import { homedir } from 'node:os';

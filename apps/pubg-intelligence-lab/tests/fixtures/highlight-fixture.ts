@@ -1,4 +1,4 @@
-import type { NormalizedMatch } from '@agent/pubg-domain';
+import type { NormalizedMatch } from '@rine-kit/pubg-domain';
 
 export const highlightMemberIds = ['a', 'b'];
 export const highlightStart = '2026-10-19T15:00:00.000Z';

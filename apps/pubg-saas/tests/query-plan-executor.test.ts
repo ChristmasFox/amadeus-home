@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { createTeamContext, type Coverage, type SyncState, type ToolEnvelope } from '@agent/pubg-domain';
+import { createTeamContext, type Coverage, type SyncState, type ToolEnvelope } from '@rine-kit/pubg-domain';
 import type { AuthorizedPublicQuery } from '../src/application/public-query-authorizer.js';
 import {
   QueryPlanExecutor,

@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { createHash, randomUUID } from 'node:crypto';
 import test from 'node:test';
 import { Pool } from 'pg';
-import { createMemoryUsageSignals } from '@agent/memory';
+import { createMemoryUsageSignals } from '@rine-kit/agent-memory';
 import {
   GateMemoryStore,
   KookIngressQueue,

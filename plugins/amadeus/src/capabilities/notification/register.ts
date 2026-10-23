@@ -1,6 +1,6 @@
 import { Static, Type } from 'typebox';
 import type { OpenClawPluginApi } from 'openclaw/plugin-sdk/core';
-import { adaptWorldlineNotification, type OwnerNotificationPresentation, type WorldlineNotificationIntent } from '@agent/presentation';
+import { adaptWorldlineNotification, type OwnerNotificationPresentation, type WorldlineNotificationIntent } from '@rine-kit/presentation';
 import { configFor } from '../../config.js';
 import { isTrustedOwnerContext, ownerEventForContext } from '../../owner.js';
 import { registerTool } from '../../shared/register-tool.js';

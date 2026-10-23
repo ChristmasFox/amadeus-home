@@ -4,7 +4,7 @@ import { performance } from 'node:perf_hooks';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 import { Pool } from 'pg';
-import { emptyContext, type ResultSetRecord } from '@agent/pubg-domain';
+import { emptyContext, type ResultSetRecord } from '@rine-kit/pubg-domain';
 import {
   KookIngressQueue, PublicQueryAuthorizer, PostgresPubgRepository, TeamAdminService, migratePublicDatabase,
   buildGateWorkingContext, estimateGateTokens, refreshKookConversationCheckpoint,

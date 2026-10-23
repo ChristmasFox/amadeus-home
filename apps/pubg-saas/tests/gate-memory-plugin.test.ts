@@ -5,7 +5,7 @@ import type { KookIngressJob } from '../src/application/kook-ingress-queue.js';
 import type { GateMemoryConsolidationConsentService, GateMemoryConsolidationWorker } from '../src/application/gate-memory-consolidation.js';
 import type { MemoryRetriever } from '../src/application/gate-memory-retriever.js';
 import type { GateMemoryWriteCoordinator } from '../src/application/gate-memory-writer.js';
-import type { AgentMemoryPlugin, MemoryRecallResult } from '@agent/memory';
+import type { AgentMemoryPlugin, MemoryRecallResult } from '@rine-kit/agent-memory';
 
 function job(kind: 'direct' | 'group', content = 'my safe preference'): KookIngressJob {
   const request = kind === 'direct'

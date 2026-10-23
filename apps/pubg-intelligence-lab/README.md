@@ -9,8 +9,6 @@ Local React research workspace for browsing Lab PUBG match history, selecting a 
 Use a standalone copy or snapshot of the Lab SQLite database. The server refuses to start without `PUBG_INTELLIGENCE_DB`; it opens that file through the PUBG Domain repository in SQLite read-only mode and does not configure the PUBG API client.
 
 ```sh
-pnpm --filter @agent/pubg-domain build
-pnpm --filter @agent/pubg-intelligence build
 PUBG_INTELLIGENCE_DB=/path/to/read-only-snapshot.sqlite pnpm --filter @agent/pubg-intelligence-lab dev
 ```
 
@@ -110,8 +108,7 @@ exports remain follow-ups.
 Focused acceptance (synthetic data and a separate temporary SQLite/archive, no running Lab required):
 
 ```sh
-pnpm --filter @agent/pubg-intelligence build
-pnpm --filter @agent/pubg-intelligence exec tsx --test tests/highlights.test.ts tests/streaks.test.ts
+node --test node_modules/@rine-kit/pubg-intelligence/…  # tests ship in rine-kit repo, not the npm tarball
 pnpm --filter @agent/pubg-intelligence-lab exec tsx --test tests/highlights.test.ts
 pnpm --filter @agent/pubg-intelligence-lab smoke:highlights --shots /tmp/pubg-highlights-smoke
 ```
@@ -161,7 +158,7 @@ At 820 px and below the workspace becomes a normal scrolling page: the top bar a
 
 ### Analytics reference
 
-All algorithms are deterministic and live in `packages/pubg-intelligence/src`; the page only renders them.
+All algorithms are deterministic and live in `@rine-kit/pubg-intelligence`; the page only renders them.
 
 | Metric | Method | Module | Source |
 | --- | --- | --- | --- |
@@ -225,7 +222,7 @@ PUBG keeps a match and its telemetry for about 14 days, so older matches can no 
 Replay the checked-in sanitized benchmark without reading the Lab match snapshot:
 
 ```sh
-pnpm --filter @agent/pubg-intelligence evaluation:replay
+pnpm --dir ../../.. exec --filter none # evaluation:replay lives in the rine-kit repo
 ```
 
 The runner compares the frozen `legacy-any-tracked-knock-v0` baseline with `tactical-social-rules-v1`, fingerprints the fixture corpus, and registers per-run metrics, error cases, resource use, parser/rule versions, and thresholds in the separate experiment SQLite file. The page's **实验登记 / 反例浏览** panel runs the same replay and stores bounded review labels (`confirm`, `reject`, `unresolved`, `wrong_evidence`) locally. Labels do not alter rules or production data. Template replay also checks that the three templates preserve numeric facts while changing wording; human preference was not collected. The current fixture holdout is synthetic and small; its promotion gate stays closed until an independently reviewed historical holdout is available.
@@ -236,7 +233,7 @@ The runner compares the frozen `legacy-any-tracked-knock-v0` baseline with `tact
 - The server binds only to loopback unless explicitly configured with a private LAN IPv4 address; LAN mode restricts API requests to that interface's subnet and exposes no general file or shell tool.
 - It reads Match Store rows and only the current `telemetry-parser-6` / `review-features-6` cache.
 - The production PUBG plugin writes complete CDN response bodies to the host-shared archive before feature parsing. Each Match ID has one immutable archive entry, gzip payloads, a manifest with raw and compressed SHA-256 values, atomic payload/manifest publication, and no rolling retention. Unique response bodies for the same Match ID are retained as separate captures; repeated body hashes are deduplicated.
-- Historical backfill reads a read-only SQLite snapshot and considers only the newest `HISTORICAL_TELEMETRY_BACKFILL_LIMIT` (500) matches; an older match never replaces a selected row with a missing telemetry asset. PUBG's telemetry CDN keeps a match for about 14 days and answers 403 afterwards, so those assets are counted as missing without retries and the local archive is the only long-term copy. New matches are archived by the existing Lab cron `amadeus-pubg-telemetry-hourly` (`5 * * * *`, `pubg_prefetch_telemetry`); the backfill only catches up on matches that were played before archiving existed or while it was failing. After a game, a new Match-ID directory should appear in the archive within about an hour. `PUBG_TELEMETRY_BACKFILL_LIMIT` lowers the cap for one run. Run it with `PUBG_INTELLIGENCE_DB=/path/to/read-only-snapshot.sqlite PUBG_TELEMETRY_ARCHIVE_DIR=/path/outside/the/repository pnpm --filter @agent/pubg-intelligence telemetry:backfill`. The runner rejects archive paths inside the repository, retries CDN failures three times, and prints aggregate counts only. New matches use the existing team prefetch and retry schedule, so an archive failure remains eligible for the normal scheduled retry.
+- Historical backfill reads a read-only SQLite snapshot and considers only the newest `HISTORICAL_TELEMETRY_BACKFILL_LIMIT` (500) matches; an older match never replaces a selected row with a missing telemetry asset. PUBG's telemetry CDN keeps a match for about 14 days and answers 403 afterwards, so those assets are counted as missing without retries and the local archive is the only long-term copy. New matches are archived by the existing Lab cron `amadeus-pubg-telemetry-hourly` (`5 * * * *`, `pubg_prefetch_telemetry`); the backfill only catches up on matches that were played before archiving existed or while it was failing. After a game, a new Match-ID directory should appear in the archive within about an hour. `PUBG_TELEMETRY_BACKFILL_LIMIT` lowers the cap for one run. Run it with `PUBG_INTELLIGENCE_DB=/path/to/read-only-snapshot.sqlite PUBG_TELEMETRY_ARCHIVE_DIR=/path/outside/the/repository pnpm --filter @rine-kit/pubg-intelligence telemetry:backfill`. The runner rejects archive paths inside the repository, retries CDN failures three times, and prints aggregate counts only. New matches use the existing team prefetch and retry schedule, so an archive failure remains eligible for the normal scheduled retry.
 - The local research page reads the same archive first. Set `PUBG_TELEMETRY_ARCHIVE_DIR` when the archive is not at `~/.local/share/amadeus/pubg-telemetry-archive`; verified archived bytes are replayed without CDN requests.
 - Battle reconstruction runs only after an explicit match drilldown and reads verified local archive entries only; it never falls back to the telemetry CDN. The Lab source cache remains read-only.
 - Its intermediate schema is `2` / `battle-reconstruction-v2`. Output player and team references are match-scoped hashes. Existing team-pair Episodes remain intact; V2 groups them only when their time overlaps, a known team reference is shared, and both sides have contact evidence.

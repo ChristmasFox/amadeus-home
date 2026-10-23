@@ -27,10 +27,8 @@ jobs:
           corepack enable
           corepack prepare pnpm@11.19.0 --activate
           pnpm install --frozen-lockfile
-      - name: Domain and shared presentation builds
+      - name: Lab PUBG plugin build
         run: |
-          pnpm --filter @agent/presentation build
-          pnpm --filter @agent/pubg-domain build
           pnpm build:pubg
       - name: Lab and Product Radar regressions
         run: |

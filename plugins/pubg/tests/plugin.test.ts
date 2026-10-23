@@ -84,7 +84,7 @@ test('bundled PUBG skill has the OpenClaw-required frontmatter', () => {
 
 test('every kind of PUBG answer gets the matching reply guide, the squad examples, and honest failure guides', async () => {
   const { replyGuideFor } = await import('../src/reply-guides.js');
-  const shared = await import('@agent/presentation');
+  const shared = await import('@rine-kit/presentation');
   const base = { dataUpdatedAt: '2026-10-19T15:50:00.000Z', evidenceRefs: [] };
   const stats = replyGuideFor({ ...base, type: 'pubg_stats', status: 'ok', rows: [{ label: 'a', values: {}, evidenceRefs: [] }] } as never) ?? '';
   assert.ok(stats.startsWith(shared.STATS_REPLY_GUIDE));

@@ -13,7 +13,7 @@ test('CLI parsing distinguishes local team ID from official player account IDs',
   assert.deepEqual(options.players, ['Alice', 'Bob']);
   assert.equal(options.teamId, 'squad_one');
   assert.match(options.output, /\.local\/pubg-team\.json$/);
-  assert.throws(() => validateOptions({ ...options, output: 'packages/pubg-domain/config/default-team.json' }), /tracked_repository_path/);
+  assert.throws(() => validateOptions({ ...options, output: 'plugins/pubg/config/default-team.json' }), /tracked_repository_path/);
   assert.throws(() => validateOptions({ ...options, players: ['Alice', 'alice'] }), /duplicate_player_names/);
 });
 

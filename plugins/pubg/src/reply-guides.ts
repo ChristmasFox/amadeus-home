@@ -1,7 +1,7 @@
-import { pubgReplyGuide, type PubgPresentation } from '@agent/presentation';
+import { pubgReplyGuide, type PubgPresentation } from '@rine-kit/presentation';
 
 /*
- * The squad chat's reply guide: the shared rules from @agent/presentation plus a worked example in this squad's
+ * The squad chat's reply guide: the shared rules from @rine-kit/presentation plus a worked example in this squad's
  * voice (Kurisu, the group's 称呼). The example is what keeps the model on the rich 战报 shape after a session reset.
  */
 

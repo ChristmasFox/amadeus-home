@@ -2,12 +2,12 @@
 
 Updated: 2026-10-17
 Branch: `research/pubg-intelligence`
-Gate API: `@agent/pubg-intelligence/gate` `1.0.0`
+Gate API: `@rine-kit/pubg-intelligence/gate` `1.0.0`
 Gate compact-facts rule: `gate-compact-facts-v1`
 
 ## SOURCE_FIXED
 
-`packages/pubg-intelligence` now exports a dedicated Gate subpath, `@agent/pubg-intelligence/gate`, at semver `1.0.0` for the compact Domain telemetry facts that Gate actually persists. The dedicated entrypoint does not import Lab experiment storage or SQLite modules. The API validates match identity, current parser/feature versions, the authorized roster, evidence shape, the feature cap, and that the persisted fact's raw event array is empty. It reports integrity-checked fight outcomes and explicitly in-match directed teammate damage; it excludes pre-match damage and marks unknown phase, missing/current-version cache gaps, and invalid fight-integrity results as incomplete or unavailable. It emits response-local evidence aliases rather than raw account, match, or event IDs.
+`packages/pubg-intelligence` now exports a dedicated Gate subpath, `@rine-kit/pubg-intelligence/gate`, at semver `1.0.0` for the compact Domain telemetry facts that Gate actually persists. The dedicated entrypoint does not import Lab experiment storage or SQLite modules. The API validates match identity, current parser/feature versions, the authorized roster, evidence shape, the feature cap, and that the persisted fact's raw event array is empty. It reports integrity-checked fight outcomes and explicitly in-match directed teammate damage; it excludes pre-match damage and marks unknown phase, missing/current-version cache gaps, and invalid fight-integrity results as incomplete or unavailable. It emits response-local evidence aliases rather than raw account, match, or event IDs.
 
 The Gate adapter takes only the `AuthorizedPublicQuery` created by the existing KOOK authorizer. It rejects any repository whose storage provenance is not `postgres`, reads only `listMatches` and exact-version feature `get` calls on that scoped repository, uses a 7- or 30-day window, caps reads at 30 matches, and limits feature-read concurrency to four. It never refreshes PUBG data or writes to Gate PostgreSQL. The existing PostgreSQL repository continues to enforce tenant/team membership and team-scoped feature keys. Gate does not import, configure, or connect to the Lab SQLite store.
 
@@ -19,8 +19,8 @@ No SQL migration or additional service was added: the current Gate sync already 
 
 ## BUILD_VERIFIED
 
-- `pnpm --filter @agent/pubg-intelligence build` — passed.
-- `pnpm --filter @agent/pubg-intelligence test` — 32 passed.
+- `pnpm --filter @rine-kit/pubg-intelligence build` — passed.
+- `pnpm --filter @rine-kit/pubg-intelligence test` — 32 passed.
 - `pnpm --filter @agent/pubg-intelligence-lab typecheck` — passed.
 - `pnpm --filter @agent/pubg-intelligence-lab test` — 2 passed.
 - `pnpm --filter @agent/pubg-intelligence-lab build` — passed.
@@ -30,7 +30,7 @@ No SQL migration or additional service was added: the current Gate sync already 
 - `pnpm typecheck:pubg-saas`, `pnpm typecheck:pubg`, and `pnpm test:pubg` — passed after rebase.
 - `pnpm check:architecture`, `pnpm check:secrets`, and `git diff --check` — passed.
 - `pnpm install --lockfile-only` — passed.
-- Gate OCI image package check: `docker build --platform linux/arm64 ...` passed; importing `@agent/pubg-intelligence/gate` from the built runtime image confirmed API `1.0.0` loads without `node:sqlite`.
+- Gate OCI image package check: `docker build --platform linux/arm64 ...` passed; importing `@rine-kit/pubg-intelligence/gate` from the built runtime image confirmed API `1.0.0` loads without `node:sqlite`.
 - Gate autopilot safety suite: 36 tests passed for the full-database/ACL rollback path and 38 after adding the constrained sole-tenant selector, including the multiple-unmarked-tenant refusal. Python compile, architecture check, secrets scan, and diff checks passed. PR #12 merged as `f2deb0e14b43f296f193a393e11b673962ada254`; PR #13 kept its memory changes during rebase and was validated in CI. PR #14 checks completed green; PR #15 and #16 merged only after all CI jobs passed, including isolated PostgreSQL, pgvector, and amd64/arm64 OCI builds.
 
 Local tests verify default-off and exact-tenant canary selection, no reads for a non-canary tenant, the typed AI SDK tool loop, response rendering through the KOOK adapter, bounded PostgreSQL adapter calls, stale/partial states, compact-facts validation, out-of-roster rejection, and evidence alias stability. The existing PostgreSQL repository integration test now checks that Tenant A cannot read Tenant B's match-scoped feature record; the KOOK integration test exercises the canary tool against a real disposable Gate PostgreSQL fixture when the CI database is available.

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { renderOwnerNotification } from '@agent/presentation';
+import { renderOwnerNotification } from '@rine-kit/presentation';
 import { buildMarketNotification, formatCompact, formatPercent, formatPrice, formatSigned, directionGlyph } from '../src/market.js';
 import { intradayResult, normalizeConstituents, normalizeQuote, normalizeSession, normalizeTradingDays } from '../src/market/normalize.js';
 import { normalizeSymbol } from '../src/market/symbols.js';

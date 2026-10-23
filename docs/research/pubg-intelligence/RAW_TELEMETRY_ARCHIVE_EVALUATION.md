@@ -20,12 +20,12 @@ The real AI path uses the existing Vercel AI SDK and owner-only external configu
 
 ## BUILD_VERIFIED
 
-- `pnpm --filter @agent/pubg-domain build` — passed.
-- `pnpm --filter @agent/pubg-intelligence build` — passed.
+- `pnpm --filter @rine-kit/pubg-domain build` — passed.
+- `pnpm --filter @rine-kit/pubg-intelligence build` — passed.
 - `pnpm --filter @agent/pubg-plugin build` — passed.
 - `pnpm --filter @agent/pubg-intelligence-lab typecheck` and `build` — passed.
-- `pnpm --filter @agent/pubg-domain test` — 40 passed.
-- `pnpm --filter @agent/pubg-intelligence test` — 39 passed.
+- `pnpm --filter @rine-kit/pubg-domain test` — 40 passed.
+- `pnpm --filter @rine-kit/pubg-intelligence test` — 39 passed.
 - `pnpm --filter @agent/pubg-plugin test` — 14 passed.
 - `pnpm --filter @agent/pubg-intelligence-lab test` — 4 passed.
 - `pnpm check:architecture` and `pnpm test:architecture` — passed; the fixture copy list now includes the existing `packages/agent-memory` source required by its unchanged assertions.
@@ -36,7 +36,7 @@ Focused real-data commands:
 ```sh
 PUBG_INTELLIGENCE_DB=/path/to/read-only-snapshot.sqlite \
 PUBG_TELEMETRY_ARCHIVE_DIR=/path/outside/repository \
-pnpm --filter @agent/pubg-intelligence telemetry:backfill
+pnpm --filter @rine-kit/pubg-intelligence telemetry:backfill
 
 PUBG_INTELLIGENCE_DB=/path/to/read-only-snapshot.sqlite \
 PUBG_TELEMETRY_ARCHIVE_DIR=/path/outside/repository \

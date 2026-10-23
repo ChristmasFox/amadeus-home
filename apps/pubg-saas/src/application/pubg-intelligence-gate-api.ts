@@ -1,4 +1,5 @@
-import type { MatchReviewFacts, NormalizedMatch, TelemetryFeatureRecord } from '@agent/pubg-domain';
+/** Gate-only PUBG intelligence compact-facts API (was @rine-kit/pubg-intelligence/gate). */
+import type { MatchReviewFacts, NormalizedMatch, TelemetryFeatureRecord } from '@rine-kit/pubg-domain';
 
 /** Stable, pure API consumed by Gate. Bump this semver independently of the Lab UI. */
 export const GATE_PUBG_INTELLIGENCE_API_VERSION = '1.0.0' as const;

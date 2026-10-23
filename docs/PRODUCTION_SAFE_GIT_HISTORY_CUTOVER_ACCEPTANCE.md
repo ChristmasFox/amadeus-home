@@ -71,7 +71,7 @@ All commands below were run from the repository root on the cutover branch.
 | `bash scripts/test-vps-account-map-migration.sh` | Passed; schema, redacted probe status, preflight, traversal-group contract, rollback, and continuity guards present. |
 | `bash scripts/test-openclaw-lineage-compatibility.sh` | Passed; synthetic orphan rewrite pruned the old commit and both OpenClaw/Product Radar image tags were required to rebuild before lineage bridge validation. |
 | `bash scripts/test-openclaw-candidate-deploy.sh` | Passed; candidate dry-run, permission smoke, lineage bridge guard, and account-map preflight assertions present. |
-| `pnpm --filter @agent/identity build`, `@agent/presentation build`, `@agent/amadeus-plugin typecheck` | Passed. |
+| `pnpm --filter @agent/identity build`, `@rine-kit/presentation build`, `@agent/amadeus-plugin typecheck` | Passed. |
 | `pnpm --filter @agent/amadeus-plugin test` | 141 passed, 0 failed. |
 | Qwen bridge tests | 18 passed, 0 failed. |
 | Qwen debug UI tests | 19 passed, 0 failed. |

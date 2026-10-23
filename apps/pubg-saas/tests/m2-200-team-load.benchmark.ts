@@ -10,7 +10,7 @@
  */
 import { randomUUID } from 'node:crypto';
 import { Pool, type PoolClient, type QueryResult } from 'pg';
-import { createTeamContext } from '@agent/pubg-domain/core';
+import { createTeamContext } from '@rine-kit/pubg-domain/core';
 import { migratePublicDatabase } from '../src/infrastructure/postgres/migrate.js';
 import { PostgresPubgRepository } from '../src/infrastructure/postgres/pubg-repository.js';
 import { PostgresPublicPubgAdmission } from '../src/infrastructure/pubg/request-limiter.js';

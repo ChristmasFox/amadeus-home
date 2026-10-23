@@ -9,3 +9,8 @@ allowBuilds:
   openclaw: true
   protobufjs: true
   tree-sitter-bash: true
+minimumReleaseAgeExclude:
+  - '@rine-kit/agent-memory@0.1.0'
+  - '@rine-kit/presentation@0.1.0'
+  - '@rine-kit/pubg-domain@0.1.0'
+  - '@rine-kit/pubg-intelligence@0.1.0'

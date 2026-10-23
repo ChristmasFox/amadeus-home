@@ -1,4 +1,4 @@
-import { PubgApiClient, PubgApiError } from '@agent/pubg-domain/core';
+import { PubgApiClient, PubgApiError } from '@rine-kit/pubg-domain/core';
 import type { PublicPubgAdmission } from './request-limiter.js';
 import { MAX_TEAM_ROSTER_SIZE } from '../../contracts/team-roster.js';
 

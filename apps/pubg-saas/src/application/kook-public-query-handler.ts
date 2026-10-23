@@ -7,8 +7,8 @@ import {
   emptyContext,
   type Metric,
   type ToolEnvelope,
-} from '@agent/pubg-domain/core';
-import { buildPubgToolPresentation, pubgReplyGuide, type PubgSourceRange, type PubgToolName } from '@agent/presentation';
+} from '@rine-kit/pubg-domain/core';
+import { buildPubgToolPresentation, pubgReplyGuide, type PubgSourceRange, type PubgToolName } from '@rine-kit/presentation';
 import type { AccountClaimService } from './account-claim-service.js';
 import type { KookIngressJob, KookRequestHandler } from './kook-ingress-queue.js';
 import type { KookTextPayload } from './kook-message-queue.js';
@@ -26,7 +26,7 @@ import { parseTeamLeaderboardMetric, type TeamLeaderboardMetric } from '../contr
 import { MAX_TEAM_ROSTER_SIZE } from '../contracts/team-roster.js';
 import { sanitizeKookMentionMarkup } from '../channels/kook/trusted-group-event.js';
 import { buildPublicAgentFacts } from './public-agent-facts.js';
-import type { MemoryObservation } from '@agent/memory';
+import type { MemoryObservation } from '@rine-kit/agent-memory';
 import type { GateMemoryPlugin } from './gate-memory-plugin.js';
 import { gatePubgIntelligenceEnabledForTenant, type GatePubgIntelligenceCanaryConfig } from './pubg-intelligence-canary.js';
 import { readGatePubgIntelligence, renderGatePubgIntelligenceKook, type GatePubgIntelligenceWindowDays } from './gate-pubg-intelligence.js';

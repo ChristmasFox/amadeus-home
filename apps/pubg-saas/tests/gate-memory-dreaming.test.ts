@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { nextMemoryDreamingAt, memoryDreamingLocalDateAt, type DreamingReport } from '@agent/memory';
+import { nextMemoryDreamingAt, memoryDreamingLocalDateAt, type DreamingReport } from '@rine-kit/agent-memory';
 import {
   runMemoryLearningScheduler,
   type GateMemoryDreamingRunIdentity,

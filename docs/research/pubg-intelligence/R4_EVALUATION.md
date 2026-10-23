@@ -15,13 +15,13 @@ Every run records a SHA-256 dataset fingerprint, parser/rule versions, threshold
 Command:
 
 ```sh
-pnpm --filter @agent/pubg-intelligence evaluation:replay
+pnpm --filter @rine-kit/pubg-intelligence evaluation:replay
 ```
 
 ## BUILD_VERIFIED
 
-- `pnpm --filter @agent/pubg-intelligence build` — passed.
-- `pnpm --filter @agent/pubg-intelligence test` — 29 passed.
+- `pnpm --filter @rine-kit/pubg-intelligence build` — passed.
+- `pnpm --filter @rine-kit/pubg-intelligence test` — 29 passed.
 - `pnpm --filter @agent/pubg-intelligence-lab typecheck` — passed.
 - `pnpm --filter @agent/pubg-intelligence-lab test` — 2 passed.
 - `pnpm --filter @agent/pubg-intelligence-lab build` — passed.

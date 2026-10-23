@@ -9,7 +9,7 @@ import {
   type PresentationFact,
   type PresentationLink,
   type WorldlineNotificationIntent,
-} from '@agent/presentation';
+} from '@rine-kit/presentation';
 import type { RadarEvent } from '../../core/events/events.js';
 import type { Listing, Price, ProductStatus } from '../../core/listing/model.js';
 import type { NotificationChannel, NotificationMessage } from '../../core/notification/ports.js';

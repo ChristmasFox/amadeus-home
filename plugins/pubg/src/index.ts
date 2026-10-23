@@ -24,7 +24,7 @@ import {
   type PubgSourceRange,
   type PubgStatsPresentation,
   type PubgTeamDamagePresentation,
-} from '@agent/presentation';
+} from '@rine-kit/presentation';
 import {
   PubgApiClient,
   PubgApiError,
@@ -47,8 +47,8 @@ import {
   type TelemetrySyncReportInput,
   type ToolEnvelope,
   type ToolSelectorInput,
-} from '@agent/pubg-domain';
-import { RawTelemetryArchive } from '@agent/pubg-intelligence/archive';
+} from '@rine-kit/pubg-domain';
+import { RawTelemetryArchive } from '@rine-kit/pubg-intelligence/archive';
 
 const PLUGIN_ID = 'pubg';
 const MAX_SUBJECT_ITEMS = 12;

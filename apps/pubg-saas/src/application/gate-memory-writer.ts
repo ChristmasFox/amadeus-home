@@ -9,8 +9,8 @@ import {
 } from 'ai';
 import type { Pool } from 'pg';
 import { z } from 'zod';
-import { equivalentMemoryContent, findMemoryConflicts, MemoryWriteService } from '@agent/memory';
-import type { AgentMemoryPlugin, ExplicitMemoryWrite, MemoryForgetRequest, MemoryWriteResult } from '@agent/memory';
+import { equivalentMemoryContent, findMemoryConflicts, MemoryWriteService } from '@rine-kit/agent-memory';
+import type { AgentMemoryPlugin, ExplicitMemoryWrite, MemoryForgetRequest, MemoryWriteResult } from '@rine-kit/agent-memory';
 import type { KookIngressJob } from './kook-ingress-queue.js';
 import type { KookTextPayload } from './kook-message-queue.js';
 import {

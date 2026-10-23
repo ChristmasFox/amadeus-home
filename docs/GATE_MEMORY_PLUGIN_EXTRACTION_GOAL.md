@@ -8,7 +8,7 @@ Extract Gate's memory implementation from `apps/pubg-saas` into a reusable packa
 
 This Goal is intentionally narrow:
 
-1. create `@agent/memory` as a reusable in-repo package;
+1. create `@rine-kit/agent-memory` as a reusable in-repo package;
 2. move generic memory logic out of Gate;
 3. keep Gate-specific identity, authorization, KOOK transcript access and PostgreSQL wiring in thin adapters;
 4. replace the current 30-second Light / 6-hour REM loops with one daily 03:00 Dreaming run;
@@ -45,7 +45,7 @@ Prefer moving and simplifying existing code over rewriting working pieces.
 For a trusted DM:
 
 1. Gate persists its normal conversation transcript.
-2. Gate passes a bounded, trusted observation to `@agent/memory.observe()`.
+2. Gate passes a bounded, trusted observation to `@rine-kit/agent-memory.observe()`.
 3. The observation becomes eligible short-term/episodic material.
 4. Do not run Light, REM or Deep in the reply path.
 5. Existing long-term memory recall remains available before the Agent response.
@@ -109,7 +109,7 @@ packages/agent-memory/
 
 Keep the package small. Exact file count is not a requirement.
 
-### 4.1 `@agent/memory` owns
+### 4.1 `@rine-kit/agent-memory` owns
 
 Generic concepts:
 
@@ -147,7 +147,7 @@ Gate supplies adapters implementing package ports.
 
 ### 4.3 Package must not know
 
-`@agent/memory` must not import or depend on:
+`@rine-kit/agent-memory` must not import or depend on:
 
 - KOOK types;
 - PUBG types;
@@ -298,7 +298,7 @@ Delete dead compatibility code after migration. Do not keep two memory implement
 
 No deployment pause after this phase.
 
-### P1 — Create `@agent/memory`
+### P1 — Create `@rine-kit/agent-memory`
 
 - Add the workspace package.
 - Move generic types, recall policies and reusable logic.
@@ -379,7 +379,7 @@ Only a genuinely destructive/unrecoverable database change may stop automatic de
 
 Source is complete when:
 
-1. `@agent/memory` exists and contains the generic memory runtime.
+1. `@rine-kit/agent-memory` exists and contains the generic memory runtime.
 2. Gate uses the plugin through adapters.
 3. Gate no longer contains a 30-second Light timer.
 4. Gate no longer contains a six-hour REM timer.

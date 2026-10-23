@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
 import type { OpenClawPluginApi, OpenClawPluginToolContext } from 'openclaw/plugin-sdk/core';
-import type { OwnerNotificationPresentation } from '@agent/presentation';
+import type { OwnerNotificationPresentation } from '@rine-kit/presentation';
 import { enqueueOwnerEvent, isTrustedOwnerContext, notificationParts, OwnerNotifier, ownerEvent, ownerEventForContext } from '../src/owner.js';
 
 function notification(overrides: Partial<OwnerNotificationPresentation> = {}): OwnerNotificationPresentation {

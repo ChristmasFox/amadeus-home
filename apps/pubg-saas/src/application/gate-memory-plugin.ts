@@ -1,4 +1,4 @@
-import { AgentMemoryRuntime } from '@agent/memory';
+import { AgentMemoryRuntime } from '@rine-kit/agent-memory';
 import type {
   AgentMemoryPlugin,
   DreamingReport,
@@ -9,7 +9,7 @@ import type {
   MemoryWriteResult,
   ExplicitMemoryWrite,
   MemoryForgetRequest,
-} from '@agent/memory';
+} from '@rine-kit/agent-memory';
 import type { KookIngressJob } from './kook-ingress-queue.js';
 import type { KookTextPayload } from './kook-message-queue.js';
 import type { GateMemoryConsolidationConsentService, GateMemoryConsolidationWorkflow } from './gate-memory-consolidation.js';

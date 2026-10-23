@@ -1,4 +1,4 @@
-import { importLegacyPubgData, SqlitePubgRepository } from '@agent/pubg-domain';
+import { importLegacyPubgData, SqlitePubgRepository } from '@rine-kit/pubg-domain';
 
 interface Arguments {
   apply: boolean;

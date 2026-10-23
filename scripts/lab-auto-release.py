@@ -31,9 +31,6 @@ STATE_SCHEMA = "lab-main-auto-release/v2"
 LAB_PATH_PREFIXES = (
     "plugins/amadeus/",
     "plugins/pubg/",
-    "packages/presentation/",
-    "packages/pubg-domain/",
-    "packages/pubg-intelligence/",
     "integrations/openclaw/",
     "infra/docker/casaos/openclaw/",
     # Version-pinned OpenClaw/WhatsApp runtime patches and their shared helpers.
@@ -186,10 +183,9 @@ def release_version_from_commit(root: Path, sha: str) -> str | None:
 
 
 def release_note_summary(paths: list[str]) -> str:
-    if any(path.startswith(("apps/pubg-intelligence-lab/", "packages/pubg-intelligence/",
-                            "docs/research/pubg-intelligence/")) for path in paths):
+    if any(path.startswith(("apps/pubg-intelligence-lab/", "docs/research/pubg-intelligence/")) for path in paths):
         return "PUBG Intelligence Lab 研究体验与证据链更新。"
-    if any(path.startswith(("plugins/pubg/", "packages/pubg-domain/")) for path in paths):
+    if any(path.startswith(("plugins/pubg/",)) for path in paths):
         return "PUBG 查询与比赛数据分析能力更新。"
     if any(path.startswith(("plugins/amadeus/", "integrations/openclaw/")) for path in paths):
         return "Lab 对话与工具运行能力更新。"

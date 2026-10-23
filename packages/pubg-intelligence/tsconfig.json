@@ -1,8 +1,0 @@
-{
-  "extends": "../../packages/pubg-domain/tsconfig.json",
-  "compilerOptions": {
-    "rootDir": ".",
-    "outDir": "dist"
-  },
-  "include": ["src/**/*.ts", "tests/**/*.test.ts"]
-}

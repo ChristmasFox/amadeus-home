@@ -1,7 +1,7 @@
 import { parentPort } from 'node:worker_threads';
-import type { NormalizedMatch } from '@agent/pubg-domain';
-import { analyzeMatchStory } from '@agent/pubg-intelligence';
-import { RawTelemetryArchive } from '@agent/pubg-intelligence/archive';
+import type { NormalizedMatch } from '@rine-kit/pubg-domain';
+import { analyzeMatchStory } from '@rine-kit/pubg-intelligence';
+import { RawTelemetryArchive } from '@rine-kit/pubg-intelligence/archive';
 import { computeMatchAnalysis } from './match-analysis.js';
 
 interface AnalysisTask {

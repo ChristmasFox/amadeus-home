@@ -28,8 +28,7 @@ if [[ ! -s "$SNAPSHOT" ]]; then
 fi
 
 cd "$ROOT"
-pnpm --filter @agent/pubg-domain build >/dev/null
-pnpm --filter @agent/pubg-intelligence build >/dev/null
+# Domain/intelligence come from @rine-kit/* on npm (prebuilt).
 echo "pubg-intelligence-lab starting on http://$BIND:$PORT with snapshot $SNAPSHOT"
 cd "$ROOT/apps/pubg-intelligence-lab"
 # The public hostname (when configured) serves the built client, never the Vite dev server, so rebuild it on every start.

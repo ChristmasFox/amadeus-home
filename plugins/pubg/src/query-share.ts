@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
-import { assignStatTitles, type PubgStatsPresentation } from '@agent/presentation';
-import { issueReviewShare, type ReviewShareStore } from '@agent/pubg-domain';
+import { assignStatTitles, type PubgStatsPresentation } from '@rine-kit/presentation';
+import { issueReviewShare, type ReviewShareStore } from '@rine-kit/pubg-domain';
 
 /**
  * Record (战绩) queries whose answers are about concrete matches. Operational tools (prefetch, sync report, player

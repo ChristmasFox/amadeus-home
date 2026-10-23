@@ -5,7 +5,7 @@ import {
   safePlayerName,
   type Snapshot,
 } from './snapshot.js';
-import { type NormalizedMatch } from '@agent/pubg-domain';
+import { type NormalizedMatch } from '@rine-kit/pubg-domain';
 import {
   battlePlayerRef,
   battleTeamRef,
@@ -19,7 +19,7 @@ import {
   normalizeBattleTelemetry,
   type RelativeValues,
   type ResearchSquad,
-} from '@agent/pubg-intelligence';
+} from '@rine-kit/pubg-intelligence';
 
 export async function loadBattleTelemetry(snapshot: Snapshot, match: NormalizedMatch): Promise<BattleTelemetryDocument> {
   const cached = snapshot.battleTelemetry.get(match.matchId);

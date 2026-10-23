@@ -6,10 +6,6 @@
 !packages/
 !packages/identity/
 !packages/identity/**
-!packages/presentation/
-!packages/presentation/**
-!packages/pubg-domain/
-!packages/pubg-domain/**
 !plugins/
 !plugins/pubg/
 !plugins/pubg/**

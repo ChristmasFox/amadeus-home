@@ -2,8 +2,8 @@ import { createHash } from 'node:crypto';
 import { mkdir, readdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { OpenClawPluginApi, OpenClawPluginToolContext } from 'openclaw/plugin-sdk/core';
-import type { OwnerNotificationPresentation } from '@agent/presentation';
-import { assertValid, renderOwnerNotification, validateOwnerNotificationPresentation } from '@agent/presentation';
+import type { OwnerNotificationPresentation } from '@rine-kit/presentation';
+import { assertValid, renderOwnerNotification, validateOwnerNotificationPresentation } from '@rine-kit/presentation';
 import { readRequiredFile, type AmadeusConfig } from './config.js';
 
 export interface OwnerEvent extends OwnerNotificationPresentation {

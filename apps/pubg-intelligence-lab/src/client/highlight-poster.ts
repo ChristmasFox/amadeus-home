@@ -1,4 +1,4 @@
-import type { MatchHighlight } from '@agent/pubg-intelligence';
+import type { MatchHighlight } from '@rine-kit/pubg-intelligence';
 
 export const highlightClock = (seconds: number) => `${Math.floor(seconds / 60).toString().padStart(2, '0')}:${Math.floor(seconds % 60).toString().padStart(2, '0')}`;
 export const highlightDate = (value: string | null) => value ? new Date(value).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai', hour12: false }) : '比赛时间未知';

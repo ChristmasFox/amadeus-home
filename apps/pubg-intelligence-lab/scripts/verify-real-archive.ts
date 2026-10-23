@@ -1,5 +1,5 @@
-import { DEFAULT_TIMEZONE, localDateLabel, SqlitePubgRepository } from '@agent/pubg-domain';
-import { RawTelemetryArchive } from '@agent/pubg-intelligence/archive';
+import { DEFAULT_TIMEZONE, localDateLabel, SqlitePubgRepository } from '@rine-kit/pubg-domain';
+import { RawTelemetryArchive } from '@rine-kit/pubg-intelligence/archive';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { realpathSync, statSync } from 'node:fs';

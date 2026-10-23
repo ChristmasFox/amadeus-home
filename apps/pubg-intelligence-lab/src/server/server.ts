@@ -54,7 +54,7 @@ import {
   DEFAULT_TIMEZONE,
   extractMatchReviewFacts,
   localDateLabel,
-} from '@agent/pubg-domain';
+} from '@rine-kit/pubg-domain';
 import {
   analyzeTacticalMatch,
   anonymizeResearchText,
@@ -86,7 +86,7 @@ import {
   runResearchAssistant,
   type TacticalMatchAnalysis,
   tacticalPlayerRef,
-} from '@agent/pubg-intelligence';
+} from '@rine-kit/pubg-intelligence';
 import { type LanguageModel } from 'ai';
 import { execFile } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, renameSync, statSync } from 'node:fs';
