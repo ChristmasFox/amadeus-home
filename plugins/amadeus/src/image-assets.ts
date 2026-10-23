@@ -521,7 +521,7 @@ export function registerImageAssets(api: OpenClawPluginApi): void {
     return job.then(() => undefined);
   }, { matcher: ['image_generate', 'amadeus_image_upscale', 'amadeus_web_image'], timeoutMs: 60_000 });
 
-  registerTool(api, 'amadeus_web_image', 'Find real photos on the internet (SearXNG image search), download them safely, and attach them to the reply with their source page link as the caption. Use when the person wants an actual existing image from the web rather than a generated one.', WebImageParameters, async (params, context, _notifier, signal) => findAndImportWebImages(configFor(api), params, context, signal));
+  registerTool(api, 'amadeus_web_image', 'Find real photos on the internet (SearXNG image search), download them safely, and attach them to the reply with their source page link as the caption. Use this, not image_generate, whenever the person asks to find, search for, look up or be sent an existing picture or photo of something ("找一张…的图发我", "搜张…的照片", "find me a picture of…"). image_generate is only for newly drawn or made-up images.', WebImageParameters, async (params, context, _notifier, signal) => findAndImportWebImages(configFor(api), params, context, signal));
   registerTool(api, 'amadeus_image_upscale', 'Upscale one existing image on the configured host service. Default to scale:2; an explicit user 4x/4倍 request uses scale:4. 4K/2K are resolution profiles, not multipliers. The current inbound turn also constrains an unambiguous explicit multiplier. Reply context wins over the current conversation’s recent image.', ImageUpscaleParameters, async (params, context, _notifier, signal) => upscaleImage(configFor(api), params, context, signal));
 }
 

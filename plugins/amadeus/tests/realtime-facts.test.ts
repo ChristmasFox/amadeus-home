@@ -42,6 +42,8 @@ test('registered hooks give a soft hint, never block or revise, and still audit'
   for (const text of ['Claude Opus 最新版本？', 'Amadeus 1.15.8 · 世界线收束\n版本：1.15.8', '解释一下 TypeScript 泛型']) {
     const prompt = await hooks.get('before_prompt_build')!({ prompt: text, messages: [] }, context);
     assert.match(prompt.appendSystemContext, /web_search/u);
+    assert.match(prompt.appendSystemContext, /amadeus_web_image/u);
+    assert.match(prompt.appendSystemContext, /image_generate/u);
   }
   assert.equal(hooks.has('before_agent_finalize'), false);
   assert.equal(await hooks.get('before_tool_call')!({ toolName: 'memory_search', params: {}, runId: 'run-hook' }, context), undefined);

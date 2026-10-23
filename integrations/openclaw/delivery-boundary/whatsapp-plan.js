@@ -95,7 +95,10 @@ function createWhatsAppReplyPlan(params) {
   plan.finalize = (dispatchResult) => {
     const visible = settleNativeStatus(dispatchResult);
     if (statusReactionController) {
-      const outcome = readAgentRunTerminalOutcome(dispatchResult) === 'failed' || !visible ? 'error' : 'done';
+      // ❌ only for a failed run. A completed run that queued no reply (NO_REPLY / deliberate silence)
+      // is a normal ending; an unknown terminal outcome with nothing delivered still counts as a failure.
+      const terminal = readAgentRunTerminalOutcome(dispatchResult);
+      const outcome = terminal === 'failed' || (terminal !== 'completed' && !visible) ? 'error' : 'done';
       statusFinal = contextualEmoji && outcome === 'done' && statusReactionController.finishWithContextual
         ? statusReactionController.finishWithContextual(contextualEmoji)
         : finalizeWhatsAppStatusReaction({ controller: statusReactionController, outcome });

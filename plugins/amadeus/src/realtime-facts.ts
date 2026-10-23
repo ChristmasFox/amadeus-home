@@ -16,6 +16,9 @@ const SEARCH_TOOLS = new Set(['web_search', 'web_fetch']);
 // the revise hook fails with a transcript-projection error → ❌ and no reply).
 const SEARCH_HINT = '当问题依赖当前事实（最新版本、新闻、价格、服务状态等）且你无法确定时，可调用 web_search，必要时再调用 web_fetch，并在回答里给出来源和查询或页面时间。搜索失败、超时或无结果时，明确说明当前事实无法确认，不要用旧知识或猜测冒充当前事实。不依赖当前事实的问题不必搜索。';
 
+// Same soft-guidance rule: the model picks between finding an existing picture and creating a new one.
+const IMAGE_HINT = '用户要网上已有的真实图片（"找一张…的图/照片发我""搜图"）时调用 amadeus_web_image，不要用 image_generate 生成；只有用户明确要"画""生成""做一张"新图时才用 image_generate。';
+
 export function classifyRealtimeEvidence(evidence: Pick<RealtimeEvidence, 'source' | 'observedAt' | 'validUntil'>, now = new Date()): RealtimeEvidence {
   const source = typeof evidence.source === 'string' && evidence.source.trim() ? evidence.source.trim() : null;
   const observedAt = typeof evidence.observedAt === 'string' && Number.isFinite(Date.parse(evidence.observedAt)) ? new Date(evidence.observedAt).toISOString() : null;
@@ -61,7 +64,7 @@ export class RealtimeToolAudit {
 
 export function registerRealtimeFacts(api: OpenClawPluginApi): void {
   const audit = new RealtimeToolAudit();
-  api.on('before_prompt_build', () => ({ appendSystemContext: SEARCH_HINT }));
+  api.on('before_prompt_build', () => ({ appendSystemContext: `${SEARCH_HINT}\n\n${IMAGE_HINT}` }));
   api.on('before_tool_call', (event, context) => {
     if (SEARCH_TOOLS.has(event.toolName)) audit.start({ session: context.sessionKey ?? 'unknown', ...((event.runId ?? context.runId) ? { runId: (event.runId ?? context.runId)! } : {}), tool: event.toolName, ...(event.toolCallId ? { toolCallId: event.toolCallId } : {}) });
     return undefined;

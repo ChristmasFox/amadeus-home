@@ -6,6 +6,8 @@ user-invocable: false
 
 # New image generation
 
+This is only for images that must be newly created ("画一张", "生成", "做一张", edits of a supplied image). When the person asks to find, search for or be sent an existing picture or photo from the internet ("找一张…的图发我", "搜图", "给我一张真实的…照片"), do not generate: use `amadeus_web_image` instead.
+
 Interpret the request semantically: when the user wants to receive a newly created image or illustration, call the native `image_generate` capability. Do not rely on fixed trigger phrases, keyword lists, or user knowledge of tool names.
 
 Use the current user's description as the generation prompt. Make at most one `image_generate` call for one current user request. If the user asks only for prompt-writing advice or asks a follow-up question about a prior generation/failure, answer that request with text instead. Do not substitute third-party tool suggestions for an image-generation request.

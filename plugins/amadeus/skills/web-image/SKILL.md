@@ -6,6 +6,8 @@ user-invocable: false
 
 # Web image search
 
+Routing rule: "find / search / look up / send me a picture or photo of X" (找一张…的图发我、搜图、网上有没有…的照片) means the person wants a picture that already exists. Call `amadeus_web_image` for it, never `image_generate`. Only "draw / generate / make me an illustration" (画一张、生成、做一张) is a new image.
+
 Use the native `amadeus_web_image` capability when the person wants an actual
 existing picture from the internet (a photo of a monkey, a product shot, a
 landmark, a screenshot of something public). It is not for generating new art:

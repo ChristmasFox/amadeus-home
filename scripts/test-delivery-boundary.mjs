@@ -85,9 +85,9 @@ const body=transformed.slice(node.start,node.end);
 assert.equal(body.includes('mediaOnlyCoalescer'),false);
 assert.equal(body.includes('mediaUrls'),false);
 assert.equal(body.includes('JSON.parse'),false);
-const provider=[];let port;const counts={typing:0,lease:0};
-const scope={globalThis:{__amadeusDeliveryBoundaryV2_20260930:{version:2,createWhatsAppPlan(input){port=input;return {replyOptions:{},dispatcherOptions:{},finalize:()=>true,delivery:{observeMessageSent:true,preparePayload:async()=>null,durable:()=>false,deliver:async()=>({visibleReplySent:false})}};}}},
- readAgentRunTerminalOutcome:()=> 'completed',finalizeWhatsAppStatusReaction:async({controller,outcome})=>{if(outcome==='done')await controller.setDone();else await controller.setError();await controller.restoreInitial();},
+const hooks={visible:true,terminal:'completed',outcomes:[]};const provider=[];let port;const counts={typing:0,lease:0};
+const scope={globalThis:{__amadeusDeliveryBoundaryV2_20260930:{version:2,createWhatsAppPlan(input){port=input;return {replyOptions:{},dispatcherOptions:{},finalize:()=>hooks.visible,delivery:{observeMessageSent:true,preparePayload:async()=>null,durable:()=>false,deliver:async()=>({visibleReplySent:false})}};}}},
+ readAgentRunTerminalOutcome:()=>hooks.terminal,finalizeWhatsAppStatusReaction:async({controller,outcome})=>{hooks.outcomes.push(outcome);if(outcome==='done')await controller.setDone();else await controller.setError();await controller.restoreInitial();},
  buildQuotedMessageOptions:params=>params,listWhatsAppSendResultMessageIds:result=>[result.messageId],markdownToWhatsAppChunks:text=>[text],resolveTextChunkLimit:()=>4000,resolveMarkdownTableMode$1:()=> 'code',resolveChunkMode:()=> 'length',
  resolveWhatsAppInboundReplyPolicy:()=>({suppressTyping:false,disableBlockStreaming:false}),resolveChannelStreamingBlockEnabled:()=>false,
  startAmadeusVoiceReplyLease:()=>{counts.lease++;return {};},startAmadeusWhatsAppTypingIndicator:()=>{counts.typing++;return ()=>{};},closeAmadeusVoiceReplyLeaseForTurn:()=>{},
@@ -150,6 +150,19 @@ await port.sendReaction('😂');assert.deepEqual(reactions.at(-1).slice(0,3),['c
  const plain=await run('none');assert.deepEqual(plain.slice(-2),['✅','👀'],'no contextual emoji keeps native done/restore');
  scope.sendReactionWhatsApp=planReaction;
  console.log('WHATSAPP_STATUS_REACTION_CONTEXTUAL_TERMINAL=passed');
+}
+// ❌ is for failed runs only: silence / NO_REPLY (completed, nothing queued) ends as done.
+{
+ const { createStatusReactionController } = await import(createRequire(host+'/package.json').resolve('openclaw/plugin-sdk/channel-feedback'));
+ const ctl=createStatusReactionController({enabled:true,adapter:{setReaction:async()=>{}},initialEmoji:'👀'});
+ const settle=(visible,terminal)=>{hooks.visible=visible;hooks.terminal=terminal;hooks.outcomes.length=0;scope.globalThis.createPlan({...params,statusReactionController:ctl}).finalize({});return hooks.outcomes[0];};
+ assert.equal(settle(false,'completed'),'done','completed with no payload (NO_REPLY) is not an error');
+ assert.equal(settle(true,'completed'),'done');
+ assert.equal(settle(true,'failed'),'error','failed run is an error even if something was delivered');
+ assert.equal(settle(false,'failed'),'error');
+ assert.equal(settle(false,undefined),'error','unknown outcome with nothing delivered stays an error');
+ hooks.visible=true;hooks.terminal='completed';
+ console.log('WHATSAPP_SILENT_COMPLETION_NOT_ERROR=passed');
 }
 params.transport.sendMedia=async()=>{throw new Error('document rejected');};await assert.rejects(port.sendDocument({bytes:Buffer.from('document'),mimeType:'image/png',fileName:'file.png'}));
 scope.globalThis.__amadeusDeliveryBoundaryV2_20260930=undefined;assert.throws(()=>scope.globalThis.createPlan(params),/unavailable/u);
