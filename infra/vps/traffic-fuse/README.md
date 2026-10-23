@@ -28,16 +28,29 @@ root qdisc, and requires a post-operation kernel read-back. The current
 reject a live apply until an operator-approved, non-destructive composition or
 replacement plan and an independent rescue path are proven.
 
-The example config keeps `autoApply=false`. A future runtime install must:
+## Runtime install (live on amadeus-gateway since 2026-10-23)
 
-1. complete the read-only interface/qdisc/provider-scope audit;
-2. provision the fixed probe group and root-only state/config paths;
-3. arm and verify the one-shot rescue timer before any qdisc mutation;
-4. perform a controlled isolated 2 Mbps aggregate test and SSH reconnect;
-5. authorize live `--apply` separately, with a dated root-only checkpoint.
+`install.sh <staged infra/vps dir> [interface]` installs the code under
+`/usr/local/libexec/amadeus-vps-traffic-fuse/`, the root-owned config under
+`/etc/amadeus/traffic-fuse.json`, the setgid state directory
+`/var/lib/amadeus-traffic-fuse/` (group `amadeus-accounting-snapshot`, so the fixed
+probe can read `public-snapshot.json`) and enables the 10-second sampling timer and
+the Shanghai-midnight release timer. The rescue service/timer are installed but never
+enabled: arm `amadeus-vps-traffic-fuse-rescue.timer` by hand before any manual
+`tc_helper.py apply`. The sampling and release services run with
+`SupplementaryGroups=amadeus-accounting-snapshot` so they can read the provider snapshot
+without extra capabilities. `autoApply` is set to `true` in the runtime config only
+after the controlled test below passed.
 
-The fixed probe reads only the sanitized `public-snapshot.json`. It never reads
-this SQLite file, proxy credentials, account databases, client addresses,
-destination history, or provider API secrets. The HomeLab owner worker polls
-the probe at a bounded cadence and lets the existing owner outbox deduplicate
-warning, engagement, release, and failure event keys.
+The kernel-default root qdisc (handle `0:`, kind equal to `net.core.default_qdisc`, or
+`noqueue` on virtual devices) is not "foreign": `tc qdisc del root` makes the kernel
+recreate exactly that qdisc, so the helper may replace it and release restores it.
+Any other root qdisc (another kind, an explicit handle) is still refused.
+
+Verified on 2026-10-23: isolated veth namespace test (business flow 1.94 Mbit/s,
+port-22 flow in the control class, release restores the default), then a live
+apply/release on `eth0` with the rescue timer armed (fq 0: -> htb 1a: -> fq 0:,
+read-back verified, SSH uninterrupted).
+
+Operational notes: the first day after install has `partial_coverage` (traffic before
+the first sample is not counted); a full-day guard starts at the next Shanghai midnight.

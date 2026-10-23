@@ -80,7 +80,7 @@ class TrafficFuseTests(unittest.TestCase):
         self.store.record_sample(sample("2026-10-10T16:00:00Z", CAP_BYTES, rx=CAP_BYTES, tx=0))
         self.store.record_sample(sample("2026-10-10T17:00:00Z", CAP_BYTES * 2, rx=CAP_BYTES * 2, tx=0))
         # The protected day is 2026-10-11 in Shanghai for the 16:00Z sample.
-        self.store.apply_result("2026-10-11", success=True)
+        self.store.apply_result("2026-10-11", success=True, observed_at=datetime.fromisoformat("2026-10-10T17:00:01+00:00"))
         released = self.store.release("2026-10-11", success=True, observed_at=datetime.fromisoformat("2026-10-11T16:00:00+00:00"))
         self.assertEqual(released["day"], "2026-10-12")
         self.assertEqual(released["operationStatus"], "released")
@@ -115,6 +115,17 @@ class TcPlannerTests(unittest.TestCase):
             plan_apply(FuseConfig("wan0"), [{"kind": "fq_codel", "handle": "0:"}])
         with self.assertRaises(RuntimeError):
             plan_release(FuseConfig("wan0"), [{"kind": "cake", "handle": "1:"}])
+
+    def test_untouched_kernel_default_root_may_be_replaced_and_is_restored_by_release(self) -> None:
+        default_fq = [{"kind": "fq", "handle": "0:", "root": True}]
+        commands = plan_apply(FuseConfig("wan0"), default_fq, "fq")
+        self.assertEqual(commands[0][:5], ["tc", "qdisc", "replace", "dev", "wan0"])
+        # Only the kernel default: another kind, an explicit handle, or an unknown default stay foreign.
+        for qdisc, default in (([{"kind": "fq_codel", "handle": "0:"}], "fq"), ([{"kind": "fq", "handle": "8001:"}], "fq"), (default_fq, None), (default_fq, "fq_codel"), ([{"kind": "noqueue", "handle": "5:"}], "fq")):
+            with self.assertRaises(RuntimeError):
+                plan_apply(FuseConfig("wan0"), qdisc, default)
+        # After release the kernel shows its default again, which is "not owned" and therefore released.
+        self.assertTrue(verify_release(default_fq))
 
     def test_owned_plan_is_fixed_and_shared(self) -> None:
         commands = plan_apply(FuseConfig("wan0", 2222), [{"kind": "htb", "handle": "1a:"}])

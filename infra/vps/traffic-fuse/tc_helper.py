@@ -58,9 +58,30 @@ def owned_root(qdisc: dict[str, Any] | None) -> bool:
     return handle in {OWNED_HANDLE, OWNED_HANDLE.rstrip(":")}
 
 
-def plan_apply(config: FuseConfig, qdisc_json: Any) -> list[list[str]]:
+def kernel_default_root(qdisc: dict[str, Any] | None, default_kind: str | None) -> bool:
+    """True for the untouched kernel default root qdisc (handle 0:, kind == net.core.default_qdisc).
+
+    Deleting the fuse-owned root later makes the kernel recreate exactly this
+    qdisc, so replacing it is reversible; anything an operator configured
+    (another kind, an explicit handle) stays foreign.
+    """
+    if not qdisc:
+        return False
+    # Virtual devices (veth, tun) report "noqueue" as their default root; deleting ours restores it too.
+    return str(qdisc.get("handle", "")) in {"0:", "0"} and qdisc.get("kind") in {default_kind, "noqueue"}
+
+
+def read_default_qdisc() -> str | None:
+    try:
+        with open("/proc/sys/net/core/default_qdisc", encoding="ascii") as handle:
+            return handle.read().strip() or None
+    except OSError:
+        return None
+
+
+def plan_apply(config: FuseConfig, qdisc_json: Any, default_kind: str | None = None) -> list[list[str]]:
     root = root_qdisc(qdisc_json)
-    if root and not owned_root(root):
+    if root and not owned_root(root) and not kernel_default_root(root, default_kind):
         kind = root.get("kind", "unknown")
         raise RuntimeError(f"foreign root qdisc {kind} present; no safe business-only composition is available, refusing destructive replacement")
     base = ["tc", "qdisc", "replace", "dev", config.interface, "root", "handle", OWNED_HANDLE, "htb", "default", "20"]
@@ -127,7 +148,7 @@ def run(argv: Sequence[str] | None = None) -> int:
             "filters": tc_json("filter", "show", "dev", config.interface),
         }, separators=(",", ":")))
         return 0
-    commands = plan_apply(config, qdisc_json) if args.operation == "apply" else plan_release(config, qdisc_json)
+    commands = plan_apply(config, qdisc_json, read_default_qdisc()) if args.operation == "apply" else plan_release(config, qdisc_json)
     for command in commands:
         subprocess.run(command, check=True)
     after = tc_json("qdisc", "show", "dev", config.interface)

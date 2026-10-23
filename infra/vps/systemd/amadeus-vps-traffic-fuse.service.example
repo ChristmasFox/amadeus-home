@@ -6,6 +6,8 @@ Wants=network-online.target
 [Service]
 Type=oneshot
 User=root
+# Reads the group-readable provider snapshot; new files in the setgid state directory inherit this group for the fixed probe.
+SupplementaryGroups=amadeus-accounting-snapshot
 WorkingDirectory=/usr/local/libexec/amadeus-vps-traffic-fuse
 ExecStart=/usr/bin/python3 /usr/local/libexec/amadeus-vps-traffic-fuse/traffic_fuse.py --config /etc/amadeus/traffic-fuse.json tick
 UMask=0077
