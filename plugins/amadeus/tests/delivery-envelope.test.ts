@@ -66,6 +66,14 @@ test('control-prefixed silent sentinels are suppressed before channel delivery',
     assert.deepEqual(calls, []);
   }
 });
+test('decoder restores a text part whose "text" key was dropped', () => {
+  for (const raw of ['{"version":2,"silent":false,"parts":[{"kind":"text":"hi\\n[react:👍]"}]}', '{"version":2,"silent":false,"parts":[{"kind":"text":"a\nb"}]}']) {
+    const decoded = decodeAgentReply(context, raw);
+    assert.equal(decoded.status, 'structured');
+    assert.equal(decoded.envelope.parts[0]?.kind, 'text');
+  }
+  assert.equal(decodeAgentReply(context, '{"version":2,"silent":false,"parts":[{"kind":"voice":"x"}]}').status, 'malformed');
+});
 test('decoder does not repair control characters outside JSON strings', () => {
   const malformed = `{"version":2,\u0001"silent":false,"parts":[{"kind":"text","text":"ok"}]}`;
   const decoded = decodeAgentReply(context, malformed);

@@ -44,7 +44,8 @@ export function registerVoiceReplyPrompt(api: OpenClawPluginApi, boundaryOptions
   const warnInvalidStructuredOutput = (runId: string, envelope: { fallbackReason?: string; channel: string }, raw: unknown): void => {
     if (envelope.fallbackReason !== 'invalid_structured_output' || loggedInvalidRuns.has(runId)) return;
     const rawLength = typeof raw === 'string' ? raw.length : 0;
-    api.logger.warn(`amadeus structured reply fallback: reason=invalid_structured_output run_id=${runId} channel=${envelope.channel} raw_length=${rawLength}`);
+    const rawPreview = typeof raw === 'string' ? JSON.stringify(raw.slice(0, 200)) : 'null';
+    api.logger.warn(`amadeus structured reply fallback: reason=invalid_structured_output run_id=${runId} channel=${envelope.channel} raw_length=${rawLength} raw_preview=${rawPreview}`);
     loggedInvalidRuns.add(runId);
     if (loggedInvalidRuns.size > 1024) loggedInvalidRuns.delete(loggedInvalidRuns.values().next().value!);
   };

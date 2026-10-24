@@ -56,14 +56,29 @@ function escapeControlCharactersInStrings(raw: string): string | undefined {
   return changed ? output.join('') : undefined;
 }
 
+/**
+ * Models occasionally drop the key of a text part and write
+ * `{"kind":"text":"..."}`. Insert only that missing `,"text"` key; the result
+ * is still parsed and checked by the strict envelope validator.
+ */
+function restoreMissingTextKey(raw: string): string | undefined {
+  const repaired = raw.replace(/("kind"\s*:\s*"text")\s*:\s*(?=")/gu, '$1,"text":');
+  return repaired === raw ? undefined : repaired;
+}
+
 function parseWire(raw: string): unknown {
-  try {
-    return JSON.parse(raw) as unknown;
-  } catch {
-    const repaired = escapeControlCharactersInStrings(raw);
-    if (repaired === undefined) throw new Error('invalid_agent_json');
-    return JSON.parse(repaired) as unknown;
+  const attempts: Array<(value: string) => string | undefined> = [(value) => value, escapeControlCharactersInStrings, restoreMissingTextKey];
+  for (const attempt of attempts) {
+    const candidate = attempt(raw);
+    if (candidate === undefined) continue;
+    try { return JSON.parse(candidate) as unknown; } catch { /* try the next narrow repair */ }
   }
+  const stacked = restoreMissingTextKey(raw);
+  const escaped = stacked === undefined ? undefined : escapeControlCharactersInStrings(stacked);
+  if (escaped !== undefined) {
+    try { return JSON.parse(escaped) as unknown; } catch { /* fall through */ }
+  }
+  throw new Error('invalid_agent_json');
 }
 
 /**
