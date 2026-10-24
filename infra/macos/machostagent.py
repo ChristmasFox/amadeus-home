@@ -232,9 +232,18 @@ def process_rows() -> list[dict[str, Any]]:
     return rows
 
 
+def ssh_listening() -> bool:
+    # macOS runs sshd on demand from launchd (process is sshd-session, absent when idle), so probe the port.
+    try:
+        with socket.create_connection(("127.0.0.1", 22), timeout=1.0):
+            return True
+    except OSError:
+        return False
+
+
 def services() -> dict[str, dict[str, Any]]:
     result: dict[str, dict[str, Any]] = {
-        "ssh": {"ok": bool(run(["/usr/bin/pgrep", "-x", "sshd"], timeout=1.0))},
+        "ssh": {"ok": ssh_listening()},
         "macHostAgent": {"ok": True},
     }
     if isinstance(SERVICE_URLS, dict):
