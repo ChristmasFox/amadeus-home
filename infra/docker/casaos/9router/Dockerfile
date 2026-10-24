@@ -37,6 +37,8 @@ COPY infra/docker/casaos/9router/patch-image-combo-safety.mjs /opt/amadeus/patch
 RUN node /opt/amadeus/patch-image-combo-safety.mjs --root /usr/local/lib/node_modules/9router --apply
 COPY infra/docker/casaos/9router/patch-combo-location-fallback.mjs /opt/amadeus/patch-combo-location-fallback.mjs
 RUN node /opt/amadeus/patch-combo-location-fallback.mjs --root /usr/local/lib/node_modules/9router --apply
+COPY infra/docker/casaos/9router/patch-grok-strip-external-web-access.mjs /opt/amadeus/patch-grok-strip-external-web-access.mjs
+RUN node /opt/amadeus/patch-grok-strip-external-web-access.mjs --root /usr/local/lib/node_modules/9router --apply
 # The pinned upstream image also keeps a standalone bundle at /app. Keep its
 # Combo safety behavior identical and require the same exact 0.5.104 version.
 RUN node /opt/amadeus/patch-image-combo-safety.mjs --root /app --apply
