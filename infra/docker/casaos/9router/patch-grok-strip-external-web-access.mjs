@@ -1,11 +1,13 @@
 #!/usr/bin/env node
-// Codex live web_search sets tools[].external_web_access. Grok CLI rejects that
-// field (even when false). Hosted tools are passed through as-is in the compiled
-// Responses allowlist filter; strip the key before upstream.
+// Grok CLI (cli-chat-proxy) rejects:
+// 1) tools[].external_web_access (Codex live web_search), even when false
+// 2) reasoning items that keep content:null alongside encrypted_content
+//    ("Could not decode the compaction blob...")
 import { chmod, readdir, readFile, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
 export const MARKER = "amadeus-grok-strip-extweb-0.5.104";
+export const REASONING_MARKER = "amadeus-grok-reasoning-content-0.5.104";
 export const VERSION = "0.5.104";
 const HOSTED_HINT = 'new Set(["web_search","x_search","web_search_preview","file_search","image_generation","code_interpreter","mcp","local_shell"])';
 const NEEDLE1 = "if(r.has(d))return c.add(d),!0;";
@@ -21,6 +23,13 @@ const REPL2 =
   ' */,!0);';
 const NEEDLE2_APPLIED =
   'if(!("function"===d||""===d||a.function||"string"==typeof a.name)||r.has(d))return r.has(d)&&(delete a.external_web_access,!0);';
+
+const REASONING_NEEDLE =
+  'if("reasoning"===a.type)return A(a.id)&&"string"==typeof a.encrypted_content?c:null;';
+const REASONING_REPL =
+  'if("reasoning"===a.type){if(!A(a.id)||"string"!=typeof a.encrypted_content)return null;/* ' +
+  REASONING_MARKER +
+  ' */delete c.content;Array.isArray(c.summary)||(c.summary=[]);return c;}';
 
 async function filesUnder(root) {
   const output = [];
@@ -42,22 +51,22 @@ async function filesUnder(root) {
 }
 
 export function patchGrokStripExtwebSource(source) {
-  if (source.includes(MARKER)) return source;
-  if (!source.includes(HOSTED_HINT)) return source;
   let out = source;
-  if (out.includes(NEEDLE1)) {
-    const count = out.split(NEEDLE1).length - 1;
-    if (count !== 1) throw new Error(`grok_strip_extweb_needle1_drift:${count}`);
-    out = out.replace(NEEDLE1, REPL1);
-  } else if (out.includes(NEEDLE1_APPLIED)) {
-    out = out.replace(NEEDLE1_APPLIED, REPL1);
-  } else if (!out.includes(REPL1)) {
-    return source;
+  if (!out.includes(MARKER) && out.includes(HOSTED_HINT)) {
+    if (out.includes(NEEDLE1)) {
+      const count = out.split(NEEDLE1).length - 1;
+      if (count !== 1) throw new Error(`grok_strip_extweb_needle1_drift:${count}`);
+      out = out.replace(NEEDLE1, REPL1);
+    } else if (out.includes(NEEDLE1_APPLIED)) {
+      out = out.replace(NEEDLE1_APPLIED, REPL1);
+    }
+    if (out.includes(NEEDLE2)) out = out.replace(NEEDLE2, REPL2);
+    else if (out.includes(NEEDLE2_APPLIED)) out = out.replace(NEEDLE2_APPLIED, REPL2);
   }
-  if (out.includes(NEEDLE2)) {
-    out = out.replace(NEEDLE2, REPL2);
-  } else if (out.includes(NEEDLE2_APPLIED)) {
-    out = out.replace(NEEDLE2_APPLIED, REPL2);
+  if (!out.includes(REASONING_MARKER) && out.includes(REASONING_NEEDLE)) {
+    const count = out.split(REASONING_NEEDLE).length - 1;
+    if (count !== 1) throw new Error(`grok_reasoning_content_drift:${count}`);
+    out = out.replace(REASONING_NEEDLE, REASONING_REPL);
   }
   return out;
 }
@@ -66,12 +75,20 @@ async function findCandidates(root) {
   const candidates = [];
   for (const path of await filesUnder(root)) {
     const source = await readFile(path, "utf8");
-    if (!source.includes(HOSTED_HINT) && !source.includes(MARKER)) continue;
+    const relevant =
+      source.includes(HOSTED_HINT) ||
+      source.includes(REASONING_NEEDLE) ||
+      source.includes(MARKER) ||
+      source.includes(REASONING_MARKER);
+    if (!relevant) continue;
     if (
       source.includes(NEEDLE1) ||
       source.includes(NEEDLE1_APPLIED) ||
       source.includes(REPL1) ||
-      source.includes(MARKER)
+      source.includes(REASONING_NEEDLE) ||
+      source.includes(REASONING_REPL) ||
+      source.includes(MARKER) ||
+      source.includes(REASONING_MARKER)
     ) {
       candidates.push({ path, source });
     }
@@ -95,14 +112,14 @@ export async function install(root, mode = "verify", { checkVersion = true } = {
   for (const candidate of candidates) {
     const output = patchGrokStripExtwebSource(candidate.source);
     if (mode === "verify") {
-      if (!candidate.source.includes(MARKER)) {
+      if (!candidate.source.includes(MARKER) || !candidate.source.includes(REASONING_MARKER)) {
         throw new Error(`grok_strip_extweb_not_installed:${candidate.path}`);
       }
       touched.push(candidate.path);
       continue;
     }
     if (output === candidate.source) {
-      if (!candidate.source.includes(MARKER) && !candidate.source.includes("delete a.external_web_access")) {
+      if (!candidate.source.includes(MARKER) || !candidate.source.includes(REASONING_MARKER)) {
         throw new Error(`grok_strip_extweb_unchanged:${candidate.path}`);
       }
       touched.push(candidate.path);
@@ -112,7 +129,11 @@ export async function install(root, mode = "verify", { checkVersion = true } = {
     await writeFile(candidate.path, output);
     await chmod(candidate.path, permissions);
     const verify = await readFile(candidate.path, "utf8");
-    if (!verify.includes(MARKER) || patchGrokStripExtwebSource(verify) !== verify) {
+    if (
+      !verify.includes(MARKER) ||
+      !verify.includes(REASONING_MARKER) ||
+      patchGrokStripExtwebSource(verify) !== verify
+    ) {
       throw new Error(`grok_strip_extweb_verify_failed:${candidate.path}`);
     }
     touched.push(candidate.path);
