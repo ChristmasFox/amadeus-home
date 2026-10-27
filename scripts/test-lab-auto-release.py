@@ -214,3 +214,44 @@ assert "lab-auto-enable" not in devctl and "lab-auto-disable" not in devctl
 assert "LAB_DEPLOYMENT=AFTER_MAIN_UPDATE ci=not_required candidate=automatic formal=on_approval" in devctl
 assert "Lab candidate and manual promotion commands are retired" in release_cli
 print("LAB_AUTO_RELEASE_TEST=passed ci-gate=none candidate=automatic formal=on_approval rollback=single-stage")
+
+
+# The main checkout's dependencies are kept in step with its lockfile (a stale install crash-looped the PUBG site).
+with tempfile.TemporaryDirectory(prefix="lab-deps-sync-") as temporary:
+    main_tree = Path(temporary) / "main"
+    subprocess.run(["git", "init", "-q", str(main_tree)], check=True)
+    subprocess.run(["git", "-C", str(main_tree), "config", "user.name", "fixture"], check=True)
+    subprocess.run(["git", "-C", str(main_tree), "config", "user.email", "fixture@example.invalid"], check=True)
+    (main_tree / "scripts").mkdir()
+    (main_tree / "scripts/sync-main-deps.sh").write_text("#!/usr/bin/env bash\necho DEPS_SYNC=installed root=$4\n")
+    (main_tree / "README").write_text("x\n")
+    subprocess.run(["git", "-C", str(main_tree), "add", "-A"], check=True)
+    subprocess.run(["git", "-C", str(main_tree), "commit", "-qm", "init"], check=True)
+    release_tree = Path(temporary) / "release"
+    subprocess.run(["git", "-C", str(main_tree), "worktree", "add", "-q", "--detach", str(release_tree)], check=True)
+    # from a linked worktree, "the main checkout" is still the primary one
+    assert auto.main_worktree(release_tree).resolve() == main_tree.resolve()
+    seen: list[list[str]] = []
+    real_run = subprocess.run
+
+    def fake_run(args, **kwargs):
+        if args[0] == "git":  # only the install script is faked
+            return real_run(args, **kwargs)
+        seen.append(list(args))
+        return subprocess.CompletedProcess(args, 0, stdout="DEPS_SYNC=installed root=x\n")
+
+    with patch.object(auto.subprocess, "run", fake_run):
+        auto.sync_main_tree_dependencies(release_tree)
+    assert len(seen) == 1, seen
+    assert seen[0][0] == "bash" and seen[0][1].endswith("scripts/sync-main-deps.sh")
+    assert "--restart" in seen[0] and "com.amadeus.pubg-intelligence-lab" in seen[0]
+    assert Path(seen[0][-1]).resolve() == main_tree.resolve()
+
+    def failing_run(args, **kwargs):
+        if args[0] == "git":
+            return real_run(args, **kwargs)
+        return subprocess.CompletedProcess(args, 1, stdout="pnpm exploded\n")
+
+    with patch.object(auto.subprocess, "run", failing_run):
+        auto.sync_main_tree_dependencies(release_tree)  # reported, never raised: a release is not blocked by it
+print("Lab main-tree dependency sync fixtures passed")

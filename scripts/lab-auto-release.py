@@ -119,6 +119,41 @@ def save_state(data: dict[str, Any]) -> None:
         temporary.unlink(missing_ok=True)
 
 
+MAIN_TREE_SERVICES = ("com.amadeus.pubg-intelligence-lab",)
+
+
+def main_worktree(root: Path) -> Path:
+    """The primary checkout (~/amadeus-home), whichever worktree this script runs from."""
+    common = git(root, "rev-parse", "--path-format=absolute", "--git-common-dir")
+    return Path(common).parent
+
+
+def sync_main_tree_dependencies(root: Path) -> None:
+    """Install the main checkout's dependencies when its lockfile / package.json files changed.
+
+    Services run straight from that checkout (the PUBG Intelligence Lab LaunchAgent); a dependency change that was
+    pulled but not installed crash-looped it and the public site answered 502. Never blocks a release: a failure is
+    reported and the next cycle tries again.
+    """
+    script = root / "scripts/sync-main-deps.sh"
+    if not script.is_file():
+        return
+    try:
+        tree = main_worktree(root)
+        args = ["bash", str(script)]
+        for label in MAIN_TREE_SERVICES:
+            args += ["--restart", label]
+        args.append(str(tree))
+        result = subprocess.run(args, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=1800)
+        for line in (result.stdout or "").splitlines():
+            if line.startswith("DEPS_SYNC"):
+                print("LAB_" + line)
+        if result.returncode:
+            print("LAB_DEPS_SYNC=failed detail=" + (result.stdout or "").strip().splitlines()[-1][:300])
+    except (AutomationError, OSError, subprocess.TimeoutExpired) as exc:
+        print("LAB_DEPS_SYNC=failed detail=" + str(exc))
+
+
 def fetch_main(root: Path) -> str:
     git(root, "fetch", "--prune", REMOTE, BRANCH, "--tags")
     return git(root, "rev-parse", f"{REMOTE}/{BRANCH}")
@@ -622,6 +657,7 @@ def release_once(root: Path) -> None:
         return
     try:
         source_root = Path(__file__).resolve().parents[1]
+        sync_main_tree_dependencies(source_root)
         main_sha = git(source_root, "rev-parse", f"{REMOTE}/{BRANCH}")
         state = load_state()
         if state is None:

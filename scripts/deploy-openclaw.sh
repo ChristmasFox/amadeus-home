@@ -460,6 +460,9 @@ deploy_stage verify
     source "${NVM_DIR:-$HOME/.nvm}/nvm.sh"
     nvm use 24.16.0 >/dev/null
   fi
+  # The build and tests below run from this checkout: install first when its lockfile / package.json files changed
+  # since the last install (a no-op otherwise), so a dependency bump cannot fail the release or leave stale modules.
+  bash "$ROOT_DIR/scripts/sync-main-deps.sh" "$ROOT_DIR"
   if ((FULL_VERIFY || (BUILD_OPENCLAW && BUILD_RADAR))); then
     pnpm build
     pnpm typecheck

@@ -28,6 +28,9 @@ if [[ ! -s "$SNAPSHOT" ]]; then
 fi
 
 cd "$ROOT"
+# The server runs out of this checkout, so its node_modules must match this checkout's lockfile: a dependency change
+# that was pulled but not installed used to crash-loop the service (ERR_MODULE_NOT_FOUND) and the site answered 502.
+bash "$ROOT/scripts/sync-main-deps.sh" "$ROOT"
 # Domain/intelligence come from @rine-kit/* on npm (prebuilt).
 echo "pubg-intelligence-lab starting on http://$BIND:$PORT with snapshot $SNAPSHOT"
 cd "$ROOT/apps/pubg-intelligence-lab"
