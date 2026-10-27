@@ -10,15 +10,15 @@
     "worker": "node dist/src/public-sync-worker.js"
   },
   "dependencies": {
-    "@rine-kit/agent-memory": "0.1.4",
-    "@rine-kit/presentation": "0.1.4",
-    "@rine-kit/pubg-domain": "0.1.4",
+    "@rine-kit/agent-memory": "0.1.5",
+    "@rine-kit/presentation": "0.1.5",
+    "@rine-kit/pubg-domain": "0.1.5",
     "@ai-sdk/openai-compatible": "3.0.67",
     "ai": "7.0.137",
     "pg": "^8.23.1",
     "undici": "8.10.2",
     "zod": "4.5.4",
-    "@rine-kit/pubg-intelligence": "0.1.4"
+    "@rine-kit/pubg-intelligence": "0.1.5"
   },
   "devDependencies": {
     "@types/node": "22.18.6",
