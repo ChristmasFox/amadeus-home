@@ -10,7 +10,8 @@ allowBuilds:
   protobufjs: true
   tree-sitter-bash: true
 minimumReleaseAgeExclude:
-  - '@rine-kit/agent-memory@0.1.0'
-  - '@rine-kit/presentation@0.1.0'
-  - '@rine-kit/pubg-domain@0.1.0'
-  - '@rine-kit/pubg-intelligence@0.1.0'
+  - '@rine-kit/agent-memory@0.1.0 || 0.1.4'
+  - '@rine-kit/presentation@0.1.0 || 0.1.4'
+  - '@rine-kit/pubg-domain@0.1.0 || 0.1.4'
+  - '@rine-kit/pubg-intelligence@0.1.0 || 0.1.4'
+  - '@rine-kit/pubg-reply@0.1.4'

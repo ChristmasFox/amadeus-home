@@ -11,8 +11,8 @@ importers:
   apps/product-radar:
     dependencies:
       '@rine-kit/presentation':
-        specifier: 0.1.0
-        version: 0.1.0
+        specifier: 0.1.4
+        version: 0.1.4
       sharp:
         specifier: 0.35.4
         version: 0.35.4(@types/node@22.18.6)
@@ -33,11 +33,11 @@ importers:
         specifier: 3.0.67
         version: 3.0.67(zod@4.5.4)
       '@rine-kit/pubg-domain':
-        specifier: 0.1.0
-        version: 0.1.0
+        specifier: 0.1.4
+        version: 0.1.4
       '@rine-kit/pubg-intelligence':
-        specifier: 0.1.0
-        version: 0.1.0
+        specifier: 0.1.4
+        version: 0.1.4
       ai:
         specifier: 7.0.137
         version: 7.0.137(zod@4.5.4)
@@ -82,17 +82,17 @@ importers:
         specifier: 3.0.67
         version: 3.0.67(zod@4.5.4)
       '@rine-kit/agent-memory':
-        specifier: 0.1.0
-        version: 0.1.0
+        specifier: 0.1.4
+        version: 0.1.4
       '@rine-kit/presentation':
-        specifier: 0.1.0
-        version: 0.1.0
+        specifier: 0.1.4
+        version: 0.1.4
       '@rine-kit/pubg-domain':
-        specifier: 0.1.0
-        version: 0.1.0
+        specifier: 0.1.4
+        version: 0.1.4
       '@rine-kit/pubg-intelligence':
-        specifier: 0.1.0
-        version: 0.1.0
+        specifier: 0.1.4
+        version: 0.1.4
       ai:
         specifier: 7.0.137
         version: 7.0.137(zod@4.5.4)
@@ -141,8 +141,11 @@ importers:
         specifier: workspace:*
         version: link:../../packages/identity
       '@rine-kit/presentation':
-        specifier: 0.1.0
-        version: 0.1.0
+        specifier: 0.1.4
+        version: 0.1.4
+      '@rine-kit/pubg-reply':
+        specifier: 0.1.4
+        version: 0.1.4
       '@types/node':
         specifier: 22.18.6
         version: 22.18.6
@@ -168,14 +171,17 @@ importers:
         specifier: workspace:*
         version: link:../../packages/identity
       '@rine-kit/presentation':
-        specifier: 0.1.0
-        version: 0.1.0
+        specifier: 0.1.4
+        version: 0.1.4
       '@rine-kit/pubg-domain':
-        specifier: 0.1.0
-        version: 0.1.0
+        specifier: 0.1.4
+        version: 0.1.4
       '@rine-kit/pubg-intelligence':
-        specifier: 0.1.0
-        version: 0.1.0
+        specifier: 0.1.4
+        version: 0.1.4
+      '@rine-kit/pubg-reply':
+        specifier: 0.1.4
+        version: 0.1.4
       '@types/node':
         specifier: 22.18.6
         version: 22.18.6
@@ -1103,17 +1109,20 @@ packages:
   '@protobufjs/utf8@1.1.2':
     resolution: {integrity: sha512-b1UQwcEZ4yCnMCD8DAL1VlbvBJE9/IX4FTIp7BG1xYpf29SLazLSrqUkj4w7Y5y7cCVP6E5tcqqcI0xemPkHug==}
 
-  '@rine-kit/agent-memory@0.1.0':
-    resolution: {integrity: sha512-Iua0BnaWsYMU+qDGQNchNhkRhwybElHio8qQSyoqmlSD32qPUbY6szcKpoq7BWJes61SVH7xlEO0cCa0GEldaw==}
+  '@rine-kit/agent-memory@0.1.4':
+    resolution: {integrity: sha512-FDwVf1qCwd0N6MJWoUCxSX1TMPJquLwjlzJnIIBVasRCPCgckMc5htDRiVWMFKh7aG8MWi5imVoQGgAvvkuZ+w==}
 
-  '@rine-kit/presentation@0.1.0':
-    resolution: {integrity: sha512-m4RaH2v/SycKObd1s3OTRBFpHrsrHhJgZkgQdwyxk5L8VhTpx3DPhj0Zk+XE07yqoe+M7v8dZPr/w+nsqL4P+Q==}
+  '@rine-kit/presentation@0.1.4':
+    resolution: {integrity: sha512-Ul9pq2Q3S59ckCOYFo9xucozWgPHqJDwtRN2jJ1gP/Fiqo3HXVj3JHCqMN33hHBENkBqssTEmI4wxDrdIcnigg==}
 
-  '@rine-kit/pubg-domain@0.1.0':
-    resolution: {integrity: sha512-Z5piwbjEJtM3B05hMV8kyn2B94IwkkRdkxcCvwnLfjwY6bmMIMVekRllhFYCU0qOkHTxtNW0E2Jy5frTm+/VWg==}
+  '@rine-kit/pubg-domain@0.1.4':
+    resolution: {integrity: sha512-VDG5q6Rs0Cq3FqsO939nLHMOsPixKPyLF33uKzjGDqJe/bE9fKn6WgS/JZgeDovH3FuHo8Ch+tziYOS/RYkoOw==}
 
-  '@rine-kit/pubg-intelligence@0.1.0':
-    resolution: {integrity: sha512-EI8GBclebMBv0EFtur7jtka5yWnoA6Dkfyq7p6U50VvD3Zb8zSZ3i1QgpnVLH1zjUXpGUSMwRDmm7wahd3fuhA==}
+  '@rine-kit/pubg-intelligence@0.1.4':
+    resolution: {integrity: sha512-L+jxX/zQ1mMU5Sss3X/ao2Zli24TvD5s5Yiprt+Mu+oiA8lO3VLI1IyqSsmRauV/b2tkS8p2fiNWP+myonuWuQ==}
+
+  '@rine-kit/pubg-reply@0.1.4':
+    resolution: {integrity: sha512-rWZ+OBnNxw3ahYD/8t/IvjyOWCHelIQk1p5NHfP74357fHJOL0UArk5JuN5cwHSo0b6ZO4Vgmv2UDcs5Dml4uA==}
 
   '@rolldown/pluginutils@1.0.0-rc.3':
     resolution: {integrity: sha512-eybk3TjzzzV97Dlj5c+XrBFW57eTNhzod66y9HrBlzJ6NsCrWCp/2kaPS3K9wJmurBC0Tdw4yPjXKZqlznim3Q==}
@@ -3545,20 +3554,25 @@ snapshots:
 
   '@protobufjs/utf8@1.1.2': {}
 
-  '@rine-kit/agent-memory@0.1.0': {}
+  '@rine-kit/agent-memory@0.1.4': {}
 
-  '@rine-kit/presentation@0.1.0': {}
+  '@rine-kit/presentation@0.1.4': {}
 
-  '@rine-kit/pubg-domain@0.1.0':
+  '@rine-kit/pubg-domain@0.1.4':
     dependencies:
-      '@rine-kit/presentation': 0.1.0
+      '@rine-kit/presentation': 0.1.4
       zod: 4.6.7
 
-  '@rine-kit/pubg-intelligence@0.1.0':
+  '@rine-kit/pubg-intelligence@0.1.4':
     dependencies:
-      '@rine-kit/pubg-domain': 0.1.0
+      '@rine-kit/pubg-domain': 0.1.4
       ai: 7.0.137(zod@4.6.7)
       zod: 4.6.7
+
+  '@rine-kit/pubg-reply@0.1.4':
+    dependencies:
+      '@rine-kit/presentation': 0.1.4
+      '@rine-kit/pubg-domain': 0.1.4
 
   '@rolldown/pluginutils@1.0.0-rc.3': {}
 

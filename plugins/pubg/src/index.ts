@@ -7,24 +7,9 @@ import { openClawConversationAdapter } from './adapters/openclaw.js';
 import { registerPubgEvidenceGuard } from './evidence-guard.js';
 import { registerDailyReviewService } from './daily-review-service.js';
 import { dailyStatsSource } from './daily-review-stats.js';
-import { appendQueryShareLink, querySharePlayers, queryShareTeamTotals } from './query-share.js';
-import { replyGuideFor } from './reply-guides.js';
+import { jsonToolResult as sharedJsonToolResult, queryShareFor as sharedQueryShareFor, type ShareAppender } from '@rine-kit/pubg-reply';
 import { IdentityStore, type IdentityResolution, type PersonSnapshot } from '@agent/identity';
-import {
-  adaptWorldlineNotification,
-  buildPubgStatusPresentation,
-  buildPubgToolPresentation,
-  formatDisplayTime,
-  renderPubgMatchList,
-  renderPubgStats,
-  renderPubgStatus,
-  renderPubgTeamDamage,
-  type PubgMatchListPresentation,
-  type PubgRenderOptions,
-  type PubgSourceRange,
-  type PubgStatsPresentation,
-  type PubgTeamDamagePresentation,
-} from '@rine-kit/presentation';
+import { adaptWorldlineNotification } from '@rine-kit/presentation';
 import {
   PubgApiClient,
   PubgApiError,
@@ -573,198 +558,12 @@ function runtimeError(error: unknown): ToolEnvelope {
   };
 }
 
-type DataSourceRange = {
-  from: string | null;
-  to: string | null;
-  fromLocal: string | null;
-  toLocal: string | null;
-  timezone: string | null;
-  businessDayStart: string | null;
-  segments: Array<{
-    label: string;
-    from: string | null;
-    to: string | null;
-    fromLocal: string | null;
-    toLocal: string | null;
-    timezone: string | null;
-    businessDayStart: string | null;
-  }>;
-};
-
-type DataSourceRangeCore = Pick<DataSourceRange, 'from' | 'to' | 'timezone' | 'businessDayStart'>;
-type DataSourceRangeSegmentValue = { label: string } & DataSourceRangeCore;
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
-}
-
-function stringOrNull(value: unknown): string | null {
-  return typeof value === 'string' && value.trim() ? value : null;
-}
-
-function formatLocalTime(value: unknown, timezone: string, now?: string, forceDate = false): string | null {
-  const instant = typeof value === 'number' ? new Date(value) : typeof value === 'string' ? value : null;
-  return formatDisplayTime(instant, { timezone, ...(now ? { now } : {}), forceDate });
-}
-
-const DISPLAY_TIME_KEYS = new Set([
-  'asOf', 'checkedAt', 'coverageStart', 'coverageEnd', 'createdAt', 'startedAt',
-  'finishedAt', 'lastRunAt', 'occurredAt', 'updatedAt', 'expiresAt', 'from', 'to',
-]);
-
-function decorateDisplayTimes(value: unknown, timezone: string, now: string): unknown {
-  if (Array.isArray(value)) return value.map((item) => decorateDisplayTimes(item, timezone, now));
-  if (!isRecord(value)) return value;
-  const result: Record<string, unknown> = {};
-  for (const [key, item] of Object.entries(value)) {
-    result[key] = decorateDisplayTimes(item, timezone, now);
-    if (DISPLAY_TIME_KEYS.has(key) && typeof item === 'string') {
-      const local = formatLocalTime(item, timezone, now, key === 'from' || key === 'to');
-      if (local) result[`${key}Local`] = local;
-    }
-  }
-  return result;
-}
-
-function rangeFromValue(value: unknown): DataSourceRangeCore | null {
-  if (!isRecord(value)) return null;
-  const from = stringOrNull(value.from) ?? stringOrNull(value.start);
-  const to = stringOrNull(value.to) ?? stringOrNull(value.end);
-  if (from === null && to === null) return null;
-  return {
-    from,
-    to,
-    timezone: stringOrNull(value.timezone),
-    businessDayStart: stringOrNull(value.businessDayStart),
-  };
-}
-
-function earliestRangeValue(ranges: DataSourceRangeCore[], key: 'from' | 'to'): string | null {
-  const values = ranges.map((range) => range[key]).filter((value): value is string => value !== null);
-  if (!values.length) return null;
-  const ordered = values
-    .map((value) => ({ value, timestamp: Date.parse(value) }))
-    .filter((item) => Number.isFinite(item.timestamp))
-    .sort((left, right) => left.timestamp - right.timestamp);
-  if (!ordered.length) return values[0] ?? null;
-  return (key === 'from' ? ordered[0] : ordered[ordered.length - 1])?.value ?? null;
-}
-
-function dataSourceRangeFor(envelope: ToolEnvelope, fallbackTimezone = 'Asia/Shanghai'): DataSourceRange {
-  const query = isRecord(envelope.queryResolved) ? envelope.queryResolved : {};
-  const direct = rangeFromValue(query.sourceRange);
-  const resolvedSelector = rangeFromValue(query.resolvedSelector);
-  const selector = resolvedSelector ?? rangeFromValue(query.selector);
-  const selectorRanges = [direct, selector].filter((range): range is DataSourceRangeCore => range !== null);
-  const rawSegments = Array.isArray(query.resolvedSegments) ? query.resolvedSegments : query.segments;
-  const segments: DataSourceRangeSegmentValue[] = Array.isArray(rawSegments)
-    ? rawSegments.flatMap((segment): DataSourceRangeSegmentValue[] => {
-      if (!isRecord(segment)) return [];
-      const range = rangeFromValue(segment.selector);
-      if (!range) return [];
-      return [{ label: stringOrNull(segment.label) ?? 'segment', ...range }];
-    })
-    : [];
-  const segmentRanges = segments.map(({ label: _label, ...range }) => range);
-  const ranges = [...selectorRanges, ...segmentRanges];
-  const fallback = {
-    from: stringOrNull(envelope.coverage.coverageStart),
-    to: stringOrNull(envelope.coverage.coverageEnd),
-    timezone: null,
-    businessDayStart: null,
-  };
-  const primary = direct ?? selector ?? (ranges.length ? ranges[0] : fallback);
-  const timezone = primary.timezone ?? fallbackTimezone;
-  const localize = (range: DataSourceRangeCore) => ({
-    ...range,
-    fromLocal: formatLocalTime(range.from, range.timezone ?? timezone, undefined, true),
-    toLocal: formatLocalTime(range.to, range.timezone ?? timezone, undefined, true),
-  });
-  const localizedSegments = segments.map((segment) => ({
-    ...segment,
-    fromLocal: formatLocalTime(segment.from, segment.timezone ?? timezone, undefined, true),
-    toLocal: formatLocalTime(segment.to, segment.timezone ?? timezone, undefined, true),
-  }));
-  const localizedPrimary = localize({
-    from: earliestRangeValue(ranges.length ? ranges : [fallback], 'from'),
-    to: earliestRangeValue(ranges.length ? ranges : [fallback], 'to'),
-    timezone,
-    businessDayStart: primary.businessDayStart,
-  });
-  return {
-    ...localizedPrimary,
-    segments: localizedSegments,
-  };
-}
-
-function presentationRangeFor(dataSourceRange: DataSourceRange): PubgSourceRange | undefined {
-  const segments = dataSourceRange.segments.map((segment) => ({ label: segment.label, from: segment.from, to: segment.to }));
-  if (dataSourceRange.from === null && dataSourceRange.to === null && !segments.length) return undefined;
-  return { from: dataSourceRange.from, to: dataSourceRange.to, ...(segments.length ? { segments } : {}) };
-}
-
-type ShareAppender = (
-  envelope: ToolEnvelope,
-  displayText: string,
-  timezone: string,
-  presentation: ReturnType<typeof buildPubgToolPresentation>['presentation'],
-) => { text: string; url?: string };
-
-function jsonToolResult(name: string, envelope: ToolEnvelope, fallbackTimezone = 'Asia/Shanghai', share?: ShareAppender): ReturnType<typeof jsonResult> {
-  const dataSourceRange = dataSourceRangeFor(envelope, fallbackTimezone);
-  const displayTimezone = dataSourceRange.timezone ?? fallbackTimezone;
-  const displayEnvelope = decorateDisplayTimes(envelope, displayTimezone, envelope.asOf) as Record<string, unknown>;
-  const range = presentationRangeFor(dataSourceRange);
-  let presentation: ReturnType<typeof buildPubgToolPresentation>;
-  try {
-    presentation = buildPubgToolPresentation(name, {
-      status: envelope.status,
-      data: envelope.data,
-      dataUpdatedAt: envelope.asOf,
-      ...(range ? { sourceRange: range } : {}),
-      queryResolved: envelope.queryResolved,
-      evidenceRefs: envelope.evidenceRefs,
-      ...(envelope.error ? { error: envelope.error } : {}),
-    }, { timezone: displayTimezone, now: envelope.asOf, localizedMetrics: true });
-  } catch (error) {
-    const status = buildPubgStatusPresentation({
-      toolName: name,
-      status: 'error',
-      data: {},
-      dataUpdatedAt: envelope.asOf,
-      ...(range ? { sourceRange: range } : {}),
-      evidenceRefs: envelope.evidenceRefs,
-      error: { code: 'presentation_invalid', reason: error instanceof Error ? error.message : String(error) },
-    });
-    presentation = { presentation: status, displayText: renderPubgStatus(status, { timezone: displayTimezone, now: envelope.asOf }) };
-  }
-  const shared = share ? share(envelope, presentation.displayText, displayTimezone, presentation.presentation) : { text: presentation.displayText };
-  // The share page keeps the plain block; the chat reply the agent retells gets the chat layout (bold, medals, ledger).
-  const chatText = chatDisplayText(presentation.presentation, { timezone: displayTimezone, now: envelope.asOf, chatEmphasis: true });
-  if (chatText !== undefined && shared.text.startsWith(presentation.displayText)) {
-    shared.text = chatText + shared.text.slice(presentation.displayText.length);
-  }
-  const replyGuide = replyGuideFor(presentation.presentation);
-  return jsonResult({
-    ...displayEnvelope,
-    asOfLocal: formatLocalTime(envelope.asOf, displayTimezone) ?? envelope.asOf,
-    dataUpdatedAt: envelope.asOf,
-    dataUpdatedAtLocal: formatLocalTime(envelope.asOf, displayTimezone) ?? envelope.asOf,
-    displayTimezone,
-    dataSourceRange,
-    presentation: presentation.presentation,
-    displayText: shared.text,
-    ...(replyGuide ? { replyGuide } : {}),
-    // The amadeus delivery boundary ends the reply with this exact link even when the agent retells the answer.
-    ...(shared.url ? { replyLink: { kind: 'share', url: shared.url } } : {}),
-  });
-}
-
-function chatDisplayText(presentation: ReturnType<typeof buildPubgToolPresentation>['presentation'], options: PubgRenderOptions): string | undefined {
-  if (presentation.type === 'pubg_stats') return renderPubgStats(presentation as PubgStatsPresentation, options);
-  if (presentation.type === 'pubg_team_damage') return renderPubgTeamDamage(presentation as PubgTeamDamagePresentation, options);
-  if (presentation.type === 'pubg_match_list') return renderPubgMatchList(presentation as PubgMatchListPresentation, options);
-  return undefined;
+/*
+ * How a PUBG tool result reaches the model (presentation, chat-layout displayText, replyGuide, share link) lives in
+ * @rine-kit/pubg-reply, shared with every other host; only the OpenClaw result wrapper stays here.
+ */
+export function jsonToolResult(name: string, envelope: ToolEnvelope, fallbackTimezone = 'Asia/Shanghai', share?: ShareAppender): ReturnType<typeof jsonResult> {
+  return jsonResult(sharedJsonToolResult(name, envelope, fallbackTimezone, share));
 }
 
 const shareStores = new Map<string, SqlitePubgRepository>();
@@ -778,28 +577,15 @@ function queryShareFor(name: string, config: PluginConfig): ShareAppender | unde
   const teamConfigFile = configString(config, 'teamConfigFile', 'PUBG_TEAM_CONFIG_FILE');
   const squadKey = teamConfigFile ?? '';
   if (!shareSquads.has(squadKey)) shareSquads.set(squadKey, loadTeamConfig({ path: teamConfigFile, required: true }).id);
-  return (envelope, displayText, timezone, presentation) => {
-    const players = querySharePlayers(presentation);
-    const teamTotals = queryShareTeamTotals(displayText);
-    return appendQueryShareLink({
-      toolName: name,
-      status: envelope.status,
-      matchIds: (envelope.evidenceRefs as { matchIds?: unknown } | undefined)?.matchIds,
-      displayText,
-      dataUpdatedAt: envelope.asOf ?? null,
-      timezone,
-      squadId: shareSquads.get(squadKey)!,
-      shareBaseUrl,
-      store: () => {
-        let store = shareStores.get(databasePath);
-        if (!store) { store = new SqlitePubgRepository(databasePath); shareStores.set(databasePath, store); }
-        return store;
-      },
-      now: new Date(),
-      ...(players.length ? { players } : {}),
-      ...(teamTotals ? { teamTotals } : {}),
-    });
-  };
+  return sharedQueryShareFor(name, {
+    shareBaseUrl,
+    squadId: shareSquads.get(squadKey)!,
+    store: () => {
+      let store = shareStores.get(databasePath);
+      if (!store) { store = new SqlitePubgRepository(databasePath); shareStores.set(databasePath, store); }
+      return store;
+    },
+  });
 }
 
 function makeTool<Schema extends TypeSchema>(
