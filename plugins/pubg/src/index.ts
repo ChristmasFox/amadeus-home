@@ -5,6 +5,7 @@ import { defineToolPlugin } from 'openclaw/plugin-sdk/tool-plugin';
 import { Static, Type, type TSchema as TypeSchema } from 'typebox';
 import { openClawConversationAdapter } from './adapters/openclaw.js';
 import { registerPubgEvidenceGuard } from './evidence-guard.js';
+import { statsSelector } from './recent-matches.js';
 import { registerDailyReviewService } from './daily-review-service.js';
 import { dailyStatsSource } from './daily-review-stats.js';
 import { jsonToolResult as sharedJsonToolResult, queryShareFor as sharedQueryShareFor, type ShareAppender } from '@rine-kit/pubg-reply';
@@ -194,7 +195,11 @@ const ToolOutputSchema = Type.Object({
 
 const QueryStatsParameters = Type.Object({
   ...SubjectProperties,
-  selector: Selector,
+  recentMatches: Type.Optional(Type.Integer({
+    minimum: 1, maximum: 100,
+    description: 'The squad\'s most recent N competitive matches (近5场/最近10场/最近三局战绩), with NO date. When set it replaces selector; never put a date range here or in selector for a last-N request.',
+  })),
+  selector: Type.Optional(Selector),
   metrics: Type.Array(Metrics, { minItems: 1, maxItems: 16 }),
   operation: Type.Optional(Type.Union([
     Type.Literal('report'), Type.Literal('detail'), Type.Literal('rank'), Type.Literal('strongest'),
@@ -621,6 +626,11 @@ function makeTool<Schema extends TypeSchema>(
   };
 }
 
+function omitRecentMatches<T extends { recentMatches?: unknown }>(input: T): Omit<T, 'recentMatches'> {
+  const { recentMatches: _recent, ...rest } = input;
+  return rest;
+}
+
 function selectorInput(value: unknown): ToolSelectorInput {
   return value as ToolSelectorInput;
 }
@@ -661,19 +671,19 @@ const entry = defineToolPlugin({
     }),
     tool({
       name: 'pubg_query_stats',
-      description: 'Query deterministic PUBG aggregates for a bounded selector and return validated presentation/displayText.',
+      description: 'Query deterministic PUBG aggregates and return validated presentation/displayText. For a last-N request (近5场战绩) pass recentMatches=N and no date; otherwise pass a period selector.',
       parameters: QueryStatsParameters,
       factory: ({ config, toolContext }) => makeTool(
         'pubg_query_stats',
-        'Query deterministic PUBG aggregates for a bounded selector and return validated presentation/displayText.',
+        'Query deterministic PUBG aggregates and return validated presentation/displayText. For a last-N request (近5场战绩) pass recentMatches=N and no date; otherwise pass a period selector.',
         QueryStatsParameters,
         config,
         toolContext,
         true,
         (service, input, sessionId, signal) => service.queryStats({
-          ...(input as QueryStatsParameters),
+          ...omitRecentMatches(input as QueryStatsParameters),
           sessionId,
-          selector: selectorInput((input as QueryStatsParameters).selector),
+          selector: selectorInput(statsSelector((input as QueryStatsParameters).selector, (input as QueryStatsParameters).recentMatches)),
           metrics: (input as QueryStatsParameters).metrics as Metric[],
           ...(signal ? { signal } : {}),
         } as StatsToolInput),
