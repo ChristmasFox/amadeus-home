@@ -20,7 +20,8 @@ import queue
 from engine_contract import SpeechEngine, SynthesisTiming
 
 MODEL_ID = "qwen3-tts-1.7b"
-MODEL_ALIASES = frozenset((MODEL_ID, "amadeus-tts"))
+FISH_MODEL_ID = "fish-audio-s2-pro"
+MODEL_ALIASES = frozenset((MODEL_ID, FISH_MODEL_ID, "amadeus-tts"))
 VOICE_ID = "kurisu-v1"
 UPSTREAM_MODEL = "Qwen/Qwen3-TTS-12Hz-1.7B-Base"
 MAX_TEXT = 1200
@@ -187,6 +188,12 @@ def create_engine(profile: Path, model_path: str, on_warmup=None) -> SpeechEngin
     backend = os.environ.get("AMADEUS_TTS_ENGINE", "mlx")
     if backend == "mps":
         return QwenEngine(profile, model_path, on_warmup=on_warmup)
+    if backend == "fish":
+        model_id = os.environ.get("AMADEUS_TTS_FISH_MODEL")
+        if not model_id:
+            raise ValueError("fish_model_required")
+        from fish_engine import FishMlxEngine
+        return FishMlxEngine(profile, model_id, on_warmup=on_warmup)
     if backend == "mlx":
         explicit_path = os.environ.get("AMADEUS_TTS_MLX_MODEL_PATH")
         if not explicit_path:
@@ -201,7 +208,9 @@ class SpeechServer(ThreadingHTTPServer):
     def __init__(self, address: tuple[str, int], token: str):
         super().__init__(address, SpeechHandler)
         self.token = token
-        self.engine_name = "qwen3-tts-mlx" if os.environ.get("AMADEUS_TTS_ENGINE", "mlx") == "mlx" else "qwen3-tts-mps"
+        backend = os.environ.get("AMADEUS_TTS_ENGINE", "mlx")
+        self.engine_name = "fish-s2-pro-mlx" if backend == "fish" else "qwen3-tts-mlx" if backend == "mlx" else "qwen3-tts-mps"
+        self.model_id = FISH_MODEL_ID if backend == "fish" else MODEL_ID
         self.model_revision = os.environ.get("AMADEUS_TTS_MODEL_REVISION", "e7dd0585652209fa0d7783659aad4e8a324de11c")
         self.engine: SpeechEngine | None = None
         self.state = "starting"
@@ -266,10 +275,10 @@ class SpeechHandler(BaseHTTPRequestHandler):
     def do_GET(self) -> None:
         if self.path == "/healthz":
             state = self.server.state
-            self._json(200 if state == "ready" else 503, {"status": state, "provider": self.server.engine_name, "engine": "mlx" if self.server.engine_name.endswith("-mlx") else "mps", "model": "Qwen3-TTS-12Hz-1.7B-Base-8bit" if self.server.engine_name.endswith("-mlx") else MODEL_ID, "voice": VOICE_ID, "language": "auto"})
+            self._json(200 if state == "ready" else 503, {"status": state, "provider": self.server.engine_name, "engine": "mlx" if self.server.engine_name.endswith("-mlx") else "mps", "model": os.environ.get("AMADEUS_TTS_FISH_MODEL", "Fish-Audio-S2-Pro") if self.server.engine_name.startswith("fish") else "Qwen3-TTS-12Hz-1.7B-Base-8bit" if self.server.engine_name.endswith("-mlx") else MODEL_ID, "voice": VOICE_ID, "language": "auto"})
         elif self.path == "/v1/voices":
             if self._authorized():
-                self._json(200, {"object": "list", "data": [{"id": VOICE_ID, "model": MODEL_ID}]})
+                self._json(200, {"object": "list", "data": [{"id": VOICE_ID, "model": self.server.model_id}]})
         else:
             self._error(404, "not_found")
 
@@ -342,7 +351,7 @@ class SpeechHandler(BaseHTTPRequestHandler):
             "audio_ms=%d queue_wait_ms=%.1f generate_or_model_ms=%.1f "
             "decode_stage=inside_model_api wav_serialize_ms=%.1f engine_inside_lock_ms=%.1f "
             "encode_ms=%d total_ms=%d rtf=%.3f",
-            MODEL_ID, VOICE_ID, fmt, input_bucket, audio_duration_ms,
+            self.server.model_id, VOICE_ID, fmt, input_bucket, audio_duration_ms,
             timing.queue_wait_ms, timing.generate_or_model_ms, timing.wav_serialize_ms,
             timing.engine_inside_lock_ms, encode_ms, total_ms, rtf,
         )
@@ -356,7 +365,7 @@ class SpeechHandler(BaseHTTPRequestHandler):
 def main() -> None:
     log_dir = Path(os.environ["AMADEUS_TTS_LOG_DIR"])
     log_dir.mkdir(parents=True, exist_ok=True)
-    handler = RotatingFileHandler(log_dir / "qwen3-tts.log", maxBytes=2_000_000, backupCount=3)
+    handler = RotatingFileHandler(log_dir / os.environ.get("AMADEUS_TTS_LOG_NAME", "qwen3-tts.log"), maxBytes=2_000_000, backupCount=3)
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s", handlers=[handler])
     token_file = Path(os.environ["AMADEUS_TTS_TOKEN_FILE"])
     token = token_file.read_text().strip()

@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+  <key>Label</key><string>com.amadeus.fish-tts</string>
+  <key>ProgramArguments</key><array><string>/Users/OPERATOR/Library/Application Support/Amadeus/speech-fish/venv/bin/python</string><string>/Users/OPERATOR/Library/Application Support/Amadeus/speech-fish/service.py</string></array>
+  <key>EnvironmentVariables</key><dict>
+    <key>AMADEUS_TTS_ENGINE</key><string>fish</string>
+    <key>AMADEUS_TTS_FISH_MODEL</key><string>mlx-community/fish-audio-s2-pro-8bit</string>
+    <key>AMADEUS_TTS_BIND</key><string>127.0.0.1</string>
+    <key>AMADEUS_TTS_PORT</key><string>18794</string>
+    <key>AMADEUS_TTS_TOKEN_FILE</key><string>/Users/OPERATOR/Library/Application Support/Amadeus/speech/tts.token</string>
+    <key>AMADEUS_TTS_VOICE_DIR</key><string>/Users/OPERATOR/Library/Application Support/Amadeus/voices/kurisu-v1</string>
+    <key>AMADEUS_TTS_LOG_DIR</key><string>/Users/OPERATOR/Library/Logs/Amadeus</string>
+    <key>AMADEUS_TTS_LOG_NAME</key><string>fish-tts.log</string>
+    <key>HF_HOME</key><string>/Users/OPERATOR/.cache/huggingface</string>
+    <key>HF_HUB_OFFLINE</key><string>1</string>
+  </dict>
+  <key>RunAtLoad</key><true/>
+  <key>KeepAlive</key><dict><key>SuccessfulExit</key><false/></dict>
+  <key>ThrottleInterval</key><integer>60</integer>
+  <key>ProcessType</key><string>Interactive</string>
+  <key>StandardOutPath</key><string>/dev/null</string>
+  <key>StandardErrorPath</key><string>/Users/OPERATOR/Library/Logs/Amadeus/fish-tts-launchd.err.log</string>
+</dict></plist>

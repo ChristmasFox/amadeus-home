@@ -1,0 +1,10 @@
+# Fish Audio S2 Pro MLX backend (separate venv from the Qwen MLX one: needs newer mlx-audio/transformers).
+mlx-audio @ git+https://github.com/Blaizzy/mlx-audio.git@b80c4edb4181c102f72b56bbf6ce9438a2050354
+mlx==0.32.4
+transformers==5.22.0
+huggingface-hub==2.4.0
+numpy==2.4.6
+soundfile==0.14.0
+imageio-ffmpeg==0.6.0
+socksio==1.0.0
+sentencepiece==0.2.2

@@ -77,3 +77,28 @@ path and destructive retirement sequence are specified by
 `docs/AMADEUS_QWEN3_TTS_MLX_REBASELINE_GOAL.md`; this Goal waives new human
 listening and WhatsApp acceptance while retaining automated health,
 synthesis, fallback, rollback and cleanup gates.
+
+## Fish Audio S2 Pro TTS (replaces the Qwen3-TTS LaunchAgent on `127.0.0.1:18794`)
+
+`com.amadeus.fish-tts` serves the same authenticated OpenAI-compatible
+`/v1/audio/speech` contract as the Qwen service (same `service.py`, selected with
+`AMADEUS_TTS_ENGINE=fish`), so the 9Router TTS bridge and its cloud fallback are unchanged.
+It clones `voices/kurisu-v1` (46 s reference + transcript) with
+`mlx-community/fish-audio-s2-pro-8bit`; the 8-bit checkpoint only loads because
+`fish_engine.py` overrides mlx-audio's `model_quant_predicate` (the loader skipped
+embeddings and `fast_*` layers that the checkpoint had quantized). Output stays mp3 so the
+WhatsApp plugin transcodes it to Opus. Fish emotion tags (`[angry]`, `[whisper]`, ...) pass
+through the input text; nothing adds them automatically and the `style` field stays `default`.
+
+Runtime layout (not in Git): `~/Library/Application Support/Amadeus/speech-fish/{venv,service.py,engine_contract.py,fish_engine.py}`,
+venv from `requirements-fish-tts.txt` (separate from the Qwen MLX venv), token shared with
+`speech/tts.token`, log `~/Library/Logs/Amadeus/fish-tts.log`, `HF_HUB_OFFLINE=1`.
+
+Roll back to Qwen3-TTS (models and venv are kept):
+
+```sh
+launchctl bootout gui/$(id -u)/com.amadeus.fish-tts
+rm ~/Library/LaunchAgents/com.amadeus.fish-tts.plist
+cp "$HOME/Library/Application Support/Amadeus/speech/rollback/com.amadeus.qwen3-tts.plist" ~/Library/LaunchAgents/
+launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.amadeus.qwen3-tts.plist
+```
