@@ -1375,11 +1375,12 @@ PY
 import json, subprocess, sys
 sys.path.insert(0, sys.argv[3])
 from lab_auto_release_contract import valid_pubg_stats_smoke
-prompt = ('Use the native pubg_query_stats tool with team=true, selector={"type":"last_n_matches","count":5}, '
+prompt = ('Use the native pubg_query_stats tool with team=true, selector={"type":"last_n_matches","count":100}, '
           'metrics=["matches","kills","damage"], and refresh=false. Do not guess or use memory. '
           'If the tool returns ok or partial, reply LAB_STATS_QUERY_OK. Otherwise reply '
           'LAB_STATS_QUERY_FAILED. Do not include player names, identifiers, or statistics in the reply.')
-# The model occasionally picks a different selector (e.g. no_matches) even
+# count=100 because the newest 5 stored matches can all belong to non-team players (no_matches
+# although the tool works). The model occasionally picks a different selector (e.g. no_matches) even
 # though the tool works; one fresh-session retry separates that from a real
 # regression, which fails both attempts.
 for attempt in (1, 2):
