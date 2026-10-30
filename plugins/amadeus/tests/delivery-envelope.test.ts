@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { decodeAgentReply, INVALID_STRUCTURED_OUTPUT_MESSAGE } from '../src/delivery-decoder.js';
 import { createAttachmentPart, createDeliveryEnvelope, createSilentDelivery, validateDeliveryEnvelope, type DeliveryPart } from '../src/delivery-envelope.js';
 import { createDeliverySettlementContext, settleDelivery, type DeliverySettlementAdapters } from '../src/delivery-settlement.js';
+import { stripReactFromEnvelope } from '../src/whatsapp-react.js';
 import { createWhatsAppAttachmentSender } from '../src/whatsapp-delivery.js';
 import { createTelegramAttachmentSender } from '../src/telegram-delivery.js';
 import { DeliveryRuns } from '../src/delivery-runs.js';
@@ -73,6 +74,16 @@ test('decoder restores a text part whose "text" key was dropped', () => {
     assert.equal(decoded.envelope.parts[0]?.kind, 'text');
   }
   assert.equal(decodeAgentReply(context, '{"version":2,"silent":false,"parts":[{"kind":"voice":"x"}]}').status, 'malformed');
+});
+test('voice speechText keeps Fish inline delivery tags and the react tag still comes out', async () => {
+  const spoken = '[sigh] もう、仕方ないわね。[short pause] 手伝ってあげるわ。';
+  const decoded = decodeAgentReply(context, wire([{ kind: 'voice', speechText: `${spoken}[react:👍]`, emotion: 'irritated' }, text]));
+  assert.equal(decoded.status, 'structured');
+  const calls: Array<{ text: string; emotion: string }> = [];
+  const sent = stripReactFromEnvelope(decoded.envelope);
+  assert.equal(sent.emoji, '👍');
+  await settleDelivery(sent.envelope, { ...adapters([]), synthesize: async (request) => { calls.push({ text: request.text, emotion: request.emotion }); return { audio: Buffer.from('mp3'), mimeType: 'audio/mpeg' }; } }, createDeliverySettlementContext());
+  assert.deepEqual(calls, [{ text: spoken, emotion: 'irritated' }]);
 });
 test('decoder does not repair control characters outside JSON strings', () => {
   const malformed = `{"version":2,\u0001"silent":false,"parts":[{"kind":"text","text":"ok"}]}`;

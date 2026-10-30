@@ -14,8 +14,8 @@ import { Readable } from 'node:stream';
 export const CLOUD_MODELS = Object.freeze(['qwen-audio-3.1-tts-flash', 'qwen-audio-3.0-tts-flash']);
 export const CLOUD_MODEL = CLOUD_MODELS[0];
 export const CLOUD_FALLBACK_MODEL = CLOUD_MODELS[1];
-export const LOCAL_MODEL = 'Qwen3-TTS-12Hz-1.7B-Base-8bit';
-export const LOCAL_PROVIDER = 'qwen3-tts-mlx';
+export const LOCAL_MODEL = 'Fish-Audio-S2-Pro-8bit';
+export const LOCAL_PROVIDER = 'fish-s2-pro-mlx';
 export const MODEL_ALIASES = new Set(['amadeus-tts', 'qwen3-tts-1.7b']);
 export const VOICE_ID = 'kurisu-v1';
 export const MAX_TEXT = 1200;
@@ -137,6 +137,11 @@ async function convertAudio(audio, inputFormat, outputFormat, deadlineAt, spawnF
   });
 }
 
+// Local Fish reads bracket tags as delivery directions; the cloud voice would read them out loud.
+export function stripInlineTags(text) {
+  return String(text).replace(/<\|[^|]*\|>/gu, '').replace(/\[[^\[\]\r\n]{1,40}\]/gu, '').replace(/[\[\]]/gu, '').replace(/[ \t]{2,}/gu, ' ').trim();
+}
+
 function cloudInstruction(style, emotion) {
   if (!EMOTIONS.has(emotion)) throw new Error('invalid_style');
   const persona = typeof style?.cloudPersona === 'string' && style.cloudPersona.trim() ? style.cloudPersona.trim() : DEFAULT_STYLE.cloudPersona;
@@ -207,7 +212,7 @@ export function classifyLocalFailure(error) {
   return { fallback: false, result: failure(502, 'provider_unavailable') };
 }
 
-export function createTtsServer({ bridgeKey, cloudKey, cloudVoiceId, cloudVoiceId31, cloudVoiceId30, localKey, cloudUrl, localUrl = 'http://host.docker.internal:18794/v1/audio/speech', style = DEFAULT_STYLE, emotionsEnabled = false, fetchFn = fetch, spawnFn = spawn, cloudTimeoutMs = CLOUD_BUDGET_MS, localTimeoutMs = LOCAL_BUDGET_MS }) {
+export function createTtsServer({ bridgeKey, cloudKey, cloudVoiceId, cloudVoiceId31, cloudVoiceId30, localKey, cloudUrl, localUrl = 'http://host.docker.internal:18794/v1/audio/speech', style = DEFAULT_STYLE, emotionsEnabled = true, fetchFn = fetch, spawnFn = spawn, cloudTimeoutMs = CLOUD_BUDGET_MS, localTimeoutMs = LOCAL_BUDGET_MS }) {
   cloudVoiceId30 ||= cloudVoiceId; cloudVoiceId31 ||= cloudVoiceId;
   if (!bridgeKey || bridgeKey.length < 32 || !cloudKey || cloudKey.length < 20 || !cloudVoiceId31 || !cloudVoiceId30 || !localKey || localKey.length < 32) throw new Error('protected_tts_keys_required');
   validateCloudStyle(style); const endpoint = validCloudEndpoint(cloudUrl); const localEndpoint = new URL(localUrl);
@@ -228,19 +233,19 @@ export function createTtsServer({ bridgeKey, cloudKey, cloudVoiceId, cloudVoiceI
     if (typeof data.input !== 'string' || !data.input.trim() || data.input.length > MAX_TEXT) return sendJson(400, failure(400, 'audio_invalid').body);
     const format = data.response_format || 'mp3'; if (!CLOUD_FORMATS.has(format)) return sendJson(400, failure(400, 'audio_invalid').body);
     const requestedEmotion = data.style === undefined || data.style === '' ? 'default' : data.style; if (typeof requestedEmotion !== 'string' || !EMOTIONS.has(requestedEmotion)) return sendJson(400, failure(400, 'audio_invalid').body);
-    // Emotion controls stay available for a future explicit opt-in, but the live
-    // production policy normalizes every request to the accepted default voice.
+    // Emotion controls are live (2026-10-30): Fish applies the emotion tag, the cloud fallback
+    // gets it as an instruction. AMADEUS_TTS_EMOTIONS_ENABLED=false restores the old default-only policy.
     const emotion = emotionsEnabled ? requestedEmotion : 'default';
     if (data.language !== undefined && data.language !== 'ja') return sendJson(400, failure(400, 'audio_invalid').body);
     const requested = Number(req.headers['x-amadeus-deadline-ms']); const deadlineMs = Number.isFinite(requested) && requested > 0 ? Math.min(DEFAULT_DEADLINE_MS, requested) : DEFAULT_DEADLINE_MS; const deadlineAt = started + deadlineMs;
     let lastReason = 'provider_unavailable';
-    const tryLocal = emotion === 'default';
+    const tryLocal = true; // Fish applies the emotion itself; cloud is only the fallback and receives it as an instruction
     if (tryLocal) {
       const localStarted = Date.now(); const localDeadline = Math.min(deadlineAt - RESERVE_MS, localStarted + Math.min(localTimeoutMs, LOCAL_BUDGET_MS));
       if (remainingMs(localDeadline) <= 0) lastReason = 'deadline_exceeded';
       else {
         try {
-          const localResponse = await fetchWithDeadline(fetchFn, localEndpoint, { method: 'POST', redirect: 'error', headers: { Authorization: `Bearer ${localKey}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ model: 'amadeus-tts', voice: VOICE_ID, input: data.input, response_format: format, style: 'default' }) }, localDeadline);
+          const localResponse = await fetchWithDeadline(fetchFn, localEndpoint, { method: 'POST', redirect: 'error', headers: { Authorization: `Bearer ${localKey}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ model: 'amadeus-tts', voice: VOICE_ID, input: data.input, response_format: format, style: emotion }) }, localDeadline);
           if (!localResponse.ok) {
             const operational = localResponse.status === 408 || localResponse.status === 429 || localResponse.status >= 500;
             if (!operational) {
@@ -267,13 +272,13 @@ export function createTtsServer({ bridgeKey, cloudKey, cloudVoiceId, cloudVoiceI
           lastReason = classified.category;
         }
       }
-    } else lastReason = 'style_requires_cloud';
+    } else lastReason = 'deadline_exceeded';
     for (const [index, model] of CLOUD_MODELS.entries()) {
       const attemptStarted = Date.now(); const budget = Math.min(cloudTimeoutMs, CLOUD_BUDGET_MS); const providerDeadline = Math.min(deadlineAt - RESERVE_MS, attemptStarted + budget);
       if (remainingMs(providerDeadline) <= 0) { lastReason = 'deadline_exceeded'; break; }
       const voiceId = model === CLOUD_MODELS[0] ? cloudVoiceId31 : cloudVoiceId30;
       try {
-        const response = await fetchWithDeadline(fetchFn, endpoint, { method: 'POST', redirect: 'error', headers: { Authorization: `Bearer ${cloudKey}`, 'Content-Type': 'application/json' }, body: JSON.stringify(buildCloudRequest({ model, text: data.input, voiceId, emotion, format, style })) }, providerDeadline);
+        const response = await fetchWithDeadline(fetchFn, endpoint, { method: 'POST', redirect: 'error', headers: { Authorization: `Bearer ${cloudKey}`, 'Content-Type': 'application/json' }, body: JSON.stringify(buildCloudRequest({ model, text: stripInlineTags(data.input), voiceId, emotion, format, style })) }, providerDeadline);
         if (!response.ok) { const classified = cloudError(response.status); if (!classified.fallback) { sendJson(classified.result.status, classified.result.body); console.info(JSON.stringify({ run_id: runId, delivery_id: req.headers['x-amadeus-delivery-id'] || 'unknown', origin: req.headers['x-amadeus-origin'] || 'unknown', modality: 'voice', source: 'reply_envelope', tts_requested: true, tts_provider: model, tts_attempt: index + 1, deadline_ms: deadlineMs, provider_ms: Date.now() - attemptStarted, final_status: 'failed', fallback_reason: classified.result.body.error.type })); return; } lastReason = classified.category; continue; }
         const raw = await readBounded(response.body && typeof response.body.getReader === 'function' ? Readable.fromWeb(response.body) : response.body, MAX_CLOUD_RESPONSE_BODY, providerDeadline);
         const audio = await normalizeCloudAudio(JSON.parse(raw.toString('utf8')), format, fetchFn, providerDeadline, spawnFn);
@@ -290,6 +295,6 @@ if (process.argv[1]?.endsWith('/tts-bridge.mjs')) {
   const fs = await import('node:fs');
   const read = (key, name, options) => { const path = process.env[key]; if (!path) throw new Error(`${name}_file_required`); const stat = fs.lstatSync(path); if (!stat.isFile() || stat.isSymbolicLink() || (stat.mode & 0o077)) throw new Error(`${name}_file_unprotected`); return readProtected(path, name, options); };
   const stylePath = process.env.AMADEUS_TTS_STYLE_FILE; const style = stylePath ? JSON.parse(fs.readFileSync(stylePath, 'utf8')) : DEFAULT_STYLE;
-  const server = createTtsServer({ bridgeKey: read('AMADEUS_TTS_BRIDGE_KEY_FILE', 'tts_bridge_key', { min: 32 }), cloudKey: read('AMADEUS_TTS_CLOUD_API_KEY_FILE', 'tts_cloud_api_key', { min: 20 }), cloudVoiceId31: read('AMADEUS_TTS_CLOUD_VOICE_ID_31_FILE', 'tts_cloud_voice_id_31', { min: 8, max: 256 }), cloudVoiceId30: read('AMADEUS_TTS_CLOUD_VOICE_ID_FILE', 'tts_cloud_voice_id', { min: 8, max: 256 }), localKey: read('AMADEUS_TTS_LOCAL_KEY_FILE', 'tts_local_key', { min: 32 }), cloudUrl: process.env.AMADEUS_TTS_CLOUD_URL, localUrl: process.env.AMADEUS_TTS_LOCAL_URL || 'http://host.docker.internal:18794/v1/audio/speech', style, emotionsEnabled: process.env.AMADEUS_TTS_EMOTIONS_ENABLED === 'true' });
+  const server = createTtsServer({ bridgeKey: read('AMADEUS_TTS_BRIDGE_KEY_FILE', 'tts_bridge_key', { min: 32 }), cloudKey: read('AMADEUS_TTS_CLOUD_API_KEY_FILE', 'tts_cloud_api_key', { min: 20 }), cloudVoiceId31: read('AMADEUS_TTS_CLOUD_VOICE_ID_31_FILE', 'tts_cloud_voice_id_31', { min: 8, max: 256 }), cloudVoiceId30: read('AMADEUS_TTS_CLOUD_VOICE_ID_FILE', 'tts_cloud_voice_id', { min: 8, max: 256 }), localKey: read('AMADEUS_TTS_LOCAL_KEY_FILE', 'tts_local_key', { min: 32 }), cloudUrl: process.env.AMADEUS_TTS_CLOUD_URL, localUrl: process.env.AMADEUS_TTS_LOCAL_URL || 'http://host.docker.internal:18794/v1/audio/speech', style, emotionsEnabled: process.env.AMADEUS_TTS_EMOTIONS_ENABLED !== 'false' });
   const port = Number(process.env.AMADEUS_TTS_BRIDGE_PORT || DEFAULT_PORT); server.listen(port, '127.0.0.1', () => console.info(`tts bridge listening on container loopback port=${port}`));
 }

@@ -316,7 +316,18 @@ class SpeechHandler(BaseHTTPRequestHandler):
         if not isinstance(text, str) or not text.strip() or len(text) > MAX_TEXT:
             self._error(400, "invalid_input")
             return
-        if data.get("style", "default") not in ("", "default"):
+        style = data.get("style") or "default"
+        effective_tags: list[str] = []
+        if self.server.engine_name.startswith("fish"):
+            # Fish takes the emotion as a bracket tag in the text; sanitize drops
+            # every non-allowlisted tag/control token so none is ever read aloud.
+            from fish_emotion import prepare
+            try:
+                text, effective_tags = prepare(text, style)
+            except ValueError as exc:
+                self._error(400, str(exc))
+                return
+        elif style != "default":
             self._error(400, "unsupported_style")
             return
         fmt = data.get("response_format", "mp3")
@@ -350,10 +361,10 @@ class SpeechHandler(BaseHTTPRequestHandler):
             "speech_synthesis_ok model=%s voice=%s format=%s input_chars=%s "
             "audio_ms=%d queue_wait_ms=%.1f generate_or_model_ms=%.1f "
             "decode_stage=inside_model_api wav_serialize_ms=%.1f engine_inside_lock_ms=%.1f "
-            "encode_ms=%d total_ms=%d rtf=%.3f",
+            "encode_ms=%d total_ms=%d rtf=%.3f emotion=%s tags=%s",
             self.server.model_id, VOICE_ID, fmt, input_bucket, audio_duration_ms,
             timing.queue_wait_ms, timing.generate_or_model_ms, timing.wav_serialize_ms,
-            timing.engine_inside_lock_ms, encode_ms, total_ms, rtf,
+            timing.engine_inside_lock_ms, encode_ms, total_ms, rtf, style, ','.join(effective_tags) or '-',
         )
         self.send_response(200)
         self.send_header("Content-Type", mime)

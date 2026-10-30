@@ -1,17 +1,19 @@
 # 9Router Amadeus speech bridges
 
 The staged TTS bridge listens on container loopback `127.0.0.1:20130` and
-preserves the single logical `amadeus-tts` connection and model alias. A
-normal/default request attempts the authenticated Mac-local Qwen3-TTS MLX
-service at `host.docker.internal:18794` first. Operational local failures may
-fall through to Qwen Audio 3.1, then Qwen Audio 3.0. Production currently
-normalizes every valid style/emotion request to the accepted default voice, so
-all requests try local MLX first; local configuration, authentication, and
-contract errors fail closed. The emotion instruction code remains behind the
-disabled `AMADEUS_TTS_EMOTIONS_ENABLED` opt-in for a future explicit decision.
+preserves the single logical `amadeus-tts` connection and model alias. Every
+valid request, including the Kurisu emotions (`irritated`, `embarrassed`,
+`angry`, `sarcastic`, `soft`, `sad`), tries the authenticated Mac-local Fish
+Audio S2 Pro service at `host.docker.internal:18794` first; the local service
+turns the emotion into a Fish tag and sanitizes inline `[tags]` in the text.
+Operational local failures fall through to Qwen Audio 3.1, then Qwen Audio 3.0;
+there the emotion becomes the cloud `instruction` and inline tags are stripped
+so the cloud voice never reads them. Local configuration, authentication, and
+contract errors fail closed. `AMADEUS_TTS_EMOTIONS_ENABLED=false` restores the
+old default-only policy.
 
-Bridge health reports `emotionControlsEnabled=false`, `localProvider=qwen3-tts-mlx`,
-`localModel=Qwen3-TTS-12Hz-1.7B-Base-8bit`, and the deterministic fallback
+Bridge health reports `emotionControlsEnabled=true`, `localProvider=fish-s2-pro-mlx`,
+`localModel=Fish-Audio-S2-Pro-8bit`, and the deterministic fallback
 order. Logs contain bounded provider/category/timing/size facts only; text,
 audio, authorization values, API keys, and model-bound voice IDs are not logged.
 The bridge reads protected 9Router secret files and does not own cloud
