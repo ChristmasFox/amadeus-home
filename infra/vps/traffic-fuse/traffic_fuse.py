@@ -241,6 +241,8 @@ class TrafficFuseStore:
             "capThresholdBytes": CAP_BYTES,
             "remainingHeadroomBytes": max(CAP_BYTES - effective, 0) if isinstance(effective, int) else None,
             "coverage": state["coverage"],
+            # When counting began for this day; lets the owner notice say "counted from HH:mm".
+            "coverageStartedAt": state["first_sample_at"],
             "sourceStatus": state["source_status"],
             "dataUpdatedAt": state["last_sample_at"],
         }

@@ -27,6 +27,7 @@ class TrafficFuseTests(unittest.TestCase):
         warned = self.store.record_sample(sample("2026-10-10T00:01:00Z", WARNING_BYTES, rx=WARNING_BYTES, tx=0))
         self.assertEqual(warned["state"], "WARNED")
         self.assertEqual([e["eventType"] for e in warned["events"]], ["warning"])
+        self.assertEqual(warned["events"][0]["coverageStartedAt"], "2026-10-10T00:00:00Z", "the notice can say when counting began")
         capped_desired = self.store.record_sample(sample("2026-10-10T00:02:00Z", CAP_BYTES, rx=CAP_BYTES, tx=0))
         self.assertEqual(capped_desired["state"], "PROTECTING")
         self.assertEqual([e["eventType"] for e in capped_desired["events"]], ["warning"])
