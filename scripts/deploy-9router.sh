@@ -44,10 +44,12 @@ node --input-type=module - "$private_policy" <<'JS'
 import { readFileSync } from 'node:fs';
 const policy=JSON.parse(readFileSync(process.argv[2],'utf8'));
 const models=['gpt-image-2.5-sunburst','gpt-image-2.5-flare','gpt-image-2.5'];
-if (policy.packageVersion!=='0.5.104'||policy.imageAccount?.provider!=='codex'||
+const restricted=policy.imageAccount!==null&&(policy.imageAccount?.provider!=='codex'||
     JSON.stringify(policy.imageAccount.models)!==JSON.stringify(models)||
     typeof policy.imageAccount.email!=='string'||
-    !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(policy.imageAccount.email)||
+    !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(policy.imageAccount.email));
+// imageAccount null = image generation is not tied to one account (the current production setting).
+if (policy.packageVersion!=='0.5.104'||restricted||
     policy.serverActions?.bodySizeLimit!=='20mb') {
   throw Error('private_production_account_policy_invalid');
 }
@@ -81,10 +83,10 @@ if ((BUILD == 1)); then
     --file "$context/infra/docker/casaos/9router/Dockerfile" --tag "$IMAGE" "$context"
   docker --context orbstack save "$IMAGE" | orb -m "$MACHINE" -u root docker load >/dev/null
 fi
-# Both pre-built and built candidates must retain the exact private account allowlist.
+# Both pre-built and built candidates must carry exactly this policy (account allowlist, or imageAccount null = unrestricted).
 image_policy="$(orb -m "$MACHINE" -u root docker run --rm --network none --entrypoint cat "$IMAGE" /opt/amadeus/runtime-policy.json)"
 if [[ "$image_policy" != "$(<"$private_policy")" ]]; then
-  echo 'Candidate 9Router image has a different/missing production account policy; refusing deployment.' >&2
+  echo 'Candidate 9Router image has a different/missing production policy; refusing deployment.' >&2
   exit 1
 fi
 # Do not let the candidate touch production data until the isolated startup passes.

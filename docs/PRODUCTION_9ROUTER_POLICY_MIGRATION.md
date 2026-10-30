@@ -18,8 +18,8 @@ After merging community changes, the old Git-tracked `infra/9router/runtime-poli
 
 - `scripts/deploy-9router.sh --apply` now REQUIRES a readable, valid private policy. If absent, **fails closed before mutation**.
 - `--apply --build` injects only that protected JSON file into the *temporary* Git archive build context (never back into Git).
-- An imported/prebuilt candidate image must embed the identical account policy. Different or unrestricted policies are **rejected** before switching the live service.
-- Do NOT rename `.local` or delete this protected file while relying on the restricted image account. Back it up in private storage.
+- An imported/prebuilt candidate image must embed the identical account policy. A different policy is **rejected** before switching the live service. `"imageAccount": null` (image generation not tied to one account) is a valid policy and is the current production setting (2026-10-30).
+- Do NOT rename `.local` or delete this protected file; the deploy script always needs it. If it still names an account, image generation stays tied to that account; set `imageAccount` to `null` to lift the restriction. Back it up in private storage.
 - Use `--dry-run` then a planned release after verifying the private path. No daemon restart or credential rotation is part of this migration.
 
 ### Security and history
