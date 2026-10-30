@@ -24,6 +24,17 @@ function createWhatsAppReplyPlan(params) {
     cfg: params.cfg, accountId: params.route.accountId, fromMe: false,
     ...(String(params.transport.chatJid ?? '').endsWith('@g.us') && params.transport.senderJid ? { participant: params.transport.senderJid } : {}),
   });
+  const sendText = async (text) => {
+    if (controlToken.test(text)) throw new Error('whatsapp_protocol_text_rejected');
+    const chunks = markdownToWhatsAppChunks(text, params.maxMediaTextChunkLimit ?? resolveTextChunkLimit(params.cfg, 'whatsapp'), resolveMarkdownTableMode$1({ cfg: params.cfg, channel: 'whatsapp', accountId: params.route.accountId }), resolveChunkMode(params.cfg, 'whatsapp', params.route.accountId));
+    let sent;
+    for (const chunk of chunks) sent = receipt(await params.transport.reply(chunk, quote()));
+    if (!sent) throw new Error('whatsapp_text_not_sent');
+    return sent;
+  };
+  // A user-visible WhatsApp turn never ends in silence: when the run queued no reply, say so in text.
+  const SILENT_TURN_TEXT = '……刚才没接上话，你再说一遍？';
+  const FAILED_TURN_TEXT = '这次处理出错了，你稍后再试一次？';
   let contextualEmoji;
   let statusFinal;
   let settleContextual;
@@ -41,14 +52,7 @@ function createWhatsAppReplyPlan(params) {
       else if (!statusReactionController) typingStop ??= startAmadeusWhatsAppTypingIndicator(sendComposing);
     },
     stop: () => { typingStop?.(); typingStop = undefined; closeAmadeusVoiceReplyLeaseForTurn(sessionKey, messageId); },
-    sendText: async (text) => {
-      if (controlToken.test(text)) throw new Error('whatsapp_protocol_text_rejected');
-      const chunks = markdownToWhatsAppChunks(text, params.maxMediaTextChunkLimit ?? resolveTextChunkLimit(params.cfg, 'whatsapp'), resolveMarkdownTableMode$1({ cfg: params.cfg, channel: 'whatsapp', accountId: params.route.accountId }), resolveChunkMode(params.cfg, 'whatsapp', params.route.accountId));
-      let sent;
-      for (const chunk of chunks) sent = receipt(await params.transport.reply(chunk, quote()));
-      if (!sent) throw new Error('whatsapp_text_not_sent');
-      return sent;
-    },
+    sendText,
     sendVoice: async ({ audio, mimeType }) => {
       const native = await prepareWhatsAppOutboundMedia({ buffer: audio, contentType: mimeType, fileName: 'kurisu.mp3' });
       return receipt(await params.transport.sendMedia({ audio: native.buffer, ptt: true, mimetype: native.mimetype }, quote()));
@@ -93,16 +97,20 @@ function createWhatsAppReplyPlan(params) {
   };
   const settleNativeStatus = plan.finalize;
   plan.finalize = (dispatchResult) => {
-    const visible = settleNativeStatus(dispatchResult);
+    const delivered = settleNativeStatus(dispatchResult);
+    const terminal = readAgentRunTerminalOutcome(dispatchResult);
+    // NO_REPLY / an empty completion is not a successful ending for a user turn: answer in text instead.
+    const fallback = delivered ? null : sendText(terminal === 'completed' ? SILENT_TURN_TEXT : FAILED_TURN_TEXT).then(() => true, () => false);
+    const visible = delivered || fallback !== null;
     if (statusReactionController) {
-      // ❌ only for a failed run. A completed run that queued no reply (NO_REPLY / deliberate silence)
-      // is a normal ending; an unknown terminal outcome with nothing delivered still counts as a failure.
-      const terminal = readAgentRunTerminalOutcome(dispatchResult);
-      const outcome = terminal === 'failed' || (terminal !== 'completed' && !visible) ? 'error' : 'done';
-      statusFinal = contextualEmoji && outcome === 'done' && statusReactionController.finishWithContextual
-        ? statusReactionController.finishWithContextual(contextualEmoji)
-        : finalizeWhatsAppStatusReaction({ controller: statusReactionController, outcome });
-      statusFinal = statusFinal.catch(() => undefined);
+      // ❌ only for a failed run, or when nothing at all reached the user (not even the fallback).
+      const settle = (fallbackSent) => {
+        const outcome = terminal === 'failed' || (terminal !== 'completed' && !delivered) || (!delivered && !fallbackSent) ? 'error' : 'done';
+        return contextualEmoji && outcome === 'done' && statusReactionController.finishWithContextual
+          ? statusReactionController.finishWithContextual(contextualEmoji)
+          : finalizeWhatsAppStatusReaction({ controller: statusReactionController, outcome });
+      };
+      statusFinal = (fallback ? fallback.then(settle) : settle(true)).catch(() => undefined);
       void statusFinal.then(() => settleContextual());
     }
     if (params.shouldClearGroupHistory) params.groupHistories.set(params.groupHistoryKey, []);

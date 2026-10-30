@@ -44,6 +44,8 @@ assert c["tools"]["profile"] == "full"
 assert c["tools"].get("deny") == ["tts", "message"]
 assert c["tools"]["toolsBySender"]["*"].get("allow") == ["web_search", "web_fetch"]
 assert c["agents"]["defaults"]["typingMode"] == "instant"
+# Group chats never get the NO_REPLY prompt guidance; only internal runs (cron/heartbeat) may stay silent.
+assert c["agents"]["defaults"]["silentReply"] == {"group": "disallow", "internal": "allow"}
 assert c["agents"]["defaults"]["typingIntervalSeconds"] == 3
 user_seed = (ROOT / "integrations/openclaw/workspace-seed/USER.seed.md").read_text()
 assert "Prefer Simplified Chinese for ordinary text replies." in user_seed

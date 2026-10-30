@@ -56,6 +56,14 @@ test('plain external assistant text recovers as one typed text part', async () =
   await settleDelivery(decoded.envelope, adapters(calls), createDeliverySettlementContext());
   assert.deepEqual(calls, [`text:${raw}`]);
 });
+test('a bare NO_REPLY from a user turn is never delivered as chat text and never ends silent', () => {
+  for (const raw of ['NO_REPLY', ' no_reply \n']) {
+    const decoded = decodeAgentReply(context, raw);
+    assert.equal(decoded.status, 'malformed');
+    assert.equal(decoded.envelope.silent, false);
+    assert.equal(decoded.envelope.parts.some((part) => part.kind === 'text' && /no_reply/iu.test(part.text)), false);
+  }
+});
 test('control-prefixed silent sentinels are suppressed before channel delivery', async () => {
   const rawText = '[[amadeus:reply-modality=default]]\nNO_REPLY';
   for (const raw of [rawText, wire([{ kind: 'text', text: rawText }])]) {

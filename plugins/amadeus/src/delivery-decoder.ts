@@ -98,6 +98,8 @@ function legacyMediaPrefixedWire(raw: string): string | undefined {
 // malformed-output fallback or a channel adapter. The sentinel is deliberately
 // recognized by shape so the decoder does not depend on a retired marker name.
 const CONTROL_SENTINEL = /^(?:\s*\[\[[^\]\r\n]+\]\]\s*)+[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)*\s*$/u;
+// A message that is only a snake_case protocol token (the native silent sentinel) is never chat text.
+const BARE_PROTOCOL_TOKEN = /^[a-z][a-z0-9]*(?:_[a-z0-9]+)+$/iu;
 function isControlSentinel(value: unknown): value is string {
   return typeof value === 'string' && CONTROL_SENTINEL.test(value);
 }
@@ -111,7 +113,7 @@ function isControlSentinel(value: unknown): value is string {
 function recoverablePlainText(context: DeliveryContext, raw: string): AgentReplyDecode | undefined {
   if (context.origin !== 'external_user') return undefined;
   const text = raw.trim();
-  if (!text || /^(?:\s*[\[{`])/u.test(text)
+  if (!text || BARE_PROTOCOL_TOKEN.test(text) || /^(?:\s*[\[{`])/u.test(text)
     || /(?:^|\n)\s*\[\[[^\]\r\n]+\]\]/u.test(text)
     || /(?:^|\n)\s*MEDIA\s*:/iu.test(text)
     || /(?:["']?(?:version|silent|parts|deliveryId|assetId|filePath|mimeType|disposition)["']?\s*[:=])/iu.test(text)) return undefined;

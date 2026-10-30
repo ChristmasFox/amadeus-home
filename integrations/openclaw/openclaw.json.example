@@ -69,6 +69,10 @@
         }
       },
       "userTimezone": "Asia/Shanghai",
+      "silentReply": {
+        "group": "disallow",
+        "internal": "allow"
+      },
       "typingMode": "instant",
       "typingIntervalSeconds": 3,
       "timeoutSeconds": 300,
