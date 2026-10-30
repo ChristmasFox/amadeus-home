@@ -26,3 +26,42 @@ def valid_pubg_stats_smoke(payload: Any) -> bool:
         and tool_summary["calls"] >= 1
         and tool_summary.get("failures") == 0
     )
+
+
+# --- Smoke scope -----------------------------------------------------------
+# A deploy only needs the domain smokes whose code paths the diff can affect. The base is the
+# release that is currently live; with no usable base every smoke runs.
+PUBG_SMOKE_PREFIXES = (
+    "plugins/pubg/",
+    "packages/identity/",
+    "infra/docker/casaos/openclaw/",
+)
+PUBG_SMOKE_DEPENDENCY_FILES = ("package.json", "pnpm-lock.yaml", "plugins/pubg/package.json")
+VOICE_SMOKE_PREFIXES = (
+    "apps/qwen3-tts-service/",
+    "infra/docker/casaos/9router/",
+    "integrations/openclaw/delivery-boundary/",
+    "plugins/amadeus/skills/voice-reply/",
+    "scripts/openclaw-voice-",
+    "scripts/deploy-9router",
+)
+VOICE_SMOKE_SOURCE_MARKERS = ("delivery-speech", "delivery-settlement", "delivery-decoder", "delivery-envelope",
+                              "voice", "tts", "whatsapp-delivery")
+
+
+def smoke_scope(changed_paths: "list[str] | None", dependency_diff: str = "") -> dict[str, bool]:
+    """Which domain smokes a diff can affect; None means the base is unknown, so run everything."""
+    if changed_paths is None:
+        return {"pubg": True, "voice": True}
+    paths = [p.strip() for p in changed_paths if p.strip()]
+    pubg = any(p.startswith(PUBG_SMOKE_PREFIXES) for p in paths)
+    if not pubg and any(p in PUBG_SMOKE_DEPENDENCY_FILES for p in paths):
+        lowered = dependency_diff.lower()
+        pubg = "pubg" in lowered or "rine-kit" in lowered
+    voice = any(
+        p.startswith(VOICE_SMOKE_PREFIXES)
+        or (p.startswith("plugins/amadeus/src/") and any(m in p.rsplit("/", 1)[-1] for m in VOICE_SMOKE_SOURCE_MARKERS))
+        or (p.startswith("infra/macos/") and ("tts" in p or "fish" in p))
+        for p in paths
+    )
+    return {"pubg": pubg, "voice": voice}

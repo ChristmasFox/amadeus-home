@@ -169,6 +169,14 @@ valid_query = {
         "toolSummary": {"calls": 1, "failures": 0, "tools": ["pubg_query_stats"]},
     }},
 }
+# Scoped smokes: only domains the diff can affect are exercised; an unknown base runs everything.
+assert contract.smoke_scope(None) == {"pubg": True, "voice": True}
+assert contract.smoke_scope(["plugins/amadeus/skills/voice-reply/SKILL.md", "apps/qwen3-tts-service/service.py"]) == {"pubg": False, "voice": True}
+assert contract.smoke_scope(["infra/docker/casaos/9router/tts-bridge.mjs"]) == {"pubg": False, "voice": True}
+assert contract.smoke_scope(["scripts/deploy-openclaw.sh", "infra/macos/README.md", "docs/x.md"]) == {"pubg": False, "voice": False}
+assert contract.smoke_scope(["plugins/pubg/src/index.ts"]) == {"pubg": True, "voice": False}
+assert contract.smoke_scope(["pnpm-lock.yaml"], "+ '@rine-kit/pubg-domain': 0.1.6")["pubg"]
+assert not contract.smoke_scope(["pnpm-lock.yaml"], "+ lodash: 4.17.21")["pubg"]
 assert contract.valid_pubg_stats_smoke(valid_query)
 assert not contract.valid_pubg_stats_smoke({**valid_query, "status": "error"})
 assert not contract.valid_pubg_stats_smoke({"status": "ok", "result": {"meta": {
@@ -204,12 +212,15 @@ assert deploy.index("if ((AUTO_RELEASE || CANDIDATE)); then\n  build_images_and_
 assert "OPENCLAW_CONTAINER_HEALTH=healthy" in deploy
 assert "WHATSAPP_HEALTH=linked,running,connected" in deploy
 assert "poll (up to ~60s) before" in deploy, "WhatsApp health waits for reconnect"
-assert "PUBG_STATS_QUERY=passed" in deploy
-assert "valid_pubg_stats_smoke" in deploy
+assert "scripts/lab_release_smoke.py" in deploy, "post-switch smokes run through the scoped smoke driver"
+smoke = (ROOT / "scripts/lab_release_smoke.py").read_text()
+assert "PUBG_STATS_QUERY=passed" in smoke and "valid_pubg_stats_smoke" in smoke
+assert "CHAT_SMOKE=passed" in smoke and "VOICE_SMOKE=passed" in smoke and "ATTEMPTS = 3" in smoke
+assert "LAB_SMOKE_BASE_SHA" in runner and "live_release_sha" in runner
 assert "AUTO_RELEASE_ROLLBACK=passed" in deploy
 assert "restored_health" in deploy and "[[ \"$restored_health\" == healthy ]]" in deploy
 assert "[[ \"$restored_health\" == starting ]] || break" in deploy, "rollback waits out Docker's starting state"
-assert "for attempt in (1, 2):" in deploy and "PUBG_STATS_QUERY=retry reason=not_verified" in deploy
+assert "PUBG_STATS_QUERY=retry" in smoke
 assert "lab-auto-enable" not in devctl and "lab-auto-disable" not in devctl
 assert "LAB_DEPLOYMENT=AFTER_MAIN_UPDATE ci=not_required candidate=automatic formal=on_approval" in devctl
 assert "Lab candidate and manual promotion commands are retired" in release_cli

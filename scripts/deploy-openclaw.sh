@@ -1371,38 +1371,8 @@ if not all(whatsapp.get(key) is True for key in ('linked', 'running', 'connected
 print('WHATSAPP_HEALTH=linked,running,connected')
 PY
   smoke_key="lab-release-$(git -C "$ROOT_DIR" rev-parse --short=12 HEAD)-$STAMP"
-  python3 - "$MACHINE" "$smoke_key" "$ROOT_DIR/scripts" <<'PY'
-import json, subprocess, sys
-sys.path.insert(0, sys.argv[3])
-from lab_auto_release_contract import valid_pubg_stats_smoke
-prompt = ('Use the native pubg_query_stats tool with team=true, selector={"type":"last_n_matches","count":100}, '
-          'metrics=["matches","kills","damage"], and refresh=false. Do not guess or use memory. '
-          'If the tool returns ok or partial, reply LAB_STATS_QUERY_OK. Otherwise reply '
-          'LAB_STATS_QUERY_FAILED. Do not include player names, identifiers, or statistics in the reply.')
-# count=100 because the newest 5 stored matches can all belong to non-team players (no_matches
-# although the tool works). The model occasionally picks a different selector (e.g. no_matches) even
-# though the tool works; one fresh-session retry separates that from a real
-# regression, which fails both attempts.
-for attempt in (1, 2):
-    try:
-        response = subprocess.run(
-            ['orb', '-m', sys.argv[1], '-u', 'root', 'docker', 'exec', 'openclaw', 'node', 'dist/index.js',
-             'agent', '--agent', 'main', '--session-key', 'agent:main:' + sys.argv[2] + ('' if attempt == 1 else '-retry'), '--message', prompt,
-             '--json', '--timeout', '180'], capture_output=True, text=True, check=False, timeout=200)
-    except subprocess.TimeoutExpired as exc:
-        if attempt == 2: raise SystemExit('PUBG stats query timed out; automatic rollback will restore the prior image') from exc
-        print('PUBG_STATS_QUERY=retry reason=timeout'); continue
-    try:
-        payload = json.loads(response.stdout)
-    except json.JSONDecodeError as exc:
-        if attempt == 2: raise SystemExit('PUBG stats query returned invalid structured output; automatic rollback will restore the prior image') from exc
-        print('PUBG_STATS_QUERY=retry reason=invalid_output'); continue
-    if response.returncode == 0 and valid_pubg_stats_smoke(payload):
-        break
-    if attempt == 2: raise SystemExit('PUBG stats query was not verified; automatic rollback will restore the prior image')
-    print('PUBG_STATS_QUERY=retry reason=not_verified')
-print('PUBG_STATS_QUERY=passed')
-PY
+  # Generic chat smoke always; PUBG / voice smokes only when the diff since the live release touches them.
+  python3 "$ROOT_DIR/scripts/lab_release_smoke.py" "$MACHINE" "$smoke_key" "$ROOT_DIR"
 fi
 
 ensure_cron() {

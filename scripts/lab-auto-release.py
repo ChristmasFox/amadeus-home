@@ -523,9 +523,22 @@ def deployment_environment(sha: str) -> dict[str, str]:
     return env
 
 
+def live_release_sha(root: Path, release_sha: str) -> str | None:
+    """The newest already-deployed release that is an ancestor of this one; the smoke diff base."""
+    state = load_state() or {}
+    live = [str(state[key]) for key in ("lastCandidateSha", "lastFormalSha")
+            if state.get(key) and str(state[key]) != release_sha and is_ancestor(root, str(state[key]), release_sha)]
+    if not live:
+        return None
+    return max(live, key=lambda sha: int(git(root, "show", "-s", "--format=%ct", sha) or 0))
+
+
 def deploy_pending(root: Path, pending: dict[str, Any]) -> dict[str, Any]:
     tree = checkout_for_sha(root, str(pending["releaseSha"]))
     env = deployment_environment(str(pending["releaseSha"]))
+    base = live_release_sha(root, str(pending["releaseSha"]))
+    if base:
+        env["LAB_SMOKE_BASE_SHA"] = base
     ensure_private_dir(RELEASE_STATE_ROOT)
     log_dir = STATE_ROOT / "logs"
     ensure_private_dir(log_dir)
