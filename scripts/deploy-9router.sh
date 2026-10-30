@@ -127,6 +127,17 @@ if n!=1: raise SystemExit('expected exactly one image; refusing to modify multi-
 t=p.with_suffix('.upgrade-tmp');t.write_text(s);t.chmod(0o600);t.replace(p)
 PY
 changed=1
+# Retire the 2026-10-30 hot overrides: the image now carries the bridge, so drop the
+# bind-mounted copy and make sure emotional TTS stays enabled (both steps are idempotent).
+orb -m "$MACHINE" -u root python3 - "$APP/docker-compose.yml" <<'PY'
+import re,sys
+from pathlib import Path
+p=Path(sys.argv[1]);s=p.read_text()
+s=re.sub(r'(?m)^[ \t]*# fish-emotion hot override[^\n]*\n','',s)
+s=re.sub(r'(?m)^[ \t]*- /DATA/AppData/9router/overrides/tts-bridge\.mjs:/opt/amadeus/tts-bridge\.mjs:ro\n','',s)
+s=s.replace('AMADEUS_TTS_EMOTIONS_ENABLED: "false"','AMADEUS_TTS_EMOTIONS_ENABLED: "true"')
+t=p.with_suffix('.policy-tmp');t.write_text(s);t.chmod(0o600);t.replace(p)
+PY
 orb -m "$MACHINE" -u root bash -lc 'cd "$1" && docker compose config --quiet && docker compose up -d --no-build 9router' -- "$APP"
 healthy=0
 for _ in $(seq 1 60); do

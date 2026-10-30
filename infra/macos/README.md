@@ -90,6 +90,9 @@ embeddings and `fast_*` layers that the checkpoint had quantized). Output stays 
 WhatsApp plugin transcodes it to Opus. Fish emotion tags (`[angry]`, `[whisper]`, ...) pass
 through the input text; nothing adds them automatically and the `style` field stays `default`.
 
+`infra/macos/manage-fish-tts.sh --dry-run|--apply|--status|--uninstall` syncs the service sources into the runtime directory,
+renders the LaunchAgent from `com.amadeus.fish-tts.plist.example` and restarts it (`--status` reports source drift).
+
 Runtime layout (not in Git): `~/Library/Application Support/Amadeus/speech-fish/{venv,service.py,engine_contract.py,fish_engine.py}`,
 venv from `requirements-fish-tts.txt` (separate from the Qwen MLX venv), token shared with
 `speech/tts.token`, log `~/Library/Logs/Amadeus/fish-tts.log`, `HF_HUB_OFFLINE=1`.
