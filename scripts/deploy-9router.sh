@@ -44,7 +44,7 @@ node --input-type=module - "$private_policy" <<'JS'
 import { readFileSync } from 'node:fs';
 const policy=JSON.parse(readFileSync(process.argv[2],'utf8'));
 const models=['gpt-image-2.5-sunburst','gpt-image-2.5-flare','gpt-image-2.5'];
-if (policy.packageVersion!=='0.5.95'||policy.imageAccount?.provider!=='codex'||
+if (policy.packageVersion!=='0.5.104'||policy.imageAccount?.provider!=='codex'||
     JSON.stringify(policy.imageAccount.models)!==JSON.stringify(models)||
     typeof policy.imageAccount.email!=='string'||
     !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(policy.imageAccount.email)||
