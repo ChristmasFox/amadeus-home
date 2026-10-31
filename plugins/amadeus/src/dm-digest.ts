@@ -182,7 +182,7 @@ export async function updateDigest(update: DigestUpdate): Promise<'updated' | 's
 }
 
 /** Digits of the owner's WhatsApp number, read from the protected owner-target file. */
-async function ownerDigits(api: OpenClawPluginApi): Promise<string | undefined> {
+export async function ownerDigits(api: OpenClawPluginApi): Promise<string | undefined> {
   try {
     const raw = await readRequiredFile(configFor(api).ownerTargetFile, 'WhatsApp owner target');
     const digits = raw.replace(/\D/gu, '');
@@ -197,6 +197,19 @@ export function isOwnerDirectSession(sessionKey: unknown, owner: string | undefi
   if (!owner || typeof sessionKey !== 'string' || chatKind(sessionKey) !== 'direct') return false;
   const match = /:direct:(.+)$/u.exec(sessionKey);
   return match?.[1] !== undefined && match[1].replace(/\D/gu, '') === owner;
+}
+
+/** Synchronous accessor over the owner number: loaded asynchronously on first use, retried while unavailable. */
+export function cachedOwnerDigits(resolve: () => Promise<string | undefined>): () => string | undefined {
+  let cached: string | undefined;
+  let loading = false;
+  const load = (): void => {
+    if (cached || loading) return;
+    loading = true;
+    void resolve().then((value) => { cached = value; loading = false; }, () => { loading = false; });
+  };
+  load();
+  return () => { load(); return cached; };
 }
 
 export interface DigestDependencies {
@@ -237,17 +250,9 @@ export function registerDmDigest(api: OpenClawPluginApi, dependencies: DigestDep
   });
   // Synchronous on purpose: the owner number is cached after the first lookup (the first turn after a restart may
   // run without the digest), and the digest is one small local file.
-  let cachedOwner: string | undefined;
-  let ownerLoaded = false;
-  const loadOwner = (): void => {
-    if (ownerLoaded) return;
-    ownerLoaded = true;
-    void resolveOwner().then((value) => { cachedOwner = value; if (!value) ownerLoaded = false; }, () => { ownerLoaded = false; });
-  };
-  loadOwner();
+  const owner = cachedOwnerDigits(resolveOwner);
   api.on('before_prompt_build', (_event, context) => {
-    loadOwner();
-    if (!context.workspaceDir || !isOwnerDirectSession(context.sessionKey, cachedOwner)) return;
+    if (!context.workspaceDir || !isOwnerDirectSession(context.sessionKey, owner())) return;
     try {
       const digest = readFileSync(digestPath(context.workspaceDir), 'utf8').trim();
       return digest ? { appendSystemContext: renderDigestContext(digest) } : undefined;

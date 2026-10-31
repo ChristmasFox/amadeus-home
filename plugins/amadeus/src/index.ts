@@ -17,6 +17,7 @@ import { registerIdentityLifecycle, registerOwnerNotificationWorker } from './sh
 import { registerRealtimeFacts } from './realtime-facts.js';
 import { registerRemember } from './remember.js';
 import { registerDmDigest } from './dm-digest.js';
+import { registerOwnerDmPreferences } from './owner-dm-preferences.js';
 
 const entry = definePluginEntry({
   id: 'amadeus',
@@ -33,6 +34,7 @@ const entry = definePluginEntry({
     registerRealtimeFacts(api);
     registerRemember(api);
     registerDmDigest(api);
+    registerOwnerDmPreferences(api);
     registerIdentity(api);
     registerProductRadar(api);
     registerMedia(api);

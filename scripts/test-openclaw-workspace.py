@@ -126,3 +126,8 @@ with tempfile.TemporaryDirectory(prefix="openclaw-workspace-test-") as temporary
     assert (plan_workspace / "SOUL.md").read_bytes() == seeds["SOUL.md"]
 
 print("OPENCLAW_WORKSPACE_SEED_TEST=passed")
+
+# The owner-DM-only interaction preference is plugin-owned; SOUL.md reaches every session including groups.
+soul_seed = (ROOT / "integrations/openclaw/workspace-seed/SOUL.seed.md").read_text()
+for forbidden in ("互动偏好",):
+    assert forbidden not in soul_seed, f"SOUL seed must not carry the private preference: {forbidden}"

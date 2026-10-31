@@ -171,6 +171,7 @@ export function checkArchitecture(root = REPO_ROOT) {
     // Owner-scoped memory rule (remember.ts) and owner-DM-only digest (dm-digest.ts).
     join(root, 'plugins/amadeus/src/remember.ts'),
     join(root, 'plugins/amadeus/src/dm-digest.ts'),
+    join(root, 'plugins/amadeus/src/owner-dm-preferences.ts'),
   ]);
   for (const path of amadeusSourceFiles) {
     const content = readFileSync(path, 'utf8');
