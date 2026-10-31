@@ -7,6 +7,7 @@
 **/*secret*
 **/*token*
 !scripts/check-secrets.sh
+!scripts/test-check-secrets.sh
 !scripts/prepare-9router-speech-secrets.sh
 !scripts/secrets-inventory.sh
 !scripts/export-skuld-secrets.sh
@@ -92,3 +93,17 @@ infra/9router/runtime-policy.json
 !integrations/openclaw/vendor/openclaw-duckduckgo-plugin-2026.9.4.tar.gz
 !integrations/openclaw/vendor/openclaw-searxng-plugin-2026.9.4.tar.gz
 .scratch/
+
+# Lab runtime memory is private runtime data and is never committed (only code, templates and *.seed.md).
+# Root-level agent files and snapshots at any depth; workspace-seed/*.seed.md do not match these names.
+MEMORY.md
+USER.md
+DREAMS.md
+memory/
+.dreams/
+*.sqlite-wal
+*.sqlite-shm
+*.jsonl
+backups-*/
+openclaw.json.bak*
+openclaw.json.last-good

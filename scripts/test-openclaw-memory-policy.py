@@ -111,6 +111,9 @@ assert (
 assert config["memory"]["search"]["enabled"] is True
 assert config["memory"]["search"]["sources"] == ["memory"]
 assert config["memory"]["search"]["rememberAcrossConversations"] is False
+assert config["memory"]["search"]["store"]["fts"]["tokenizer"] == "trigram", "CJK keyword search needs the trigram FTS tokenizer"
+assert config["memory"]["search"]["query"]["minScore"] == 0.25
+assert config["hooks"]["internal"]["entries"]["session-memory"]["messages"] == 200
 assert "memory-core" in config["plugins"]["allow"]
 assert config["plugins"]["slots"]["memory"] == "memory-core"
 memory_core = config["plugins"]["entries"]["memory-core"]

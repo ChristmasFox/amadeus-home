@@ -108,7 +108,7 @@ for path in "${FILES[@]-}"; do
       has_skuld_docs=1
       ;;
     package.json|*/package.json|pnpm-lock.yaml|pnpm-workspace.yaml|.dockerignore|*/Dockerfile|Dockerfile|Dockerfile.*|*/Dockerfile.*) has_package_meta=1 ;;
-    docs/*|.agent/*|.gitignore|README.md|AGENTS.md|VERSION|RELEASE_NOTES.md|scripts/check-architecture.mjs|scripts/test-check-architecture.mjs|scripts/developer-workflow.sh|scripts/test-developer-workflow.sh|scripts/notify-owner.sh|*.md|*/tests/*|*/test/*|*.test.ts|*.spec.ts) has_fast=1 ;;
+    docs/*|.agent/*|.gitignore|README.md|AGENTS.md|VERSION|RELEASE_NOTES.md|scripts/check-architecture.mjs|scripts/test-check-architecture.mjs|scripts/check-secrets.sh|scripts/test-check-secrets.sh|scripts/developer-workflow.sh|scripts/test-developer-workflow.sh|scripts/notify-owner.sh|*.md|*/tests/*|*/test/*|*.test.ts|*.spec.ts) has_fast=1 ;;
     *) unknown+=("$path") ;;
   esac
 done

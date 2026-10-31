@@ -48,6 +48,14 @@
         }
       },
       "sources": ["memory"],
+      "store": {
+        "fts": {
+          "tokenizer": "trigram"
+        }
+      },
+      "query": {
+        "minScore": 0.25
+      },
       "rememberAcrossConversations": false
     }
   },
@@ -88,7 +96,7 @@
       "entries": {
         "session-memory": {
           "enabled": true,
-          "messages": 60
+          "messages": 200
         }
       }
     }

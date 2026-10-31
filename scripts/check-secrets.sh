@@ -56,4 +56,43 @@ if [ -n "$forbidden" ]; then
   exit 1
 fi
 
+# Lab runtime memory (MEMORY.md, USER.md, DREAMS.md, memory/, snapshots, state
+# DB sidecars, backups) is private data: only code, templates and *.seed.md may
+# be visible to Git.
+runtime_memory=""
+while IFS= read -r file; do
+  [ -n "$file" ] || continue
+  case "$file" in
+    integrations/openclaw/workspace-seed/*.seed.md) continue ;;
+  esac
+  case "/$file" in
+    */MEMORY.md|*/USER.md|*/DREAMS.md|*/memory/*|*/.dreams/*|*.sqlite-wal|*.sqlite-shm|*.jsonl|*/backups-*/*|*/openclaw.json.bak*|*/openclaw.json.last-good)
+      runtime_memory+="$file"$'\n'
+      ;;
+  esac
+done <<< "$tracked_files"
+
+if [ -n "$runtime_memory" ]; then
+  printf '%s\n' 'Lab runtime memory or session data is visible to Git (never commit it):' >&2
+  printf '%s\n' "$runtime_memory" >&2
+  exit 1
+fi
+
+# The real owner number must never appear in a non-ignored file. It is read at
+# runtime from a private file (never embedded here); skipped when unavailable.
+owner_file="${LAB_OWNER_TARGET_FILE:-/DATA/AppData/openclaw/secrets/owner-whatsapp-target}"
+if [ -r "$owner_file" ]; then
+  owner_digits="$(LC_ALL=C tr -dc '0-9' < "$owner_file" 2>/dev/null || true)"
+  if [ "${#owner_digits}" -ge 7 ]; then
+    owner_hits="$(printf '%s\n' "$tracked_files" | while IFS= read -r file; do
+      [ -f "$file" ] && grep -l -F -e "$owner_digits" -- "$file" 2>/dev/null || true
+    done)"
+    if [ -n "$owner_hits" ]; then
+      printf '%s\n' 'Owner phone number found in (file names only):' >&2
+      printf '%s\n' "$owner_hits" | sort -u >&2
+      exit 1
+    fi
+  fi
+fi
+
 printf '%s\n' 'Secret scan passed: no credential-shaped values or forbidden tracked files found.'
