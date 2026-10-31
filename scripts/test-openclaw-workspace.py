@@ -127,11 +127,11 @@ with tempfile.TemporaryDirectory(prefix="openclaw-workspace-test-") as temporary
 
 print("OPENCLAW_WORKSPACE_SEED_TEST=passed")
 
-# The owner-DM-only interaction preference is plugin-owned; SOUL.md reaches every session including groups.
+# Owner DM preferences live in a runtime file read by the plugin; SOUL.md reaches every session including groups.
 soul_seed = (ROOT / "integrations/openclaw/workspace-seed/SOUL.seed.md").read_text()
-for forbidden in ("互动偏好",):
-    assert forbidden not in soul_seed, f"SOUL seed must not carry the private preference: {forbidden}"
-
 agents_seed = (ROOT / "integrations/openclaw/workspace-seed/AGENTS.seed.md").read_text()
+for name, seed in (("SOUL", soul_seed), ("AGENTS", agents_seed)):
+    assert "互动偏好" not in seed, f"{name} seed must not carry owner DM preferences"
+    assert "owner-dm-preferences" not in seed, f"{name} seed must not name the runtime file"
 assert "群聊隐私硬规则" in agents_seed
 assert len(agents_seed) < 8000, "AGENTS seed must stay well within the bootstrap budget"

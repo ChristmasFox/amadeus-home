@@ -82,6 +82,11 @@ chat model, stored at `<workspace>/.amadeus-private/dm-digest.md` — deliberate
 outside `memory/**`, so `memory_search` of any session cannot return it — and
 injected only into the owner's direct sessions. A failed summary keeps the old file.
 
+Owner DM preferences (`src/owner-dm-preferences.ts`) are free text the owner keeps in the
+runtime file `<workspace>/.amadeus-private/owner-dm-preferences.md` (outside git and outside the
+memory corpus, capped at 2000 characters); it is injected only into the owner's direct sessions,
+and a missing or empty file injects nothing.
+
 Runtime `MEMORY.md`, `USER.md`, `DREAMS.md`, `memory/**`, `.amadeus-private/`,
 session `*.jsonl`, SQLite sidecars and backups are never committed: `.gitignore`
 and `scripts/check-secrets.sh` enforce it; only `workspace-seed/*.seed.md` are tracked.
