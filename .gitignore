@@ -107,3 +107,4 @@ memory/
 backups-*/
 openclaw.json.bak*
 openclaw.json.last-good
+.amadeus-private/

@@ -28,7 +28,7 @@ printf 'seed\n' > integrations/openclaw/workspace-seed/USER.seed.md
 printf 'doc mentions MEMORY.md and memory/ but is a plain file\n' > README.md
 expect_pass "seeds and docs"
 
-for path in MEMORY.md workspace/USER.md workspace/DREAMS.md workspace/memory/2026-10-31-0400.md .dreams/state.json \
+for path in MEMORY.md workspace/USER.md workspace/DREAMS.md workspace/memory/2026-10-31-0400.md .dreams/state.json workspace/.amadeus-private/dm-digest.md \
   state/main.sqlite-wal state/main.sqlite-shm sessions/a.jsonl backups-20261031/x.txt openclaw.json.bak.1 openclaw.json.last-good; do
   mkdir -p "$(dirname "$path")"
   printf 'x\n' > "$path"
@@ -50,4 +50,4 @@ expect_pass "ignored file containing the number"
 
 LAB_OWNER_TARGET_FILE="$base/missing" bash scripts/check-secrets.sh >/dev/null 2>&1 || { echo "FAIL: missing owner file must be skipped" >&2; exit 1; }
 
-echo "CHECK_SECRETS_TEST=passed runtime_memory=11 owner_number=3"
+echo "CHECK_SECRETS_TEST=passed runtime_memory=12 owner_number=3"

@@ -15,6 +15,8 @@ import { registerImageGenerationToolPolicy } from './image-generation-policy.js'
 import { registerImageAssets } from './image-assets.js';
 import { registerIdentityLifecycle, registerOwnerNotificationWorker } from './shared/lifecycle.js';
 import { registerRealtimeFacts } from './realtime-facts.js';
+import { registerRemember } from './remember.js';
+import { registerDmDigest } from './dm-digest.js';
 
 const entry = definePluginEntry({
   id: 'amadeus',
@@ -29,6 +31,8 @@ const entry = definePluginEntry({
     registerImageAssets(api);
     registerOwnerNotificationWorker(api, config);
     registerRealtimeFacts(api);
+    registerRemember(api);
+    registerDmDigest(api);
     registerIdentity(api);
     registerProductRadar(api);
     registerMedia(api);

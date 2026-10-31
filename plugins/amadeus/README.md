@@ -48,3 +48,40 @@ The tool decides which answers carry a link; there is no keyword routing.
 
 All credentials, SSH keys, owner identity, and media paths are deployment
 configuration. They are not part of this package or the repository.
+
+## Memory writes and the recent-DM digest
+
+`amadeus_remember` (`src/remember.ts`, `src/memory-store.ts`) is the only path that
+lets the model persist "remember this". It appends dated bullets to a managed
+section (`## 近期记住（由 remember 写入）`, delimited by HTML comment markers) and
+leaves the rest of the file untouched. A per-turn prompt rule (same
+`before_prompt_build` carrier as the voice-reply prompt, so the live `AGENTS.md`
+is never overwritten) tells the model to call it before saying "记住了".
+
+| Where | `scope=private` → `MEMORY.md` | `scope=public` → `USER.md` | recent-DM digest |
+| --- | --- | --- | --- |
+| Owner direct chat | write | write | injected |
+| Owner in a group | refused | write (group-safe text only) | never |
+| Other participant / other DM | refused | refused | never |
+| cron / subagent / heartbeat | refused | refused | never |
+
+Writes are also refused when the turn's input provenance is not a direct user
+message, or when the turn already used a web/exec/session-reading tool (prompt
+injection guard). Text is one line, ≤300 chars, no secrets/markup; public text
+additionally excludes numbers, emails, links and chat identifiers. Files are
+replaced atomically (same dir, mode/owner preserved) with a 3000/1200-char
+section budget (oldest bullets compact into one line) and a 16000/6000-char file
+ceiling below `bootstrapMaxChars`. Provenance is recorded through the
+`markMemoryArtifactAgentWrite` export added by `scripts/patch-openclaw-memory-provenance.mjs`
+so the files stay `agent` (auto-injected); on an unpatched runtime the tool still
+writes and reports `provenance: "unavailable"`.
+
+The digest (`src/dm-digest.ts`) is regenerated from the owner's direct session on
+reset/compaction (and at most every 6 h otherwise) through the configured 9router
+chat model, stored at `<workspace>/.amadeus-private/dm-digest.md` — deliberately
+outside `memory/**`, so `memory_search` of any session cannot return it — and
+injected only into the owner's direct sessions. A failed summary keeps the old file.
+
+Runtime `MEMORY.md`, `USER.md`, `DREAMS.md`, `memory/**`, `.amadeus-private/`,
+session `*.jsonl`, SQLite sidecars and backups are never committed: `.gitignore`
+and `scripts/check-secrets.sh` enforce it; only `workspace-seed/*.seed.md` are tracked.

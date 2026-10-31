@@ -91,6 +91,7 @@
       "identity_list_candidates",
       "identity_confirm_candidate",
       "amadeus_notify_owner",
+      "amadeus_remember",
       "amadeus_vps_service_info",
       "amadeus_vps_live_status",
       "amadeus_vps_usage",

@@ -492,9 +492,11 @@ deploy_stage verify
   node --check scripts/patch-openclaw-group-image-policy.mjs
   node --check scripts/patch-openclaw-heartbeat-silence.mjs
   node --check scripts/patch-openclaw-memory-core.mjs
+  node --check scripts/patch-openclaw-memory-provenance.mjs
   node scripts/test-patch-openclaw-group-image-policy.mjs
   node scripts/test-patch-openclaw-heartbeat-silence.mjs
   node scripts/test-patch-openclaw-memory-core.mjs
+  node scripts/test-patch-openclaw-memory-provenance.mjs
   pnpm test:openclaw-image-route-authority
   node scripts/test-delivery-boundary.mjs
   node scripts/test-patch-openclaw-whatsapp-voice-lifecycle.mjs
@@ -536,6 +538,9 @@ if ((BUILD_OPENCLAW || OPENCLAW_ONLY)); then
   orb -m "$MACHINE" -u root docker run --rm --entrypoint sh "$IMAGE" -lc "grep -Fq 'amadeus-memory-knn-loader-path-v1' /app/dist/extensions/memory-core/manager-runtime.js && grep -Fq 'amadeus-memory-dreaming-peer-admission-v2' /app/dist/extensions/memory-core/openclaw.plugin.json && grep -Fq 'amadeus-memory-dreaming-peer-admission-v2' /app/dist/session-ingestion-*.mjs && grep -Fq 'amadeus-memory-backfill-peer-admission-v1' /app/dist/session-backfill-*.mjs && grep -Fq 'amadeus-memory-dreaming-no-corpus-v1' /app/dist/dreaming-phases-*.mjs && grep -Fq 'amadeus-memory-dreaming-no-corpus-v1' /app/dist/extensions/memory-core/index.js && grep -Fq 'classifyDreamingSessionAdmission' /app/dist/session-ingestion-*.mjs" \
     || fail 'Immutable OpenClaw image is missing the Memory Core runtime fixes.'
   printf 'OPENCLAW_IMAGE_MEMORY_CORE_PATCH=passed\n'
+  orb -m "$MACHINE" -u root docker run --rm --entrypoint sh "$IMAGE" -lc "grep -Fq 'amadeus-memory-artifact-agent-write-v1' /app/dist/memory-artifact-provenance-*.mjs && grep -Fq 'markMemoryArtifactAgentWrite' /app/dist/plugin-sdk/memory-core-host-runtime-core.js" \
+    || fail 'Immutable OpenClaw image is missing the memory provenance export.'
+  printf 'OPENCLAW_IMAGE_MEMORY_PROVENANCE_PATCH=passed\n'
 fi
 image_amadeus_version="$(orb -m "$MACHINE" -u root docker run --rm --entrypoint cat "$IMAGE" /opt/amadeus/VERSION | tr -d '[:space:]')"
 [[ "$image_amadeus_version" == "$AMADEUS_VERSION" ]] || fail "Immutable OpenClaw candidate contains Amadeus VERSION=$image_amadeus_version, expected $AMADEUS_VERSION."
@@ -609,6 +614,7 @@ for source in \
   "$ROOT_DIR/plugins/pubg/config/default-team.json" \
   "$VOICE_LIFECYCLE_PATCH_RUNTIME" \
   "$ROOT_DIR/scripts/patch-openclaw-memory-core.mjs" \
+  "$ROOT_DIR/scripts/patch-openclaw-memory-provenance.mjs" \
   "$ROOT_DIR/scripts/openclaw-voice-markers.mjs" \
   "$ROOT_DIR/scripts/openclaw-voice-lease.mjs" \
   "$ROOT_DIR/integrations/openclaw/workspace-seed/AGENTS.seed.md" \

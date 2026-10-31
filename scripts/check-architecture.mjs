@@ -167,6 +167,9 @@ export function checkArchitecture(root = REPO_ROOT) {
     // Pre-existing Lab realtime/group prompt hooks (also present on origin/main).
     join(root, 'plugins/amadeus/src/group-roster.ts'),
     join(root, 'plugins/amadeus/src/realtime-facts.ts'),
+    // Owner-scoped memory rule (remember.ts) and owner-DM-only digest (dm-digest.ts).
+    join(root, 'plugins/amadeus/src/remember.ts'),
+    join(root, 'plugins/amadeus/src/dm-digest.ts'),
   ]);
   for (const path of amadeusSourceFiles) {
     const content = readFileSync(path, 'utf8');

@@ -66,7 +66,7 @@ while IFS= read -r file; do
     integrations/openclaw/workspace-seed/*.seed.md) continue ;;
   esac
   case "/$file" in
-    */MEMORY.md|*/USER.md|*/DREAMS.md|*/memory/*|*/.dreams/*|*.sqlite-wal|*.sqlite-shm|*.jsonl|*/backups-*/*|*/openclaw.json.bak*|*/openclaw.json.last-good)
+    */MEMORY.md|*/USER.md|*/DREAMS.md|*/memory/*|*/.dreams/*|*/.amadeus-private/*|*.sqlite-wal|*.sqlite-shm|*.jsonl|*/backups-*/*|*/openclaw.json.bak*|*/openclaw.json.last-good)
       runtime_memory+="$file"$'\n'
       ;;
   esac
