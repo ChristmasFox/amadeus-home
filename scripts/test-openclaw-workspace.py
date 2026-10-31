@@ -131,3 +131,7 @@ print("OPENCLAW_WORKSPACE_SEED_TEST=passed")
 soul_seed = (ROOT / "integrations/openclaw/workspace-seed/SOUL.seed.md").read_text()
 for forbidden in ("互动偏好",):
     assert forbidden not in soul_seed, f"SOUL seed must not carry the private preference: {forbidden}"
+
+agents_seed = (ROOT / "integrations/openclaw/workspace-seed/AGENTS.seed.md").read_text()
+assert "群聊隐私硬规则" in agents_seed
+assert len(agents_seed) < 8000, "AGENTS seed must stay well within the bootstrap budget"
