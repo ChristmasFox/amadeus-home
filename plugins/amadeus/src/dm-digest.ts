@@ -192,6 +192,17 @@ export async function ownerDigits(api: OpenClawPluginApi): Promise<string | unde
   }
 }
 
+/** Hook contexts do not always carry the workspace; fall back to the configured default agent workspace. */
+export function resolveWorkspaceDir(api: Pick<OpenClawPluginApi, 'config'>, contextDir?: string): string | undefined {
+  if (contextDir) return contextDir;
+  try {
+    const configured = (api.config as { agents?: { defaults?: { workspace?: unknown } } } | undefined)?.agents?.defaults?.workspace;
+    return typeof configured === 'string' && configured.trim() ? configured.trim() : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 /** The verified owner's direct WhatsApp session: a direct session whose peer is the owner's number. */
 export function isOwnerDirectSession(sessionKey: unknown, owner: string | undefined): boolean {
   if (!owner || typeof sessionKey !== 'string' || chatKind(sessionKey) !== 'direct') return false;
@@ -252,9 +263,10 @@ export function registerDmDigest(api: OpenClawPluginApi, dependencies: DigestDep
   // run without the digest), and the digest is one small local file.
   const owner = cachedOwnerDigits(resolveOwner);
   api.on('before_prompt_build', (_event, context) => {
-    if (!context.workspaceDir || !isOwnerDirectSession(context.sessionKey, owner())) return;
+    const workspaceDir = resolveWorkspaceDir(api, context.workspaceDir);
+    if (!workspaceDir || !isOwnerDirectSession(context.sessionKey, owner())) return;
     try {
-      const digest = readFileSync(digestPath(context.workspaceDir), 'utf8').trim();
+      const digest = readFileSync(digestPath(workspaceDir), 'utf8').trim();
       return digest ? { appendSystemContext: renderDigestContext(digest) } : undefined;
     } catch {
       return undefined;

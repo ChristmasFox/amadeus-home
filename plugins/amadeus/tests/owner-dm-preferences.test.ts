@@ -25,9 +25,9 @@ async function workspace(content?: string): Promise<string> {
   return dir;
 }
 
-async function setup(ownerDigits: () => Promise<string | undefined> = async () => OWNER) {
+async function setup(ownerDigits: () => Promise<string | undefined> = async () => OWNER, config?: unknown) {
   const hooks = new Map<string, (...args: any[]) => any>();
-  registerOwnerDmPreferences({ on: (name: string, handler: never) => hooks.set(name, handler) } as never, { ownerDigits });
+  registerOwnerDmPreferences({ config, on: (name: string, handler: never) => hooks.set(name, handler) } as never, { ownerDigits });
   await settle();
   return (sessionKey: string | undefined, workspaceDir: string | undefined) => hooks.get('before_prompt_build')!({}, { sessionKey, workspaceDir });
 }
@@ -78,6 +78,20 @@ test('nothing is injected while the owner is unknown, and a failing lookup never
   try {
     assert.equal((await setup(async () => undefined))(DM, dir), undefined);
     assert.equal((await setup(async () => { throw new Error('unreadable'); }))(DM, dir), undefined);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test('falls back to the configured default workspace when the hook context has none', async () => {
+  const dir = await workspace(PLACEHOLDER);
+  try {
+    const inject = await setup(async () => OWNER, { agents: { defaults: { workspace: dir } } });
+    assert.equal(inject(DM, undefined).appendSystemContext, PLACEHOLDER);
+    for (const key of [GROUP, OTHER_DM, 'agent:main:cron:1', 'agent:main:subagent:1', undefined]) {
+      assert.equal(inject(key, undefined), undefined, String(key));
+    }
+    assert.equal((await setup(async () => OWNER, {}))(DM, undefined), undefined);
   } finally {
     await rm(dir, { recursive: true, force: true });
   }

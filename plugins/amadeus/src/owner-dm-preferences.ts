@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { OpenClawPluginApi } from 'openclaw/plugin-sdk/core';
-import { cachedOwnerDigits, DIGEST_DIR, isOwnerDirectSession, ownerDigits } from './dm-digest.js';
+import { cachedOwnerDigits, DIGEST_DIR, isOwnerDirectSession, ownerDigits, resolveWorkspaceDir } from './dm-digest.js';
 
 /**
  * Owner DM preferences: free text the owner keeps in a runtime file and that is loaded only into his own direct chat.
@@ -44,8 +44,9 @@ export function registerOwnerDmPreferences(api: OpenClawPluginApi, dependencies:
   const owner = cachedOwnerDigits(dependencies.ownerDigits ?? (() => ownerDigits(api)));
   api.on('before_prompt_build', (_event, context) => {
     try {
-      if (!context.workspaceDir || !isOwnerDirectSession(context.sessionKey, owner())) return;
-      const text = readOwnerDmPreferences(context.workspaceDir);
+      const workspaceDir = resolveWorkspaceDir(api, context.workspaceDir);
+      if (!workspaceDir || !isOwnerDirectSession(context.sessionKey, owner())) return;
+      const text = readOwnerDmPreferences(workspaceDir);
       return text ? { appendSystemContext: text } : undefined;
     } catch {
       return undefined;

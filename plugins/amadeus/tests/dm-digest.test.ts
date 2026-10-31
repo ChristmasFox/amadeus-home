@@ -17,12 +17,12 @@ const messages = [
 const good = '- (2026-10-31) 在排查 NAS 硬盘休眠失败\n- (2026-10-30) 想换一个更安静的机箱';
 
 async function workspace(): Promise<string> { return mkdtemp(join(tmpdir(), 'amadeus-digest-')); }
-function setup(dir: string, complete: (prompt: string) => Promise<string>, logs: string[] = []) {
+function setup(dir: string, complete: (prompt: string) => Promise<string>, logs: string[] = [], config: unknown = {}) {
   const hooks = new Map<string, (...args: any[]) => any>();
   registerDmDigest({
     logger: { info: (m: string) => logs.push(m), warn: (m: string) => logs.push(m), error() {}, debug() {} },
     on: (name: string, handler: never) => hooks.set(name, handler),
-    config: {},
+    config,
   } as never, { complete: async (prompt) => complete(prompt), ownerDigits: async () => OWNER, now: () => Date.now() });
   return hooks;
 }
@@ -108,5 +108,18 @@ test('model failure or invalid output keeps the previous digest; logs carry no c
     await settle();
     assert.equal(logs.some((line) => /私密|NAS|休眠/u.test(line)), false);
     assert.equal(await readFile(digestPath(dir), 'utf8'), `${good}\n`);
+  } finally { await rm(dir, { recursive: true, force: true }); }
+});
+
+test('digest injection falls back to the configured default workspace when the hook context has none', async () => {
+  const dir = await workspace();
+  try {
+    await mkdir(join(dir, '.amadeus-private'), { recursive: true });
+    await writeFile(digestPath(dir), `${good}\n`);
+    const hooks = setup(dir, async () => good, [], { agents: { defaults: { workspace: dir } } });
+    await settle();
+    const inject = (sessionKey: string) => hooks.get('before_prompt_build')!({}, { sessionKey });
+    assert.match(inject(DM).appendSystemContext, /NAS 硬盘休眠/u);
+    for (const key of [GROUP, OTHER_DM, 'agent:main:cron:1']) assert.equal(inject(key), undefined, key);
   } finally { await rm(dir, { recursive: true, force: true }); }
 });
