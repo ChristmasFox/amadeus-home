@@ -7,3 +7,7 @@ rewrite or change permissions on an existing path or any runtime-created state.
 
 Review differences with `scripts/openclaw-workspace-sync.sh --plan`. A deliberate
 single-file sync requires `--apply --approve-file NAME`; there is no bulk apply.
+
+Seeded files: `AGENTS.md`, `SOUL.md`, `USER.md`, `MEMORY.md` and `IDENTITY.md`
+(`IDENTITY.seed.md` uses OpenClaw's `- Label: value` format and holds no secrets
+or contact data).

@@ -28,9 +28,7 @@
         "idleMinutes": 360
       },
       "direct": {
-        "mode": "daily",
-        "atHour": 4,
-        "idleMinutes": 360
+        "mode": "none"
       }
     }
   },

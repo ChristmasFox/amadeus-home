@@ -620,6 +620,7 @@ for source in \
   "$ROOT_DIR/integrations/openclaw/workspace-seed/AGENTS.seed.md" \
   "$ROOT_DIR/integrations/openclaw/workspace-seed/SOUL.seed.md" \
   "$ROOT_DIR/integrations/openclaw/workspace-seed/USER.seed.md" \
+  "$ROOT_DIR/integrations/openclaw/workspace-seed/IDENTITY.seed.md" \
   "$ROOT_DIR/integrations/openclaw/workspace-seed/MEMORY.seed.md" "$PREPARE" "$PATCH_RUNTIME" "$VOICE_PATCH_RUNTIME" "$MEDIA_AGENT_PATCH_RUNTIME" "$IMAGE_BURST_PATCH_RUNTIME"; do
   [[ -f "$source" ]] || fail "Missing deployment source: $source"
 done
@@ -646,6 +647,7 @@ AGENTS_B64="$(base64_file "$ROOT_DIR/integrations/openclaw/workspace-seed/AGENTS
 SOUL_B64="$(base64_file "$ROOT_DIR/integrations/openclaw/workspace-seed/SOUL.seed.md")"
 USER_B64="$(base64_file "$ROOT_DIR/integrations/openclaw/workspace-seed/USER.seed.md")"
 MEMORY_B64="$(base64_file "$ROOT_DIR/integrations/openclaw/workspace-seed/MEMORY.seed.md")"
+IDENTITY_B64="$(base64_file "$ROOT_DIR/integrations/openclaw/workspace-seed/IDENTITY.seed.md")"
 
 CHECKPOINT_ARGS=(
   "$CHECKPOINT_DIR"
@@ -943,7 +945,7 @@ fi
 
 if ((OPENCLAW_ONLY == 0)); then
 orb -m "$MACHINE" -u root python3 - \
-  "$OPENCLAW_DATA_DIR" "$CONFIG_B64" "$TEAM_B64" "$AGENTS_B64" "$SOUL_B64" "$USER_B64" "$MEMORY_B64" < "$PREPARE"
+  "$OPENCLAW_DATA_DIR" "$CONFIG_B64" "$TEAM_B64" "$AGENTS_B64" "$SOUL_B64" "$USER_B64" "$MEMORY_B64" "$IDENTITY_B64" < "$PREPARE"
 
 orb -m "$MACHINE" -u root python3 - \
   "$OPENCLAW_DATA_DIR/openclaw.env" "$MAC_CONTROL_HOST" "$MAC_CONTROL_USER" "$MAC_HOST_NAME" \

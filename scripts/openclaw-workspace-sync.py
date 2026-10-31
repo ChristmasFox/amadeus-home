@@ -20,6 +20,7 @@ SEEDS = {
     "SOUL.md": ROOT / "integrations/openclaw/workspace-seed/SOUL.seed.md",
     "USER.md": ROOT / "integrations/openclaw/workspace-seed/USER.seed.md",
     "MEMORY.md": ROOT / "integrations/openclaw/workspace-seed/MEMORY.seed.md",
+    "IDENTITY.md": ROOT / "integrations/openclaw/workspace-seed/IDENTITY.seed.md",
 }
 
 

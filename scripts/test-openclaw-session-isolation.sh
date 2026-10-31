@@ -11,10 +11,11 @@ from pathlib import Path
 root = Path(sys.argv[1])
 config = json.loads((root / "integrations/openclaw/openclaw.json.example").read_text())
 session = config.get("session")
-assert session == {
-    "dmScope": "per-account-channel-peer",
-    "groupScope": "per-group",
-}
+assert session["dmScope"] == "per-account-channel-peer"
+assert session["groupScope"] == "per-group"
+# Direct chats never reset automatically (context carries over); groups keep the daily/idle reset.
+assert session["resetByType"]["direct"] == {"mode": "none"}
+assert session["resetByType"]["group"] == {"mode": "daily", "atHour": 4, "idleMinutes": 360}
 assert config.get("tools", {}).get("sessions", {}).get("visibility") == "self"
 script = (root / "scripts/deploy-openclaw.sh").read_text()
 assert "dmScope=per-account-channel-peer" in script

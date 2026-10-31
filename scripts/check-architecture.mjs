@@ -118,6 +118,7 @@ export function checkArchitecture(root = REPO_ROOT) {
     'integrations/openclaw/workspace-seed/AGENTS.seed.md',
     'integrations/openclaw/workspace-seed/USER.seed.md',
     'integrations/openclaw/workspace-seed/MEMORY.seed.md',
+    'integrations/openclaw/workspace-seed/IDENTITY.seed.md',
     'integrations/openclaw/workspace-seed/README.md',
     'package.json',
     'scripts/developer-workflow.sh',

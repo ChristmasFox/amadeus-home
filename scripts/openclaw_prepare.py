@@ -288,8 +288,8 @@ def ensure_group_image_policies(channel: dict, owner_keys: list[str] | None = No
                 group["toolsBySender"] = {key: {"allow": ["*"]} for key in owner_keys}
 
 def main() -> None:
-    if len(sys.argv) != 8:
-        raise SystemExit("usage: openclaw_prepare.py DATA_DIR CONFIG_B64 TEAM_B64 AGENTS_SEED_B64 SOUL_SEED_B64 USER_SEED_B64 MEMORY_SEED_B64")
+    if len(sys.argv) != 9:
+        raise SystemExit("usage: openclaw_prepare.py DATA_DIR CONFIG_B64 TEAM_B64 AGENTS_SEED_B64 SOUL_SEED_B64 USER_SEED_B64 MEMORY_SEED_B64 IDENTITY_SEED_B64")
     data_dir = Path(sys.argv[1])
     config_template = json.loads(base64.b64decode(sys.argv[2]).decode())
     team_bytes = base64.b64decode(sys.argv[3])
@@ -298,6 +298,7 @@ def main() -> None:
         "SOUL.md": base64.b64decode(sys.argv[5]),
         "USER.md": base64.b64decode(sys.argv[6]),
         "MEMORY.md": base64.b64decode(sys.argv[7]),
+        "IDENTITY.md": base64.b64decode(sys.argv[8]),
     }
     config_dir = data_dir / "config"
     workspace_dir = data_dir / "workspace"

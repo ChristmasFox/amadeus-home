@@ -24,6 +24,7 @@ seed_paths = {
     "SOUL.md": ROOT / "integrations/openclaw/workspace-seed/SOUL.seed.md",
     "USER.md": ROOT / "integrations/openclaw/workspace-seed/USER.seed.md",
     "MEMORY.md": ROOT / "integrations/openclaw/workspace-seed/MEMORY.seed.md",
+    "IDENTITY.md": ROOT / "integrations/openclaw/workspace-seed/IDENTITY.seed.md",
 }
 seeds = {name: path.read_bytes() for name, path in seed_paths.items()}
 
@@ -44,7 +45,7 @@ with tempfile.TemporaryDirectory(prefix="openclaw-workspace-test-") as temporary
 
     fresh = base / "fresh"
     created, preserved = prepare.seed_workspace_missing_only(fresh, seeds)
-    assert (created, preserved) == (4, 0)
+    assert (created, preserved) == (5, 0)
     assert {name: (fresh / name).read_bytes() for name in seeds} == seeds
 
     runtime = base / "runtime"
@@ -63,7 +64,7 @@ with tempfile.TemporaryDirectory(prefix="openclaw-workspace-test-") as temporary
     nested.write_text("runtime-created memory must survive\n")
     workspace_mode = stat.S_IMODE(runtime.stat().st_mode)
     created, preserved = prepare.seed_workspace_missing_only(runtime, seeds)
-    assert (created, preserved) == (0, 4)
+    assert (created, preserved) == (0, 5)
     assert {name: (runtime / name).read_bytes() for name in seeds} == existing_bytes
     assert {name: stat.S_IMODE((runtime / name).stat().st_mode) for name in seeds} == existing_modes
     assert stat.S_IMODE(runtime.stat().st_mode) == workspace_mode
