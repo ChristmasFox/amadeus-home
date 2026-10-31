@@ -123,3 +123,20 @@ test('digest injection falls back to the configured default workspace when the h
     for (const key of [GROUP, OTHER_DM, 'agent:main:cron:1']) assert.equal(inject(key), undefined, key);
   } finally { await rm(dir, { recursive: true, force: true }); }
 });
+
+test('digest injection finds the file in the configured workspace when the context points elsewhere', async () => {
+  const dir = await workspace();
+  const elsewhere = await workspace();
+  try {
+    await mkdir(join(dir, '.amadeus-private'), { recursive: true });
+    await writeFile(digestPath(dir), `${good}\n`);
+    const hooks = setup(dir, async () => good, [], { agents: { defaults: { workspace: dir } } });
+    await settle();
+    const inject = (sessionKey: string) => hooks.get('before_prompt_build')!({}, { sessionKey, workspaceDir: elsewhere });
+    assert.match(inject(DM).appendSystemContext, /NAS 硬盘休眠/u);
+    for (const key of [GROUP, OTHER_DM, 'agent:main:cron:1']) assert.equal(inject(key), undefined, key);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+    await rm(elsewhere, { recursive: true, force: true });
+  }
+});

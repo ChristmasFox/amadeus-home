@@ -25,9 +25,9 @@ async function workspace(content?: string): Promise<string> {
   return dir;
 }
 
-async function setup(ownerDigits: () => Promise<string | undefined> = async () => OWNER, config?: unknown) {
+async function setup(ownerDigits: () => Promise<string | undefined> = async () => OWNER, config?: unknown, logs: string[] = []) {
   const hooks = new Map<string, (...args: any[]) => any>();
-  registerOwnerDmPreferences({ config, on: (name: string, handler: never) => hooks.set(name, handler) } as never, { ownerDigits });
+  registerOwnerDmPreferences({ config, logger: { info: (m: string) => logs.push(m) }, on: (name: string, handler: never) => hooks.set(name, handler) } as never, { ownerDigits });
   await settle();
   return (sessionKey: string | undefined, workspaceDir: string | undefined) => hooks.get('before_prompt_build')!({}, { sessionKey, workspaceDir });
 }
@@ -94,5 +94,46 @@ test('falls back to the configured default workspace when the hook context has n
     assert.equal((await setup(async () => OWNER, {}))(DM, undefined), undefined);
   } finally {
     await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test('a context workspace without the file does not hide the configured workspace', async () => {
+  const configured = await workspace(PLACEHOLDER);
+  const elsewhere = await workspace();
+  const logs: string[] = [];
+  try {
+    const inject = await setup(async () => OWNER, { agents: { defaults: { workspace: configured } } }, logs);
+    assert.equal(inject(DM, elsewhere).appendSystemContext, PLACEHOLDER);
+    assert.equal(inject(DM, elsewhere).appendSystemContext, PLACEHOLDER);
+    assert.equal(inject(GROUP, elsewhere), undefined);
+    assert.deepEqual(logs, [`amadeus owner dm preferences injected chars=${PLACEHOLDER.length}`]);
+  } finally {
+    await rm(configured, { recursive: true, force: true });
+    await rm(elsewhere, { recursive: true, force: true });
+  }
+});
+
+test('the context workspace is used when the configured one has no file', async () => {
+  const configured = await workspace();
+  const contextDir = await workspace(PLACEHOLDER);
+  try {
+    const inject = await setup(async () => OWNER, { agents: { defaults: { workspace: configured } } });
+    assert.equal(inject(DM, contextDir).appendSystemContext, PLACEHOLDER);
+  } finally {
+    await rm(configured, { recursive: true, force: true });
+    await rm(contextDir, { recursive: true, force: true });
+  }
+});
+
+test('missing everywhere injects nothing and logs each skip reason once', async () => {
+  const empty = await workspace();
+  const logs: string[] = [];
+  try {
+    const inject = await setup(async () => OWNER, { agents: { defaults: { workspace: empty } } }, logs);
+    for (let i = 0; i < 3; i += 1) assert.equal(inject(DM, empty), undefined);
+    assert.equal((await setup(async () => OWNER, {}, logs))(DM, undefined), undefined);
+    assert.deepEqual(logs, ['amadeus owner dm preferences skipped reason=no-file', 'amadeus owner dm preferences skipped reason=no-workspace']);
+  } finally {
+    await rm(empty, { recursive: true, force: true });
   }
 });

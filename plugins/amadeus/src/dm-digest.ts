@@ -192,15 +192,36 @@ export async function ownerDigits(api: OpenClawPluginApi): Promise<string | unde
   }
 }
 
-/** Hook contexts do not always carry the workspace; fall back to the configured default agent workspace. */
-export function resolveWorkspaceDir(api: Pick<OpenClawPluginApi, 'config'>, contextDir?: string): string | undefined {
-  if (contextDir) return contextDir;
+/** Ordered, de-duplicated workspace candidates: the configured default workspace first, then the hook context's. */
+export function workspaceCandidates(api: Pick<OpenClawPluginApi, 'config'>, contextDir?: string): string[] {
+  const found: string[] = [];
   try {
     const configured = (api.config as { agents?: { defaults?: { workspace?: unknown } } } | undefined)?.agents?.defaults?.workspace;
-    return typeof configured === 'string' && configured.trim() ? configured.trim() : undefined;
+    if (typeof configured === 'string') found.push(configured);
   } catch {
-    return undefined;
+    // an unreadable config simply contributes no candidate
   }
+  if (typeof contextDir === 'string') found.push(contextDir);
+  return [...new Set(found.map((entry) => entry.trim()).filter(Boolean))];
+}
+
+/** First non-empty text produced by `read` over the candidate directories; `read` must not throw. */
+export function firstWorkspaceText(candidates: string[], read: (dir: string) => string | undefined): string | undefined {
+  for (const dir of candidates) {
+    const text = read(dir);
+    if (text) return text;
+  }
+  return undefined;
+}
+
+/** Logs each distinct message at most once per process, so per-turn hooks stay quiet. */
+export function onceLogger(api: Pick<OpenClawPluginApi, 'logger'>): (message: string) => void {
+  const seen = new Set<string>();
+  return (message) => {
+    if (seen.has(message) || seen.size >= 50) return;
+    seen.add(message);
+    try { api.logger.info(message); } catch { /* diagnostics never fail a turn */ }
+  };
 }
 
 /** The verified owner's direct WhatsApp session: a direct session whose peer is the owner's number. */
@@ -262,12 +283,18 @@ export function registerDmDigest(api: OpenClawPluginApi, dependencies: DigestDep
   // Synchronous on purpose: the owner number is cached after the first lookup (the first turn after a restart may
   // run without the digest), and the digest is one small local file.
   const owner = cachedOwnerDigits(resolveOwner);
+  const logOnce = onceLogger(api);
   api.on('before_prompt_build', (_event, context) => {
-    const workspaceDir = resolveWorkspaceDir(api, context.workspaceDir);
-    if (!workspaceDir || !isOwnerDirectSession(context.sessionKey, owner())) return;
+    if (!isOwnerDirectSession(context.sessionKey, owner())) return;
     try {
-      const digest = readFileSync(digestPath(workspaceDir), 'utf8').trim();
-      return digest ? { appendSystemContext: renderDigestContext(digest) } : undefined;
+      const candidates = workspaceCandidates(api, context.workspaceDir);
+      if (!candidates.length) { logOnce('amadeus dm digest skipped reason=no-workspace'); return; }
+      const digest = firstWorkspaceText(candidates, (dir) => {
+        try { return readFileSync(digestPath(dir), 'utf8').trim() || undefined; } catch { return undefined; }
+      });
+      if (!digest) { logOnce('amadeus dm digest skipped reason=no-file'); return; }
+      logOnce(`amadeus dm digest injected chars=${digest.length}`);
+      return { appendSystemContext: renderDigestContext(digest) };
     } catch {
       return undefined;
     }

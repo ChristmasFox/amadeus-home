@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { OpenClawPluginApi } from 'openclaw/plugin-sdk/core';
-import { cachedOwnerDigits, DIGEST_DIR, isOwnerDirectSession, ownerDigits, resolveWorkspaceDir } from './dm-digest.js';
+import { cachedOwnerDigits, DIGEST_DIR, isOwnerDirectSession, ownerDigits, firstWorkspaceText, onceLogger, workspaceCandidates } from './dm-digest.js';
 
 /**
  * Owner DM preferences: free text the owner keeps in a runtime file and that is loaded only into his own direct chat.
@@ -42,12 +42,16 @@ export interface OwnerDmPreferenceDependencies {
 
 export function registerOwnerDmPreferences(api: OpenClawPluginApi, dependencies: OwnerDmPreferenceDependencies = {}): void {
   const owner = cachedOwnerDigits(dependencies.ownerDigits ?? (() => ownerDigits(api)));
+  const logOnce = onceLogger(api);
   api.on('before_prompt_build', (_event, context) => {
     try {
-      const workspaceDir = resolveWorkspaceDir(api, context.workspaceDir);
-      if (!workspaceDir || !isOwnerDirectSession(context.sessionKey, owner())) return;
-      const text = readOwnerDmPreferences(workspaceDir);
-      return text ? { appendSystemContext: text } : undefined;
+      if (!isOwnerDirectSession(context.sessionKey, owner())) return;
+      const candidates = workspaceCandidates(api, context.workspaceDir);
+      if (!candidates.length) { logOnce('amadeus owner dm preferences skipped reason=no-workspace'); return; }
+      const text = firstWorkspaceText(candidates, readOwnerDmPreferences);
+      if (!text) { logOnce('amadeus owner dm preferences skipped reason=no-file'); return; }
+      logOnce(`amadeus owner dm preferences injected chars=${text.length}`);
+      return { appendSystemContext: text };
     } catch {
       return undefined;
     }
