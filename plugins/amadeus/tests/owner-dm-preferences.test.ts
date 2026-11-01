@@ -6,6 +6,7 @@ import test from 'node:test';
 import {
   OWNER_DM_PREFERENCES_FILE,
   OWNER_DM_PREFERENCES_MAX_CHARS,
+  OWNER_DM_PREFERENCES_TOTAL_MAX_CHARS,
   registerOwnerDmPreferences,
 } from '../src/owner-dm-preferences.js';
 
@@ -41,6 +42,38 @@ test('file content is injected only into the verified owner direct session', asy
       assert.equal(inject(key, dir), undefined, String(key));
     }
     assert.equal(inject(DM, undefined), undefined);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test('sibling files are appended in name order, capped, and bounded in total', async () => {
+  const dir = await workspace(PLACEHOLDER);
+  try {
+    const sibling = (name: string, content: string) => writeFile(join(dir, '.amadeus-private', `owner-dm-preferences.${name}.md`), content);
+    await sibling('20-b', 'SECOND');
+    await sibling('10-a', 'FIRST');
+    await writeFile(join(dir, '.amadeus-private', 'unrelated.md'), 'IGNORED');
+    await writeFile(join(dir, '.amadeus-private', 'owner-dm-preferences.md.bak'), 'IGNORED');
+    const inject = await setup();
+    assert.equal(inject(DM, dir).appendSystemContext, `${PLACEHOLDER}\n\nFIRST\n\nSECOND`);
+    await sibling('30-huge', Array.from({ length: 200 }, () => 'y'.repeat(80)).join('\n'));
+    await sibling('40-huge', Array.from({ length: 200 }, () => 'z'.repeat(80)).join('\n'));
+    const text = inject(DM, dir).appendSystemContext as string;
+    assert.ok(text.length <= OWNER_DM_PREFERENCES_TOTAL_MAX_CHARS);
+    assert.ok(text.startsWith(`${PLACEHOLDER}\n\nFIRST\n\nSECOND\n\n`));
+    assert.equal(inject(GROUP, dir), undefined);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test('a sibling alone is injected when the main file is missing', async () => {
+  const dir = await workspace();
+  try {
+    await mkdir(join(dir, '.amadeus-private'), { recursive: true });
+    await writeFile(join(dir, '.amadeus-private', 'owner-dm-preferences.10-a.md'), PLACEHOLDER);
+    assert.equal((await setup())(DM, dir).appendSystemContext, PLACEHOLDER);
   } finally {
     await rm(dir, { recursive: true, force: true });
   }

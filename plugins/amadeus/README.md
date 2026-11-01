@@ -83,9 +83,10 @@ outside `memory/**`, so `memory_search` of any session cannot return it — and
 injected only into the owner's direct sessions. A failed summary keeps the old file.
 
 Owner DM preferences (`src/owner-dm-preferences.ts`) are free text the owner keeps in the
-runtime file `<workspace>/.amadeus-private/owner-dm-preferences.md` (outside git and outside the
-memory corpus, capped at 2000 characters); it is injected only into the owner's direct sessions,
-and a missing or empty file injects nothing.
+runtime file `<workspace>/.amadeus-private/owner-dm-preferences.md` plus optional sibling files
+`owner-dm-preferences.<part>.md` read in name order (outside git and outside the memory corpus,
+4000 characters per file and 9000 in total); they are injected only into the owner's direct
+sessions, and missing or empty files inject nothing.
 
 Runtime `MEMORY.md`, `USER.md`, `DREAMS.md`, `memory/**`, `.amadeus-private/`,
 session `*.jsonl`, SQLite sidecars and backups are never committed: `.gitignore`

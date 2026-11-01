@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { OpenClawPluginApi } from 'openclaw/plugin-sdk/core';
 import { cachedOwnerDigits, DIGEST_DIR, isOwnerDirectSession, ownerDigits, firstWorkspaceText, onceLogger, workspaceCandidates } from './dm-digest.js';
@@ -8,7 +8,9 @@ import { cachedOwnerDigits, DIGEST_DIR, isOwnerDirectSession, ownerDigits, first
  * SOUL.md is injected into every session (groups included), so the content never lives in git or the seeds.
  */
 export const OWNER_DM_PREFERENCES_FILE = 'owner-dm-preferences.md';
-export const OWNER_DM_PREFERENCES_MAX_CHARS = 2000;
+export const OWNER_DM_PREFERENCES_MAX_CHARS = 4000;
+export const OWNER_DM_PREFERENCES_TOTAL_MAX_CHARS = 9000;
+const EXTRA_FILE_PATTERN = /^owner-dm-preferences\.[^/\\]+\.md$/u;
 
 export function ownerDmPreferencesPath(workspaceDir: string): string {
   return join(workspaceDir, DIGEST_DIR, OWNER_DM_PREFERENCES_FILE);
@@ -28,12 +30,36 @@ export function capPreferences(text: string, maxChars = OWNER_DM_PREFERENCES_MAX
   return (kept.length ? kept.join('\n') : trimmed.slice(0, maxChars)).trim();
 }
 
-export function readOwnerDmPreferences(workspaceDir: string): string | undefined {
+function readCapped(path: string): string | undefined {
   try {
-    return capPreferences(readFileSync(ownerDmPreferencesPath(workspaceDir), 'utf8')) || undefined;
+    return capPreferences(readFileSync(path, 'utf8')) || undefined;
   } catch {
     return undefined;
   }
+}
+
+/**
+ * The main file first, then sibling files named `owner-dm-preferences.<part>.md` in name order, each capped,
+ * joined by a blank line. A sibling that would push the total past the limit is skipped whole.
+ */
+export function readOwnerDmPreferences(workspaceDir: string): string | undefined {
+  const main = ownerDmPreferencesPath(workspaceDir);
+  const parts: string[] = [];
+  let size = 0;
+  const add = (text: string | undefined): void => {
+    if (!text || size + text.length + 2 > OWNER_DM_PREFERENCES_TOTAL_MAX_CHARS) return;
+    parts.push(text);
+    size += text.length + 2;
+  };
+  add(readCapped(main));
+  let names: string[] = [];
+  try {
+    names = readdirSync(join(workspaceDir, DIGEST_DIR)).filter((name) => EXTRA_FILE_PATTERN.test(name)).sort();
+  } catch {
+    names = [];
+  }
+  for (const name of names) add(readCapped(join(workspaceDir, DIGEST_DIR, name)));
+  return parts.length ? parts.join('\n\n') : undefined;
 }
 
 export interface OwnerDmPreferenceDependencies {
