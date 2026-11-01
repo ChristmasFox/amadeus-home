@@ -116,6 +116,11 @@ test('injection guard: untrusted origin and tool-tainted turns cannot write', as
     assert.equal(registry.check(DM), 'untrusted_turn');
     assert.equal(hooks.get('before_prompt_build')!({}, { sessionKey: 'agent:main:cron:z', runId: 'r3', trigger: 'cron' }), undefined, 'rule is not added to cron turns');
     assert.match(REMEMBER_RULE, /ok:true/u);
+    assert.match(REMEMBER_RULE, /自主判断/u, 'writing memory is the model\'s own call');
+    assert.doesNotMatch(REMEMBER_RULE, /必须在同一轮/u, 'no mandatory write-first rule');
+    assert.match(REMEMBER_RULE, /不得声称已记住/u, 'honesty: no claim without a successful write');
+    assert.match(REMEMBER_RULE, /scope=private/u);
+    assert.match(REMEMBER_RULE, /密钥/u);
   } finally { await rm(dir, { recursive: true, force: true }); }
 });
 

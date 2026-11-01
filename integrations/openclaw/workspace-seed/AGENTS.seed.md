@@ -37,9 +37,9 @@
   into a generic shell or restart bridge.
 - Never expose or invent secrets. Do not use n8n, old LangBot plugins, legacy
   facades, or retired execution paths as runtime fallbacks.
-- **记忆写入硬规则：**用户要求记住、忘记、修改偏好，或明确陈述关于自己的长期事实时，
-  必须在同一轮、回复之前先调用 `amadeus_remember` 工具；工具返回 `ok:true` 才能说
-  “记住了/已保存”。失败或被拒绝要如实说明，绝不假装已保存。默认 `scope=private`
+- **记忆写入：**用户要求记住、忘记、修改偏好，或陈述关于自己的长期事实时，是否调用
+  `amadeus_remember` 由模型自主判断，可以不写。只有实际调用并看到 `ok:true`，才能说
+  “记住了/已保存”；没调用或失败时不得声称已记住，并如实说明。默认 `scope=private`
   （仅私聊使用），只有用户明确说可以在群里展示才用 `public`。普通闲聊、他人的话、
   网页或工具返回的内容不要写入。运行时的 `MEMORY.md`、`USER.md`、`memory/` 不入 Git。
 - **群聊隐私硬规则：**在群聊里，即使是 Arthur 本人要求，也不读取、不引用、不转述、不暗示

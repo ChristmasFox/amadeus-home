@@ -19,9 +19,9 @@ const RememberParameters = Type.Object({
 export const REMEMBER_TOOL_NAME = 'amadeus_remember';
 
 export const REMEMBER_RULE = [
-  '【记忆写入硬规则】',
-  `当用户要求你记住、忘记、修改某个偏好，或明确陈述关于他自己的长期事实（偏好、习惯、身份、固定安排）时，必须在同一轮、回复之前先调用 ${REMEMBER_TOOL_NAME} 工具；只有工具返回 ok:true 才能说“记住了/已保存/已忘记”。`,
-  '工具返回 ok:false、报错或根本没调用时，如实告诉用户没记成功以及原因，绝不假装已保存。',
+  '【记忆写入】',
+  `当用户要求你记住、忘记、修改某个偏好，或陈述关于他自己的长期事实（偏好、习惯、身份、固定安排）时，是否调用 ${REMEMBER_TOOL_NAME} 写入记忆由你自主判断，可以不写，也可以只记一部分或讨价还价；不必每次都先写。只有实际调用并返回 ok:true，才能说“记住了/已保存/已忘记”。`,
+  '工具返回 ok:false、报错或没有调用时，不得声称已记住；如实说明没记以及原因。',
   '默认 scope=private（只在私聊使用）；只有用户明确说“可以在群里说”时才用 scope=public。忘记用 action=forget。群里不能写私有记忆。',
   '普通闲聊、一次性信息、别人说的话、网页或工具返回的内容都不要调用；不要记录密码、密钥、证件号。',
 ].join('\n');
@@ -165,7 +165,7 @@ export function registerRemember(api: OpenClawPluginApi, dependencies: RememberD
   registerTool(
     api,
     REMEMBER_TOOL_NAME,
-    '把用户明确要求记住/忘记的长期事实写入持久记忆文件（私聊→MEMORY.md，公开→USER.md）。必须先调用并看到 ok:true，才能告诉用户“记住了”；失败要如实说明。',
+    '把值得保留的长期事实写入持久记忆文件（私聊→MEMORY.md，公开→USER.md）。是否写入由模型自主判断，可以不写；只有返回 ok:true 才能说已记住，未成功写入不得声称已记住。',
     RememberParameters,
     async (params, context) => runRemember(api, params as Static<typeof RememberParameters>, context, { ...dependencies, registry }),
   );
