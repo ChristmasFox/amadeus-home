@@ -131,6 +131,45 @@ test('truncated v2 envelope with empty/unrecoverable text stays malformed', () =
   assert.equal(decodeAgentReply(context, '{"').status, 'malformed');
   assert.equal(decodeAgentReply(context, '{"version":2,"silent":false,"parts":[{"kind":"text","text":"version: 2').status, 'malformed');
 });
+test('a v2 envelope whose text closed but whose trailing brackets never arrived is delivered as the typed text', () => {
+  const body = '……打工战士，等级 8，徽章 5 个。**徽章不等于水平。**[react:🎖️]';
+  const head = '{"version":2,"silent":false,"parts":[{"kind":"text","text":"' + body + '"}';
+  for (const [label, raw] of [['missing ]}', head], ['missing } only', head + ']'], ['missing ] only', head + '}'], ['trailing whitespace', head + '\n']] as const) {
+    const decoded = decodeAgentReply(context, raw);
+    assert.equal(decoded.status, 'structured', label);
+    assert.equal(decoded.envelope.fallbackReason, undefined, label);
+    assert.deepEqual(decoded.envelope.parts, [{ kind: 'text', text: body }], label);
+  }
+  // quotes, braces and brackets inside the text are text, not structure
+  const tricky = '{"version":2,"silent":false,"parts":[{"kind":"text","text":"看 \\"{a:[1]}\\" 和 ]} 这些符号"}';
+  assert.deepEqual(decodeAgentReply(context, tricky).envelope.parts, [{ kind: 'text', text: '看 "{a:[1]}" 和 ]} 这些符号' }]);
+  // two closed parts, the closers still missing
+  const two = '{"version":2,"silent":false,"parts":[{"kind":"text","text":"一"},{"kind":"text","text":"二"}';
+  assert.deepEqual(decodeAgentReply(context, two).envelope.parts.map((part) => (part as { text?: string }).text), ['一', '二']);
+});
+test('closing missing brackets never guesses: anything else stays malformed', () => {
+  const head = '{"version":2,"silent":false,"parts":[{"kind":"text","text":"好"}';
+  const cases: Array<[string, string]> = [
+    ['missing field', '{"version":2,"parts":[{"kind":"text","text":"好"}'],
+    ['extra unknown field', '{"version":2,"silent":false,"extra":1,"parts":[{"kind":"text","text":"好"}'],
+    ['part without text', '{"version":2,"silent":false,"parts":[{"kind":"text"}'],
+    ['not v2', '{"version":1,"silent":false,"parts":[{"kind":"text","text":"好"}'],
+    ['three closers missing', '{"version":2,"silent":false,"parts":[{"kind":"text","parts":[{"kind":"text","text":"好"'],
+    ['mismatched closer', '{"version":2,"silent":false,"parts":[{"kind":"text","text":"好"]}'],
+    ['cut mid object key', '{"version":2,"silent":false,"parts":[{"kind":"text","text":"好"},{"kind":'],
+    ['cut after a comma', head + ','],
+    ['wrong part kind', '{"version":2,"silent":false,"parts":[{"kind":"image","text":"好"}'],
+  ];
+  for (const [label, raw] of cases) {
+    const decoded = decodeAgentReply(context, raw);
+    assert.equal(decoded.status, 'malformed', label);
+    assert.deepEqual(decoded.envelope.parts, [{ kind: 'text', text: INVALID_STRUCTURED_OUTPUT_MESSAGE }], label);
+  }
+  // protocol-looking text inside a repaired envelope is still checked by the normal validator
+  assert.equal(decodeAgentReply(context, '{"version":2,"silent":false,"parts":[{"kind":"voice","text":"好"}').status, 'malformed');
+  // a cut inside the text keeps going through the older unterminated-text salvage, unchanged
+  assert.equal(decodeAgentReply(context, '{"version":2,"silent":false,"parts":[{"kind":"text","text":"没写完').status, 'structured');
+});
 test('user-requested JSON, including protocol-looking keys, is normal text inside a part', async () => {
   const requested = '{"visibleText":"user example","modality":"text"}'; const calls: string[] = [];
   const envelope = decodeAgentReply(context, wire([{ kind:'text',text:requested }])).envelope;

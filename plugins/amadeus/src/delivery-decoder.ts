@@ -66,8 +66,48 @@ function restoreMissingTextKey(raw: string): string | undefined {
   return repaired === raw ? undefined : repaired;
 }
 
+/**
+ * A v2 envelope whose last text part closed cleanly but whose trailing `]` and/or `}` never arrived (the model stopped
+ * right after the part). Only the missing closers are added: the scan respects strings and escapes, every closer that
+ * is present must match, at most two are inserted or appended, and a cut inside a string, a mismatch or any other
+ * shape is left alone. The repaired text still goes through the normal parse and validation, so fields are never
+ * guessed and text is never touched.
+ */
+function closeMissingTrailingBrackets(raw: string): string | undefined {
+  const text = raw.trim();
+  if (!text.startsWith('{') || !/"version"\s*:\s*2/u.test(text)) return undefined;
+  const stack: string[] = [];
+  let inString = false;
+  let escaped = false;
+  let out = '';
+  let inserted = 0;
+  for (const character of text) {
+    if (inString) {
+      out += character;
+      if (escaped) escaped = false;
+      else if (character === '\\') escaped = true;
+      else if (character === '"') inString = false;
+      continue;
+    }
+    if (character === '"') { inString = true; out += character; continue; }
+    if (character === '{' || character === '[') { stack.push(character); out += character; continue; }
+    if (character === '}' || character === ']') {
+      const top = stack[stack.length - 1];
+      if (top === (character === '}' ? '{' : '[')) { stack.pop(); out += character; continue; }
+      // `]` never arrived and the object closer came first: `}` found `[` on top of the object it belongs to.
+      if (character === '}' && top === '[' && stack[stack.length - 2] === '{') { stack.pop(); inserted += 1; out += ']'; stack.pop(); out += '}'; continue; }
+      return undefined;
+    }
+    out += character;
+  }
+  if (inString || stack.length === 0 && inserted === 0) return undefined;
+  const missing = stack.length + inserted;
+  if (missing === 0 || missing > 2) return undefined;
+  return out + [...stack].reverse().map((open) => (open === '{' ? '}' : ']')).join('');
+}
+
 function parseWire(raw: string): unknown {
-  const attempts: Array<(value: string) => string | undefined> = [(value) => value, escapeControlCharactersInStrings, restoreMissingTextKey];
+  const attempts: Array<(value: string) => string | undefined> = [(value) => value, escapeControlCharactersInStrings, restoreMissingTextKey, closeMissingTrailingBrackets];
   for (const attempt of attempts) {
     const candidate = attempt(raw);
     if (candidate === undefined) continue;
@@ -77,6 +117,11 @@ function parseWire(raw: string): unknown {
   const escaped = stacked === undefined ? undefined : escapeControlCharactersInStrings(stacked);
   if (escaped !== undefined) {
     try { return JSON.parse(escaped) as unknown; } catch { /* fall through */ }
+  }
+  const closed = closeMissingTrailingBrackets(raw);
+  const closedEscaped = closed === undefined ? undefined : escapeControlCharactersInStrings(closed);
+  if (closedEscaped !== undefined) {
+    try { return JSON.parse(closedEscaped) as unknown; } catch { /* fall through */ }
   }
   throw new Error('invalid_agent_json');
 }
