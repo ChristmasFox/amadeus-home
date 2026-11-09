@@ -200,7 +200,101 @@ export function steamGetProfile(deps: SteamToolDependencies, caller: SteamCaller
   });
 }
 
-export function steamGetPlaytime(deps: SteamToolDependencies, caller: SteamCaller, params: { person: Person; game?: string }): Promise<unknown> {
+/**
+ * The play-time day is the business day: Asia/Singapore 06:00 to 06:00 the next morning (the same cut as the daily
+ * squad review). Shifting by 2 hours (UTC+8 minus 6) makes "floor to a day" land on 06:00 Singapore time.
+ */
+const BUSINESS_SHIFT_MS = 2 * 3_600_000;
+const DAY_MS = 86_400_000;
+export type PlaytimePeriod = 'today' | 'yesterday' | 'this_week' | 'date';
+
+export const businessDayStart = (at: number): number => Math.floor((at + BUSINESS_SHIFT_MS) / DAY_MS) * DAY_MS - BUSINESS_SHIFT_MS;
+/** Label of the business day that contains `at`: the calendar date it starts on. */
+export const businessDayLabel = (at: number): string => new Date(at + BUSINESS_SHIFT_MS).toISOString().slice(0, 10);
+
+export function playtimeWindow(period: PlaytimePeriod, date: string | undefined, now: number): { from: number; to: number; label: string } | undefined {
+  const today = businessDayStart(now);
+  const span = (from: number): string => `${businessDayLabel(from)} 06:00 → 次日 06:00`;
+  if (period === 'today') return { from: today, to: today + DAY_MS, label: `今天（${span(today)}）` };
+  if (period === 'yesterday') return { from: today - DAY_MS, to: today, label: `昨天（${span(today - DAY_MS)}）` };
+  if (period === 'this_week') {
+    const weekday = new Date(today + BUSINESS_SHIFT_MS).getUTCDay(); // 0 = Sunday
+    const monday = today - ((weekday + 6) % 7) * DAY_MS;
+    return { from: monday, to: today + DAY_MS, label: `本周（${businessDayLabel(monday)} 06:00 起，周一为一周开始）` };
+  }
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/u.exec(date ?? '');
+  if (!match) return undefined;
+  const from = Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3])) - BUSINESS_SHIFT_MS;
+  if (!Number.isFinite(from) || businessDayLabel(from) !== date) return undefined;
+  return { from, to: from + DAY_MS, label: `${date}（${span(from)}）` };
+}
+
+export const durationText = (minutes: number): string => {
+  const hours = Math.floor(minutes / 60);
+  const rest = minutes % 60;
+  return hours ? `${hours}小时${rest}分钟` : `${rest}分钟`;
+};
+
+interface PlaySession { appId: string; gameName?: string; start: number; end: number }
+
+/** Clips sessions to [from, to) and sums them per game and per business day; a session crossing 06:00 is split between the two days. */
+export function aggregatePlay(sessions: PlaySession[], from: number, to: number, game?: string): { games: Array<{ name: string; minutes: number; text: string }>; totalMinutes: number; days: Array<{ date: string; minutes: number; text: string }> } {
+  const wanted = game?.trim().toLowerCase();
+  const perGame = new Map<string, { name: string; ms: number }>();
+  const perDay = new Map<string, number>();
+  for (const session of sessions) {
+    const name = session.gameName ?? session.appId;
+    if (wanted && !name.toLowerCase().includes(wanted)) continue;
+    const start = Math.max(session.start, from);
+    const end = Math.min(session.end, to);
+    if (end <= start) continue;
+    const entry = perGame.get(session.appId) ?? { name, ms: 0 };
+    entry.ms += end - start;
+    perGame.set(session.appId, entry);
+    for (let cursor = start; cursor < end; cursor = businessDayStart(cursor) + DAY_MS) {
+      const dayEnd = Math.min(end, businessDayStart(cursor) + DAY_MS);
+      perDay.set(businessDayLabel(cursor), (perDay.get(businessDayLabel(cursor)) ?? 0) + (dayEnd - cursor));
+    }
+  }
+  const games = [...perGame.values()].map((entry) => ({ name: entry.name, minutes: Math.round(entry.ms / 60_000) })).filter((entry) => entry.minutes > 0)
+    .sort((a, b) => b.minutes - a.minutes).map((entry) => ({ ...entry, text: durationText(entry.minutes) }));
+  const days = [...perDay.entries()].sort(([x], [y]) => x.localeCompare(y)).map(([day, ms]) => ({ date: day, minutes: Math.round(ms / 60_000), text: durationText(Math.round(ms / 60_000)) }));
+  return { games, totalMinutes: games.reduce((sum, entry) => sum + entry.minutes, 0), days };
+}
+
+/** Time actually spent in games, from the sessions the poller recorded (not Steam's lifetime totals). */
+function trackedPlaytime(deps: SteamToolDependencies, caller: SteamCaller, person: Person, period: PlaytimePeriod, date: string | undefined, game: string | undefined): unknown {
+  const now = (deps.now ?? Date.now)();
+  const window = playtimeWindow(period, date, now);
+  if (!window) return { status: 'invalid_date', reason: 'date_must_be_YYYY-MM-DD' };
+  const target = targetFor(deps, caller, person);
+  if (!('links' in target)) return target;
+  const trackingSince = deps.store.playTrackingStartedAt();
+  const base = { period: period === 'date' ? 'date' : period, label: window.label, timezone: 'Asia/Singapore', dayBoundary: '每天新加坡时间 06:00 切日', accountCount: target.links.length };
+  if (window.to <= trackingSince) {
+    return { status: 'ok', ...base, known: false, reason: 'before_tracking', trackingSince: new Date(trackingSince + 8 * 3_600_000).toISOString().slice(0, 16).replace('T', ' ') + '（新加坡时间）', note: '游戏时长是从这个时间之后才开始记录的，更早的日子没有数据。' };
+  }
+  if (target.links.every((link) => !link.broadcast)) return { status: 'ok', ...base, known: false, reason: 'tracking_off_while_announcements_off' };
+  const sessions = deps.store.playSessions(target.links.map((link) => link.steamId), window.from, window.to, now);
+  const { games, totalMinutes, days } = aggregatePlay(sessions, window.from, window.to, game);
+  const partial = window.from < trackingSince;
+  return {
+    status: 'ok', ...base, known: true, games, totalMinutes, totalText: durationText(totalMinutes),
+    ...(period === 'this_week' || days.length > 1 ? { days } : {}),
+    ...(partial ? { partial: true, trackingSince: new Date(trackingSince + 8 * 3_600_000).toISOString().slice(0, 16).replace('T', ' ') + '（新加坡时间）', note: '记录是从这个时间才开始的，这段时间之前的游戏时长没有数据，上面只是记录开始之后的部分。' } : {}),
+    ...(totalMinutes === 0 ? { note: '这段时间没有记录到游戏时长（只记录绑定账号在播报开启时的游戏状态，每分钟采样一次，误差约一分钟）。' } : {}),
+  };
+}
+
+/**
+ * Without a period: Steam's lifetime hours (total, top games, or one game). With a period (today / yesterday / this
+ * week / a date): the time actually played in that window, per game and in total, merged over the person's accounts.
+ */
+export function steamGetPlaytime(deps: SteamToolDependencies, caller: SteamCaller, params: { person: Person; game?: string; period?: PlaytimePeriod; date?: string }): Promise<unknown> {
+  if (params.period || params.date) {
+    const period: PlaytimePeriod = params.period ?? 'date';
+    return Promise.resolve(trackedPlaytime(deps, caller, params.person, period, params.date, params.game));
+  }
   return withTarget(deps, caller, params.person, async (link) => {
     const owned = unknownValue(await deps.client.ownedGames(link.steamId));
     if (!owned.known) return { status: 'ok', games: owned };

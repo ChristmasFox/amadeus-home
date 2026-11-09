@@ -80,6 +80,17 @@ export class SteamStore {
         steam_id TEXT PRIMARY KEY,
         record TEXT NOT NULL
       );
+      CREATE TABLE IF NOT EXISTS steam_play_sessions (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        steam_id TEXT NOT NULL,
+        app_id TEXT NOT NULL,
+        game_name TEXT,
+        started_at INTEGER NOT NULL,
+        ended_at INTEGER,
+        last_seen INTEGER NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_steam_play_steam ON steam_play_sessions(steam_id, started_at);
+      CREATE TABLE IF NOT EXISTS steam_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS steam_achievement_state (
         steam_id TEXT NOT NULL,
         app_id TEXT NOT NULL,
@@ -94,6 +105,7 @@ export class SteamStore {
       );
       CREATE INDEX IF NOT EXISTS idx_steam_announcements_group ON steam_announcements(group_id, sent_at);
     `);
+    this.db.prepare(`INSERT OR IGNORE INTO steam_meta (key, value) VALUES ('play_tracking_started_at', ?)`).run(String(Date.now()));
   }
 
   /** One-time upgrade from "one account per sender" to many accounts per person; rows and group lists are kept as they are. */
@@ -151,6 +163,7 @@ export class SteamStore {
       this.db.prepare('DELETE FROM steam_links WHERE steam_id = ?').run(link.steamId);
       this.db.prepare('DELETE FROM steam_presence WHERE steam_id = ?').run(link.steamId);
       this.db.prepare('DELETE FROM steam_achievement_state WHERE steam_id = ?').run(link.steamId);
+      this.db.prepare('DELETE FROM steam_play_sessions WHERE steam_id = ?').run(link.steamId);
     }
     if (links.length && this.linksBySender(senderKey).length === 0) this.db.prepare('DELETE FROM steam_group_members WHERE sender_key = ?').run(senderKey);
     return links.length;
@@ -158,6 +171,11 @@ export class SteamStore {
 
   linksBySender(senderKey: string): SteamLink[] {
     return this.db.prepare('SELECT * FROM steam_links WHERE sender_key = ? ORDER BY linked_at, steam_id').all(senderKey).map((row) => this.linkFrom(row));
+  }
+
+  /** Accounts whose play time is recorded: announcements on and enrolled in some group. */
+  trackedLinks(): SteamLink[] {
+    return this.db.prepare(`SELECT DISTINCT l.* FROM steam_links l JOIN steam_group_members m ON m.sender_key = l.sender_key WHERE l.broadcast = 1 ORDER BY l.linked_at, l.steam_id`).all().map((row) => this.linkFrom(row));
   }
 
   linksByPerson(personId: string): SteamLink[] {
@@ -239,6 +257,53 @@ export class SteamStore {
 
   savePresence(steamId: string, record: StoredPresence): void {
     this.db.prepare('INSERT INTO steam_presence (steam_id, record) VALUES (?, ?) ON CONFLICT(steam_id) DO UPDATE SET record = excluded.record').run(steamId, JSON.stringify(record));
+  }
+
+  /** When play-time tracking began: nothing before this moment can be reported. */
+  playTrackingStartedAt(): number {
+    return Number(this.db.prepare(`SELECT value FROM steam_meta WHERE key = 'play_tracking_started_at'`).get()?.value ?? Date.now());
+  }
+
+  /**
+   * Maintains one play session per account from the one-minute observations: the same game keeps extending the open
+   * session, a different game or leaving a game closes it. A long gap with no observation (outage, restart) closes the
+   * session at the last time it was actually seen, never later.
+   */
+  recordPlay(steamId: string, game: { appId: string; name?: string } | undefined, now: number, options: { startHint?: number; gapMs?: number } = {}): void {
+    const gapMs = options.gapMs ?? 5 * 60_000;
+    const open = this.db.prepare('SELECT id, app_id, last_seen FROM steam_play_sessions WHERE steam_id = ? AND ended_at IS NULL ORDER BY id DESC LIMIT 1').get(steamId);
+    if (open) {
+      const stale = now - Number(open.last_seen) > gapMs;
+      if (!stale && game && String(open.app_id) === game.appId) {
+        this.db.prepare('UPDATE steam_play_sessions SET last_seen = ?, game_name = COALESCE(?, game_name) WHERE id = ?').run(now, game.name ?? null, open.id);
+        return;
+      }
+      this.db.prepare('UPDATE steam_play_sessions SET ended_at = ? WHERE id = ?').run(stale ? Number(open.last_seen) : now, open.id);
+    }
+    if (!game) return;
+    // The hint (when the poller last saw this play begin) only backdates a first-ever sighting, never across a recorded gap.
+    const covered = options.startHint !== undefined && Number(this.db.prepare('SELECT COUNT(*) AS n FROM steam_play_sessions WHERE steam_id = ? AND last_seen >= ?').get(steamId, options.startHint)?.n ?? 0) > 0;
+    const started = options.startHint !== undefined && !covered && options.startHint <= now && now - options.startHint < 24 * 3_600_000 ? options.startHint : now;
+    this.db.prepare('INSERT INTO steam_play_sessions (steam_id, app_id, game_name, started_at, ended_at, last_seen) VALUES (?, ?, ?, ?, NULL, ?)').run(steamId, game.appId, game.name ?? null, started, now);
+  }
+
+  /** At service start: sessions left open by the previous run end at the last moment they were seen. */
+  closeStalePlaySessions(): number {
+    const changed = this.db.prepare('UPDATE steam_play_sessions SET ended_at = last_seen WHERE ended_at IS NULL').run() as { changes?: number };
+    return changed.changes ?? 0;
+  }
+
+  /** Sessions of these accounts that overlap [from, to); an open session counts up to its last sighting (or `now` when fresh). */
+  playSessions(steamIds: string[], from: number, to: number, now: number, gapMs = 5 * 60_000): Array<{ steamId: string; appId: string; gameName?: string; start: number; end: number }> {
+    if (!steamIds.length) return [];
+    const marks = steamIds.map(() => '?').join(',');
+    const rows = this.db.prepare(`SELECT steam_id, app_id, game_name, started_at, ended_at, last_seen FROM steam_play_sessions WHERE steam_id IN (${marks}) AND started_at < ? AND COALESCE(ended_at, ?) > ? ORDER BY started_at`)
+      .all(...steamIds, to, to, from);
+    return rows.map((row) => {
+      const lastSeen = Number(row.last_seen);
+      const end = row.ended_at !== null && row.ended_at !== undefined ? Number(row.ended_at) : now - lastSeen <= gapMs ? now : lastSeen;
+      return { steamId: String(row.steam_id), appId: String(row.app_id), ...(typeof row.game_name === 'string' ? { gameName: row.game_name } : {}), start: Number(row.started_at), end };
+    });
   }
 
   /** The unlocked achievements last seen for this account in this game; undefined means no baseline yet. */

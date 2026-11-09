@@ -22,3 +22,11 @@ Use the native `steam_*` tools for questions about a person's Steam account: who
 - Preconditions: the account is linked, the person is in this group's announcement list and has not switched their own announcements off, the group's announcements are on (default), and their Steam profile/game details are public. A group owner can switch the whole group off with `steam_group_settings`.
 - Achievement specifics: the first time a game is seen for an account is only a baseline, so nothing historic is announced; an unlock that is already more than about 30 minutes old when noticed is not announced; several unlocks within a few minutes arrive as one message. Polling is once a minute, day and night; there is no quiet period and no cooldown.
 - Never tell people that achievement unlocks are not announced automatically; that is wrong. If asked whether something was or will be announced, answer from this section and say plainly what you cannot see (for example a private profile), without inventing details.
+
+## Play time per day (steam_get_playtime with a period)
+- "我昨天/今天/这周玩了多久", "X 昨天玩了啥": call `steam_get_playtime` with `person` (self by default; a group member via mention/alias) and `period` = today / yesterday / this_week, or `date` = YYYY-MM-DD. The answer lists the time per game and the total, accounts of one person merged. Without `period` the tool returns Steam's lifetime totals instead.
+- **A day is cut at 06:00 Singapore time**: "昨天" is yesterday 06:00 to today 06:00, a week starts on Monday 06:00, and a session crossing 06:00 is split between the two days. Say this when it matters (for example for late-night play).
+- Play time is recorded by the poller once a minute for linked members whose announcements are on, from the moment recording began; the result carries `trackingSince` / `partial` / `before_tracking`. Days before that have no data: say so plainly, never estimate or invent hours. Accuracy is about a minute.
+- Example answer shape: "昨天（06:00→今天 06:00）：PUBG 3小时20分钟，GTA5 1小时5分钟，一共 4小时25分钟"。
+- The 09:30 daily squad review also carries a 🎮 Steam 游戏时长 block for the business day that just ended.
+

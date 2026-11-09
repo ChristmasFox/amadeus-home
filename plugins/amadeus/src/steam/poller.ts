@@ -66,6 +66,8 @@ export class PresencePoller {
   constructor(private readonly deps: PollerDependencies) {
     this.policy = deps.policy ?? DEFAULT_POLICY;
     this.now = deps.now ?? Date.now;
+    // A previous run's open play sessions end where they were last seen.
+    deps.store.closeStalePlaySessions();
   }
 
   private log(message: string): void { this.deps.log?.(message); }
@@ -90,6 +92,8 @@ export class PresencePoller {
         if (next.state === 'offline') this.dropFromQueues(steamId);
         if (event) { report.events += 1; this.enqueue(event); }
         // Achievements are read for the game being played now, and once more right after it ends (unlocks often sync then).
+        store.recordPlay(steamId, next.state === 'in_game' && next.gameId ? { appId: next.gameId, ...(next.gameName ? { name: next.gameName } : {}) } : undefined, now,
+          { ...(before?.state === 'in_game' && before.gameId === next.gameId ? { startHint: before.since } : {}) });
         if (next.state === 'in_game' && next.gameId) playing.push({ steamId, appId: next.gameId, ...(next.gameName ? { gameName: next.gameName } : {}) });
         else if (before?.state === 'in_game' && before.gameId) playing.push({ steamId, appId: before.gameId, ...(before.gameName ? { gameName: before.gameName } : {}) });
       }
