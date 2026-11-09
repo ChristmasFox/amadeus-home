@@ -32,17 +32,35 @@ GROUP_MAC_HOST_TOOL_ALLOWLIST = [
     "amadeus_macos_host_status",
     "amadeus_macos_host_processes",
 ]
+# Group-usable Steam tools. steam_friends_status stays owner-DM-only and is omitted.
+GROUP_STEAM_TOOL_ALLOWLIST = [
+    "steam_link_account",
+    "steam_unlink",
+    "steam_set_broadcast",
+    "steam_get_profile",
+    "steam_get_playtime",
+    "steam_get_recent_games",
+    "steam_group_settings",
+]
 GROUP_IMAGE_TOOL_ALLOWLIST = [
     *NON_OWNER_TOOL_ALLOWLIST,
     "image_generate",
     *GROUP_PUBG_TOOL_ALLOWLIST,
     *GROUP_MAC_HOST_TOOL_ALLOWLIST,
+    *GROUP_STEAM_TOOL_ALLOWLIST,
 ]
 LEGACY_GROUP_IMAGE_TOOL_ALLOWLIST = [*NON_OWNER_TOOL_ALLOWLIST, "image_generate"]
 LEGACY_GROUP_PUBG_TOOL_ALLOWLIST = [
     *NON_OWNER_TOOL_ALLOWLIST,
     "image_generate",
     *GROUP_PUBG_TOOL_ALLOWLIST,
+]
+# Pre-Steam group allowlist (image+pubg+mac host) so prepare can migrate to include Steam.
+LEGACY_GROUP_IMAGE_PUBG_MAC_TOOL_ALLOWLIST = [
+    *NON_OWNER_TOOL_ALLOWLIST,
+    "image_generate",
+    *GROUP_PUBG_TOOL_ALLOWLIST,
+    *GROUP_MAC_HOST_TOOL_ALLOWLIST,
 ]
 
 
@@ -277,7 +295,8 @@ def ensure_group_image_policies(channel: dict, owner_keys: list[str] | None = No
                 raise SystemExit("group config must be an object")
             old_tools = group.get("tools")
             legacy_tools = ({"allow": LEGACY_GROUP_IMAGE_TOOL_ALLOWLIST},
-                            {"allow": LEGACY_GROUP_PUBG_TOOL_ALLOWLIST})
+                            {"allow": LEGACY_GROUP_PUBG_TOOL_ALLOWLIST},
+                            {"allow": LEGACY_GROUP_IMAGE_PUBG_MAC_TOOL_ALLOWLIST})
             if old_tools is not None and old_tools != wanted_tools and old_tools not in legacy_tools:
                 raise SystemExit("unexpected group tool policy; refuse to replace unrelated restrictions")
             old_senders = group.get("toolsBySender")
