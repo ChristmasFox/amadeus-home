@@ -316,15 +316,3 @@ test('the CLI never hands the image-private LD_LIBRARY_PATH to the gateway comma
   const child = childEnvironment({ PATH: '/usr/bin', LD_LIBRARY_PATH: '/opt/amadeus-glibc/usr/lib', HOME: '/home/node' });
   assert.deepEqual(child, { PATH: '/usr/bin', HOME: '/home/node' });
 });
-
-test('an extra section from another plugin is appended to the review; a failing or empty one changes nothing', async () => {
-  const withSection = setup({ extra: async (window) => `🎮 Steam 游戏时长\n- X：测试 1小时（窗口 ${window.startMs === DAY_START && window.endMs === DAY_END}）` });
-  assert.equal((await runDailyReview(withSection.input)).result, 'sent');
-  const text = String(withSection.gateway.sent[0]!.message);
-  assert.match(text, /\n\n🎮 Steam 游戏时长\n- X：测试 1小时（窗口 true）$/u);
-  for (const extra of [async () => { throw new Error('boom'); }, async () => undefined, async () => '  ']) {
-    const plain = setup({ extra });
-    assert.equal((await runDailyReview(plain.input)).result, 'sent');
-    assert.doesNotMatch(String(plain.gateway.sent[0]!.message), /Steam/u);
-  }
-});

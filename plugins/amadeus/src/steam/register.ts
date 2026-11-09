@@ -5,9 +5,9 @@ import { groupIdFromSessionKey } from '../group-roster.js';
 import { identityContextFromOpenClaw, identityMirrorExternalAccount, identityPersonIdForAlias, identityDisplayName, identityPersonIdForSender, identityWhatsAppGroupPeople } from '../identity.js';
 import { registerTool } from '../shared/register-tool.js';
 import { SteamClient } from './client.js';
-import { nineRouterComposer } from './compose.js';
+import { renderSteamNotifications } from './notify.js';
 import { POLL_INTERVAL_MS } from './domain.js';
-import { DAILY_REVIEW_SECTIONS_GLOBAL, steamPlaytimeSection, type DailyReviewSection } from './daily.js';
+import { runDailyPlaytime } from './daily.js';
 import { PresencePoller } from './poller.js';
 import { SteamStore } from './store.js';
 import {
@@ -91,22 +91,7 @@ export function callerFrom(config: AmadeusConfig, context: OpenClawPluginToolCon
   };
 }
 
-/** Lets the pubg daily review (09:30) append the Steam play-time block; failures never reach the review. */
-function registerDailyReviewSection(api: OpenClawPluginApi): void {
-  const providers = ((globalThis as Record<string, unknown>)[DAILY_REVIEW_SECTIONS_GLOBAL] ??= new Map<string, DailyReviewSection>()) as Map<string, DailyReviewSection>;
-  providers.set('steam-playtime', async (window) => {
-    const config = configFor(api);
-    try {
-      return steamPlaytimeSection(steamRuntime(config).store, window, Date.now(), (personId, fallback) => (personId ? identityDisplayName(config, personId) : undefined) ?? fallback);
-    } catch (error) {
-      api.logger.warn(`amadeus steam playtime section failed: ${error instanceof Error ? error.message : 'unknown'}`);
-      return undefined;
-    }
-  });
-}
-
 export function registerSteamTools(api: OpenClawPluginApi): void {
-  registerDailyReviewSection(api);
   const deps = (): SteamToolDependencies => steamRuntime(configFor(api));
   const caller = (context: OpenClawPluginToolContext): SteamCaller => callerFrom(configFor(api), context);
   const person = (params: { person: unknown }): Person => params.person as Person;
@@ -147,16 +132,17 @@ export function registerSteamPresenceService(api: OpenClawPluginApi): void {
       const config = configFor(api);
       if (config.steamBroadcastMode !== 'deliver') { api.logger.info('amadeus steam presence is off'); return; }
       const { store, client } = steamRuntime(config);
+      const sendToGroup = async (groupId: string, message: string, idempotencyKey: string): Promise<void> => {
+        await (api.runtime.gateway as unknown as { request(method: string, params: Record<string, unknown>, options?: Record<string, unknown>): Promise<unknown> })
+          .request('send', { channel: 'whatsapp', to: groupId, accountId: config.steamWhatsappAccountId, message, idempotencyKey }, { timeoutMs: 20_000 });
+      };
       const poller = new PresencePoller({
         store,
         client,
-        compose: nineRouterComposer(api.config),
+        compose: (facts) => renderSteamNotifications(facts, new Date()),
         displayName: (personId) => identityDisplayName(config, personId),
         groupPeople: () => identityWhatsAppGroupPeople(config),
-        send: async (groupId, message, idempotencyKey) => {
-          await (api.runtime.gateway as unknown as { request(method: string, params: Record<string, unknown>, options?: Record<string, unknown>): Promise<unknown> })
-            .request('send', { channel: 'whatsapp', to: groupId, accountId: config.steamWhatsappAccountId, message, idempotencyKey }, { timeoutMs: 20_000 });
-        },
+        send: sendToGroup,
         log: (message) => api.logger.info(`amadeus ${message}`),
       });
       stopped = false;
@@ -172,6 +158,16 @@ export function registerSteamPresenceService(api: OpenClawPluginApi): void {
           }
         } catch (error) {
           api.logger.warn(`amadeus steam presence tick failed: ${error instanceof Error ? error.message : 'unknown'}`);
+        }
+        try {
+          // The 09:30 (Singapore) play-time message uses only local data, so it does not wait for the Steam key.
+          const daily = await runDailyPlaytime({
+            store, now: Date.now(), send: sendToGroup, log: (message) => api.logger.info(`amadeus ${message}`),
+            nameOf: (personId, fallback) => (personId ? identityDisplayName(config, personId) : undefined) ?? fallback,
+          });
+          if (daily.sent || daily.failed) api.logger.info(`amadeus steam daily playtime sent=${daily.sent} failed=${daily.failed}`);
+        } catch (error) {
+          api.logger.warn(`amadeus steam daily playtime failed: ${error instanceof Error ? error.message : 'unknown'}`);
         }
         if (!stopped) timer = setTimeout(() => { void loop(); }, POLL_INTERVAL_MS);
       };

@@ -2,7 +2,6 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { AchievementCatalog, summariseAchievements } from '../src/steam/achievements.js';
 import { SteamClient, type AchievementState, type PlayerSummary, type Unknown } from '../src/steam/client.js';
-import { buildAnnouncementPrompt } from '../src/steam/compose.js';
 import { PresencePoller, type AnnouncementFacts } from '../src/steam/poller.js';
 import { SteamStore } from '../src/steam/store.js';
 import { steamGetAchievements, type SteamCaller, type SteamToolDependencies } from '../src/steam/tools.js';
@@ -168,9 +167,4 @@ test('several unlocks in one window are merged into one message; stale unlocks a
   old.advance(4 * 60_000);
   await old.poller.tick();
   assert.equal(old.facts.length, 0, 'an unlock from hours ago is not announced');
-});
-
-test('the prompt states the unlock with name, rarity and game', () => {
-  const prompt = buildAnnouncementPrompt({ groupId: 'g', people: [{ name: 'P', kind: 'achievement_unlocked', game: 'G1', achievements: [{ apiName: 'a', name: 'Rare One', globalPercent: 2.5 }] }] });
-  assert.match(prompt, /P，在 G1 里刚解锁了成就 「Rare One」（全球解锁率 2.5%）/u);
 });

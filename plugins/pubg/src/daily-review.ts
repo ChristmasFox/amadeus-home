@@ -59,9 +59,6 @@ export interface DailyStats {
   dataUpdatedAt: string | null;
 }
 
-/** Extra text appended to the review (e.g. Steam play time from another plugin); a failure or nothing to add leaves the review untouched. */
-export type DailyExtraSource = (window: { businessDay: string; startMs: number; endMs: number }) => Promise<string | undefined>;
-
 export type DailyStatsSource = (window: { businessDay: string; startMs: number; endMs: number }) => Promise<DailyStats>;
 
 export interface DailyReviewInput {
@@ -75,7 +72,6 @@ export interface DailyReviewInput {
   businessDayStart?: string;
   shareBaseUrl?: string;
   stats: DailyStatsSource;
-  extra?: DailyExtraSource;
   now: Date;
   log?: (line: string) => void;
 }
@@ -124,7 +120,6 @@ export async function composeDailyReview(input: {
   timezone: string;
   businessDayStart?: string;
   stats: DailyStatsSource;
-  extra?: DailyExtraSource;
   now: Date;
 }): Promise<ComposedDailyReview | null> {
   const window = businessDayWindow(input.businessDay, input.timezone, input.businessDayStart);
@@ -135,18 +130,9 @@ export async function composeDailyReview(input: {
   const facts = await featuresFor(input.store, [...session.matches, ...baseline].map((item) => item.match.matchId));
   const review = buildSessionReview({ session, baseline, team: input.team, facts, playerNames: input.team.playerNames, timezone: input.timezone, now: input.now });
   const stats = await input.stats(window);
-  let extra: string | undefined;
-  try {
-    extra = (await input.extra?.({ businessDay: input.businessDay, startMs: window.startMs, endMs: window.endMs }))?.trim() || undefined;
-  } catch {
-    extra = undefined;
-  }
   return {
     session, review, stats,
-    render: (link) => {
-      const base = renderDailyReview({ review: { ...review, link }, stats: stats.presentation, link, timezone: input.timezone, now: input.now });
-      return extra ? `${base}\n\n${extra}` : base;
-    },
+    render: (link) => renderDailyReview({ review: { ...review, link }, stats: stats.presentation, link, timezone: input.timezone, now: input.now }),
   };
 }
 
@@ -229,7 +215,7 @@ export async function runDailyReview(input: DailyReviewInput): Promise<DailyOutc
   const attempts = record?.status === 'pending_delivery' ? record.attempts : 0;
   let composed: ComposedDailyReview | null;
   try {
-    composed = await composeDailyReview({ store, team, businessDay, timezone, ...(input.businessDayStart ? { businessDayStart: input.businessDayStart } : {}), stats: input.stats, ...(input.extra ? { extra: input.extra } : {}), now });
+    composed = await composeDailyReview({ store, team, businessDay, timezone, ...(input.businessDayStart ? { businessDayStart: input.businessDayStart } : {}), stats: input.stats, now });
   } catch (error) {
     const message = (error instanceof Error ? error.message : String(error)).slice(0, 200);
     const status = attempts + 1 >= DAILY_REVIEW_MAX_ATTEMPTS ? 'blocked' : 'pending_delivery';

@@ -4,6 +4,7 @@ import {
 } from './domain.js';
 import { AchievementCatalog, type AchievementClient } from './achievements.js';
 import { observationFrom, SteamApiError, type PlayerSummary } from './client.js';
+import { MIN_STOP_MINUTES } from './notify.js';
 import type { SteamLink, SteamStore } from './store.js';
 
 export interface AnnouncementPerson {
@@ -15,6 +16,10 @@ export interface AnnouncementPerson {
   game?: string;
   /** For achievement_unlocked. */
   achievements?: UnlockedAchievement[];
+  /** For stopped_playing: how long the session lasted. */
+  durationMinutes?: number;
+  /** For switched_game: the game just left and its length, when long enough to count. */
+  previous?: { gameName?: string; minutes: number };
 }
 
 export interface AnnouncementFacts {
@@ -25,8 +30,8 @@ export interface AnnouncementFacts {
 export interface PollerDependencies {
   store: SteamStore;
   client: { playerSummaries(ids: string[]): Promise<Map<string, PlayerSummary>> } & Partial<AchievementClient>;
-  /** Writes the announcement text from the facts (the Kurisu voice); rejects when no valid text could be made. */
-  compose: (facts: AnnouncementFacts) => Promise<string>;
+  /** Renders the announcement(s) from the facts (a deterministic Amadeus template); one text per message to send. */
+  compose: (facts: AnnouncementFacts) => string | string[] | Promise<string | string[]>;
   send: (groupId: string, text: string, idempotencyKey: string) => Promise<void>;
   now?: () => number;
   policy?: BroadcastPolicy;
@@ -52,7 +57,7 @@ export interface TickReport {
  * never replays history; queued arrivals live in memory only and are dropped by a restart on purpose.
  */
 /** One queue slot per person for presence events (the newest wins); achievements of one game share a slot and are merged. */
-const slotOf = (change: PresenceChange): string => (change.kind === 'achievement_unlocked' ? `${change.steamId}|achievements|${change.gameId ?? ''}` : change.steamId);
+const slotOf = (change: PresenceChange): string => (change.kind === 'achievement_unlocked' ? `${change.steamId}|achievements|${change.gameId ?? ''}` : change.kind === 'stopped_playing' ? `${change.steamId}|stopped|${change.at}` : change.steamId);
 
 /** An unlock older than this when first seen (offline sync, a long gap) is absorbed silently: nothing historic is announced. */
 const FRESH_UNLOCK_MS = 30 * 60_000;
@@ -90,10 +95,20 @@ export class PresencePoller {
         const { next, event } = applyObservation(before, observation, now);
         store.savePresence(steamId, next);
         if (next.state === 'offline') this.dropFromQueues(steamId);
-        if (event) { report.events += 1; this.enqueue(event); }
-        // Achievements are read for the game being played now, and once more right after it ends (unlocks often sync then).
-        store.recordPlay(steamId, next.state === 'in_game' && next.gameId ? { appId: next.gameId, ...(next.gameName ? { name: next.gameName } : {}) } : undefined, now,
+        const { closed } = store.recordPlay(steamId, next.state === 'in_game' && next.gameId ? { appId: next.gameId, ...(next.gameName ? { name: next.gameName } : {}) } : undefined, now,
           { ...(before?.state === 'in_game' && before.gameId === next.gameId ? { startHint: before.since } : {}) });
+        const minutes = closed ? Math.round((closed.endedAt - closed.startedAt) / 60_000) : 0;
+        const counts = closed !== undefined && closed.reason !== 'gap' && minutes >= MIN_STOP_MINUTES;
+        // Leaving one game for another is announced once, as the switch (with the length of the game just left); only a real stop gets its own notice.
+        const enriched = event && event.kind === 'switched_game' && closed && counts
+          ? { ...event, previous: { ...(closed.gameName ? { gameName: closed.gameName } : {}), minutes } }
+          : event;
+        if (enriched) { report.events += 1; this.enqueue(enriched); }
+        if (closed && counts && closed.reason === 'stopped') {
+          report.events += 1;
+          this.enqueue({ steamId, kind: 'stopped_playing', at: now, gameId: closed.appId, ...(closed.gameName ? { gameName: closed.gameName } : {}), durationMinutes: minutes });
+        }
+        // Achievements are read for the game being played now, and once more right after it ends (unlocks often sync then).
         if (next.state === 'in_game' && next.gameId) playing.push({ steamId, appId: next.gameId, ...(next.gameName ? { gameName: next.gameName } : {}) });
         else if (before?.state === 'in_game' && before.gameId) playing.push({ steamId, appId: before.gameId, ...(before.gameName ? { gameName: before.gameName } : {}) });
       }
@@ -207,25 +222,29 @@ export class PresencePoller {
       const multiple = store.accountCount(link) > 1;
       return [{
         name: shown,
-        ...(multiple && shown !== link.personaName ? { steamName: link.personaName } : {}),
+        ...(shown !== link.personaName || multiple ? { steamName: link.personaName } : {}),
         kind: change.kind,
         ...(change.gameName ? { game: change.gameName } : {}),
         ...(change.achievements ? { achievements: change.achievements } : {}),
+        ...(change.durationMinutes !== undefined ? { durationMinutes: change.durationMinutes } : {}),
+        ...(change.previous ? { previous: change.previous } : {}),
       }];
     });
     if (!people.length) return;
-    let text: string;
+    let texts: string[];
     try {
-      text = await this.deps.compose({ groupId, people });
+      const composed = await this.deps.compose({ groupId, people });
+      texts = (Array.isArray(composed) ? composed : [composed]).filter((text) => text.trim());
+      if (!texts.length) throw new Error('empty');
     } catch {
-      // No fixed template: a failed compose is recorded and nothing is sent.
+      // A failed render is recorded and nothing is sent.
       store.recordAnnouncement(key, groupId, now, 'compose_failed');
       report.failed += 1;
       this.log('steam announcement compose failed; not sent');
       return;
     }
     try {
-      await this.deps.send(groupId, text, key);
+      for (const [index, text] of texts.entries()) await this.deps.send(groupId, text, index === 0 ? key : `${key}#${index}`);
     } catch {
       store.recordAnnouncement(key, groupId, now, 'send_failed');
       report.failed += 1;

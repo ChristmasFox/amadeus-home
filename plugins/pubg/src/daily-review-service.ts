@@ -1,7 +1,7 @@
 import type { OpenClawPluginApi } from 'openclaw/plugin-sdk/core';
 import { loadTeamConfig, SqlitePubgRepository } from '@rine-kit/pubg-domain';
 import { loadReviewSubscription, type ReportGateway, type ReportSubscription } from './session-review-delivery.js';
-import { DAILY_REVIEW_RETRY_MS, nextDailyReviewAt, runDailyReview, type DailyExtraSource, type DailyOutcome, type DailyReviewMode, type DailyStatsSource } from './daily-review.js';
+import { DAILY_REVIEW_RETRY_MS, nextDailyReviewAt, runDailyReview, type DailyOutcome, type DailyReviewMode, type DailyStatsSource } from './daily-review.js';
 
 interface DailyReviewConfig {
   databasePath?: string;
@@ -32,24 +32,6 @@ export function nextDailyRunAt(outcome: DailyOutcome | null, now: Date, timezone
  * until the next 09:30. On start it runs once to catch up a day that came due while the gateway was down; the ledger
  * makes that a no-op for a day already handled. stop() clears the timer, so nothing keeps running in the background.
  */
-/** Same global the Amadeus plugin fills (kept as a literal so the plugins stay independent). */
-const DAILY_REVIEW_SECTIONS_GLOBAL = '__amadeusDailyReviewSections20261109';
-const SECTION_TIMEOUT_MS = 8_000;
-
-/** Sections other plugins contribute to the daily review; each is bounded in time and may fail without affecting the review. */
-const sectionsFromOtherPlugins: DailyExtraSource = async (window) => {
-  const providers = (globalThis as Record<string, unknown>)[DAILY_REVIEW_SECTIONS_GLOBAL];
-  if (!(providers instanceof Map)) return undefined;
-  const parts: string[] = [];
-  for (const provider of providers.values() as Iterable<(window: { startMs: number; endMs: number }) => Promise<string | undefined>>) {
-    try {
-      const text = await Promise.race([provider(window), new Promise<undefined>((resolve) => setTimeout(() => resolve(undefined), SECTION_TIMEOUT_MS))]);
-      if (text?.trim()) parts.push(text.trim());
-    } catch { /* a section must never break the review */ }
-  }
-  return parts.length ? parts.join('\n\n') : undefined;
-};
-
 export function registerDailyReviewService(api: OpenClawPluginApi, statsFor: (config: DailyReviewConfig) => DailyStatsSource): void {
   let timer: ReturnType<typeof setTimeout> | undefined;
   let stopped = false;
@@ -76,7 +58,6 @@ export function registerDailyReviewService(api: OpenClawPluginApi, statsFor: (co
         }
       }
       const stats = statsFor(config);
-      const extraSections = sectionsFromOtherPlugins;
       const run = async () => {
         let outcome: DailyOutcome | null = null;
         try {
@@ -91,7 +72,6 @@ export function registerDailyReviewService(api: OpenClawPluginApi, statsFor: (co
             ...(config.businessDayStart ? { businessDayStart: config.businessDayStart } : {}),
             ...(config.reviewPageBaseUrl ? { shareBaseUrl: config.reviewPageBaseUrl } : {}),
             stats,
-            extra: extraSections,
             now: new Date(),
             log: (line) => api.logger.info(line),
           });

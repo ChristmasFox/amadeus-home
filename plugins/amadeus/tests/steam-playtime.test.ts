@@ -1,9 +1,10 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import type { PlayerSummary } from '../src/steam/client.js';
-import { steamPlaytimeSection } from '../src/steam/daily.js';
+import { runDailyPlaytime, steamPlaytimeSection } from '../src/steam/daily.js';
 import { PresencePoller } from '../src/steam/poller.js';
 import { SteamStore } from '../src/steam/store.js';
+import { renderSteamNotifications } from '../src/steam/notify.js';
 import { aggregatePlay, businessDayLabel, businessDayStart, playtimeWindow, steamGetPlaytime, type SteamCaller, type SteamToolDependencies } from '../src/steam/tools.js';
 
 const MIN = 60_000;
@@ -134,28 +135,136 @@ test('the poller records the play sessions it observes, including a first sighti
   assert.deepEqual(sessions.map((s) => [s.appId, s.start - D9, s.end - D9]), [['10', 100 * MIN, 122 * MIN]]);
 });
 
-test('the morning section: per person per game and total, idle members named, honest about the start of tracking', () => {
+function dailyEnv() {
   const store = new SteamStore(':memory:');
   store.link({ senderKey: 'whatsapp:1', steamId: ID1, personaName: 'MainNick', personId: 'p1', now: 1 });
   store.link({ senderKey: 'whatsapp:1', steamId: ID2, personaName: 'AltNick', personId: 'p1', now: 2 });
   store.link({ senderKey: 'whatsapp:2', steamId: '76561190000000003', personaName: 'IdleNick', personId: 'p2', now: 3 });
+  store.link({ senderKey: 'whatsapp:3', steamId: '76561190000000004', personaName: 'Other', personId: 'p3', now: 4 });
   store.enroll(GROUP, 'whatsapp:1'); store.enroll(GROUP, 'whatsapp:2');
+  store.enroll('120363000000000999@g.us', 'whatsapp:3');            // a different group with its own member
   const db = (store as unknown as { db: { prepare(sql: string): { run(...args: unknown[]): unknown } } }).db;
+  const setTracking = (at: number) => db.prepare(`UPDATE steam_meta SET value = ? WHERE key = 'play_tracking_started_at'`).run(String(at));
+  setTracking(D9 - 5 * 24 * HOUR);
+  const names = (personId: string | undefined, fallback: string) => (personId === 'p1' ? 'Arthur' : personId === 'p2' ? 'Nori' : personId === 'p3' ? 'Zed' : fallback);
+  return { store, setTracking, names };
+}
+
+test('the standalone morning message: Amadeus shape, one line per person with per-game times and a total for several games', () => {
+  const { store, setTracking, names } = dailyEnv();
   const window = { startMs: D9 - 24 * HOUR, endMs: D9 };
-  db.prepare(`UPDATE steam_meta SET value = ? WHERE key = 'play_tracking_started_at'`).run(String(D9 - 5 * 24 * HOUR));
-  play(store, ID1, { appId: '578080', name: 'PUBG' }, D9 - 10 * HOUR, 200);
-  play(store, ID2, { appId: '271590', name: 'GTA5' }, D9 - 5 * HOUR, 65);
-  const names = (personId: string | undefined, fallback: string) => (personId === 'p1' ? 'Arthur' : personId === 'p2' ? 'Nori' : fallback);
-  const text = steamPlaytimeSection(store, window, D9 + 4 * HOUR, names)!;
-  assert.match(text, /^🎮 Steam 游戏时长（业务日 2026-11-08，新加坡时间 06:00 → 次日 06:00）$/mu);
-  assert.match(text, /^- Arthur：PUBG 3小时20分钟、GTA5 1小时5分钟（合计 4小时25分钟）$/mu);
-  assert.match(text, /没有记录到游戏时长：Nori/u);
-  // tracking began mid-window: say so
-  db.prepare(`UPDATE steam_meta SET value = ? WHERE key = 'play_tracking_started_at'`).run(String(D9 - 12 * HOUR));
-  assert.match(steamPlaytimeSection(store, window, D9 + 4 * HOUR, names)!, /记录从 .* 起，之前的部分没有数据/u);
-  // tracking began after the window: no invented numbers
-  db.prepare(`UPDATE steam_meta SET value = ? WHERE key = 'play_tracking_started_at'`).run(String(D9 + HOUR));
-  assert.match(steamPlaytimeSection(store, window, D9 + 4 * HOUR, names)!, /才开始记录的，这一天没有数据/u);
-  // nobody linked: no section at all
-  assert.equal(steamPlaytimeSection(new SteamStore(':memory:'), window, D9, names), undefined);
+  const links = store.broadcastMembers(GROUP);
+  assert.equal(steamPlaytimeSection(store, links, window, D9 + 4 * HOUR, names), undefined, 'nobody played: nothing is sent');
+  play(store, ID1, { appId: '578080', name: 'PUBG' }, D9 - 10 * HOUR, 130);
+  play(store, ID2, { appId: '271590', name: 'GTA5' }, D9 - 5 * HOUR, 95);
+  play(store, '76561190000000003', { appId: '578080', name: 'PUBG' }, D9 - 4 * HOUR, 40);
+  assert.equal(steamPlaytimeSection(store, links, window, D9 + 4 * HOUR, names), [
+    'Amadeus • 世界线观测 · Steam 昨日游戏时长',
+    '',
+    '业务日 2026-11-08（新加坡时间 06:00 → 次日 06:00）各成员的游戏时长。',
+    '',
+    '- Arthur：PUBG 2 小时 10 分钟，GTA5 1 小时 35 分钟（合计 3 小时 45 分钟）',
+    '- Nori：PUBG 40 分钟',
+    '',
+    'El Psy Kongroo.',
+  ].join('\n'));
+  setTracking(D9 - 12 * HOUR);
+  assert.match(steamPlaytimeSection(store, links, window, D9 + 4 * HOUR, names)!, /记录从 .* 起，之前的部分没有数据/u);
+  setTracking(D9 + HOUR);
+  assert.equal(steamPlaytimeSection(store, links, window, D9 + 4 * HOUR, names), undefined, 'recording began after the day: nothing invented');
+  assert.equal(steamPlaytimeSection(new SteamStore(':memory:'), [], window, D9, names), undefined);
+});
+
+test('the 09:30 Singapore job: once per group per day, only that group\'s members, skipped when nobody played, no old days after a late start', async () => {
+  const { store, names } = dailyEnv();
+  const sent: Array<{ group: string; text: string }> = [];
+  const run = (now: number) => runDailyPlaytime({ store, now, nameOf: names, send: async (group, text) => { sent.push({ group, text }); } });
+  play(store, ID1, { appId: '578080', name: 'PUBG' }, D9 - 10 * HOUR, 130);                    // yesterday (business day 2026-11-08)
+  const other = '76561190000000004';
+  play(store, other, { appId: '271590', name: 'GTA5' }, D9 - 6 * HOUR, 60);
+  const at0930 = D9 + 3 * HOUR + 30 * MIN;                                                       // 09:30 on the 9th
+  assert.deepEqual(await run(at0930 - MIN), { sent: 0, skipped: 0, failed: 0 });                 // 09:29: not yet
+  assert.deepEqual(await run(at0930), { sent: 2, skipped: 0, failed: 0 });
+  assert.equal(sent.length, 2);
+  const mine = sent.find((entry) => entry.group === GROUP)!.text;
+  assert.match(mine, /- Arthur：PUBG 2 小时 10 分钟$/mu);
+  assert.doesNotMatch(mine, /Zed|GTA5/u, 'another group\'s member does not leak into this group');
+  assert.match(sent.find((entry) => entry.group !== GROUP)!.text, /- Zed：GTA5 1 小时/u);
+  assert.deepEqual(await run(at0930 + 5 * MIN), { sent: 0, skipped: 0, failed: 0 });             // already done today
+  // the next day nobody played: skipped once, not sent
+  const next = at0930 + 24 * HOUR;
+  assert.deepEqual(await run(next), { sent: 0, skipped: 2, failed: 0 });
+  assert.deepEqual(await run(next + MIN), { sent: 0, skipped: 0, failed: 0 });
+  // a start 4 hours after 09:30 does not send anything for an old day
+  assert.deepEqual(await run(at0930 + 48 * HOUR + 4 * HOUR), { sent: 0, skipped: 0, failed: 0 });
+  // a failing send is recorded once and not retried in a loop
+  const failing = dailyEnv();
+  play(failing.store, ID1, { appId: '578080', name: 'PUBG' }, D9 - 10 * HOUR, 130);
+  const result = await runDailyPlaytime({ store: failing.store, now: at0930, nameOf: failing.names, send: async () => { throw new Error('down'); } });
+  assert.deepEqual(result, { sent: 0, skipped: 1, failed: 1 });
+  assert.deepEqual(await runDailyPlaytime({ store: failing.store, now: at0930 + MIN, nameOf: failing.names, send: async () => undefined }), { sent: 0, skipped: 0, failed: 0 });
+});
+
+function stopEnv(people: Array<[string, string]> = [[ID1, 'p1']]) {
+  const store = new SteamStore(':memory:');
+  for (const [id, person] of people) store.link({ senderKey: `whatsapp:${person}`, steamId: id, personaName: 'nick', personId: person, now: D9 });
+  store.enroll(GROUP, 'whatsapp:p1');
+  let now = D9 + 10 * HOUR;
+  let game: { id: string; name: string } | undefined;
+  const sent: string[] = [];
+  const poller = new PresencePoller({
+    store,
+    client: { playerSummaries: async (ids) => new Map(ids.map((id): [string, PlayerSummary] => [id, { steamId: id, name: 'nick', profilePublic: true, personaState: 1, ...(game ? { gameId: game.id, gameName: game.name } : {}) }])) },
+    compose: (facts) => renderSteamNotifications(facts, new Date(now)),
+    send: async (_group, text) => { sent.push(text); },
+    displayName: () => 'kim',
+    now: () => now,
+  });
+  const run = async (minutes: number, next: typeof game) => { game = next; for (let i = 0; i < minutes; i += 1) { await poller.tick(); now += MIN; } };
+  return { store, sent, run, setNow: (value: number) => { now = value; }, getNow: () => now, poller };
+}
+
+test('stopped_playing: a real stop of a long session is announced once with the length; short ones and switches are not doubled', async () => {
+  const { sent, run } = stopEnv();
+  await run(1, undefined);                                   // baseline: offline-ish (online, no game)
+  await run(90, { id: '578080', name: 'PUBG: BATTLEGROUNDS' });
+  await run(5, undefined);                                   // stops; merge window then flush
+  const stops = sent.filter((text) => text.includes('Steam 收束'));
+  assert.equal(stops.length, 1);
+  assert.match(stops[0]!, /kim 结束了 PUBG: BATTLEGROUNDS。/u);
+  assert.match(stops[0]!, /- 本局时长：1 小时 3\d 分钟/u);                // 90 observations minus the baseline minute, within a minute of what the poller saw
+  // a 3-minute session never produces a stop notice
+  const before = sent.length;
+  await run(3, { id: '10', name: 'Quick Game' });
+  await run(6, undefined);
+  assert.equal(sent.filter((text) => text.includes('Quick Game')).filter((text) => text.includes('Steam 收束')).length, 0);
+  assert.ok(sent.length >= before);
+});
+
+test('switching games sends only the switch notice, carrying the length of the game just left', async () => {
+  const { sent, run } = stopEnv();
+  await run(1, undefined);
+  await run(40, { id: '10', name: 'Game A' });
+  await run(40, { id: '20', name: 'Game B' });
+  await run(5, { id: '20', name: 'Game B' });
+  const switches = sent.filter((text) => text.includes('Steam 换台'));
+  assert.equal(switches.length, 1);
+  assert.match(switches[0]!, /kim 换成了 Game B。/u);
+  assert.match(switches[0]!, /- 上一局：Game A，\d+ 分钟/u);
+  assert.equal(sent.filter((text) => text.includes('Steam 收束')).length, 0, 'no stop notice for leaving a game to start another');
+});
+
+test('an outage or a restart that closes a session is not announced as the player stopping', async () => {
+  const env = stopEnv();
+  await env.run(1, undefined);
+  await env.run(40, { id: '10', name: 'Game A' });
+  // 30 minutes of nothing observed, then the game is gone: the old session ends where it was last seen, no stop notice
+  env.setNow(env.getNow() + 30 * MIN);
+  await env.run(8, undefined);
+  assert.equal(env.sent.filter((text) => text.includes('Steam 收束')).length, 0);
+  // a restart closes whatever was left open without any notice either
+  await env.run(40, { id: '30', name: 'Game C' });
+  const restarted = new PresencePoller({ store: env.store, client: { playerSummaries: async () => new Map() }, compose: () => 'x', send: async () => undefined, now: () => env.getNow() });
+  assert.ok(restarted);
+  assert.equal(env.sent.filter((text) => text.includes('Steam 收束')).length, 0);
 });

@@ -21,6 +21,15 @@ export interface SteamLink {
   linkedAt: number;
 }
 
+/** A play session that was just closed by an observation. `gap` (outage / long silence) and restarts are not real stops. */
+export interface ClosedPlay {
+  appId: string;
+  gameName?: string;
+  startedAt: number;
+  endedAt: number;
+  reason: 'stopped' | 'switched' | 'gap';
+}
+
 export interface GroupSettings {
   groupId: string;
   enabled: boolean;
@@ -233,6 +242,11 @@ export class SteamStore {
     return this.db.prepare('SELECT group_id, enabled FROM steam_group_settings WHERE enabled = 1 ORDER BY group_id').all().map((row) => ({ groupId: String(row.group_id), enabled: true }));
   }
 
+  /** Groups with at least one enrolled member whose announcements are on (a group the owner switched off is left out). */
+  activeGroups(): string[] {
+    return this.db.prepare(`SELECT DISTINCT m.group_id FROM steam_group_members m LEFT JOIN steam_group_settings g ON g.group_id = m.group_id WHERE COALESCE(g.enabled, 1) = 1 ORDER BY m.group_id`).all().map((row) => String(row.group_id));
+  }
+
   /** Links announced in a group: enrolled in it and not switched off by their owner. */
   broadcastMembers(groupId: string): SteamLink[] {
     return this.db.prepare(`SELECT l.* FROM steam_links l JOIN steam_group_members m ON m.sender_key = l.sender_key WHERE m.group_id = ? AND l.broadcast = 1 ORDER BY l.linked_at`)
@@ -269,22 +283,31 @@ export class SteamStore {
    * session, a different game or leaving a game closes it. A long gap with no observation (outage, restart) closes the
    * session at the last time it was actually seen, never later.
    */
-  recordPlay(steamId: string, game: { appId: string; name?: string } | undefined, now: number, options: { startHint?: number; gapMs?: number } = {}): void {
+  recordPlay(steamId: string, game: { appId: string; name?: string } | undefined, now: number, options: { startHint?: number; gapMs?: number } = {}): { closed?: ClosedPlay } {
     const gapMs = options.gapMs ?? 5 * 60_000;
-    const open = this.db.prepare('SELECT id, app_id, last_seen FROM steam_play_sessions WHERE steam_id = ? AND ended_at IS NULL ORDER BY id DESC LIMIT 1').get(steamId);
+    const open = this.db.prepare('SELECT id, app_id, game_name, started_at, last_seen FROM steam_play_sessions WHERE steam_id = ? AND ended_at IS NULL ORDER BY id DESC LIMIT 1').get(steamId);
+    let closed: ClosedPlay | undefined;
     if (open) {
       const stale = now - Number(open.last_seen) > gapMs;
       if (!stale && game && String(open.app_id) === game.appId) {
         this.db.prepare('UPDATE steam_play_sessions SET last_seen = ?, game_name = COALESCE(?, game_name) WHERE id = ?').run(now, game.name ?? null, open.id);
-        return;
+        return {};
       }
-      this.db.prepare('UPDATE steam_play_sessions SET ended_at = ? WHERE id = ?').run(stale ? Number(open.last_seen) : now, open.id);
+      const endedAt = stale ? Number(open.last_seen) : now;
+      this.db.prepare('UPDATE steam_play_sessions SET ended_at = ? WHERE id = ?').run(endedAt, open.id);
+      closed = {
+        appId: String(open.app_id), ...(typeof open.game_name === 'string' ? { gameName: open.game_name } : {}),
+        startedAt: Number(open.started_at), endedAt,
+        // Only a session that ended in what we saw is a real stop; an outage or restart is not.
+        reason: stale ? 'gap' : game ? 'switched' : 'stopped',
+      };
     }
-    if (!game) return;
+    if (!game) return closed ? { closed } : {};
     // The hint (when the poller last saw this play begin) only backdates a first-ever sighting, never across a recorded gap.
     const covered = options.startHint !== undefined && Number(this.db.prepare('SELECT COUNT(*) AS n FROM steam_play_sessions WHERE steam_id = ? AND last_seen >= ?').get(steamId, options.startHint)?.n ?? 0) > 0;
     const started = options.startHint !== undefined && !covered && options.startHint <= now && now - options.startHint < 24 * 3_600_000 ? options.startHint : now;
     this.db.prepare('INSERT INTO steam_play_sessions (steam_id, app_id, game_name, started_at, ended_at, last_seen) VALUES (?, ?, ?, ?, NULL, ?)').run(steamId, game.appId, game.name ?? null, started, now);
+    return closed ? { closed } : {};
   }
 
   /** At service start: sessions left open by the previous run end at the last moment they were seen. */
@@ -326,7 +349,7 @@ export class SteamStore {
     return this.db.prepare('SELECT 1 AS x FROM steam_announcements WHERE idempotency_key = ?').get(key) !== undefined;
   }
 
-  recordAnnouncement(key: string, groupId: string, now: number, outcome: 'sent' | 'compose_failed' | 'send_failed'): void {
+  recordAnnouncement(key: string, groupId: string, now: number, outcome: 'sent' | 'compose_failed' | 'send_failed' | 'skipped'): void {
     this.db.prepare('INSERT OR REPLACE INTO steam_announcements (idempotency_key, group_id, sent_at, outcome) VALUES (?, ?, ?, ?)').run(key, groupId, now, outcome);
   }
 }
