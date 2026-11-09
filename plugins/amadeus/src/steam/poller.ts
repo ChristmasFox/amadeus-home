@@ -1,3 +1,4 @@
+import { gameLabel } from './game-aliases.js';
 import {
   announcementKey, applyObservation, DEFAULT_POLICY, planBroadcast,
   type BroadcastPolicy, type Candidate, type EventKind, type PresenceChange, type StoredPresence, type UnlockedAchievement,
@@ -102,8 +103,9 @@ export class PresencePoller {
         // Leaving one game for another is announced once, as the switch (with the length of the game just left); only a real stop gets its own notice.
         // The switch always says which game was left; the length is added only when that session was long enough to count.
         const leftName = (closed?.gameName ?? before?.gameName) || undefined;
+        const leftId = (closed?.appId ?? before?.gameId) || undefined;
         const enriched = event && event.kind === 'switched_game' && (leftName || (closed && counts))
-          ? { ...event, previous: { ...(leftName ? { gameName: leftName } : {}), ...(closed && counts ? { minutes } : {}) } }
+          ? { ...event, previous: { ...(leftId ? { gameId: leftId } : {}), ...(leftName ? { gameName: leftName } : {}), ...(closed && counts ? { minutes } : {}) } }
           : event;
         if (enriched) { report.events += 1; this.enqueue(enriched); }
         if (closed && counts && closed.reason === 'stopped') {
@@ -231,10 +233,10 @@ export class PresencePoller {
         name: shown,
         ...(shown !== link.personaName || multiple ? { steamName: link.personaName } : {}),
         kind: change.kind,
-        ...(change.gameName ? { game: change.gameName } : {}),
+        ...(change.gameName ? { game: gameLabel(change.gameId, change.gameName)! } : {}),
         ...(change.achievements ? { achievements: change.achievements } : {}),
         ...(change.durationMinutes !== undefined ? { durationMinutes: change.durationMinutes } : {}),
-        ...(change.previous ? { previous: change.previous } : {}),
+        ...(change.previous ? { previous: { ...change.previous, ...(change.previous.gameName ? { gameName: gameLabel(change.previous.gameId, change.previous.gameName)! } : {}) } } : {}),
       }];
     });
     if (!people.length) return;

@@ -75,3 +75,22 @@ test('a switch after the arrival was announced is a 世界线变动 naming both 
   assert.match(sent[1]!, /Amadeus • 世界线观测 · 世界线变动\n\nkim 从 Game A 切换到 Game B。/u);
   assert.match(sent[1]!, /El Psy Kongroo\.$/u);
 });
+
+test('games with a community alias are shown as name（alias） in every notice; others are left exactly as Steam names them', async () => {
+  const { gameLabel } = await import('../src/steam/game-aliases.js');
+  assert.equal(gameLabel('578080', 'PUBG: BATTLEGROUNDS'), 'PUBG: BATTLEGROUNDS（吃鸡）');
+  assert.equal(gameLabel('271590', 'Grand Theft Auto V'), 'Grand Theft Auto V（GTA5）');
+  assert.equal(gameLabel('730', 'Counter-Strike 2'), 'Counter-Strike 2（CS2）');
+  assert.equal(gameLabel('999999', 'Some Game'), 'Some Game');
+  assert.equal(gameLabel(undefined, 'Some Game'), 'Some Game');
+  assert.equal(gameLabel('578080', '绝地求生 吃鸡'), '绝地求生 吃鸡', 'no doubled alias');
+  assert.equal(gameLabel('578080', undefined), undefined);
+  const { sent, run } = env();
+  await run(1, { state: 0 });
+  await run(5, { state: 1, game: { id: '578080', name: 'PUBG: BATTLEGROUNDS' } });
+  await run(1, { state: 1, game: { id: '271590', name: 'Grand Theft Auto V' } });
+  await run(5, { state: 1, game: { id: '271590', name: 'Grand Theft Auto V' } });
+  assert.match(sent[0]!, /kim 上线了，正在玩 PUBG: BATTLEGROUNDS（吃鸡）。/u);
+  assert.match(sent[0]!, /- 游戏：PUBG: BATTLEGROUNDS（吃鸡）/u);
+  assert.match(sent[1]!, /kim 从 PUBG: BATTLEGROUNDS（吃鸡） 切换到 Grand Theft Auto V（GTA5）。/u);
+});
