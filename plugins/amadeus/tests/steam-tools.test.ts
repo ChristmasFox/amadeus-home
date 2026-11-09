@@ -3,7 +3,7 @@ import test from 'node:test';
 import { SteamApiError, type PlayerSummary } from '../src/steam/client.js';
 import { SteamStore } from '../src/steam/store.js';
 import {
-  steamGetPlaytime, steamGetProfile, steamGetRecentGames, steamGroupSettings, steamLinkAccount, steamSetBroadcast, steamUnlink,
+  FRIENDS_CACHE_MS, steamFriendsStatus, steamGetPlaytime, steamGetProfile, steamGetRecentGames, steamGroupSettings, steamLinkAccount, steamSetBroadcast, steamUnlink,
   type SteamCaller, type SteamToolDependencies,
 } from '../src/steam/tools.js';
 
@@ -23,6 +23,7 @@ function setup(options: { key?: boolean; privateGames?: boolean } = {}) {
       resolveVanity: async (vanity) => (vanity === 'known_name' ? ID : undefined),
       playerSummaries: async (ids) => new Map(ids.map((id): [string, PlayerSummary] => [id, summary(id)])),
       ownedGames: async () => options.privateGames ? { known: false, reason: 'profile_private' } : { known: true, value: [{ appId: 1, name: 'Placeholder One', totalMinutes: 600 }, { appId: 2, name: 'Placeholder Two', totalMinutes: 60, recentMinutes: 30 }] },
+      friendList: async () => ({ known: true, value: [] }),
       recentGames: async () => options.privateGames ? { known: false, reason: 'profile_private' } : { known: true, value: [{ appId: 2, name: 'Placeholder Two', totalMinutes: 60, recentMinutes: 30 }] },
     },
   };
@@ -122,4 +123,66 @@ test('group announcements: owner only, in a group only', () => {
   assert.equal((steamGroupSettings(deps, caller({ isOwner: true }), { enabled: true }) as { announcementsEnabled: boolean }).announcementsEnabled, true);
   assert.equal((steamGroupSettings(deps, caller(), {}) as { announcementsEnabled: boolean }).announcementsEnabled, true);
   assert.deepEqual(steamGroupSettings(deps, caller({ isOwner: true, groupId: undefined as never }), { enabled: true }), { status: 'refused', reason: 'only_available_in_a_group' });
+});
+
+function friendsSetup(friends: PlayerSummary[] | 'private', calls = { list: 0, summaries: 0 }) {
+  const env = setup();
+  env.store.link({ senderKey: ME, steamId: ID, personaName: 'Owner', now: 1 });
+  const client = env.deps.client as unknown as Record<string, unknown>;
+  client.friendList = async () => { calls.list += 1; return friends === 'private' ? { known: false, reason: 'profile_private' } : { known: true, value: friends.map((friend) => friend.steamId) }; };
+  client.playerSummaries = async (ids: string[]) => { calls.summaries += 1; return new Map((friends === 'private' ? [] : friends).filter((friend) => ids.includes(friend.steamId)).map((friend) => [friend.steamId, friend])); };
+  return { ...env, calls, ownerDm: () => env.caller({ isOwner: true, groupId: undefined as never }) };
+}
+
+const friend = (n: number, extra: Partial<PlayerSummary> = {}): PlayerSummary => summary(`7656119000000010${n}`, { name: `Friend${n}`, ...extra });
+
+test('friends status: the owner in a direct chat sees who is playing; filters, name search and ordering work', async () => {
+  const { deps, ownerDm } = friendsSetup([
+    friend(1, { gameId: '10', gameName: 'Placeholder One' }),
+    friend(2, { personaState: 1 }),
+    friend(3, { personaState: 0, lastLogoff: Date.parse('2026-11-01T00:00:00Z') }),
+    friend(4, { personaState: 0, profilePublic: false }),
+  ]);
+  const playing = await steamFriendsStatus(deps, ownerDm(), {}) as { friends: Array<{ name: string; game: string | null; state: string }>; hiddenOrOfflineUnknown: number };
+  assert.deepEqual(playing.friends, [{ name: 'Friend1', state: 'in_game', game: 'Placeholder One' }]);
+  assert.equal(playing.hiddenOrOfflineUnknown, 1);
+  const online = await steamFriendsStatus(deps, ownerDm(), { filter: 'online' }) as { friends: Array<{ name: string }> };
+  assert.deepEqual(online.friends.map((entry) => entry.name), ['Friend1', 'Friend2']);
+  const all = await steamFriendsStatus(deps, ownerDm(), { filter: 'all' }) as { friends: Array<{ name: string; lastSeenAt?: string }> };
+  assert.deepEqual(all.friends.map((entry) => entry.name), ['Friend1', 'Friend2', 'Friend3']); // the hidden profile is never listed as offline
+  assert.equal(all.friends[2]!.lastSeenAt, '2026-11-01T00:00:00.000Z');
+  const named = await steamFriendsStatus(deps, ownerDm(), { name: 'friend1', filter: 'all' }) as { friends: Array<{ name: string }> };
+  assert.deepEqual(named.friends.map((entry) => entry.name), ['Friend1']);
+});
+
+test('friends status is refused for non-owners, in groups and without a trusted sender; nothing is exposed', async () => {
+  const { deps, caller } = friendsSetup([friend(1, { gameId: '10', gameName: 'Placeholder One' })]);
+  for (const refused of [caller({ isOwner: true }), caller({ isOwner: false, groupId: undefined as never }), { isOwner: true, mentions: [] }] as SteamCaller[]) {
+    assert.deepEqual(await steamFriendsStatus(deps, refused, {}), { status: 'refused', reason: 'owner_direct_chat_only' });
+  }
+  const env = setup();
+  assert.deepEqual(await steamFriendsStatus(env.deps, env.caller({ isOwner: true, groupId: undefined as never }), {}), { status: 'not_linked', reason: 'link_your_own_steam_account_first' });
+});
+
+test('a private friend list is unknown, and a missing key is reported', async () => {
+  const { deps, ownerDm } = friendsSetup('private');
+  assert.deepEqual(await steamFriendsStatus(deps, ownerDm(), {}), { status: 'ok', friends: { known: false, reason: 'profile_private' } });
+  const noKey = friendsSetup([]);
+  (noKey.deps.client as unknown as { hasKey: () => Promise<boolean> }).hasKey = async () => false;
+  assert.deepEqual(await steamFriendsStatus(noKey.deps, noKey.ownerDm(), {}), { status: 'unavailable', reason: 'steam_api_key_missing' });
+});
+
+test('friend data is cached briefly, refetched after it expires, and never stored or announced', async () => {
+  let t = 1_000_000;
+  const calls = { list: 0, summaries: 0 };
+  const { store, deps, ownerDm } = friendsSetup([friend(1, { gameId: '10', gameName: 'Placeholder One' })], calls);
+  deps.now = () => t;
+  await steamFriendsStatus(deps, ownerDm(), {});
+  await steamFriendsStatus(deps, ownerDm(), { filter: 'all' });
+  assert.equal(calls.list, 1);
+  t += FRIENDS_CACHE_MS + 1;
+  await steamFriendsStatus(deps, ownerDm(), {});
+  assert.equal(calls.list, 2);
+  assert.deepEqual(store.watchedSteamIds(), []);
+  assert.equal(store.linkBySteamId('76561190000000101'), undefined);
 });

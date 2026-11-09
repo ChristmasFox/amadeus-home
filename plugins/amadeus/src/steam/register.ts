@@ -10,7 +10,7 @@ import { pollIntervalMs } from './domain.js';
 import { PresencePoller } from './poller.js';
 import { SteamStore } from './store.js';
 import {
-  steamGetPlaytime, steamGetProfile, steamGetRecentGames, steamGroupSettings, steamLinkAccount, steamSetBroadcast, steamUnlink,
+  steamFriendsStatus, steamGetPlaytime, steamGetProfile, steamGetRecentGames, steamGroupSettings, steamLinkAccount, steamSetBroadcast, steamUnlink,
   type Person, type SteamCaller, type SteamToolDependencies,
 } from './tools.js';
 
@@ -29,6 +29,11 @@ const BroadcastParameters = Type.Object({ enabled: Type.Boolean({ description: '
 const EmptyParameters = Type.Object({}, { additionalProperties: false });
 const ProfileParameters = Type.Object({ person: PersonParameters }, { additionalProperties: false });
 const PlaytimeParameters = Type.Object({ person: PersonParameters, game: Type.Optional(Type.String({ minLength: 1, maxLength: 128, description: '只看某个游戏时填游戏名（部分匹配）。' })) }, { additionalProperties: false });
+const FriendsParameters = Type.Object({
+  filter: Type.Optional(Type.Union([Type.Literal('playing'), Type.Literal('online'), Type.Literal('all')], { description: 'playing=正在玩游戏（默认）；online=在线（含玩游戏）；all=全部能看到状态的好友。' })),
+  name: Type.Optional(Type.String({ minLength: 1, maxLength: 64, description: '只看昵称包含这段文字的好友，用来回答“XX 在干嘛”。' })),
+  limit: Type.Optional(Type.Integer({ minimum: 1, maximum: 100 })),
+}, { additionalProperties: false });
 const GroupParameters = Type.Object({ enabled: Type.Optional(Type.Boolean({ description: '只有 owner 能设置：true=本群开启 Steam 上线播报，false=关闭。不填则只查看当前状态。' })) }, { additionalProperties: false });
 
 const runtimes = new Map<string, { store: SteamStore; client: SteamClient }>();
@@ -87,6 +92,8 @@ export function registerSteamTools(api: OpenClawPluginApi): void {
     });
   registerTool(api, 'steam_get_recent_games', '查某个已绑定 Steam 的人近两周玩过的游戏及时长。不公开时返回 known:false。', ProfileParameters,
     async (params, context) => steamGetRecentGames(deps(), caller(context), { person: person(params as { person: unknown }) }));
+  registerTool(api, 'steam_friends_status', 'Arthur 本人在私聊里问他自己的 Steam 好友现在谁在玩什么、某个好友在干嘛时调用（需要他已绑定自己的 Steam）。好友列表不公开时返回 known:false。只在 owner 私聊可用，群里不可用，也不要在群里透露任何好友信息。', FriendsParameters,
+    async (params, context) => steamFriendsStatus(deps(), caller(context), params as Static<typeof FriendsParameters>));
   registerTool(api, 'steam_group_settings', '查看或（仅 owner）开启/关闭当前群的 Steam 上线播报。', GroupParameters,
     async (params, context) => steamGroupSettings(deps(), caller(context), params as Static<typeof GroupParameters>));
 }

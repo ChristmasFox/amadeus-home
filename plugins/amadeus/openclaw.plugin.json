@@ -113,6 +113,7 @@
       "steam_get_profile",
       "steam_get_playtime",
       "steam_get_recent_games",
+      "steam_friends_status",
       "steam_group_settings"
     ],
     "services": ["amadeus-owner-notification-worker", "amadeus-steam-presence"]
