@@ -3,7 +3,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import patch
 
-from scripts.openclaw_telemetry_mount import ARCHIVE_TARGET, ARCHIVE_VOLUME, ensure_archive_env, ensure_archive_mount, install
+from scripts.openclaw_telemetry_mount import ARCHIVE_TARGET, ARCHIVE_VOLUME, ensure_archive_env, ensure_archive_mount, ensure_env_proxy, install
 
 
 COMPOSE = """services:
@@ -22,6 +22,17 @@ COMPOSE = """services:
 
 
 class OpenClawTelemetryMountTests(unittest.TestCase):
+    def test_node_env_proxy_is_added_once_to_openclaw_only(self):
+        with_proxy = COMPOSE.replace("    environment:\n", "    environment:\n      HTTPS_PROXY: http://proxy.invalid:7897\n      NO_PROXY: 9router\n")
+        updated = ensure_env_proxy(with_proxy)
+        self.assertEqual(updated.count('NODE_USE_ENV_PROXY: "1"'), 1)
+        self.assertIn('      HTTPS_PROXY: http://proxy.invalid:7897\n      NODE_USE_ENV_PROXY: "1"\n', updated)
+        self.assertIn("  9router:\n    image: local/9router:unchanged\n    volumes:", updated)
+        self.assertEqual(ensure_env_proxy(updated), updated)
+        # without an HTTPS_PROXY line it goes to the top of the environment block
+        self.assertIn('    environment:\n      NODE_USE_ENV_PROXY: "1"\n      PUBG_DATABASE_PATH', ensure_env_proxy(COMPOSE))
+
+
     def test_installs_archive_mount_only_for_openclaw_and_is_idempotent(self):
         updated = ensure_archive_mount(COMPOSE, "local/openclaw:git-abc123")
         self.assertIn("image: local/openclaw:git-abc123", updated)

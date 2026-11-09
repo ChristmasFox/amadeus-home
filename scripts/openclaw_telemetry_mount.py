@@ -89,6 +89,31 @@ def ensure_archive_mount(compose: str, image: str) -> str:
     return "".join(lines)
 
 
+PROXY_KEY = "NODE_USE_ENV_PROXY"
+PROXY_LINE = '      NODE_USE_ENV_PROXY: "1"'
+
+
+def ensure_env_proxy(compose: str) -> str:
+    """Make Node's fetch honour HTTP(S)_PROXY in the openclaw service (web_fetch/web_search need it to reach blocked sites).
+
+    The service's NO_PROXY list keeps 9router, searxng and the other local services direct. Idempotent.
+    """
+    newline = "\r\n" if "\r\n" in compose else "\n"
+    lines = compose.splitlines(keepends=True)
+    start, end = _service_bounds(lines)
+    if any(re.match(rf"^\s+{PROXY_KEY}\s*:", lines[index]) for index in range(start + 1, end)):
+        return compose
+    anchors = [index for index in range(start + 1, end) if re.match(r"^\s+HTTPS_PROXY\s*:", lines[index])]
+    if len(anchors) > 1:
+        raise ValueError("openclaw_compose_proxy_anchor_ambiguous")
+    if not anchors:
+        anchors = [index for index in range(start + 1, end) if re.match(r"^    environment:\s*(?:#.*)?$", lines[index].rstrip("\r\n"))]
+    if len(anchors) != 1:
+        return compose  # no environment block to extend: leave the file as it is
+    lines.insert(anchors[0] + 1, PROXY_LINE + newline)
+    return "".join(lines)
+
+
 def ensure_archive_env(env_text: str, archive_dir: str) -> str:
     path = Path(archive_dir)
     if not path.is_absolute() or "\n" in archive_dir or "\r" in archive_dir:
@@ -136,7 +161,7 @@ def install(compose_path: Path, env_path: Path, image: str, archive_dir: str) ->
             raise ValueError("openclaw_runtime_config_path_invalid")
     compose_text = compose_path.read_text(encoding="utf-8")
     env_text = env_path.read_text(encoding="utf-8") if env_path.exists() else ""
-    updated_compose = ensure_archive_mount(compose_text, image)
+    updated_compose = ensure_env_proxy(ensure_archive_mount(compose_text, image))
     updated_env = ensure_archive_env(env_text, archive_dir)
 
     archive_path.mkdir(parents=True, exist_ok=True, mode=0o700)
