@@ -22,6 +22,7 @@ services:
       PUBG_TELEMETRY_ARCHIVE_DIR: /var/lib/amadeus/pubg-telemetry-archive
       PUBG_TEAM_CONFIG_FILE: /run/secrets/pubg_team.json
       PUBG_API_KEY_FILE: /run/secrets/pubg_api_key
+      STEAM_API_KEY_FILE: /run/secrets/steam_web_api_key
       IDENTITY_DATABASE_PATH: /data/identity.sqlite
       IDENTITY_PRESETS_FILE: /data/identity-presets.json
       OWNER_NOTIFICATION_OUTBOX_DIR: /var/lib/openclaw/notifications
@@ -50,6 +51,7 @@ services:
       - ${OPENCLAW_LONGBRIDGE_SDK_HOME_HOST_DIR:-/DATA/AppData/openclaw/data/longbridge-sdk-home}/.longbridge:/home/node/.longbridge
       - ${OPENCLAW_TEAM_CONFIG_HOST_FILE:-/DATA/AppData/openclaw/secrets/pubg-team.json}:/run/secrets/pubg_team.json:ro
       - ${PUBG_API_KEY_HOST_FILE:-/DATA/AppData/openclaw/secrets/pubg-api-key}:/run/secrets/pubg_api_key:ro
+      - ${STEAM_API_KEY_HOST_FILE:-/DATA/AppData/openclaw/secrets/steam-web-api-key}:/run/secrets/steam_web_api_key:ro
       - ${OPENCLAW_TELEGRAM_TOKEN_HOST_FILE:-/DATA/AppData/openclaw/secrets/telegram-bot-token}:/run/secrets/telegram_bot_token:ro
       - ${OPENCLAW_OWNER_TARGET_HOST_FILE:-/DATA/AppData/openclaw/secrets/owner-whatsapp-target}:/run/secrets/owner_whatsapp_target:ro
       - ${OPENCLAW_MAC_SSH_KEY_HOST_FILE:-/DATA/AppData/openclaw/secrets/mac-ssh-key}:/run/secrets/mac_ssh_key:ro
