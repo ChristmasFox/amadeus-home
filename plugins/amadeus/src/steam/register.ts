@@ -2,7 +2,7 @@ import { Type, type Static } from 'typebox';
 import type { OpenClawPluginApi, OpenClawPluginToolContext } from 'openclaw/plugin-sdk/core';
 import { configFor, type AmadeusConfig } from '../config.js';
 import { groupIdFromSessionKey } from '../group-roster.js';
-import { identityContextFromOpenClaw, identityMirrorExternalAccount, identityPersonIdForAlias, identityPersonIdForSender } from '../identity.js';
+import { identityContextFromOpenClaw, identityMirrorExternalAccount, identityPersonIdForAlias, identityPersonIdForSender, identityWhatsAppGroupPeople } from '../identity.js';
 import { registerTool } from '../shared/register-tool.js';
 import { SteamClient } from './client.js';
 import { nineRouterComposer } from './compose.js';
@@ -115,6 +115,7 @@ export function registerSteamPresenceService(api: OpenClawPluginApi): void {
         store,
         client,
         compose: nineRouterComposer(api.config),
+        groupPeople: () => identityWhatsAppGroupPeople(config),
         send: async (groupId, message, idempotencyKey) => {
           await (api.runtime.gateway as unknown as { request(method: string, params: Record<string, unknown>, options?: Record<string, unknown>): Promise<unknown> })
             .request('send', { channel: 'whatsapp', to: groupId, accountId: config.steamWhatsappAccountId, message, idempotencyKey }, { timeoutMs: 20_000 });

@@ -386,3 +386,21 @@ export function identityPersonIdForSender(config: AmadeusConfig, reference: { ty
     return undefined;
   }
 }
+
+/** WhatsApp groups and the people seen in them (a reviewed group alias or an inbound identity tied to that group). */
+export function identityWhatsAppGroupPeople(config: AmadeusConfig): Array<{ groupId: string; personIds: string[] }> {
+  const { db } = identityStore(config);
+  const groups = new Map<string, Set<string>>();
+  const add = (rows: Array<Record<string, unknown>>): void => {
+    for (const row of rows) {
+      const groupId = String(row.group_id ?? '');
+      if (!/@g\.us$/u.test(groupId)) continue;
+      const people = groups.get(groupId) ?? new Set<string>();
+      people.add(String(row.person_id));
+      groups.set(groupId, people);
+    }
+  };
+  add(db.prepare(`SELECT conversation_id AS group_id, person_id FROM channel_identities WHERE channel = 'whatsapp' AND conversation_id LIKE '%@g.us'`).all() as Array<Record<string, unknown>>);
+  add(db.prepare(`SELECT scope_id AS group_id, person_id FROM addressing WHERE scope = 'group'`).all() as Array<Record<string, unknown>>);
+  return [...groups].map(([groupId, people]) => ({ groupId, personIds: [...people] }));
+}

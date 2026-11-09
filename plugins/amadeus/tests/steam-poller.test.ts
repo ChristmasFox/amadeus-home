@@ -16,7 +16,7 @@ function setup(options: { people?: typeof A[]; compose?: (facts: AnnouncementFac
     store.link({ senderKey: person.sender, steamId: person.steam, personaName: person.name, now: DAY });
     store.enroll(GROUP, person.sender);
   }
-  if (options.enabled !== false) store.setGroup(GROUP, true);
+  if (options.enabled === false) store.setGroup(GROUP, false);
   const states = new Map<string, { personaState: number; gameId?: string; gameName?: string }>();
   const sent: Array<{ groupId: string; text: string; key: string }> = [];
   let now = DAY;
@@ -158,4 +158,27 @@ test('a person who left the group (membership check fails) is not announced', as
   env.states.set(A.steam, { personaState: 1 });
   for (let i = 0; i < 8; i += 1) { t += 60_000; await poller.tick(); }
   assert.equal(env.sent.length, 0);
+});
+
+test('default-on group: linked people seen in the group are enrolled on their own, opt-outs stay out, friendship is irrelevant', async () => {
+  const store = new SteamStore(':memory:');
+  store.link({ senderKey: 'whatsapp:1', steamId: A.steam, personaName: 'Alpha', personId: 'pa', now: DAY });
+  store.link({ senderKey: 'whatsapp:2', steamId: B.steam, personaName: 'Bravo', personId: 'pb', now: DAY });
+  store.setBroadcast('whatsapp:2', false);
+  assert.equal(store.groupEnabled(GROUP), true);
+  assert.deepEqual(store.watchedSteamIds(), []);
+  const poller = new PresencePoller({
+    store,
+    client: { playerSummaries: async (ids) => new Map(ids.map((id): [string, PlayerSummary] => [id, { steamId: id, name: id, profilePublic: true, personaState: 1 }])) },
+    compose: async () => 'x',
+    send: async () => undefined,
+    now: () => DAY,
+    groupPeople: () => [{ groupId: GROUP, personIds: ['pa', 'pb', 'nobody'] }],
+  });
+  const report = await poller.tick();
+  assert.equal(report.watched, 1);
+  assert.deepEqual(store.watchedSteamIds(), [A.steam]);
+  assert.deepEqual(store.broadcastMembers(GROUP).map((link) => link.senderKey), ['whatsapp:1']);
+  store.setGroup(GROUP, false);
+  assert.deepEqual(store.watchedSteamIds(), []);
 });

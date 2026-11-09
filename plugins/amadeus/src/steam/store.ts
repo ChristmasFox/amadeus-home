@@ -133,7 +133,23 @@ export class SteamStore {
   }
 
   groupEnabled(groupId: string): boolean {
-    return this.db.prepare('SELECT enabled FROM steam_group_settings WHERE group_id = ?').get(groupId)?.enabled === 1;
+    // No row means the default: announcements are on until the owner switches the group off.
+    return this.db.prepare('SELECT enabled FROM steam_group_settings WHERE group_id = ?').get(groupId)?.enabled !== 0;
+  }
+
+  /**
+   * Enrols every linked person of `personIds` in the group, except those who switched their own announcements off.
+   * Returns how many were newly added.
+   */
+  enrollPeople(groupId: string, personIds: string[]): number {
+    let added = 0;
+    for (const personId of new Set(personIds)) {
+      const row = this.db.prepare('SELECT sender_key FROM steam_links WHERE person_id = ? AND broadcast = 1').get(personId);
+      if (!row) continue;
+      const changed = this.db.prepare('INSERT OR IGNORE INTO steam_group_members (group_id, sender_key) VALUES (?, ?)').run(groupId, String(row.sender_key)) as { changes?: number };
+      added += changed.changes ?? 0;
+    }
+    return added;
   }
 
   enabledGroups(): GroupSettings[] {
@@ -153,7 +169,7 @@ export class SteamStore {
   /** Every SteamID that some enabled group may announce: what the poller needs to watch. */
   watchedSteamIds(): string[] {
     return this.db.prepare(`SELECT DISTINCT l.steam_id FROM steam_links l JOIN steam_group_members m ON m.sender_key = l.sender_key
-      JOIN steam_group_settings g ON g.group_id = m.group_id AND g.enabled = 1 WHERE l.broadcast = 1`).all().map((row) => String(row.steam_id));
+      LEFT JOIN steam_group_settings g ON g.group_id = m.group_id WHERE l.broadcast = 1 AND COALESCE(g.enabled, 1) = 1`).all().map((row) => String(row.steam_id));
   }
 
   presence(steamId: string): StoredPresence | undefined {

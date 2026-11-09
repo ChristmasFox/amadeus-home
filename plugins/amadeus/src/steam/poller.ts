@@ -25,6 +25,8 @@ export interface PollerDependencies {
   policy?: BroadcastPolicy;
   /** Optional membership check before sending; a false answer (or a failure) skips that person. */
   isMember?: (groupId: string, senderKey: string) => Promise<boolean>;
+  /** Known members per group (from the identity store); linked people among them are enrolled before each poll. */
+  groupPeople?: () => Array<{ groupId: string; personIds: string[] }>;
   log?: (message: string) => void;
 }
 
@@ -55,6 +57,7 @@ export class PresencePoller {
   async tick(): Promise<TickReport> {
     const { store } = this.deps;
     const report: TickReport = { watched: 0, events: 0, sent: 0, skipped: 0, failed: 0 };
+    this.reconcile();
     const ids = store.watchedSteamIds();
     report.watched = ids.length;
     if (ids.length) {
@@ -72,6 +75,20 @@ export class PresencePoller {
     }
     await this.flush(report);
     return report;
+  }
+
+  /** Linked people who belong to an announcing group join its list on their own; someone who opted out stays out. */
+  private reconcile(): void {
+    if (!this.deps.groupPeople) return;
+    try {
+      for (const { groupId, personIds } of this.deps.groupPeople()) {
+        if (!this.deps.store.groupEnabled(groupId)) continue;
+        const added = this.deps.store.enrollPeople(groupId, personIds);
+        if (added) this.log(`steam enrolled ${added} linked member(s) into a group`);
+      }
+    } catch (error) {
+      this.log(`steam member reconcile failed: ${error instanceof Error ? error.message : 'unknown'}`);
+    }
   }
 
   private dropFromQueues(steamId: string): void {

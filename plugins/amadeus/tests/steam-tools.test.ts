@@ -119,9 +119,10 @@ test('a hidden profile never reports a state; offline is not guessed', async () 
 test('group announcements: owner only, in a group only', () => {
   const { store, deps, caller } = setup();
   assert.deepEqual(steamGroupSettings(deps, caller(), { enabled: true }), { status: 'refused', reason: 'owner_only' });
-  assert.equal(store.groupEnabled(GROUP), false);
+  assert.equal(store.groupEnabled(GROUP), true, 'a group announces by default');
+  assert.equal((steamGroupSettings(deps, caller({ isOwner: true }), { enabled: false }) as { announcementsEnabled: boolean }).announcementsEnabled, false);
+  assert.equal((steamGroupSettings(deps, caller(), {}) as { announcementsEnabled: boolean }).announcementsEnabled, false);
   assert.equal((steamGroupSettings(deps, caller({ isOwner: true }), { enabled: true }) as { announcementsEnabled: boolean }).announcementsEnabled, true);
-  assert.equal((steamGroupSettings(deps, caller(), {}) as { announcementsEnabled: boolean }).announcementsEnabled, true);
   assert.deepEqual(steamGroupSettings(deps, caller({ isOwner: true, groupId: undefined as never }), { enabled: true }), { status: 'refused', reason: 'only_available_in_a_group' });
 });
 
