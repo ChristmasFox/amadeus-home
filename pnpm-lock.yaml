@@ -147,8 +147,8 @@ importers:
         specifier: 0.1.5
         version: 0.1.5
       '@rine-kit/pubg-reply':
-        specifier: 0.1.5
-        version: 0.1.5
+        specifier: 0.2.0
+        version: 0.2.0
       '@types/node':
         specifier: 22.18.6
         version: 22.18.6
@@ -183,8 +183,8 @@ importers:
         specifier: 0.1.5
         version: 0.1.5
       '@rine-kit/pubg-reply':
-        specifier: 0.1.5
-        version: 0.1.5
+        specifier: 0.2.0
+        version: 0.2.0
       '@types/node':
         specifier: 22.18.6
         version: 22.18.6
@@ -1118,14 +1118,20 @@ packages:
   '@rine-kit/presentation@0.1.5':
     resolution: {integrity: sha512-i9oZ6YGWaTt97c0HvKQkMhkXaZ51mutbGsZITsnfJpyPKpLMFs+Cjl9cWfzhGJ35YqEe0VW0jbbWIN4ISTQ7HQ==}
 
+  '@rine-kit/presentation@0.2.0':
+    resolution: {integrity: sha512-9He8Bm/Xa/9hvqxt+R0dPGizQ2TwMLWhMvGsUtpf3Tp4QMCZHlrHBfssdJeWIpbIY/oI136rwzZrTTTQX0cLcw==}
+
   '@rine-kit/pubg-domain@0.1.5':
     resolution: {integrity: sha512-KRezbcqOFAcQTsDlj7NcNjyz3NaIV5aJ0tKhHWS3tVQlhADd7J9/2QMITxA7hxZFsTiAXDVO8ORs3IDsLdLxuw==}
+
+  '@rine-kit/pubg-domain@0.2.0':
+    resolution: {integrity: sha512-f/lZWL204nNnm9e0g/BzooQisk5UkdwcDFxbAEH+lcnHpBGt9u3jJGIPAGnL+g1I3tApsSg+UdfoLr29DIZNXA==}
 
   '@rine-kit/pubg-intelligence@0.1.5':
     resolution: {integrity: sha512-0TRI/GTc+DxKAuANFjFnV/ZIgDY/LmGlbGvK12JA7b6hXQ7FfkLRR5chikCzvR7IG0otLcnyBnkuUcdomiiwvA==}
 
-  '@rine-kit/pubg-reply@0.1.5':
-    resolution: {integrity: sha512-7yx5eXjWI2VDs5BySkZnymUzLwYFKVAhXtVH5oeks33kqdBTmjrtAif6KIMWOn3jF51z9KXM4qTs02iQ0qHylg==}
+  '@rine-kit/pubg-reply@0.2.0':
+    resolution: {integrity: sha512-+PSEZ6L+CMA8WYIGTgTl0whzfV0wcIUp3PmCTGKSNsi3vj3Sn2gwTmjIL9C6LoYDTyxrD12ywqLYispSVzQndA==}
 
   '@rolldown/pluginutils@1.0.0-rc.3':
     resolution: {integrity: sha512-eybk3TjzzzV97Dlj5c+XrBFW57eTNhzod66y9HrBlzJ6NsCrWCp/2kaPS3K9wJmurBC0Tdw4yPjXKZqlznim3Q==}
@@ -3561,9 +3567,16 @@ snapshots:
 
   '@rine-kit/presentation@0.1.5': {}
 
+  '@rine-kit/presentation@0.2.0': {}
+
   '@rine-kit/pubg-domain@0.1.5':
     dependencies:
       '@rine-kit/presentation': 0.1.5
+      zod: 4.6.7
+
+  '@rine-kit/pubg-domain@0.2.0':
+    dependencies:
+      '@rine-kit/presentation': 0.2.0
       zod: 4.6.7
 
   '@rine-kit/pubg-intelligence@0.1.5':
@@ -3572,10 +3585,10 @@ snapshots:
       ai: 7.0.137(zod@4.6.7)
       zod: 4.6.7
 
-  '@rine-kit/pubg-reply@0.1.5':
+  '@rine-kit/pubg-reply@0.2.0':
     dependencies:
-      '@rine-kit/presentation': 0.1.5
-      '@rine-kit/pubg-domain': 0.1.5
+      '@rine-kit/presentation': 0.2.0
+      '@rine-kit/pubg-domain': 0.2.0
 
   '@rolldown/pluginutils@1.0.0-rc.3': {}
 
