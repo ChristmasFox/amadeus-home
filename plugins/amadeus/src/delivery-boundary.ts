@@ -362,7 +362,9 @@ export function registerDeliveryBoundary(api: OpenClawPluginApi, options: Delive
             deliveryRuns.start({ runId, sessionKey: port.sessionKey, channel: 'whatsapp', origin: port.inboundVoice ? 'inbound_voice' : 'external_user' });
           },
         },
-        finalize: (result: { observedReplyDelivery?: boolean }) => visible || result.observedReplyDelivery === true,
+        // A deliberate silent reply from the model (it judged the group chatter not addressed to her) is a finished turn,
+        // not a missing reply: the host must not answer it with its canned "didn't catch that" fallback.
+        finalize: (result: { observedReplyDelivery?: boolean }) => visible || result.observedReplyDelivery === true || deliveryRuns.explicitSilenceFor(deliveryRuns.runIdFor(port.sessionKey) ?? runId),
       };
     },
   };

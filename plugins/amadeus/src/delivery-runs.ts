@@ -99,6 +99,11 @@ export class DeliveryRuns {
   runIdFor(sessionKey: string): string | undefined { return this.sessions.get(sessionKey); }
   channelFor(runId: string): string | undefined { return this.runs.get(runId)?.context.channel; }
   originFor(runId: string): DeliveryContext['origin'] | undefined { return this.runs.get(runId)?.context.origin; }
+  /** True when the model itself decoded to a deliberate silent reply on an ordinary user turn (not an empty or failed run). */
+  explicitSilenceFor(runId: string): boolean {
+    const run = this.runs.get(runId);
+    return run?.decodeStatus === 'silent' && run.context.origin === 'external_user';
+  }
   captionSourceFor(runId: string): 'native_completion' | 'none' | undefined { return this.runs.get(runId)?.preparedCaptionSource; }
   owns(envelope: DeliveryEnvelope): boolean { return this.runs.get(envelope.runId)?.prepared === envelope; }
   addAssets(runId: string, job: Promise<readonly AttachmentPart[]>): void {
