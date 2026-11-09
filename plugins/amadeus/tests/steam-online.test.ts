@@ -30,21 +30,22 @@ function env() {
   return { sent, run };
 }
 
-const titles = (sent: string[]) => sent.map((text) => /· (\S+ ?\S*)\n/u.exec(text)?.[1]);
+/** The kind of each notice, by the emoji that ends its title. */
+const titles = (sent: string[]) => sent.map((text) => text.split('\n')[0]!.split(' ').at(-1));
 
 test('offline -> online announces the arrival', async () => {
   const { sent, run } = env();
   await run(1, { state: 0 });
   await run(5, { state: 1 });
-  assert.deepEqual(titles(sent), ['Steam 上线']);
+  assert.deepEqual(titles(sent), ['🟢']);
 });
 
 test('offline -> straight into a game announces the arrival with the game', async () => {
   const { sent, run } = env();
   await run(1, { state: 0 });
   await run(5, { state: 1, game: { id: '10', name: 'Game A' } });
-  assert.deepEqual(titles(sent), ['Steam 上线']);
-  assert.match(sent[0]!, /kim 上线了，正在玩 Game A。/u);
+  assert.deepEqual(titles(sent), ['🟢']);
+  assert.match(sent[0]!, /^Amadeus · kim 上线 · 正在玩 Game A 🟢\n/u);
 });
 
 test('coming online and then starting a game inside the merge window still announces the arrival, with the game', async () => {
@@ -52,8 +53,8 @@ test('coming online and then starting a game inside the merge window still annou
   await run(1, { state: 0 });
   await run(1, { state: 1 });
   await run(5, { state: 1, game: { id: '10', name: 'Game A' } });
-  assert.deepEqual(titles(sent), ['Steam 上线']);
-  assert.match(sent[0]!, /kim 上线了，正在玩 Game A。/u);
+  assert.deepEqual(titles(sent), ['🟢']);
+  assert.match(sent[0]!, /^Amadeus · kim 上线 · 正在玩 Game A 🟢\n/u);
 });
 
 test('coming online into a launcher and then switching to the real game inside the window is one arrival, not a switch', async () => {
@@ -61,8 +62,8 @@ test('coming online into a launcher and then switching to the real game inside t
   await run(1, { state: 0 });
   await run(1, { state: 1, game: { id: '1', name: 'Launcher' } });
   await run(5, { state: 1, game: { id: '2', name: 'Game B' } });
-  assert.deepEqual(titles(sent), ['Steam 上线']);
-  assert.match(sent[0]!, /kim 上线了，正在玩 Game B。/u);
+  assert.deepEqual(titles(sent), ['🟢']);
+  assert.match(sent[0]!, /^Amadeus · kim 上线 · 正在玩 Game B 🟢\n/u);
 });
 
 test('a switch after the arrival was announced is a 世界线变动 naming both games, even for a short session', async () => {
@@ -71,8 +72,8 @@ test('a switch after the arrival was announced is a 世界线变动 naming both 
   await run(5, { state: 1, game: { id: '10', name: 'Game A' } });
   await run(1, { state: 1, game: { id: '20', name: 'Game B' } });
   await run(5, { state: 1, game: { id: '20', name: 'Game B' } });
-  assert.deepEqual(titles(sent), ['Steam 上线', '世界线变动']);
-  assert.match(sent[1]!, /Amadeus • 世界线观测 · 世界线变动\n\nkim 从 Game A 切换到 Game B。/u);
+  assert.deepEqual(titles(sent), ['🟢', '🔀']);
+  assert.match(sent[1]!, /^Amadeus · kim 世界线变动 · Game A → Game B 🔀\n/u);
   assert.match(sent[1]!, /El Psy Kongroo\.$/u);
 });
 
@@ -90,9 +91,9 @@ test('games with a community alias are shown as name（alias） in every notice;
   await run(5, { state: 1, game: { id: '578080', name: 'PUBG: BATTLEGROUNDS' } });
   await run(1, { state: 1, game: { id: '271590', name: 'Grand Theft Auto V' } });
   await run(5, { state: 1, game: { id: '271590', name: 'Grand Theft Auto V' } });
-  assert.match(sent[0]!, /kim 上线了，正在玩 PUBG: BATTLEGROUNDS（吃鸡）。/u);
+  assert.match(sent[0]!, /^Amadeus · kim 上线 · 正在玩 PUBG: BATTLEGROUNDS（吃鸡） 🟢\n/u);
   assert.match(sent[0]!, /- 游戏：PUBG: BATTLEGROUNDS（吃鸡）/u);
-  assert.match(sent[1]!, /kim 从 PUBG: BATTLEGROUNDS（吃鸡） 切换到 Grand Theft Auto V（GTA5）。/u);
+  assert.match(sent[1]!, /^Amadeus · kim 世界线变动 · PUBG: BATTLEGROUNDS（吃鸡） → Grand Theft Auto V（GTA5） 🔀\n/u);
 });
 
 test('guidance: a plain 玩了多久 is today; lifetime only when asked (stated in the tool description and the SKILL, not in code)', async () => {
@@ -107,10 +108,10 @@ test('who is playing and play time come back as finished Amadeus cards with the 
   const { renderPlaytimeCard, renderPlayingCard, CARD_REPLY_GUIDE } = await import('../src/steam/cards.js');
   const at = new Date('2026-11-09T12:00:00Z');
   const play = renderPlaytimeCard({ name: '猴', label: '今天（2026-11-09 06:00 → 次日 06:00）', games: [{ appId: '578080', name: 'PUBG: BATTLEGROUNDS', text: '2小时5分钟' }, { appId: '9', name: 'Other', text: '30分钟' }], totalText: '2小时35分钟' }, at);
-  assert.equal(play, 'Amadeus • 世界线观测 · Steam 游戏时长\n\n猴 今天玩了 2小时35分钟。\n\n- 成员：猴\n- 时段：今天（2026-11-09 06:00 → 次日 06:00）\n- 游戏：PUBG: BATTLEGROUNDS（吃鸡），2小时5分钟\n- 游戏：Other，30分钟\n- 合计：2小时35分钟\n\nEl Psy Kongroo.');
-  assert.match(renderPlaytimeCard({ name: '猴', label: '昨天（x）', games: [], totalText: '0分钟' }, at), /猴 昨天没有记录到游戏时长。/u);
+  assert.equal(play, 'Amadeus · 猴 今日游戏时长 ⏱️\n\n- 时段：今天（2026-11-09 06:00 → 次日 06:00）\n- 游戏：PUBG: BATTLEGROUNDS（吃鸡），2小时5分钟\n- 游戏：Other，30分钟\n- 合计：2小时35分钟\n\nEl Psy Kongroo.');
+  assert.match(renderPlaytimeCard({ name: '猴', label: '昨天（x）', games: [], totalText: '0分钟' }, at), /^Amadeus · 猴 昨日游戏时长 ⏱️\n[\s\S]*- 结果：没有记录到游戏时长/u);
   const who = renderPlayingCard({ friends: [{ name: 'A', steamId: '1', state: 'in_game', game: 'Phantom Blade Zero', appId: '4115450' }, { name: 'B', steamId: '2', state: 'online', game: null }] }, at);
-  assert.equal(who, 'Amadeus • 世界线观测 · Steam 在线情况\n\n当前观测到 2 位。\n\n- A：Phantom Blade Zero（游戏中）\n- B：在线\n\nEl Psy Kongroo.');
+  assert.equal(who, 'Amadeus · Steam 在线情况 · 2 位 👥\n\n- A：Phantom Blade Zero（游戏中）\n- B：在线\n\nEl Psy Kongroo.');
   assert.match(CARD_REPLY_GUIDE, /原样/u);
 });
 
@@ -125,7 +126,7 @@ test('several people asked at once: one merged card with each person\'s games an
       { name: '胶', known: true, games: [], totalText: '0分钟' },
     ],
   }, at);
-  assert.equal(card, 'Amadeus • 世界线观测 · Steam 游戏时长\n\n猴、kim、胶 今天的游戏时长。\n\n- 时段：今天（2026-11-09 06:00 → 次日 06:00）\n- 猴 · Phantom Blade Zero：2小时19分钟\n- 猴 · PUBG: BATTLEGROUNDS（吃鸡）：3分钟\n- 猴 · 合计：2小时22分钟\n- kim · PUBG: BATTLEGROUNDS（吃鸡）：5分钟\n- kim · 合计：5分钟\n- 胶：没有记录到游戏时长\n\nEl Psy Kongroo.');
+  assert.equal(card, 'Amadeus · 猴、kim、胶 今日游戏时长 ⏱️\n\n- 时段：今天（2026-11-09 06:00 → 次日 06:00）\n- 猴 · Phantom Blade Zero：2小时19分钟\n- 猴 · PUBG: BATTLEGROUNDS（吃鸡）：3分钟\n- 猴 · 合计：2小时22分钟\n- kim · PUBG: BATTLEGROUNDS（吃鸡）：5分钟\n- kim · 合计：5分钟\n- 胶：没有记录到游戏时长\n\nEl Psy Kongroo.');
   assert.equal((card.match(/El Psy Kongroo/gu) ?? []).length, 1, 'one card, one sign-off');
 });
 
@@ -155,5 +156,5 @@ test('steam_get_playtime with people returns one card for everybody; several peo
   const refused = await steamGetPlaytime(deps, caller, { people: [{ reference: 'mention', mentionIndex: 0 }, { reference: 'mention', mentionIndex: 1 }] }) as { status: string };
   assert.equal(refused.status, 'invalid_request');
   const single = await steamGetPlaytime(deps, caller, { person: { reference: 'mention', mentionIndex: 0 }, period: 'today' }) as { displayText: string };
-  assert.match(single.displayText, /猴 今天玩了/u);
+  assert.match(single.displayText, /^Amadeus · 猴 今日游戏时长 ⏱️/u);
 });

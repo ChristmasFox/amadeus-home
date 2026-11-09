@@ -55,7 +55,7 @@ test('trusted image-generation completion owns caption presentation while unrela
 });
 
 test('a deterministic Steam card travels as typed envelope and as its own plain text, so a native sender that ignores channelData still delivers it',async()=>{
- const card='Amadeus • 世界线观测 · Steam 游戏时长\n\n猴 今天玩了 1小时1分钟。\n\n- 成员：猴\n- 游戏：Phantom Blade Zero，1小时1分钟\n\nEl Psy Kongroo. [react:👍]';
+ const card='Amadeus · 猴 今日游戏时长 ⏱️\n\n- 游戏：Phantom Blade Zero，1小时1分钟\n\nEl Psy Kongroo. [react:👍]';
  const cardWire=JSON.stringify({version:2,silent:false,parts:[{kind:'text',text:card}]});
  const hooks=setup();hooks.get('before_prompt_build')?.({}, {runId:'card-r',sessionKey:'card-s',channel:'whatsapp'});
  hooks.get('before_agent_finalize')?.({runId:'card-r',lastAssistantMessage:cardWire},{});

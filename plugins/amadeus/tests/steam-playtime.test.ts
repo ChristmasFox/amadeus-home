@@ -194,17 +194,16 @@ test('the standalone morning message: Amadeus shape, one line per person with pe
   play(store, ID2, { appId: '271590', name: 'GTA5' }, D9 - 5 * HOUR, 95);
   play(store, '76561190000000003', { appId: '578080', name: 'PUBG' }, D9 - 4 * HOUR, 40);
   assert.equal(steamPlaytimeSection(CAL, store, links, window, D9 + 4 * HOUR, names), [
-    'Amadeus • 世界线观测 · Steam 昨日游戏时长',
+    'Amadeus · 昨日游戏时长汇总 📊',
     '',
-    '业务日 2026-11-08（Asia/Shanghai 06:00 → 次日 06:00）各成员的游戏时长。',
-    '',
+    '- 时段：业务日 2026-11-08（Asia/Shanghai 06:00 → 次日 06:00）',
     '- Arthur：PUBG 2 小时 10 分钟，GTA5 1 小时 35 分钟（合计 3 小时 45 分钟）',
     '- Nori：PUBG 40 分钟',
     '',
     'El Psy Kongroo.',
   ].join('\n'));
   setTracking(D9 - 12 * HOUR);
-  assert.match(steamPlaytimeSection(CAL, store, links, window, D9 + 4 * HOUR, names)!, /记录从 .* 起，之前的部分没有数据/u);
+  assert.match(steamPlaytimeSection(CAL, store, links, window, D9 + 4 * HOUR, names)!, /- 记录起点：.*，之前的部分没有数据/u);
   setTracking(D9 + HOUR);
   assert.equal(steamPlaytimeSection(CAL, store, links, window, D9 + 4 * HOUR, names), undefined, 'recording began after the day: nothing invented');
   assert.equal(steamPlaytimeSection(CAL, new SteamStore(':memory:'), [], window, D9, names), undefined);
@@ -264,15 +263,15 @@ test('stopped_playing: a real stop of a long session is announced once with the 
   await run(1, undefined);                                   // baseline: offline-ish (online, no game)
   await run(90, { id: '578080', name: 'PUBG: BATTLEGROUNDS' });
   await run(5, undefined);                                   // stops; merge window then flush
-  const stops = sent.filter((text) => text.includes('Steam 收束'));
+  const stops = sent.filter((text) => text.includes('🏁'));
   assert.equal(stops.length, 1);
-  assert.match(stops[0]!, /kim 结束了 PUBG: BATTLEGROUNDS（吃鸡）。/u);
+  assert.match(stops[0]!, /^Amadeus · kim 收束 · PUBG: BATTLEGROUNDS（吃鸡） 1小时3\d分 🏁\n/u);
   assert.match(stops[0]!, /- 本局时长：1 小时 3\d 分钟/u);                // 90 observations minus the baseline minute, within a minute of what the poller saw
   // a 3-minute session never produces a stop notice
   const before = sent.length;
   await run(3, { id: '10', name: 'Quick Game' });
   await run(6, undefined);
-  assert.equal(sent.filter((text) => text.includes('Quick Game')).filter((text) => text.includes('Steam 收束')).length, 0);
+  assert.equal(sent.filter((text) => text.includes('Quick Game')).filter((text) => text.includes('🏁')).length, 0);
   assert.ok(sent.length >= before);
 });
 
@@ -284,9 +283,9 @@ test('switching games sends only the switch notice, carrying the length of the g
   await run(5, { id: '20', name: 'Game B' });
   const switches = sent.filter((text) => text.includes('世界线变动'));
   assert.equal(switches.length, 1);
-  assert.match(switches[0]!, /kim 从 Game A 切换到 Game B。/u);
+  assert.match(switches[0]!, /^Amadeus · kim 世界线变动 · Game A → Game B 🔀\n/u);
   assert.match(switches[0]!, /- 上一局：Game A，\d+ 分钟/u);
-  assert.equal(sent.filter((text) => text.includes('Steam 收束')).length, 0, 'no stop notice for leaving a game to start another');
+  assert.equal(sent.filter((text) => text.includes('🏁')).length, 0, 'no stop notice for leaving a game to start another');
 });
 
 test('an outage or a restart that closes a session is not announced as the player stopping', async () => {
@@ -296,10 +295,10 @@ test('an outage or a restart that closes a session is not announced as the playe
   // 30 minutes of nothing observed, then the game is gone: the old session ends where it was last seen, no stop notice
   env.setNow(env.getNow() + 30 * MIN);
   await env.run(8, undefined);
-  assert.equal(env.sent.filter((text) => text.includes('Steam 收束')).length, 0);
+  assert.equal(env.sent.filter((text) => text.includes('🏁')).length, 0);
   // a restart closes whatever was left open without any notice either
   await env.run(40, { id: '30', name: 'Game C' });
   const restarted = new PresencePoller({ store: env.store, client: { playerSummaries: async () => new Map() }, compose: () => 'x', send: async () => undefined, now: () => env.getNow() });
   assert.ok(restarted);
-  assert.equal(env.sent.filter((text) => text.includes('Steam 收束')).length, 0);
+  assert.equal(env.sent.filter((text) => text.includes('🏁')).length, 0);
 });

@@ -1,5 +1,5 @@
-import { adaptWorldlineNotification, renderOwnerNotification, type PresentationFact } from '@rine-kit/presentation';
 import type { BusinessCalendar } from './business-day.js';
+import { renderLayout, type CardFact } from './layout.js';
 import { minutesText } from './notify.js';
 import type { SteamLink, SteamStore } from './store.js';
 import { aggregatePlay } from './tools.js';
@@ -24,31 +24,18 @@ export function steamPlaytimeSection(calendar: BusinessCalendar, store: SteamSto
     entry.ids.push(link.steamId);
     people.set(key, entry);
   }
-  const facts: PresentationFact[] = [];
+  const facts: CardFact[] = [];
   for (const { name, ids } of people.values()) {
     const { games, totalMinutes } = aggregatePlay(calendar, store.playSessions(ids, window.startMs, window.endMs, now), window.startMs, window.endMs);
     if (!totalMinutes) continue;
     const perGame = games.map((game) => `${game.name} ${minutesText(game.minutes)}`).join('，');
-    facts.push({ label: name, value: games.length > 1 ? `${perGame}（合计 ${minutesText(totalMinutes)}）` : perGame, evidenceRefs: [] });
+    facts.push({ label: name, value: games.length > 1 ? `${perGame}（合计 ${minutesText(totalMinutes)}）` : perGame });
   }
   if (!facts.length) return undefined;
   const partial = window.startMs < trackingSince;
-  const occurredAt = new Date(now).toISOString();
-  const notification = adaptWorldlineNotification({
-    type: 'worldline_notification_intent',
-    eventType: 'steam.daily_playtime',
-    kind: 'steam_activity',
-    severity: 'info',
-    significance: 'minor',
-    eventKey: `steam:daily-playtime:${calendar.label(window.startMs)}:${links[0]?.steamId ?? ''}`,
-    source: 'steam',
-    headline: 'Steam 昨日游戏时长',
-    summary: `业务日 ${calendar.label(window.startMs)}（${calendar.timezone} ${calendar.start} → 次日 ${calendar.start}）各成员的游戏时长。${partial ? `\n记录从 ${calendar.format(trackingSince)} 起，之前的部分没有数据。` : ''}`,
-    facts,
-    occurredAt,
-    worldLineClosing: true,
-  });
-  return renderOwnerNotification(notification, { now: occurredAt });
+  const header: CardFact[] = [{ label: '时段', value: `业务日 ${calendar.label(window.startMs)}（${calendar.timezone} ${calendar.start} → 次日 ${calendar.start}）` }];
+  const tail: CardFact[] = partial ? [{ label: '记录起点', value: `${calendar.format(trackingSince)}，之前的部分没有数据` }] : [];
+  return renderLayout('📊', '昨日游戏时长汇总', [...header, ...facts, ...tail]);
 }
 
 export interface DailyPlaytimeDependencies {

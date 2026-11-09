@@ -1,5 +1,5 @@
-import { adaptWorldlineNotification, renderOwnerNotification, type PresentationFact } from '@rine-kit/presentation';
 import type { EventKind } from './domain.js';
+import { namesForTitle, renderLayout, titleDuration, type CardFact } from './layout.js';
 import type { AnnouncementFacts, AnnouncementPerson } from './poller.js';
 
 /**
@@ -10,14 +10,6 @@ import type { AnnouncementFacts, AnnouncementPerson } from './poller.js';
  */
 export const MIN_STOP_MINUTES = 5;
 
-const TITLES: Record<EventKind, string> = {
-  came_online: 'Steam 上线',
-  back_from_away: 'Steam 回归信号',
-  started_playing: 'Steam 开局',
-  switched_game: '世界线变动',
-  achievement_unlocked: 'Steam 成就',
-  stopped_playing: 'Steam 收束',
-};
 const ORDER: EventKind[] = ['came_online', 'back_from_away', 'started_playing', 'switched_game', 'achievement_unlocked', 'stopped_playing'];
 
 export const minutesText = (minutes: number): string => {
@@ -27,32 +19,41 @@ export const minutesText = (minutes: number): string => {
   return rest ? `${hours} 小时 ${rest} 分钟` : `${hours} 小时`;
 };
 
-const fact = (label: string, value: string): PresentationFact => ({ label, value, evidenceRefs: [] });
+const fact = (label: string, value: string): CardFact => ({ label, value });
 const quoted = (person: AnnouncementPerson): string => (person.achievements ?? []).map((item) => `「${item.name}」`).join('、');
 
-function sentence(person: AnnouncementPerson, detailed: boolean): string {
+const EMOJI: Record<EventKind, string> = { came_online: '🟢', back_from_away: '🔄', started_playing: '🎮', switched_game: '🔀', achievement_unlocked: '🏆', stopped_playing: '🏁' };
+
+/** Headline of a lone event: who + what, with the key object when it is short. */
+function singleHeadline(person: AnnouncementPerson): string {
   const { name, game } = person;
-  switch (person.kind) {
-    case 'came_online': return game ? `${name} 上线了，正在玩 ${game}。` : `${name} 上线了。`;
-    case 'back_from_away': return game ? `${name} 离开了一阵后又上线了，正在玩 ${game}。` : `${name} 离开了一阵后又上线了。`;
-    case 'started_playing': return game ? `${name} 开始玩 ${game}。` : `${name} 开始玩游戏了。`;
-    case 'switched_game': return person.previous?.gameName && game ? `${name} 从 ${person.previous.gameName} 切换到 ${game}。` : game ? `${name} 切换到了 ${game}。` : `${name} 换了个游戏。`;
-    case 'achievement_unlocked': {
-      const count = person.achievements?.length ?? 0;
-      const where = game ? `在 ${game} 里` : '';
-      const what = count > 1 ? `${count} 个成就` : '成就';
-      return `${name} ${where}解锁了${what}${detailed && count ? `：${quoted(person)}` : ''}。`;
-    }
-    case 'stopped_playing': {
-      const base = game ? `${name} 结束了 ${game}` : `${name} 结束了游戏`;
-      return `${base}${detailed && person.durationMinutes !== undefined ? `（本局 ${minutesText(person.durationMinutes)}）` : ''}。`;
-    }
+    switch (person.kind) {
+    case 'came_online': return `${name} 上线${game ? ` · 正在玩 ${game}` : ''}`;
+    case 'back_from_away': return `${name} 回来了${game ? ` · 正在玩 ${game}` : ''}`;
+    case 'started_playing': return `${name} ${game ? `开始玩 ${game}` : '开始玩游戏'}`;
+    case 'switched_game': return `${name} 世界线变动${game ? ` · ${person.previous?.gameName ? `${person.previous.gameName} → ${game}` : `→ ${game}`}` : ''}`;
+    case 'achievement_unlocked': return `${name} 解锁成就${game ? ` · ${game}` : ''}`;
+    case 'stopped_playing': return `${name} 收束${game ? ` · ${game}` : ''}${person.durationMinutes !== undefined ? ` ${titleDuration(person.durationMinutes)}` : ''}`;
   }
 }
 
-function singleFacts(person: AnnouncementPerson): PresentationFact[] {
-  const facts: PresentationFact[] = [fact('成员', person.name)];
-  if (person.steamName) facts.push(fact('Steam', person.steamName));
+const MULTI_ACTION: Record<EventKind, string> = { came_online: '上线', back_from_away: '回来了', started_playing: '开局', switched_game: '世界线变动', achievement_unlocked: '解锁成就', stopped_playing: '收束' };
+
+/** One row per person when several share a message. */
+function personRow(person: AnnouncementPerson): CardFact {
+  const { game } = person;
+  switch (person.kind) {
+    case 'came_online': return fact(person.name, game ? `正在玩 ${game}` : '在线');
+    case 'back_from_away': return fact(person.name, game ? `正在玩 ${game}` : '在线');
+    case 'started_playing': return fact(person.name, game ?? '开始玩游戏');
+    case 'switched_game': return fact(person.name, game ? (person.previous?.gameName ? `${person.previous.gameName} → ${game}` : `→ ${game}`) : '换了个游戏');
+    case 'achievement_unlocked': return fact(person.name, `${game ? `${game} · ` : ''}${person.achievements?.length ? quoted(person) : '成就'}`);
+    case 'stopped_playing': return fact(person.name, `${game ?? '游戏'}${person.durationMinutes !== undefined ? `，本局 ${minutesText(person.durationMinutes)}` : ''}`);
+  }
+}
+
+function singleFacts(person: AnnouncementPerson): CardFact[] {
+  const facts: CardFact[] = person.steamName ? [fact('Steam', person.steamName)] : [];
   const game = person.game ? [fact('游戏', person.game)] : [];
   switch (person.kind) {
     case 'came_online': return [...facts, ...game, fact('状态', person.game ? '游戏中' : '在线')];
@@ -69,29 +70,14 @@ function singleFacts(person: AnnouncementPerson): PresentationFact[] {
   }
 }
 
-/** One message per kind present in the batch; a lone event gets the full fact list, several share one message. */
-export function renderSteamNotifications(facts: AnnouncementFacts, now: Date = new Date()): string[] {
+/** One message per kind present in the batch; a lone event gets the full fact list, several share one message with a row each. */
+export function renderSteamNotifications(facts: AnnouncementFacts, _now: Date = new Date()): string[] {
   const messages: string[] = [];
-  const occurredAt = now.toISOString();
   for (const kind of ORDER) {
     const people = facts.people.filter((person) => person.kind === kind);
     if (!people.length) continue;
-    const single = people.length === 1;
-    const notification = adaptWorldlineNotification({
-      type: 'worldline_notification_intent',
-      eventType: `steam.${kind}`,
-      kind: 'steam_activity',
-      severity: 'info',
-      significance: 'minor',
-      eventKey: `steam:${facts.groupId}:${kind}:${occurredAt}`,
-      source: 'steam',
-      headline: TITLES[kind],
-      summary: people.map((person) => sentence(person, !single)).join('\n'),
-      facts: single ? singleFacts(people[0]!) : [fact('成员', people.map((person) => person.name).join('、'))],
-      occurredAt,
-      worldLineClosing: true,
-    });
-    messages.push(renderOwnerNotification(notification, { now: occurredAt }));
+    if (people.length === 1) { messages.push(renderLayout(EMOJI[kind], singleHeadline(people[0]!), singleFacts(people[0]!))); continue; }
+    messages.push(renderLayout(EMOJI[kind], `${namesForTitle(people.map((person) => person.name))} ${MULTI_ACTION[kind]}`, people.map(personRow)));
   }
   return messages;
 }
