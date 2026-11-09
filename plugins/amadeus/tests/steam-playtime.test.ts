@@ -266,7 +266,7 @@ test('stopped_playing: a real stop of a long session is announced once with the 
   await run(5, undefined);                                   // stops; merge window then flush
   const stops = sent.filter((text) => text.includes('Steam 收束'));
   assert.equal(stops.length, 1);
-  assert.match(stops[0]!, /kim 结束了 PUBG: BATTLEGROUNDS。/u);
+  assert.match(stops[0]!, /kim 结束了 PUBG: BATTLEGROUNDS（吃鸡）。/u);
   assert.match(stops[0]!, /- 本局时长：1 小时 3\d 分钟/u);                // 90 observations minus the baseline minute, within a minute of what the poller saw
   // a 3-minute session never produces a stop notice
   const before = sent.length;
