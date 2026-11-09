@@ -17,6 +17,7 @@ import { registerIdentityLifecycle, registerOwnerNotificationWorker } from './sh
 import { registerRealtimeFacts } from './realtime-facts.js';
 import { registerRemember } from './remember.js';
 import { registerDmDigest } from './dm-digest.js';
+import { registerTruncatedOutputGuard } from './truncated-output.js';
 import { registerSteamPresenceService, registerSteamTools } from './steam/register.js';
 import { registerMemoryOwnerOnly } from './memory-owner-only.js';
 import { registerOwnerDmPreferences } from './owner-dm-preferences.js';
@@ -35,6 +36,7 @@ const entry = definePluginEntry({
     registerOwnerNotificationWorker(api, config);
     registerRealtimeFacts(api);
     registerRemember(api);
+    registerTruncatedOutputGuard(api);
     registerDmDigest(api);
     registerOwnerDmPreferences(api);
     registerMemoryOwnerOnly(api);

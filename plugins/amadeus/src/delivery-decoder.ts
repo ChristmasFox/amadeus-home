@@ -124,6 +124,14 @@ function recoverablePlainText(context: DeliveryContext, raw: string): AgentReply
   }
 }
 
+/** The bounded failure notice as a decode result, for runs whose model output is known to be a cut-off fragment. */
+export function malformedReply(context: DeliveryContext): AgentReplyDecode {
+  return {
+    envelope: createTextDelivery(context, INVALID_STRUCTURED_OUTPUT_MESSAGE, { source: 'agent_structured_output', fallbackReason: 'invalid_structured_output' }),
+    status: 'malformed',
+  };
+}
+
 /** Sole Agent protocol decoder. The wire object cannot supply asset ids/paths. */
 export function decodeAgentReply(context: DeliveryContext, raw: unknown): AgentReplyDecode {
   // External turns must receive a typed response even when the model violates

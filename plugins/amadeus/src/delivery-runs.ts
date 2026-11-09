@@ -1,6 +1,7 @@
 import { createDeliveryEnvelope, type AttachmentPart, type DeliveryContext, type DeliveryEnvelope } from './delivery-envelope.js';
 import { runReactions, stripReactFromEnvelope } from './whatsapp-react.js';
-import { decodeAgentReply } from './delivery-decoder.js';
+import { decodeAgentReply, malformedReply } from './delivery-decoder.js';
+import { isDegenerateRun, isFragmentText } from './truncated-output.js';
 import { normalizeImageCaption } from './image-caption.js';
 import { applyReplyLink } from './reply-links.js';
 
@@ -108,7 +109,8 @@ export class DeliveryRuns {
   decode(runId: string, raw: unknown): DeliveryEnvelope {
     const run = this.runs.get(runId); if (!run) throw new Error('delivery_run_missing');
     if (run.envelope) return run.envelope;
-    const decoded = decodeAgentReply(run.context, raw);
+    // A run flagged as a cut-off fragment never posts the fragment itself.
+    const decoded = run.context.origin === 'external_user' && isDegenerateRun(runId) && isFragmentText(raw) ? malformedReply(run.context) : decodeAgentReply(run.context, raw);
     run.raw = raw;
     run.decodeStatus = decoded.status;
     // Strip Kurisu's trailing [react:<emoji>] before any sender sees text.
