@@ -41,6 +41,7 @@ LAB_PATH_PREFIXES = (
 LAB_PATH_FILES = {
     "package.json", "pnpm-lock.yaml", "pnpm-workspace.yaml",
     "scripts/deploy-openclaw.sh", "scripts/openclaw_prepare.py", "scripts/openclaw_telemetry_mount.py",
+    "scripts/lab_release_smoke.py",
 }
 
 

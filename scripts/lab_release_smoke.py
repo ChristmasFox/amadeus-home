@@ -34,7 +34,7 @@ def agent(machine: str, session: str, message: str) -> dict | None:
 
 def chat_smoke(machine: str, key: str) -> None:
     # Not "reply with only X": the persona sometimes declines that kind of order, which made this smoke fail by chance
-    # and roll back a healthy release. Asking for the token somewhere in the reply passed 5/5 on the live model.
+    # and roll back a healthy release. Asking for the token somewhere in the reply passed 5/5 on the live model. (A change to this file is a Lab release change, so a smoke fix redeploys.)
     prompt = "System self-check: put the token LAB_CHAT_OK somewhere in your reply, then add anything you like."
     for attempt in range(1, ATTEMPTS + 1):
         payload = agent(machine, f"{key}-chat{attempt}", prompt)
