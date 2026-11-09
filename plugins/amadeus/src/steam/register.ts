@@ -12,7 +12,7 @@ import { runDailyPlaytime } from './daily.js';
 import { PresencePoller } from './poller.js';
 import { SteamStore } from './store.js';
 import {
-  steamFriendsStatus, steamGetAchievements, steamGetPlaytime, steamGetProfile, steamGetRecentGames, steamGroupSettings, steamLinkAccount, steamSetBroadcast, steamUnlink,
+  steamFriendsStatus, steamGetAchievements, steamGetOwnedGames, steamGetPlaytime, steamGetProfile, steamGetRecentGames, steamGroupSettings, steamLinkAccount, steamSetBroadcast, steamUnlink,
   type Person, type SteamCaller, type SteamToolDependencies,
 } from './tools.js';
 
@@ -52,6 +52,12 @@ const AchievementParameters = Type.Object({
   mode: Type.Optional(Type.Union([Type.Literal('summary'), Type.Literal('rarest'), Type.Literal('recent'), Type.Literal('missing')], { description: 'summary=完成度+最稀有+最近解锁（默认）；rarest=已解锁里最稀有的；recent=最近解锁；missing=还差哪些（最容易的先）。' })),
   limit: Type.Optional(Type.Integer({ minimum: 1, maximum: 20 })),
 }, { additionalProperties: false });
+const OwnedParameters = Type.Object({
+  person: Type.Optional(PersonParameters),
+  all: Type.Optional(Type.Boolean({ description: 'true=本群全部已绑定、没关播报的成员，用来排名（谁拥有的游戏最多/总时长最长）；此时不要填 person。' })),
+  rankBy: Type.Optional(Type.Union([Type.Literal('games'), Type.Literal('hours')], { description: 'all=true 时的排序：games=拥有游戏数（默认），hours=总游戏时长。' })),
+  limit: Type.Optional(Type.Integer({ minimum: 1, maximum: 20 })),
+}, { additionalProperties: false });
 const GroupParameters = Type.Object({ enabled: Type.Optional(Type.Boolean({ description: '只有 owner 能设置：true=本群开启 Steam 自动播报（含成就解锁），false=关闭。不填则只查看当前状态。' })) }, { additionalProperties: false });
 
 const runtimes = new Map<string, { store: SteamStore; client: SteamClient }>();
@@ -89,6 +95,7 @@ export function callerFrom(config: AmadeusConfig, context: OpenClawPluginToolCon
     selfPerson: () => identityPersonIdForSender(config, { type: 'self' }, context),
     mentionPerson: (index) => identityPersonIdForSender(config, { type: 'mention', index }, context),
     replyPerson: () => identityPersonIdForSender(config, { type: 'reply_sender' }, context),
+    displayName: (personId) => identityDisplayName(config, personId),
     mirrorLink: (steamId, label) => identityMirrorExternalAccount(config, context, 'steam', steamId, label),
   };
 }
@@ -117,6 +124,11 @@ export function registerSteamTools(api: OpenClawPluginApi): void {
     async (params, context) => {
       const typed = params as Static<typeof AchievementParameters>;
       return steamGetAchievements(deps(), caller(context), { person: person(typed), ...(typed.game ? { game: typed.game } : {}), ...(typed.mode ? { mode: typed.mode } : {}), ...(typed.limit ? { limit: typed.limit } : {}) });
+    });
+  registerTool(api, 'steam_get_owned_games', '查已绑定 Steam 的人拥有多少款游戏、总游戏时长和玩得最久的游戏（官方 GetOwnedGames，含免费游戏）。用户问“我有多少游戏/库存/游戏数/总时长/谁的游戏最多/排名”时必须调用本工具，不要用近两周游戏去猜，也不要爬网页。默认查提问者自己；person 可查群里其他已绑定、没关播报的成员；all=true 对本群全部已绑定成员按游戏数（或 rankBy=hours 按总时长）排名。一个人多个账号会合并（同一款游戏只算一次）；游戏详情没公开返回 known:false（“游戏详情未公开”），排名里会排除并注明，不要当成 0。', OwnedParameters,
+    async (params, context) => {
+      const typed = params as Static<typeof OwnedParameters>;
+      return steamGetOwnedGames(deps(), caller(context), { ...(typed.person ? { person: person(typed as { person: unknown }) } : {}), ...(typed.all ? { all: true } : {}), ...(typed.rankBy ? { rankBy: typed.rankBy } : {}), ...(typed.limit ? { limit: typed.limit } : {}) });
     });
   registerTool(api, 'steam_friends_status', '查某个已绑定 Steam 的人的好友列表和好友现在的状态（谁在玩什么、谁在线），数据来自 Steam Web API。用户问“我的好友列表/我有哪些好友/好友谁在玩/某某在干嘛”时必须调用本工具，禁止 web_fetch 或搜索 steamcommunity 去爬好友页。默认查提问者自己已绑定的账号（person 不填=self）；也可以用 person 查群里其他已绑定、且没关播报的成员；多个账号会合并。好友列表没公开时返回 known:false（“好友列表未公开”），如实说，不要编造；列表有数量上限（群里更短），可用 name 查某个好友。', FriendsParameters,
     async (params, context) => steamFriendsStatus(deps(), caller(context), params as Static<typeof FriendsParameters>));

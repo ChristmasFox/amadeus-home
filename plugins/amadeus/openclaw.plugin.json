@@ -114,6 +114,7 @@
       "steam_get_playtime",
       "steam_get_recent_games",
       "steam_get_achievements",
+      "steam_get_owned_games",
       "steam_friends_status",
       "steam_group_settings"
     ],

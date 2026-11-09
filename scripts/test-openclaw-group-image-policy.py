@@ -37,7 +37,7 @@ class GroupImagePolicyTest(unittest.TestCase):
             self.assertEqual(group["toolsBySender"], {key: {"allow": list(prepare.GROUP_OWNER_TOOL_ALLOWLIST)} for key in keys})
             for rule in group["toolsBySender"].values():
                 self.assertNotIn("*", rule["allow"])
-                self.assertLessEqual(len(rule["allow"]), 32)
+                self.assertLessEqual(len(rule["allow"]), 33)
                 self.assertTrue(set(prepare.GROUP_IMAGE_TOOL_ALLOWLIST) <= set(rule["allow"]))
                 self.assertEqual(len(rule["allow"]), len(set(rule["allow"])), "no duplicates")
                 for forbidden in ("exec", "read", "write", "edit", "apply_patch", "gateway") + tuple(
@@ -122,17 +122,18 @@ class GroupImagePolicyTest(unittest.TestCase):
             prepare.ensure_group_image_policies({"groups": []})
 
     def test_previous_steam_lists_are_migrated(self):
-        """Live configs from before the achievements tool and from before the friends tool both upgrade in place."""
+        """Live configs from before each later Steam tool (achievements, friends, owned games) upgrade in place."""
         keys = prepare.owner_tool_policy_keys("+15555550123")
         for tools, owner in ((prepare.LEGACY_GROUP_NO_ACHIEVEMENTS_TOOL_ALLOWLIST, prepare.LEGACY_GROUP_OWNER_NO_ACHIEVEMENTS_TOOL_ALLOWLIST),
-                             (prepare.LEGACY_GROUP_NO_FRIENDS_TOOL_ALLOWLIST, prepare.LEGACY_GROUP_OWNER_NO_FRIENDS_TOOL_ALLOWLIST)):
+                             (prepare.LEGACY_GROUP_NO_FRIENDS_TOOL_ALLOWLIST, prepare.LEGACY_GROUP_OWNER_NO_FRIENDS_TOOL_ALLOWLIST),
+                             (prepare.LEGACY_GROUP_NO_OWNED_TOOL_ALLOWLIST, prepare.LEGACY_GROUP_OWNER_NO_OWNED_TOOL_ALLOWLIST)):
             channel = {"groups": {"*": {"tools": {"allow": list(tools)}, "toolsBySender": {key: {"allow": list(owner)} for key in keys}}}}
             prepare.ensure_group_image_policies(channel, keys)
             group = channel["groups"]["*"]
-            for name in ("steam_get_achievements", "steam_friends_status"):
+            for name in ("steam_get_achievements", "steam_friends_status", "steam_get_owned_games"):
                 self.assertIn(name, group["tools"]["allow"])
                 self.assertTrue(all(name in rule["allow"] for rule in group["toolsBySender"].values()))
-        self.assertEqual(len(prepare.LEGACY_GROUP_NO_FRIENDS_TOOL_ALLOWLIST) + 1, len(prepare.GROUP_IMAGE_TOOL_ALLOWLIST))
+        self.assertEqual(len(prepare.LEGACY_GROUP_NO_OWNED_TOOL_ALLOWLIST) + 1, len(prepare.GROUP_IMAGE_TOOL_ALLOWLIST))
 
     def test_core_patch_passes_every_group_tool_except_the_core_web_pair(self):
         """The pinned core patch lets only the tools it lists through the global sender layer; a group

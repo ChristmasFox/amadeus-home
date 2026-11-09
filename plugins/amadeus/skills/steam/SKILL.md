@@ -35,3 +35,9 @@ Use the native `steam_*` tools for questions about a person's Steam account: who
 - If no `steam_*` tool covers the question, say so plainly instead of scraping.
 - This rule is about **Steam only**. PUBG questions (match stats, daily reviews, players, telemetry) are answered by the PUBG tools (`pubg_*`), which use the PUBG API; never route a PUBG question to a `steam_*` tool and never treat this rule as a reason to avoid the PUBG tools.
 
+## Owned games, game counts and total play time
+- Questions about what someone **owns** (拥有多少游戏、库存、游戏数、总游戏时长、谁的游戏最多、排名) use `steam_get_owned_games` (official GetOwnedGames, free games included). Do not guess from the recently-played list and do not scrape.
+- Default is the asker's own account(s); `person` asks about another linked member who has not switched announcements off; `all: true` ranks every linked member of the group (by games owned, or `rankBy: "hours"` for total play time). Several accounts of one person are merged and a game owned twice counts once.
+- If game details are not public the tool says so (`known:false`, 游戏详情未公开): say it is not visible, never say 0, and in a ranking name who was left out and why. Results are cached for a few minutes.
+- Total hours here are Steam's lifetime totals; for "how long did I play yesterday/this week" use `steam_get_playtime` with a period.
+

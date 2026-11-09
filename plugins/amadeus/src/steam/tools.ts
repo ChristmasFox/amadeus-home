@@ -22,6 +22,8 @@ export interface SteamCaller {
   replyPerson?: () => string | undefined;
   /** Mirrors a new link into the identity store; returns the person id when the sender is a known person. */
   mirrorLink?: (steamId: string, label: string) => string | undefined;
+  /** A person's display name (for rankings); falls back to the Steam nickname. */
+  displayName?: (personId: string) => string | undefined;
 }
 
 export interface SteamToolDependencies {
@@ -32,6 +34,8 @@ export interface SteamToolDependencies {
   /** Cached achievement names and rarity; created on first use. */
   achievementCatalog?: AchievementCatalog;
   /** Short-lived friend snapshots, shared by calls so a follow-up question does not refetch. */
+  /** Owned-game lists per account, kept briefly: a library changes slowly and the endpoint is rate limited. */
+  ownedCache?: Map<string, { at: number; value: Unknown<GameStat[]> }>;
   friendsCache?: Map<string, { at: number; friends: PlayerSummary[]; truncated: boolean; accountCount: number; accountsHidden: number }>;
   now?: () => number;
 }
@@ -305,6 +309,99 @@ export function steamGetPlaytime(deps: SteamToolDependencies, caller: SteamCalle
       gameCount: games.length,
       totalHours: minutesToHours(totalMinutes),
       top: [...games].sort((a, b) => b.totalMinutes - a.totalMinutes).slice(0, 5).map(gameView),
+    };
+  });
+}
+
+export const OWNED_CACHE_MS = 5 * 60_000;
+export const OWNED_TOP_MAX = 20;
+export const OWNED_RANK_MAX = 15;
+
+async function ownedFor(deps: SteamToolDependencies, steamId: string): Promise<Unknown<GameStat[]>> {
+  const now = (deps.now ?? Date.now)();
+  const cache = deps.ownedCache ??= new Map();
+  const hit = cache.get(steamId);
+  if (hit && now - hit.at <= OWNED_CACHE_MS) return hit.value;
+  const value = await deps.client.ownedGames(steamId);
+  cache.set(steamId, { at: now, value });
+  return value;
+}
+
+interface LibraryResult {
+  /** Accounts whose game list could be read. */
+  readable: number;
+  accounts: Array<{ account: string; known: boolean; gameCount?: number; totalHours?: number }>;
+  gameCount: number;
+  totalMinutes: number;
+  games: GameStat[];
+}
+
+/** One person's library over all their accounts: a game owned on two accounts counts once, play time adds up. */
+async function libraryOf(deps: SteamToolDependencies, links: SteamLink[]): Promise<LibraryResult> {
+  const merged = new Map<number, GameStat>();
+  const accounts: LibraryResult['accounts'] = [];
+  let readable = 0;
+  let totalMinutes = 0;
+  for (const link of links) {
+    const owned = unknownValue(await ownedFor(deps, link.steamId));
+    if (!owned.known) { accounts.push({ account: link.personaName, known: false }); continue; }
+    readable += 1;
+    const minutes = owned.value.reduce((sum, game) => sum + game.totalMinutes, 0);
+    totalMinutes += minutes;
+    accounts.push({ account: link.personaName, known: true, gameCount: owned.value.length, totalHours: minutesToHours(minutes) });
+    for (const game of owned.value) {
+      const existing = merged.get(game.appId);
+      merged.set(game.appId, existing ? { ...existing, totalMinutes: existing.totalMinutes + game.totalMinutes, ...(existing.name ?? game.name ? { name: existing.name ?? game.name } : {}) } : game);
+    }
+  }
+  return { readable, accounts, gameCount: merged.size, totalMinutes, games: [...merged.values()].sort((a, b) => b.totalMinutes - a.totalMinutes) };
+}
+
+/**
+ * How many games a person owns, their total play time and their most played games, from GetOwnedGames (played free
+ * games included). `all: true` ranks every linked member of the group (by games owned) instead; a member whose game
+ * details are private is left out of the ranking and named as such. Several accounts of one person are merged.
+ */
+export function steamGetOwnedGames(deps: SteamToolDependencies, caller: SteamCaller, params: { person?: Person; all?: boolean; limit?: number; rankBy?: 'games' | 'hours' }): Promise<unknown> {
+  return guarded(deps, async () => {
+    if (params.all) {
+      if (!caller.groupId) return { status: 'refused', reason: 'ranking_needs_a_group' };
+      const byPerson = new Map<string, { name: string; links: SteamLink[] }>();
+      for (const link of deps.store.broadcastMembers(caller.groupId)) {
+        const key = link.personId ?? link.senderKey;
+        const entry = byPerson.get(key) ?? { name: (link.personId ? caller.displayName?.(link.personId) : undefined) ?? link.personaName, links: [] };
+        entry.links.push(link);
+        byPerson.set(key, entry);
+      }
+      const ranked: Array<{ name: string; gameCount: number; totalHours: number; accountCount: number; topGame?: string }> = [];
+      const hidden: string[] = [];
+      for (const { name, links } of byPerson.values()) {
+        const library = await libraryOf(deps, links);
+        if (!library.readable) { hidden.push(name); continue; }
+        ranked.push({ name, gameCount: library.gameCount, totalHours: minutesToHours(library.totalMinutes), accountCount: links.length, ...(library.games[0]?.name ? { topGame: library.games[0].name } : {}) });
+      }
+      const by = params.rankBy === 'hours' ? 'totalHours' : 'gameCount';
+      ranked.sort((a, b) => b[by] - a[by] || a.name.localeCompare(b.name));
+      return {
+        status: 'ok', rankedBy: params.rankBy === 'hours' ? 'total_hours' : 'games_owned',
+        ranking: ranked.slice(0, Math.min(Math.max(params.limit ?? OWNED_RANK_MAX, 1), OWNED_RANK_MAX)),
+        ...(hidden.length ? { gameDetailsNotPublic: hidden, note: '这些成员的游戏详情未公开，没有计入排名。' } : {}),
+        ...(ranked.length ? {} : { ranking: [], note: '群里没有人公开游戏详情，无法排名。' }),
+      };
+    }
+    const target = targetFor(deps, caller, params.person ?? { reference: 'self' });
+    if (!('links' in target)) return target;
+    const library = await libraryOf(deps, target.links);
+    if (!library.readable) return { status: 'ok', games: { known: false, reason: 'profile_private', note: '游戏详情未公开' }, accountCount: target.links.length };
+    const limit = Math.min(Math.max(params.limit ?? 5, 1), OWNED_TOP_MAX);
+    return {
+      status: 'ok',
+      gameCount: library.gameCount,
+      totalHours: minutesToHours(library.totalMinutes),
+      accountCount: target.links.length,
+      ...(target.links.length > 1 ? { accounts: library.accounts } : {}),
+      ...(library.readable < target.links.length ? { note: `有 ${target.links.length - library.readable} 个账号的游戏详情未公开，没有计入。` } : {}),
+      top: library.games.slice(0, limit).map(gameView),
     };
   });
 }
