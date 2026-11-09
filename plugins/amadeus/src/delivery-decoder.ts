@@ -104,6 +104,66 @@ function isControlSentinel(value: unknown): value is string {
   return typeof value === 'string' && CONTROL_SENTINEL.test(value);
 }
 
+/** Fail-closed shape check shared by plain-text recovery and truncated-envelope salvage. */
+function looksLikeProtocolText(text: string): boolean {
+  return BARE_PROTOCOL_TOKEN.test(text) || /^(?:\s*[\[{`])/u.test(text)
+    || /(?:^|\n)\s*\[\[[^\]\r\n]+\]\]/u.test(text)
+    || /(?:^|\n)\s*MEDIA\s*:/iu.test(text)
+    || /(?:["']?(?:version|silent|parts|deliveryId|assetId|filePath|mimeType|disposition)["']?\s*[:=])/iu.test(text);
+}
+
+/**
+ * A model can emit a nearly-complete v2 envelope and then stop before closing the
+ * text string / object (observed as raw beginning with `{"version":2` … `"text":"…`
+ * and ending mid-value, often with positive provider usage). Guessing closing
+ * braces is unsafe; extracting the unterminated text value and re-wrapping it
+ * through createTextDelivery is a narrow, fail-closed salvage.
+ */
+function salvageTruncatedEnvelopeText(raw: string): string | undefined {
+  const trimmed = raw.trim();
+  if (!trimmed.startsWith('{') || !/"version"\s*:\s*2/u.test(trimmed)) return undefined;
+  if (!/"kind"\s*:\s*"text"/u.test(trimmed)) return undefined;
+  const match = /"kind"\s*:\s*"text"\s*,\s*"text"\s*:\s*"/u.exec(trimmed);
+  if (!match) return undefined;
+  const body = trimmed.slice(match.index + match[0].length);
+  let escaped = false;
+  let complete = false;
+  const chars: string[] = [];
+  for (const character of body) {
+    if (escaped) {
+      chars.push(character);
+      escaped = false;
+      continue;
+    }
+    if (character === '\\') {
+      chars.push(character);
+      escaped = true;
+      continue;
+    }
+    if (character === '"') {
+      complete = true;
+      break;
+    }
+    chars.push(character);
+  }
+  // A trailing lone backslash means the cut landed inside an escape — drop it.
+  if (!complete && escaped) chars.pop();
+  // If the string already closed cleanly, ordinary JSON.parse should have worked;
+  // refuse to salvage a fully-terminated value so we do not bypass the validator.
+  if (complete) return undefined;
+  if (chars.length === 0) return undefined;
+  let text: string;
+  try {
+    text = JSON.parse(`"${chars.join('')}"`) as string;
+  } catch {
+    return undefined;
+  }
+  if (typeof text !== 'string') return undefined;
+  const value = text.trim();
+  if (!value || looksLikeProtocolText(value)) return undefined;
+  return value;
+}
+
 /**
  * A normal external turn can occasionally arrive as plain assistant text when
  * the model ignores the JSON-only instruction. Recover that text as a typed
@@ -113,10 +173,7 @@ function isControlSentinel(value: unknown): value is string {
 function recoverablePlainText(context: DeliveryContext, raw: string): AgentReplyDecode | undefined {
   if (context.origin !== 'external_user') return undefined;
   const text = raw.trim();
-  if (!text || BARE_PROTOCOL_TOKEN.test(text) || /^(?:\s*[\[{`])/u.test(text)
-    || /(?:^|\n)\s*\[\[[^\]\r\n]+\]\]/u.test(text)
-    || /(?:^|\n)\s*MEDIA\s*:/iu.test(text)
-    || /(?:["']?(?:version|silent|parts|deliveryId|assetId|filePath|mimeType|disposition)["']?\s*[:=])/iu.test(text)) return undefined;
+  if (!text || looksLikeProtocolText(text)) return undefined;
   try {
     return { envelope: createTextDelivery(context, text), status: 'structured' };
   } catch {
@@ -155,7 +212,19 @@ export function decodeAgentReply(context: DeliveryContext, raw: unknown): AgentR
   }
   const wireRaw: string = legacyWire ?? raw;
   let value: unknown;
-  try { value = parseWire(wireRaw); } catch { return fail(); }
+  try {
+    value = parseWire(wireRaw);
+  } catch {
+    if (context.origin === 'external_user') {
+      const salvaged = salvageTruncatedEnvelopeText(wireRaw);
+      if (salvaged) {
+        try {
+          return { envelope: createTextDelivery(context, salvaged), status: 'structured' };
+        } catch { /* fall through to fail */ }
+      }
+    }
+    return fail();
+  }
   if (!value || typeof value !== 'object' || Array.isArray(value)) return fail();
   const wire = value as Record<string, unknown>;
   if (Object.keys(wire).some((key) => !['version', 'silent', 'parts'].includes(key))

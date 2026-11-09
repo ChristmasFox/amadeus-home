@@ -7,9 +7,9 @@ const GROUP = 'agent:main:whatsapp:group:120363000000000000@g.us:thread:whatsapp
 const DM = 'agent:main:whatsapp:secondary:direct:+15550100123';
 const withUsage = (output: number) => [{ role: 'user', content: 'q' }, { role: 'assistant', usage: { output }, content: [{ type: 'text', text: 'x' }] }];
 
-test('fragments are 1-3 character non-JSON answers; reaction tags and whitespace do not count', () => {
-  for (const text of ['先', '上一', '绑定', ' 先 ', '先[react:👍]']) assert.equal(isFragmentText(text), true, text);
-  for (const text of ['', '   ', '这是一个完整的回答', '{"', '[x', '```', undefined, 3]) assert.equal(isFragmentText(text as never), false, String(text));
+test('fragments are 1-3 character cut-offs including short JSON stubs; reaction tags and whitespace do not count', () => {
+  for (const text of ['先', '上一', '绑定', ' 先 ', '先[react:👍]', '{"', '{', '[', '`', '[x', '```']) assert.equal(isFragmentText(text), true, text);
+  for (const text of ['', '   ', '这是一个完整的回答', undefined, 3]) assert.equal(isFragmentText(text as never), false, String(text));
 });
 
 test('a fragment with no usage is sent back once, then accepted but flagged', () => {
@@ -54,4 +54,12 @@ test('a flagged run posts the failure notice instead of the fragment; an unflagg
   const plain = decideFor('run-i', '好');
   assert.match(JSON.stringify(plain.parts), /好/u);
   assert.doesNotMatch(JSON.stringify(plain.parts), /回复格式异常/u);
+});
+
+test('a short JSON stub with no usage is retried once like a plain fragment', () => {
+  const attempts = new Map<string, number>();
+  const event = { runId: 'run-json-stub', sessionKey: GROUP, lastAssistantMessage: '{"', messages: withUsage(0) };
+  assert.equal(decideFinalize(event, attempts).action, 'revise');
+  assert.equal(decideFinalize(event, attempts).action, 'continue');
+  assert.equal(isDegenerateRun('run-json-stub'), true);
 });

@@ -23,11 +23,17 @@ export function markDegenerateRun(runId: string): void {
 
 export const isDegenerateRun = (runId: string): boolean => degenerateRuns.has(runId);
 
-/** True for a 1-3 character non-JSON answer. Whitespace and the trailing reaction tag do not count. */
+/**
+ * True for a 1-3 character cut-off answer. Whitespace and the trailing reaction tag do not count.
+ * Short JSON/protocol openers such as `{"` are included: providers sometimes stop after opening the
+ * envelope, leaving nothing recoverable for the decoder, so the finalize guard should retry once.
+ */
 export function isFragmentText(text: unknown): boolean {
   if (typeof text !== 'string') return false;
   const trimmed = text.replace(/\[react:[^\]\r\n]*\]/gu, '').trim();
-  return trimmed.length > 0 && [...trimmed].length <= MAX_FRAGMENT_CHARS && !/^[\[{`]/u.test(trimmed);
+  if (trimmed.length === 0 || [...trimmed].length > MAX_FRAGMENT_CHARS) return false;
+  // Anything else in this length band (plain chars or `{`/`[`/`\`` stubs) counts as a fragment.
+  return true;
 }
 
 /** The usage the provider reported for the last assistant message in the history, when it is there. */

@@ -119,6 +119,18 @@ for (const [name, raw] of Object.entries({
   assert.equal(JSON.stringify(decoded.envelope).includes(raw), false);
   const calls: string[] = []; await settleDelivery(decoded.envelope, adapters(calls), createDeliverySettlementContext()); assert.deepEqual(calls, [`text:${INVALID_STRUCTURED_OUTPUT_MESSAGE}`]);
 });
+test('truncated v2 text envelope salvages the unterminated text value', () => {
+  const raw = '{"version":2,"silent":false,"parts":[{"kind":"text","text":"……打工战士，这张图没出处。[react:🙄]';
+  const decoded = decodeAgentReply(context, raw);
+  assert.equal(decoded.status, 'structured');
+  assert.equal(decoded.envelope.fallbackReason, undefined);
+  assert.deepEqual(decoded.envelope.parts, [{ kind: 'text', text: '……打工战士，这张图没出处。[react:🙄]' }]);
+});
+test('truncated v2 envelope with empty/unrecoverable text stays malformed', () => {
+  assert.equal(decodeAgentReply(context, '{"version":2,"silent":false,"parts":[{"kind":"text","text":"').status, 'malformed');
+  assert.equal(decodeAgentReply(context, '{"').status, 'malformed');
+  assert.equal(decodeAgentReply(context, '{"version":2,"silent":false,"parts":[{"kind":"text","text":"version: 2').status, 'malformed');
+});
 test('user-requested JSON, including protocol-looking keys, is normal text inside a part', async () => {
   const requested = '{"visibleText":"user example","modality":"text"}'; const calls: string[] = [];
   const envelope = decodeAgentReply(context, wire([{ kind:'text',text:requested }])).envelope;
