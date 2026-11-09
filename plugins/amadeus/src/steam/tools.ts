@@ -2,6 +2,7 @@ import { SteamApiError, type GameStat, type PlayerSummary, type SteamClient, typ
 import { businessCalendar, type BusinessCalendar } from './business-day.js';
 import { AchievementCatalog, summariseAchievements, type AchievementClient, type AchievementMode } from './achievements.js';
 import { parseSteamReference } from './domain.js';
+import { CARD_REPLY_GUIDE, renderPlayingCard, renderPlaytimeCard } from './cards.js';
 import type { SteamLink, SteamStore } from './store.js';
 
 /** Everything a tool needs to know about who is asking, taken from the host's trusted metadata (never message text). */
@@ -276,9 +277,9 @@ export const durationText = (minutes: number): string => {
 interface PlaySession { appId: string; gameName?: string; start: number; end: number }
 
 /** Clips sessions to [from, to) and sums them per game and per business day; a session crossing the day boundary is split between the two days. */
-export function aggregatePlay(calendar: BusinessCalendar, sessions: PlaySession[], from: number, to: number, game?: string): { games: Array<{ name: string; minutes: number; text: string }>; totalMinutes: number; days: Array<{ date: string; minutes: number; text: string }> } {
+export function aggregatePlay(calendar: BusinessCalendar, sessions: PlaySession[], from: number, to: number, game?: string): { games: Array<{ appId: string; name: string; minutes: number; text: string }>; totalMinutes: number; days: Array<{ date: string; minutes: number; text: string }> } {
   const wanted = game?.trim().toLowerCase();
-  const perGame = new Map<string, { name: string; ms: number }>();
+  const perGame = new Map<string, { appId: string; name: string; ms: number }>();
   const perDay = new Map<string, number>();
   for (const session of sessions) {
     const name = session.gameName ?? session.appId;
@@ -286,7 +287,7 @@ export function aggregatePlay(calendar: BusinessCalendar, sessions: PlaySession[
     const start = Math.max(session.start, from);
     const end = Math.min(session.end, to);
     if (end <= start) continue;
-    const entry = perGame.get(session.appId) ?? { name, ms: 0 };
+    const entry = perGame.get(session.appId) ?? { appId: session.appId, name, ms: 0 };
     entry.ms += end - start;
     perGame.set(session.appId, entry);
     for (let cursor = start; cursor < end; cursor = calendar.windowAt(cursor).endMs) {
@@ -294,7 +295,7 @@ export function aggregatePlay(calendar: BusinessCalendar, sessions: PlaySession[
       perDay.set(calendar.label(cursor), (perDay.get(calendar.label(cursor)) ?? 0) + (dayEnd - cursor));
     }
   }
-  const games = [...perGame.values()].map((entry) => ({ name: entry.name, minutes: Math.round(entry.ms / 60_000) })).filter((entry) => entry.minutes > 0)
+  const games = [...perGame.values()].map((entry) => ({ appId: entry.appId, name: entry.name, minutes: Math.round(entry.ms / 60_000) })).filter((entry) => entry.minutes > 0)
     .sort((a, b) => b.minutes - a.minutes).map((entry) => ({ ...entry, text: durationText(entry.minutes) }));
   const days = [...perDay.entries()].sort(([x], [y]) => x.localeCompare(y)).map(([day, ms]) => ({ date: day, minutes: Math.round(ms / 60_000), text: durationText(Math.round(ms / 60_000)) }));
   return { games, totalMinutes: games.reduce((sum, entry) => sum + entry.minutes, 0), days };
@@ -317,8 +318,15 @@ function trackedPlaytime(deps: SteamToolDependencies, caller: SteamCaller, perso
   const sessions = deps.store.playSessions(target.links.map((link) => link.steamId), window.from, window.to, now);
   const { games, totalMinutes, days } = aggregatePlay(calendar, sessions, window.from, window.to, game);
   const partial = window.from < trackingSince;
+  const subject = target.links[0]!;
+  const name = (subject.personId ? caller.displayName?.(subject.personId) : undefined) || subject.personaName;
+  const displayText = renderPlaytimeCard({
+    name, label: window.label, games, totalText: durationText(totalMinutes),
+    ...(partial ? { partialSince: `${calendar.format(trackingSince)}（${calendar.timezone}）` } : {}),
+  }, new Date(now));
   return {
     status: 'ok', ...base, known: true, games, totalMinutes, totalText: durationText(totalMinutes),
+    displayText, replyGuide: CARD_REPLY_GUIDE,
     ...(period === 'this_week' || days.length > 1 ? { days } : {}),
     ...(partial ? { partial: true, trackingSince: `${calendar.format(trackingSince)}（${calendar.timezone}）`, note: '记录是从这个时间才开始的，这段时间之前的游戏时长没有数据，上面只是记录开始之后的部分。' } : {}),
     ...(totalMinutes === 0 ? { note: '这段时间没有记录到游戏时长（只记录绑定账号在播报开启时的游戏状态，每分钟采样一次，误差约一分钟）。' } : {}),
@@ -561,8 +569,16 @@ export async function steamFriendsStatus(deps: SteamToolDependencies, caller: St
       .sort((a, b) => rank(a) - rank(b) || a.name.localeCompare(b.name));
     const limit = Math.min(Math.max(params.limit ?? cap.default, 1), cap.max);
     const hidden = entry.friends.filter((friend) => !friend.profilePublic && friend.personaState === 0 && !friend.gameId).length;
+    const shown = matching.slice(0, limit).map((friend) => ({
+      name: friend.name,
+      steamId: friend.steamId,
+      state: (rank(friend) === 0 ? 'in_game' : rank(friend) === 1 ? 'online' : 'offline') as 'in_game' | 'online' | 'offline',
+      game: friend.gameName ?? null,
+      ...(friend.gameId ? { appId: friend.gameId } : {}),
+    }));
     return {
       status: 'ok',
+      ...(shown.length ? { displayText: renderPlayingCard({ friends: shown }, new Date(now)), replyGuide: CARD_REPLY_GUIDE } : {}),
       friendCount: entry.friends.length,
       truncated: entry.truncated,
       accountsChecked: entry.accountCount,
@@ -572,6 +588,7 @@ export async function steamFriendsStatus(deps: SteamToolDependencies, caller: St
       matched: matching.length,
       friends: matching.slice(0, limit).map((friend) => ({
         name: friend.name,
+        steamId: friend.steamId,
         state: rank(friend) === 0 ? 'in_game' : rank(friend) === 1 ? 'online' : 'offline',
         game: friend.gameName ?? null,
         ...(rank(friend) === 2 && friend.lastLogoff ? { lastSeenAt: new Date(friend.lastLogoff).toISOString() } : {}),

@@ -139,7 +139,7 @@ export function registerSteamTools(api: OpenClawPluginApi): void {
     async (params, context) => steamSetBroadcast(deps(), caller(context), params as Static<typeof BroadcastParameters>));
   registerTool(api, 'steam_get_profile', '查某个已绑定 Steam 的人的资料：昵称、当前在线状态与正在玩的游戏、账号创建时间。资料不公开的字段会返回 known:false，不要编造。', ProfileParameters,
     async (params, context) => steamGetProfile(deps(), caller(context), { person: person(params as { person: unknown }) }));
-  registerTool(api, 'steam_get_playtime', '查某个已绑定 Steam 的人的游戏时长。问“玩了多久/玩了几个小时/玩了多长时间”而没有说生涯、总共、入坑以来、一共这类意思时，问的是今天：用 period=today，不要用不带 period 的总时长顶替；只有用户明确问生涯/总共/一共玩了多少才不带 period。不带 period：Steam 的总时长（生涯累计）、最常玩的游戏或某个游戏的时长（游戏详情不公开时 known:false）。带 period（today/yesterday/this_week/date+date）：按 PUBG 同一个业务日切天（默认 Asia/Shanghai，每天 06:00 切日，06:00→次日 06:00 为一天；回答时说明按 6 点切日，和 PUBG 战报同一天），返回那段时间里实际玩了哪些游戏各多久和合计，多个账号合并；例如“我昨天玩了多久”用 person=self、period=yesterday，再按游戏列出时长。记录只从开始记录的时间起有，更早的日子如实说没有数据，不要编造。', PlaytimeParameters,
+  registerTool(api, 'steam_get_playtime', '查某个已绑定 Steam 的人的游戏时长。问“玩了多久/玩了几个小时/玩了多长时间”而没有说生涯、总共、入坑以来、一共这类意思时，问的是今天：用 period=today，不要用不带 period 的总时长顶替；只有用户明确问生涯/总共/一共玩了多少才不带 period。不带 period：Steam 的总时长（生涯累计）、最常玩的游戏或某个游戏的时长（游戏详情不公开时 known:false）。带 period（today/yesterday/this_week/date+date）：按 PUBG 同一个业务日切天（默认 Asia/Shanghai，每天 06:00 切日，06:00→次日 06:00 为一天；回答时说明按 6 点切日，和 PUBG 战报同一天），返回那段时间里实际玩了哪些游戏各多久和合计，多个账号合并；例如“我昨天玩了多久”用 person=self、period=yesterday，再按游戏列出时长。记录只从开始记录的时间起有，更早的日子如实说没有数据，不要编造。结果带 displayText 时那是写好的 Amadeus 卡片，原样作为回复发出，不要改写。', PlaytimeParameters,
     async (params, context) => {
       const typed = params as Static<typeof PlaytimeParameters>;
       return steamGetPlaytime(deps(), caller(context), { person: person(typed), ...(typed.game ? { game: typed.game } : {}), ...(typed.period ? { period: typed.period } : {}), ...(typed.date ? { date: typed.date } : {}) });
@@ -173,7 +173,7 @@ export function registerSteamTools(api: OpenClawPluginApi): void {
       const typed = params as Static<typeof OverlapParameters>;
       return steamLibraryOverlap(deps(), caller(context), { mode: typed.mode, ...(typed.people ? { people: typed.people.map((entry) => entry as unknown as Person) } : {}), ...(typed.all ? { all: true } : {}), ...(typed.limit ? { limit: typed.limit } : {}) });
     });
-  registerTool(api, 'steam_friends_status', '查某个已绑定 Steam 的人的好友列表和好友现在的状态（谁在玩什么、谁在线），数据来自 Steam Web API。用户问“我的好友列表/我有哪些好友/好友谁在玩/某某在干嘛”时必须调用本工具，禁止 web_fetch 或搜索 steamcommunity 去爬好友页。默认查提问者自己已绑定的账号（person 不填=self）；也可以用 person 查群里其他已绑定、且没关播报的成员；多个账号会合并。好友列表没公开时返回 known:false（“好友列表未公开”），如实说，不要编造；列表有数量上限（群里更短），可用 name 查某个好友。', FriendsParameters,
+  registerTool(api, 'steam_friends_status', '查某个已绑定 Steam 的人的好友列表和好友现在的状态（谁在玩什么、谁在线），数据来自 Steam Web API。用户问“我的好友列表/我有哪些好友/好友谁在玩/某某在干嘛”时必须调用本工具，禁止 web_fetch 或搜索 steamcommunity 去爬好友页。每个好友都带 SteamID64（steamId），之后绑定或查询某个好友时直接用它；结果带 displayText 时原样作为回复发出。默认查提问者自己已绑定的账号（person 不填=self）；也可以用 person 查群里其他已绑定、且没关播报的成员；多个账号会合并。好友列表没公开时返回 known:false（“好友列表未公开”），如实说，不要编造；列表有数量上限（群里更短），可用 name 查某个好友。', FriendsParameters,
     async (params, context) => steamFriendsStatus(deps(), caller(context), params as Static<typeof FriendsParameters>));
   registerTool(api, 'steam_group_settings', '查看或（仅 owner）开启/关闭当前群的 Steam 自动播报（默认开启；播报内容含上线、开始玩、换游戏、离开后回来、成就解锁）。返回的是开关和名单人数，不列出播报事件；事件范围见技能说明。', GroupParameters,
     async (params, context) => steamGroupSettings(deps(), caller(context), params as Static<typeof GroupParameters>));

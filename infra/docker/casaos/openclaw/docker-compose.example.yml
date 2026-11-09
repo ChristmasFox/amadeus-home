@@ -37,6 +37,9 @@ services:
       AMADEUS_IMAGE_ASSET_CONTAINER_ROOT: ${AMADEUS_IMAGE_ASSET_CONTAINER_ROOT:-/var/lib/amadeus/image-assets}
       VPS_ACCOUNT_MAP_FILE: /run/secrets/vps_account_map.json
       TZ: Asia/Shanghai
+      # Node's fetch ignores HTTP(S)_PROXY unless this is set; without it web_fetch/web_search reach steamcommunity.com and similar sites directly and fail.
+      # NO_PROXY below keeps 9router, searxng and the other local services off the proxy.
+      NODE_USE_ENV_PROXY: "1"
       HTTP_PROXY: ${OPENCLAW_HTTP_PROXY:-http://host.docker.internal:7897}
       HTTPS_PROXY: ${OPENCLAW_HTTPS_PROXY:-http://host.docker.internal:7897}
       NO_PROXY: ${OPENCLAW_NO_PROXY:-localhost,127.0.0.1,::1,openclaw,9router,searxng,product-radar,media-organizer-adapter,changedetection,host.docker.internal,.local,10.0.0.0/8,172.16.0.0/12,192.168.5.0/24,192.168.97.0/24}

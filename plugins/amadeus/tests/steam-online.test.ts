@@ -102,3 +102,14 @@ test('guidance: a plain 玩了多久 is today; lifetime only when asked (stated 
   assert.match(register, /没有说生涯、总共.*用 period=today，不要用不带 period 的总时长顶替/u);
   assert.match(skill, /plain "X 玩了多久[^]*means \*\*today\*\*[^]*do not substitute the lifetime totals/u);
 });
+
+test('who is playing and play time come back as finished Amadeus cards with the SteamID64, ready to deliver unchanged', async () => {
+  const { renderPlaytimeCard, renderPlayingCard, CARD_REPLY_GUIDE } = await import('../src/steam/cards.js');
+  const at = new Date('2026-11-09T12:00:00Z');
+  const play = renderPlaytimeCard({ name: '猴', label: '今天（2026-11-09 06:00 → 次日 06:00）', games: [{ appId: '578080', name: 'PUBG: BATTLEGROUNDS', text: '2小时5分钟' }, { appId: '9', name: 'Other', text: '30分钟' }], totalText: '2小时35分钟' }, at);
+  assert.equal(play, 'Amadeus • 世界线观测 · Steam 游戏时长\n\n猴 今天玩了 2小时35分钟。\n\n- 成员：猴\n- 时段：今天（2026-11-09 06:00 → 次日 06:00）\n- 游戏：PUBG: BATTLEGROUNDS（吃鸡），2小时5分钟\n- 游戏：Other，30分钟\n- 合计：2小时35分钟\n\nEl Psy Kongroo.');
+  assert.match(renderPlaytimeCard({ name: '猴', label: '昨天（x）', games: [], totalText: '0分钟' }, at), /猴 昨天没有记录到游戏时长。/u);
+  const who = renderPlayingCard({ friends: [{ name: 'A', steamId: '1', state: 'in_game', game: 'Phantom Blade Zero', appId: '4115450' }, { name: 'B', steamId: '2', state: 'online', game: null }] }, at);
+  assert.equal(who, 'Amadeus • 世界线观测 · Steam 在线情况\n\n当前观测到 2 位。\n\n- A：Phantom Blade Zero（游戏中）\n- B：在线\n\nEl Psy Kongroo.');
+  assert.match(CARD_REPLY_GUIDE, /原样/u);
+});

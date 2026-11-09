@@ -51,3 +51,28 @@ test('registered hooks give a soft hint, never block or revise, and still audit'
   await hooks.get('after_tool_call')!({ toolName: 'web_search', params: {}, runId: 'run-hook', toolCallId: 'call-hook', result: { statusCode: 200 } }, context);
   assert.ok(logs.some(value => value.includes('realtime_tool_audit')));
 });
+
+test('two web failures in a row stop further web calls for that turn; a success or another turn starts fresh', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'realtime-guard-'));
+  process.env.NEWS_TOOL_AUDIT_PATH = join(directory, 'audit.jsonl');
+  const hooks = new Map<string, (...args: any[]) => any>();
+  const api = { on(name: string, handler: (...args: any[]) => any) { hooks.set(name, handler); }, logger: { info() {}, warn() {}, error() {} } } as any;
+  registerRealtimeFacts(api);
+  const before = (toolName: string, runId: string) => hooks.get('before_tool_call')!({ toolName, params: {}, runId, toolCallId: `${runId}-${Math.random()}` }, { runId, sessionKey: 's' });
+  const after = (toolName: string, runId: string, outcome: { error?: string; result?: unknown }) => hooks.get('after_tool_call')!({ toolName, params: {}, runId, toolCallId: `${runId}-x`, ...outcome }, { runId, sessionKey: 's' });
+  assert.equal(await before('web_fetch', 'r1'), undefined);
+  await after('web_fetch', 'r1', { error: 'fetch failed' });
+  assert.equal(await before('web_search', 'r1'), undefined, 'one failure still allows a retry');
+  await after('web_search', 'r1', { result: { details: { status: 'error' } } });
+  const blocked = await before('web_fetch', 'r1');
+  assert.equal(blocked.block, true);
+  assert.match(blocked.blockReason, /连续失败 2 次/u);
+  assert.equal((await before('web_search', 'r1')).block, true);
+  assert.equal(await before('web_fetch', 'r2'), undefined, 'another turn is not affected');
+  assert.equal(await before('memory_search', 'r1'), undefined, 'only the web tools are stopped');
+  // a success in between resets the count
+  await after('web_fetch', 'r3', { error: 'timeout' });
+  await after('web_fetch', 'r3', { result: { content: 'ok' } });
+  await after('web_fetch', 'r3', { error: 'timeout' });
+  assert.equal(await before('web_fetch', 'r3'), undefined);
+});

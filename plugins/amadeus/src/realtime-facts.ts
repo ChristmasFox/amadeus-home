@@ -62,15 +62,45 @@ export class RealtimeToolAudit {
   }
 }
 
+/** Two web failures in a row end the web attempts of that turn: the model then tells or asks the user instead of trying yet another entry point. */
+export const WEB_FAILURE_LIMIT = 2;
+export const WEB_FAILURE_BLOCK_REASON = '联网查询已经连续失败 2 次，这一轮不要再调用 web_search / web_fetch，也不要换入口重试。直接告诉用户现在查不到，并问他要不要换个说法、给个链接或稍后再试。';
+
+/** Consecutive failures of the web tools per turn (keyed by run, else session); a success resets the count. */
+export class WebFailureGuard {
+  private readonly failures = new Map<string, number>();
+  blocked(key: string): boolean { return (this.failures.get(key) ?? 0) >= WEB_FAILURE_LIMIT; }
+  record(key: string, failed: boolean): void {
+    if (!failed) { this.failures.delete(key); return; }
+    this.failures.set(key, (this.failures.get(key) ?? 0) + 1);
+    // Bounded: old turns are forgotten first.
+    if (this.failures.size > 500) this.failures.delete(this.failures.keys().next().value!);
+  }
+}
+
+function webResultFailed(result: unknown, error?: string): boolean {
+  if (error) return true;
+  if (!result || typeof result !== 'object') return false;
+  const value = result as Record<string, unknown>;
+  const details = value.details && typeof value.details === 'object' ? value.details as Record<string, unknown> : {};
+  return value.isError === true || details.status === 'error' || value.status === 'error' || typeof value.error === 'string' || typeof details.error === 'string';
+}
+
 export function registerRealtimeFacts(api: OpenClawPluginApi): void {
   const audit = new RealtimeToolAudit();
+  const webGuard = new WebFailureGuard();
   api.on('before_prompt_build', () => ({ appendSystemContext: `${SEARCH_HINT}\n\n${IMAGE_HINT}` }));
   api.on('before_tool_call', (event, context) => {
+    if (SEARCH_TOOLS.has(event.toolName) && webGuard.blocked(event.runId ?? context.runId ?? context.sessionKey ?? 'unknown')) {
+      api.logger.warn('web tools failed twice in this turn; blocking further web calls');
+      return { block: true, blockReason: WEB_FAILURE_BLOCK_REASON };
+    }
     if (SEARCH_TOOLS.has(event.toolName)) audit.start({ session: context.sessionKey ?? 'unknown', ...((event.runId ?? context.runId) ? { runId: (event.runId ?? context.runId)! } : {}), tool: event.toolName, ...(event.toolCallId ? { toolCallId: event.toolCallId } : {}) });
     return undefined;
   });
   api.on('after_tool_call', async (event, context) => {
     if (!SEARCH_TOOLS.has(event.toolName)) return;
+    webGuard.record(event.runId ?? context.runId ?? context.sessionKey ?? 'unknown', webResultFailed(event.result, event.error));
     const record = await audit.finish({ session: context.sessionKey ?? 'unknown', ...(event.runId ? { runId: event.runId } : {}), tool: event.toolName, ...(event.toolCallId ? { toolCallId: event.toolCallId } : {}), ...(event.result !== undefined ? { result: event.result } : {}), ...(event.error ? { error: event.error } : {}), ...(event.durationMs !== undefined ? { durationMs: event.durationMs } : {}) });
     api.logger.info(JSON.stringify({ event: 'realtime_tool_audit', ...(record ?? { tool: event.toolName, success: false }) }));
   });

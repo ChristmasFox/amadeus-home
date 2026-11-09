@@ -145,7 +145,7 @@ test('friends status: the owner in a direct chat sees who is playing; filters, n
     friend(4, { personaState: 0, profilePublic: false }),
   ]);
   const playing = await steamFriendsStatus(deps, ownerDm(), {}) as { friends: Array<{ name: string; game: string | null; state: string }>; hiddenOrOfflineUnknown: number };
-  assert.deepEqual(playing.friends, [{ name: 'Friend1', state: 'in_game', game: 'Placeholder One' }]);
+  assert.deepEqual(playing.friends, [{ name: 'Friend1', steamId: '76561190000000101', state: 'in_game', game: 'Placeholder One' }]);
   assert.equal(playing.hiddenOrOfflineUnknown, 1);
   const online = await steamFriendsStatus(deps, ownerDm(), { filter: 'online' }) as { friends: Array<{ name: string }> };
   assert.deepEqual(online.friends.map((entry) => entry.name), ['Friend1', 'Friend2']);
