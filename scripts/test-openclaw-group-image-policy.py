@@ -32,14 +32,8 @@ class GroupImagePolicyTest(unittest.TestCase):
         self.assertEqual(channel["dmPolicy"], "open")
         self.assertEqual(channel["allowFrom"], ["*"])
         for group in [*channel["groups"].values(), *channel["accounts"]["secondary"]["groups"].values()]:
-            self.assertEqual(group["tools"], {"allow": [
-                "web_search", "web_fetch", "image_generate",
-                "pubg_resolve_players", "pubg_search_matches", "pubg_query_stats",
-                "pubg_compare_stats", "pubg_get_match", "pubg_get_review_facts",
-                "pubg_get_period_review", "pubg_query_team_damage",
-                "pubg_prefetch_telemetry", "pubg_telemetry_sync_report",
-                "amadeus_macos_host_status", "amadeus_macos_host_processes",
-            ]})
+            self.assertEqual(group["tools"], {"allow": list(prepare.GROUP_IMAGE_TOOL_ALLOWLIST)})
+            self.assertNotIn("steam_friends_status", group["tools"]["allow"])
             self.assertEqual(group["toolsBySender"], {key: {"allow": ["*"]} for key in keys})
         self.assertFalse(channel["groups"]["*"]["requireMention"])
         self.assertTrue(channel["groups"]["fixture-group"]["requireMention"])
@@ -54,14 +48,8 @@ class GroupImagePolicyTest(unittest.TestCase):
         before = copy.deepcopy(channel["direct"])
         prepare.ensure_group_image_policies(channel)
         self.assertEqual(channel["direct"], before)
-        self.assertEqual(channel["groups"]["*"]["tools"], {"allow": [
-                "web_search", "web_fetch", "image_generate",
-                "pubg_resolve_players", "pubg_search_matches", "pubg_query_stats",
-                "pubg_compare_stats", "pubg_get_match", "pubg_get_review_facts",
-                "pubg_get_period_review", "pubg_query_team_damage",
-                "pubg_prefetch_telemetry", "pubg_telemetry_sync_report",
-                "amadeus_macos_host_status", "amadeus_macos_host_processes",
-            ]})
+        self.assertEqual(channel["groups"]["*"]["tools"], {"allow": list(prepare.GROUP_IMAGE_TOOL_ALLOWLIST)})
+        self.assertNotIn("steam_friends_status", channel["groups"]["*"]["tools"]["allow"])
         self.assertNotIn("toolsBySender", channel["groups"]["*"])
 
     def test_legacy_group_image_policy_is_upgraded_to_include_pubg_tools(self):
