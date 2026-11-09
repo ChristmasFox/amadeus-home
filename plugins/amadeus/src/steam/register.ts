@@ -139,7 +139,7 @@ export function registerSteamTools(api: OpenClawPluginApi): void {
     async (params, context) => steamSetBroadcast(deps(), caller(context), params as Static<typeof BroadcastParameters>));
   registerTool(api, 'steam_get_profile', '查某个已绑定 Steam 的人的资料：昵称、当前在线状态与正在玩的游戏、账号创建时间。资料不公开的字段会返回 known:false，不要编造。', ProfileParameters,
     async (params, context) => steamGetProfile(deps(), caller(context), { person: person(params as { person: unknown }) }));
-  registerTool(api, 'steam_get_playtime', '查某个已绑定 Steam 的人的游戏时长。不带 period：Steam 的总时长、最常玩的游戏或某个游戏的时长（游戏详情不公开时 known:false）。带 period（today/yesterday/this_week/date+date）：按 PUBG 同一个业务日切天（默认 Asia/Shanghai，每天 06:00 切日，06:00→次日 06:00 为一天；回答时说明按 6 点切日，和 PUBG 战报同一天），返回那段时间里实际玩了哪些游戏各多久和合计，多个账号合并；例如“我昨天玩了多久”用 person=self、period=yesterday，再按游戏列出时长。记录只从开始记录的时间起有，更早的日子如实说没有数据，不要编造。', PlaytimeParameters,
+  registerTool(api, 'steam_get_playtime', '查某个已绑定 Steam 的人的游戏时长。问“玩了多久/玩了几个小时/玩了多长时间”而没有说生涯、总共、入坑以来、一共这类意思时，问的是今天：用 period=today，不要用不带 period 的总时长顶替；只有用户明确问生涯/总共/一共玩了多少才不带 period。不带 period：Steam 的总时长（生涯累计）、最常玩的游戏或某个游戏的时长（游戏详情不公开时 known:false）。带 period（today/yesterday/this_week/date+date）：按 PUBG 同一个业务日切天（默认 Asia/Shanghai，每天 06:00 切日，06:00→次日 06:00 为一天；回答时说明按 6 点切日，和 PUBG 战报同一天），返回那段时间里实际玩了哪些游戏各多久和合计，多个账号合并；例如“我昨天玩了多久”用 person=self、period=yesterday，再按游戏列出时长。记录只从开始记录的时间起有，更早的日子如实说没有数据，不要编造。', PlaytimeParameters,
     async (params, context) => {
       const typed = params as Static<typeof PlaytimeParameters>;
       return steamGetPlaytime(deps(), caller(context), { person: person(typed), ...(typed.game ? { game: typed.game } : {}), ...(typed.period ? { period: typed.period } : {}), ...(typed.date ? { date: typed.date } : {}) });

@@ -94,3 +94,11 @@ test('games with a community alias are shown as name（alias） in every notice;
   assert.match(sent[0]!, /- 游戏：PUBG: BATTLEGROUNDS（吃鸡）/u);
   assert.match(sent[1]!, /kim 从 PUBG: BATTLEGROUNDS（吃鸡） 切换到 Grand Theft Auto V（GTA5）。/u);
 });
+
+test('guidance: a plain 玩了多久 is today; lifetime only when asked (stated in the tool description and the SKILL, not in code)', async () => {
+  const { readFileSync } = await import('node:fs');
+  const register = readFileSync(new URL('../src/steam/register.ts', import.meta.url), 'utf8');
+  const skill = readFileSync(new URL('../skills/steam/SKILL.md', import.meta.url), 'utf8');
+  assert.match(register, /没有说生涯、总共.*用 period=today，不要用不带 period 的总时长顶替/u);
+  assert.match(skill, /plain "X 玩了多久[^]*means \*\*today\*\*[^]*do not substitute the lifetime totals/u);
+});
