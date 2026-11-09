@@ -1223,6 +1223,41 @@ for name in ['pubg','amadeus','voice-reply','market','macos-host','image-upscale
 print('OPENCLAW_PREFLIGHT=passed')
 PY
 
+# --openclaw-only skips openclaw_prepare.py; still migrate group owner tool policy.
+orb -m "$MACHINE" -u root python3 - "$ROOT_DIR/scripts/openclaw_prepare.py" "$OPENCLAW_DATA_DIR/config/openclaw.json" <<'PY'
+import importlib.util, json, os, sys, time
+from pathlib import Path
+prepare_path, config_path = map(Path, sys.argv[1:])
+spec = importlib.util.spec_from_file_location("openclaw_prepare", prepare_path)
+prepare = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(prepare)
+path = config_path
+config = json.loads(path.read_text())
+owners = config.get("commands", {}).get("ownerAllowFrom", [])
+if len(owners) != 1 or not str(owners[0]).startswith("whatsapp:+"):
+    raise SystemExit("exactly one WhatsApp owner identity is required before group tool migration")
+phone = str(owners[0]).split(":", 1)[1]
+keys = prepare.owner_tool_policy_keys(phone)
+whatsapp = config.setdefault("channels", {}).setdefault("whatsapp", {})
+before = json.dumps(whatsapp.get("groups", {}), sort_keys=True)
+prepare.ensure_group_image_policies(whatsapp, keys)
+prepare.ensure_group_image_policies(config.setdefault("channels", {}).setdefault("telegram", {}))
+after = json.dumps(whatsapp.get("groups", {}), sort_keys=True)
+if before != after:
+    backup = path.with_name(path.name + f".bak-owner-group-tools-{time.strftime('%Y%m%d%H%M%S')}")
+    backup.write_bytes(path.read_bytes())
+    os.chmod(backup, 0o600)
+    tmp = path.with_name(path.name + ".tmp-owner-group-tools")
+    tmp.write_text(json.dumps(config, ensure_ascii=False, indent=2) + "\n")
+    os.chmod(tmp, 0o600)
+    os.chown(tmp, 1000, 1000)
+    os.replace(tmp, path)
+    os.chown(path, 1000, 1000)
+    print("APPLY_GROUP_OWNER_TOOL_POLICY=updated")
+else:
+    print("APPLY_GROUP_OWNER_TOOL_POLICY=present")
+PY
+
 orb -m "$MACHINE" -u root python3 - "$OPENCLAW_DATA_DIR/config/openclaw.json" <<'PY'
 import json, sys
 from pathlib import Path
