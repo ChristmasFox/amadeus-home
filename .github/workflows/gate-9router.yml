@@ -33,6 +33,7 @@ jobs:
           node infra/docker/casaos/9router/patch-image-upstream-diagnostics.mjs --root "$fixture/package" --apply
           node infra/docker/casaos/9router/patch-image-combo-safety.mjs --root "$fixture/package" --apply
           node infra/docker/casaos/9router/patch-combo-location-fallback.mjs --root "$fixture/package" --apply
+          node infra/docker/casaos/9router/patch-stt-multipart-body.mjs --root "$fixture/package" --apply
           node --check "$fixture/package/app/.next-cli-build/server/app/api/v1/images/generations/route.js"
           node --check "$fixture/package/app/.next-cli-build/server/chunks/8910.js"
       - name: Validate Gate-Local Compose shape

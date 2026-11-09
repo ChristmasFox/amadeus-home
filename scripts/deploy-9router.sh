@@ -72,6 +72,7 @@ chmod 0600 "$context/infra/9router/runtime-policy.json"
     node infra/docker/casaos/9router/test-runtime-policy.mjs
   fi
   node infra/docker/casaos/9router/test-image-combo-safety.mjs
+  node infra/docker/casaos/9router/test-stt-multipart-body.mjs
   node --check infra/docker/casaos/9router/start-9router.mjs
   # The exported Git snapshot has no .git metadata; scan the real worktree.
 )
