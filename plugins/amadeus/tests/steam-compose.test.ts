@@ -1,13 +1,14 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { buildAnnouncementPrompt, kurisuComposer, validateAnnouncement } from '../src/steam/compose.js';
+import type { AnnouncementFacts } from '../src/steam/poller.js';
 
-const facts = { groupId: 'g', people: [{ name: 'Alpha', game: 'Placeholder Game' }, { name: 'Bravo' }] };
+const facts: AnnouncementFacts = { groupId: 'g', people: [{ name: 'Alpha', kind: 'came_online', game: 'Placeholder Game' }, { name: 'Bravo', kind: 'came_online' }] };
 
 test('the prompt carries only the code-decided facts and the voice anchor', () => {
   const prompt = buildAnnouncementPrompt(facts);
-  assert.match(prompt, /Alpha，正在玩 Placeholder Game/u);
-  assert.match(prompt, /Bravo，在线/u);
+  assert.match(prompt, /Alpha，刚上线，正在玩 Placeholder Game/u);
+  assert.match(prompt, /Bravo，刚上线/u);
   assert.match(prompt, /不要编造/u);
 });
 
@@ -20,4 +21,14 @@ test('composer rejects invalid output instead of falling back to a template', as
   assert.equal(await kurisuComposer(async () => 'Alpha 和 Bravo 来了')(facts), 'Alpha 和 Bravo 来了');
   await assert.rejects(kurisuComposer(async () => 'nonsense')(facts), /announcement_invalid/u);
   await assert.rejects(kurisuComposer(async () => { throw new Error('down'); })(facts), /down/u);
+});
+
+test('each event type states its own fact, with the game name where there is one', () => {
+  const prompt = buildAnnouncementPrompt({ groupId: 'g', people: [
+    { name: 'A', kind: 'started_playing', game: 'G1' }, { name: 'B', kind: 'switched_game', game: 'G2' }, { name: 'C', kind: 'back_from_away' }, { name: 'D', kind: 'back_from_away', game: 'G3' },
+  ] });
+  assert.match(prompt, /A，本来就在线，刚开始玩 G1/u);
+  assert.match(prompt, /B，刚换了游戏，现在玩的是 G2/u);
+  assert.match(prompt, /C，离开了一阵后回来了\n/u);
+  assert.match(prompt, /D，离开了一阵后回来了，正在玩 G3/u);
 });

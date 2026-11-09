@@ -1,12 +1,13 @@
 import {
   announcementKey, applyObservation, DEFAULT_POLICY, planBroadcast,
-  type BroadcastPolicy, type Candidate, type PresenceChange, type StoredPresence,
+  type BroadcastPolicy, type Candidate, type EventKind, type PresenceChange, type StoredPresence,
 } from './domain.js';
 import { observationFrom, type PlayerSummary } from './client.js';
 import type { SteamStore } from './store.js';
 
 export interface AnnouncementPerson {
   name: string;
+  kind: EventKind;
   game?: string;
 }
 
@@ -70,7 +71,7 @@ export class PresencePoller {
         const { next, event } = applyObservation(store.presence(steamId), observation, now);
         store.savePresence(steamId, next);
         if (next.state === 'offline') this.dropFromQueues(steamId);
-        if (event) { report.events += 1; this.enqueue(event, next); }
+        if (event) { report.events += 1; this.enqueue(event); }
       }
     }
     await this.flush(report);
@@ -95,13 +96,13 @@ export class PresencePoller {
     for (const group of this.queue.values()) group.delete(steamId);
   }
 
-  private enqueue(event: PresenceChange, record: StoredPresence): void {
+  private enqueue(event: PresenceChange): void {
     const link = this.deps.store.linkBySteamId(event.steamId);
     if (!link || !link.broadcast) return;
     for (const groupId of this.deps.store.groupsOf(link.senderKey)) {
       if (!this.deps.store.groupEnabled(groupId)) continue;
       const group = this.queue.get(groupId) ?? new Map<string, Candidate>();
-      group.set(event.steamId, { ...event, ...(record.lastNotifiedAt !== undefined ? { lastNotifiedAt: record.lastNotifiedAt } : {}) });
+      group.set(event.steamId, { ...event });
       this.queue.set(groupId, group);
     }
   }
@@ -138,6 +139,7 @@ export class PresencePoller {
     const now = this.now();
     const people = changes.map((change) => ({
       name: members.get(change.steamId)?.personaName ?? '',
+      kind: change.kind,
       ...(change.gameName ? { game: change.gameName } : {}),
     })).filter((person) => person.name);
     if (!people.length) return;
@@ -160,10 +162,6 @@ export class PresencePoller {
       return;
     }
     store.recordAnnouncement(key, groupId, now, 'sent');
-    for (const change of changes) {
-      const record = store.presence(change.steamId);
-      if (record) store.savePresence(change.steamId, { ...record, lastNotifiedAt: now });
-    }
     report.sent += 1;
   }
 }

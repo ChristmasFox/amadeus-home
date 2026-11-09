@@ -65,7 +65,7 @@ test('a restart never replays: the ledger already knows the person is online', a
   assert.equal(env.sent.length, 0);
 });
 
-test('two people arriving together share one message; the cooldown blocks a quick re-announcement', async () => {
+test('two people arriving together share one message; coming back later is announced again', async () => {
   const env = setup();
   const poller = env.poller();
   env.states.set(A.steam, { personaState: 0 });
@@ -80,7 +80,7 @@ test('two people arriving together share one message; the cooldown blocks a quic
   await cycle(env, poller, 3);
   env.states.set(A.steam, { personaState: 1 });
   await cycle(env, poller, 8);
-  assert.equal(env.sent.length, 1); // inside the 60 minute cooldown
+  assert.equal(env.sent.length, 2); // no cooldown: a new arrival is a new announcement
 });
 
 test('an arrival that goes away again inside the merge window is not announced', async () => {
@@ -181,4 +181,20 @@ test('default-on group: linked people seen in the group are enrolled on their ow
   assert.deepEqual(store.broadcastMembers(GROUP).map((link) => link.senderKey), ['whatsapp:1']);
   store.setGroup(GROUP, false);
   assert.deepEqual(store.watchedSteamIds(), []);
+});
+
+test('an online person who starts a game, then switches game, is announced each time; no cooldown holds them back', async () => {
+  const env = setup({ people: [A] });
+  const poller = env.poller();
+  env.states.set(A.steam, { personaState: 1 });
+  await cycle(env, poller);                                   // baseline: online
+  env.states.set(A.steam, { personaState: 1, gameId: '10', gameName: 'Game One' });
+  await cycle(env, poller, 6);
+  assert.equal(env.sent.length, 1);
+  env.states.set(A.steam, { personaState: 1, gameId: '11', gameName: 'Game Two' });
+  await cycle(env, poller, 6);
+  assert.equal(env.sent.length, 2);
+  env.states.set(A.steam, { personaState: 1, gameId: '10', gameName: 'Game One' });
+  await cycle(env, poller, 6);
+  assert.equal(env.sent.length, 3);
 });

@@ -1,16 +1,25 @@
 import { KURISU_VOICE_ANCHOR } from '@rine-kit/pubg-reply';
 import { nineRouterCompleter, type Completer } from '../dm-digest.js';
+import type { EventKind } from './domain.js';
 import type { AnnouncementFacts } from './poller.js';
 
 const MAX_TEXT = 220;
 
+/** The fact each event type states, with the game name when there is one; wording is the model's job. */
+const EVENT_FACT: Record<EventKind, (game?: string) => string> = {
+  came_online: (game) => (game ? `刚上线，正在玩 ${game}` : '刚上线'),
+  started_playing: (game) => (game ? `本来就在线，刚开始玩 ${game}` : '本来就在线，刚开始玩游戏'),
+  switched_game: (game) => (game ? `刚换了游戏，现在玩的是 ${game}` : '刚换了游戏'),
+  back_from_away: (game) => (game ? `离开了一阵后回来了，正在玩 ${game}` : '离开了一阵后回来了'),
+};
+
 /** The facts are decided by code; the model only words them. No fixed template exists as a fallback. */
 export function buildAnnouncementPrompt(facts: AnnouncementFacts): string {
-  const lines = facts.people.map((person) => `- ${person.name}${person.game ? `，正在玩 ${person.game}` : '，在线'}`);
+  const lines = facts.people.map((person) => `- ${person.name}，${EVENT_FACT[person.kind](person.game)}`);
   return [
     KURISU_VOICE_ANCHOR,
     '',
-    '【任务】群里有成员刚刚在 Steam 上线了。用你自己的口吻，在群里自然地说一两句话告诉大家。',
+    '【任务】群里有成员刚刚在 Steam 上有了新动静（上线 / 开始玩 / 换游戏 / 离开后回来）。按每个人事实里写的那种情况来说，用你自己的口吻，在群里自然地说一两句话告诉大家。',
     '只依据下面的事实：名字原样使用，不要编造他们在做什么、玩多久或游戏之外的信息，不要 @ 任何人，不要加链接，不超过 60 个字。每个名字都要提到。只输出要发到群里的那句话本身。',
     '',
     '【事实】',

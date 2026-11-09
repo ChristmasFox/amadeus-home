@@ -45,57 +45,65 @@ export function normalizeState(personaState: number | undefined, gameId: string 
 
 export const isOnlineState = (state: PresenceState): boolean => state === 'online' || state === 'in_game';
 
+export type EventKind = 'came_online' | 'started_playing' | 'switched_game' | 'back_from_away';
+
 export interface PresenceRecord {
   state: PresenceState;
   /** When the state last changed (ms). */
   since: number;
   gameId?: string;
   gameName?: string;
-  lastNotifiedAt?: number;
 }
 
 export interface PresenceChange {
   steamId: string;
+  kind: EventKind;
   gameId?: string;
   gameName?: string;
-  /** When the online state was first observed (ms). */
+  /** When the new state was first observed (ms). */
   at: number;
 }
 
-export interface TransitionResult {
-  record: PresenceRecord;
-  /** Set only for a confirmed offline/away to online transition. */
-  event?: PresenceChange;
-}
-
 /**
- * One observation applied to the stored record. A change must be seen on two consecutive observations to count
- * (`pending`), which absorbs reconnect flaps. The very first observation of an id only sets the baseline.
+ * One observation applied to the stored record. A change (state or game) must be seen on two consecutive
+ * observations to count (`pending`), which absorbs reconnect flaps. The very first observation of an id only sets the baseline.
  */
 export interface StoredPresence extends PresenceRecord {
   pending?: { state: PresenceState; gameId?: string; gameName?: string; since: number };
 }
 
+function eventFor(previous: StoredPresence, observed: { state: PresenceState; gameId?: string }): EventKind | undefined {
+  if (!isOnlineState(observed.state)) return undefined;
+  if (previous.state === 'offline') return 'came_online';
+  if (previous.state === 'away') return 'back_from_away';
+  if (observed.state === 'in_game') return previous.state === 'online' ? 'started_playing' : previous.gameId !== observed.gameId ? 'switched_game' : undefined;
+  return undefined;
+}
+
 export function applyObservation(previous: StoredPresence | undefined, observation: PresenceObservation, now: number): { next: StoredPresence; event?: PresenceChange } {
   const observed = { state: observation.state, ...(observation.gameId ? { gameId: observation.gameId } : {}), ...(observation.gameName ? { gameName: observation.gameName } : {}) };
   if (!previous) return { next: { ...observed, since: now } };
-  // Same state: only the game details move; no event.
-  if (observation.state === previous.state) {
-    const { pending: _pending, gameId: _gameId, gameName: _gameName, ...rest } = previous;
+  const { pending, gameId: _gameId, gameName: _gameName, ...rest } = previous;
+  // Same state and same game: nothing changed, any half-seen change was a flap.
+  if (observation.state === previous.state && observation.gameId === previous.gameId) {
     return { next: { ...rest, ...(observed.gameId ? { gameId: observed.gameId } : {}), ...(observed.gameName ? { gameName: observed.gameName } : {}) } };
   }
-  if (!previous.pending || previous.pending.state !== observation.state) {
+  if (!pending || pending.state !== observation.state || pending.gameId !== observation.gameId) {
     return { next: { ...previous, pending: { ...observed, since: now } } };
   }
   // Confirmed on the second consecutive observation.
-  const wasOnline = isOnlineState(previous.state);
-  const nowOnline = isOnlineState(observation.state);
-  const confirmedAt = previous.pending.since;
-  const next: StoredPresence = { ...observed, since: confirmedAt, ...(previous.lastNotifiedAt !== undefined ? { lastNotifiedAt: previous.lastNotifiedAt } : {}) };
-  if (!wasOnline && nowOnline && previous.state === 'offline') {
-    return { next, event: { steamId: observation.steamId, ...(observed.gameId ? { gameId: observed.gameId } : {}), ...(observed.gameName ? { gameName: observed.gameName } : {}), at: confirmedAt } };
-  }
-  return { next };
+  const confirmedAt = pending.since;
+  const next: StoredPresence = { ...rest, ...observed, since: confirmedAt };
+  const kind = eventFor(previous, observed);
+  if (!kind) return { next };
+  return {
+    next,
+    event: {
+      steamId: observation.steamId, kind, at: confirmedAt,
+      ...(observed.gameId ? { gameId: observed.gameId } : {}),
+      ...(observed.gameName ? { gameName: observed.gameName } : {}),
+    },
+  };
 }
 
 export interface QuietHours {
@@ -117,27 +125,24 @@ export function inQuietHours(at: number, quiet: QuietHours = DEFAULT_QUIET): boo
   return quiet.startHour <= quiet.endHour ? hour >= quiet.startHour && hour < quiet.endHour : hour >= quiet.startHour || hour < quiet.endHour;
 }
 
-/** Daytime 60 s, overnight 5 min (the quiet window). */
-export function pollIntervalMs(at: number, quiet: QuietHours = DEFAULT_QUIET, daytimeMs = 60_000, nightMs = 300_000): number {
-  return inQuietHours(at, quiet) ? nightMs : daytimeMs;
+/** One poll a minute, day and night; the quiet window only silences announcements, it does not slow the polling. */
+export function pollIntervalMs(_at: number = Date.now(), _quiet: QuietHours = DEFAULT_QUIET, intervalMs = 60_000): number {
+  return intervalMs;
 }
 
 export interface BroadcastPolicy {
   quiet: QuietHours;
-  /** Same person: minimum gap between two announcements. */
-  cooldownMs: number;
   /** Events landing within this window of the first one are merged into one message. */
   mergeWindowMs: number;
   maxPerGroupPerHour: number;
 }
 
-export const DEFAULT_POLICY: BroadcastPolicy = { quiet: DEFAULT_QUIET, cooldownMs: 60 * 60_000, mergeWindowMs: 3 * 60_000, maxPerGroupPerHour: 6 };
+/** No per-person or per-event cooldown by decision: every confirmed event is announced, bounded only by the group cap. */
+export const DEFAULT_POLICY: BroadcastPolicy = { quiet: DEFAULT_QUIET, mergeWindowMs: 3 * 60_000, maxPerGroupPerHour: 6 };
 
-export type SkipReason = 'quiet_hours' | 'cooldown' | 'rate_limited' | 'stale';
+export type SkipReason = 'quiet_hours' | 'rate_limited' | 'stale';
 
-export interface Candidate extends PresenceChange {
-  lastNotifiedAt?: number;
-}
+export type Candidate = PresenceChange;
 
 export interface BroadcastPlan {
   /** One merged batch of people to announce, or undefined. */
@@ -149,7 +154,7 @@ export interface BroadcastPlan {
 }
 
 /**
- * Decide what one group announces now. Quiet-hour and cooldown drops are final; a rate-limited batch is dropped
+ * Decide what one group announces now. Quiet-hour drops are final; a rate-limited batch is dropped
  * too (nothing is replayed later). People inside the merge window wait so that simultaneous arrivals share one message.
  */
 export function planBroadcast(candidates: Candidate[], now: number, sentInLastHour: number, policy: BroadcastPolicy = DEFAULT_POLICY): BroadcastPlan {
@@ -157,7 +162,6 @@ export function planBroadcast(candidates: Candidate[], now: number, sentInLastHo
   const eligible: Candidate[] = [];
   for (const candidate of candidates) {
     if (inQuietHours(candidate.at, policy.quiet) || inQuietHours(now, policy.quiet)) plan.skipped.push({ steamId: candidate.steamId, reason: 'quiet_hours' });
-    else if (candidate.lastNotifiedAt !== undefined && candidate.at - candidate.lastNotifiedAt < policy.cooldownMs) plan.skipped.push({ steamId: candidate.steamId, reason: 'cooldown' });
     else eligible.push(candidate);
   }
   if (!eligible.length) return plan;
@@ -170,11 +174,11 @@ export function planBroadcast(candidates: Candidate[], now: number, sentInLastHo
     plan.skipped.push(...eligible.map((entry) => ({ steamId: entry.steamId, reason: 'rate_limited' as const })));
     return plan;
   }
-  plan.send = eligible.map(({ lastNotifiedAt: _ignored, ...change }) => change);
+  plan.send = eligible;
   return plan;
 }
 
-/** Idempotency key of one announcement: the group, and every included id with the moment it came online. */
+/** Idempotency key of one announcement: the group, and every included id with its event type and the moment it happened. */
 export function announcementKey(groupId: string, changes: PresenceChange[]): string {
-  return `steam:${groupId}:${[...changes].sort((a, b) => a.steamId.localeCompare(b.steamId)).map((entry) => `${entry.steamId}@${entry.at}`).join(',')}`;
+  return `steam:${groupId}:${[...changes].sort((a, b) => a.steamId.localeCompare(b.steamId)).map((entry) => `${entry.steamId}:${entry.kind}@${entry.at}`).join(',')}`;
 }
