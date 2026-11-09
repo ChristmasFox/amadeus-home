@@ -121,6 +121,18 @@ class GroupImagePolicyTest(unittest.TestCase):
         with self.assertRaisesRegex(SystemExit, "groups must be an object"):
             prepare.ensure_group_image_policies({"groups": []})
 
+    def test_core_patch_passes_every_group_tool_except_the_core_web_pair(self):
+        """The pinned core patch lets only the tools it lists through the global sender layer; a group
+        allowlist tool missing there silently never reaches non-owners (Steam did exactly that)."""
+        import re
+        source = Path(__file__).with_name("patch-openclaw-group-image-policy.mjs").read_text()
+        exported = re.search(r"GROUP_READONLY_CAPABILITY_TOOLS = \[(.*?)\];", source, re.S).group(1)
+        inline = re.search(r"const groupCapabilityTools = \[(.*?)\];", source, re.S).group(1)
+        names = lambda text: set(re.findall(r"'([a-z_]+)'", text))
+        wanted = set(prepare.GROUP_IMAGE_TOOL_ALLOWLIST) - set(prepare.NON_OWNER_TOOL_ALLOWLIST)
+        self.assertEqual(names(exported), wanted)
+        self.assertEqual(names(inline), wanted)
+
 
 if __name__ == "__main__":
     unittest.main()
