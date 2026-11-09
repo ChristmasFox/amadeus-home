@@ -29,7 +29,7 @@ const UnlinkParameters = Type.Object({
   account: Type.Optional(Type.String({ minLength: 1, maxLength: 256, description: '要解除哪一个账号：SteamID、个人资料链接或 Steam 昵称。只有一个账号时可不填。' })),
   all: Type.Optional(Type.Boolean({ description: 'true=解除自己所有 Steam 账号。' })),
 }, { additionalProperties: false });
-const BroadcastParameters = Type.Object({ enabled: Type.Boolean({ description: 'true=打开我的上线播报；false=关掉我的上线播报。' }) }, { additionalProperties: false });
+const BroadcastParameters = Type.Object({ enabled: Type.Boolean({ description: 'true=打开我的自动播报（上线、开始玩、换游戏、回来、成就解锁）；false=关掉。' }) }, { additionalProperties: false });
 const EmptyParameters = Type.Object({}, { additionalProperties: false });
 const ProfileParameters = Type.Object({ person: PersonParameters }, { additionalProperties: false });
 const PlaytimeParameters = Type.Object({ person: PersonParameters, game: Type.Optional(Type.String({ minLength: 1, maxLength: 128, description: '只看某个游戏时填游戏名（部分匹配）。' })) }, { additionalProperties: false });
@@ -44,7 +44,7 @@ const AchievementParameters = Type.Object({
   mode: Type.Optional(Type.Union([Type.Literal('summary'), Type.Literal('rarest'), Type.Literal('recent'), Type.Literal('missing')], { description: 'summary=完成度+最稀有+最近解锁（默认）；rarest=已解锁里最稀有的；recent=最近解锁；missing=还差哪些（最容易的先）。' })),
   limit: Type.Optional(Type.Integer({ minimum: 1, maximum: 20 })),
 }, { additionalProperties: false });
-const GroupParameters = Type.Object({ enabled: Type.Optional(Type.Boolean({ description: '只有 owner 能设置：true=本群开启 Steam 上线播报，false=关闭。不填则只查看当前状态。' })) }, { additionalProperties: false });
+const GroupParameters = Type.Object({ enabled: Type.Optional(Type.Boolean({ description: '只有 owner 能设置：true=本群开启 Steam 自动播报（含成就解锁），false=关闭。不填则只查看当前状态。' })) }, { additionalProperties: false });
 
 const runtimes = new Map<string, { store: SteamStore; client: SteamClient }>();
 
@@ -94,7 +94,7 @@ export function registerSteamTools(api: OpenClawPluginApi): void {
     async (params, context) => steamLinkAccount(deps(), caller(context), params as Static<typeof LinkParameters>));
   registerTool(api, 'steam_unlink', '解除发消息的人自己的一个 Steam 账号（有多个账号时用 account 指定哪一个，或 all=true 全部解除），并删除相关记录。', UnlinkParameters,
     async (params, context) => steamUnlink(deps(), caller(context), params as Static<typeof UnlinkParameters>));
-  registerTool(api, 'steam_set_broadcast', '打开或关闭发消息的人自己的 Steam 上线播报（在群里打开会把这个人加入本群的播报名单）。用户说“关掉/打开我的播报”时调用。', BroadcastParameters,
+  registerTool(api, 'steam_set_broadcast', '打开或关闭发消息的人自己的 Steam 自动播报（上线、开始玩、换游戏、离开后回来、成就解锁都会自动播到已开启播报的群；在群里打开会把这个人加入本群的播报名单）。用户说“关掉/打开我的播报”时调用。', BroadcastParameters,
     async (params, context) => steamSetBroadcast(deps(), caller(context), params as Static<typeof BroadcastParameters>));
   registerTool(api, 'steam_get_profile', '查某个已绑定 Steam 的人的资料：昵称、当前在线状态与正在玩的游戏、账号创建时间。资料不公开的字段会返回 known:false，不要编造。', ProfileParameters,
     async (params, context) => steamGetProfile(deps(), caller(context), { person: person(params as { person: unknown }) }));
@@ -112,7 +112,7 @@ export function registerSteamTools(api: OpenClawPluginApi): void {
     });
   registerTool(api, 'steam_friends_status', 'Arthur 本人在私聊里问他自己的 Steam 好友现在谁在玩什么、某个好友在干嘛时调用（需要他已绑定自己的 Steam）。好友列表不公开时返回 known:false。只在 owner 私聊可用，群里不可用，也不要在群里透露任何好友信息。', FriendsParameters,
     async (params, context) => steamFriendsStatus(deps(), caller(context), params as Static<typeof FriendsParameters>));
-  registerTool(api, 'steam_group_settings', '查看或（仅 owner）开启/关闭当前群的 Steam 上线播报。', GroupParameters,
+  registerTool(api, 'steam_group_settings', '查看或（仅 owner）开启/关闭当前群的 Steam 自动播报（默认开启；播报内容含上线、开始玩、换游戏、离开后回来、成就解锁）。返回的是开关和名单人数，不列出播报事件；事件范围见技能说明。', GroupParameters,
     async (params, context) => steamGroupSettings(deps(), caller(context), params as Static<typeof GroupParameters>));
 }
 
