@@ -39,6 +39,7 @@ services:
       TZ: Asia/Shanghai
       # Node's fetch ignores HTTP(S)_PROXY unless this is set; without it web_fetch/web_search reach steamcommunity.com and similar sites directly and fail.
       # NO_PROXY below keeps 9router, searxng and the other local services off the proxy.
+      # A candidate deploy only patches the live compose, so scripts/openclaw_telemetry_mount.py (ensure_env_proxy) adds this line there too.
       NODE_USE_ENV_PROXY: "1"
       HTTP_PROXY: ${OPENCLAW_HTTP_PROXY:-http://host.docker.internal:7897}
       HTTPS_PROXY: ${OPENCLAW_HTTPS_PROXY:-http://host.docker.internal:7897}
