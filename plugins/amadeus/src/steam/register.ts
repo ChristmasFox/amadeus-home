@@ -27,6 +27,7 @@ const PersonParameters = Type.Union([
 const LinkParameters = Type.Object({
   reference: Type.String({ minLength: 1, maxLength: 256, description: 'Steam 个人资料链接、自定义主页名或 17 位 SteamID。' }),
   confirm: Type.Optional(Type.Boolean({ description: '用户明确确认昵称无误后才传 true。' })),
+  person: Type.Optional(PersonParameters),
 }, { additionalProperties: false });
 const UnlinkParameters = Type.Object({
   account: Type.Optional(Type.String({ minLength: 1, maxLength: 256, description: '要解除哪一个账号：SteamID、个人资料链接或 Steam 昵称。只有一个账号时可不填。' })),
@@ -121,6 +122,7 @@ export function callerFrom(config: AmadeusConfig, context: OpenClawPluginToolCon
     replyPerson: () => identityPersonIdForSender(config, { type: 'reply_sender' }, context),
     displayName: (personId) => identityDisplayName(config, personId),
     mirrorLink: (steamId, label) => identityMirrorExternalAccount(config, context, 'steam', steamId, label),
+    mirrorLinkFor: (reference, steamId, label) => identityMirrorExternalAccount(config, context, 'steam', steamId, label, reference),
   };
 }
 
@@ -129,7 +131,7 @@ export function registerSteamTools(api: OpenClawPluginApi): void {
   const caller = (context: OpenClawPluginToolContext): SteamCaller => callerFrom(configFor(api), context);
   const person = (params: { person: unknown }): Person => params.person as Person;
 
-  registerTool(api, 'steam_link_account', '给发消息的人自己绑定一个 Steam 账号；一个人可以绑多个账号，新的不会覆盖旧的（用于查询自己的 Steam 信息，并默认在开启了播报的群里被播报上线）。先不带 confirm 调用得到昵称，让用户确认后再 confirm=true。只能绑定发消息的人自己。', LinkParameters,
+  registerTool(api, 'steam_link_account', '给发消息的人自己绑定一个 Steam 账号；一个人可以绑多个账号，新的不会覆盖旧的（用于查询自己的 Steam 信息，并默认在开启了播报的群里被播报上线）。先不带 confirm 调用得到昵称，让用户确认后再 confirm=true。不填 person 就绑发消息的人自己；只有 owner 在群里可以用 person（mention=@的人 / reply_sender=被回复的人 / alias=群里的称呼）替其他成员绑定，非 owner 只能绑自己。', LinkParameters,
     async (params, context) => steamLinkAccount(deps(), caller(context), params as Static<typeof LinkParameters>));
   registerTool(api, 'steam_unlink', '解除发消息的人自己的一个 Steam 账号（有多个账号时用 account 指定哪一个，或 all=true 全部解除），并删除相关记录。', UnlinkParameters,
     async (params, context) => steamUnlink(deps(), caller(context), params as Static<typeof UnlinkParameters>));

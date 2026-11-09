@@ -22,6 +22,8 @@ export interface SteamCaller {
   replyPerson?: () => string | undefined;
   /** Mirrors a new link into the identity store; returns the person id when the sender is a known person. */
   mirrorLink?: (steamId: string, label: string) => string | undefined;
+  /** Same for another person the owner named by a trusted mention or reply. */
+  mirrorLinkFor?: (reference: { type: 'mention'; index: number } | { type: 'reply_sender' }, steamId: string, label: string) => string | undefined;
   /** A person's display name (for rankings); falls back to the Steam nickname. */
   displayName?: (personId: string) => string | undefined;
 }
@@ -76,8 +78,41 @@ function ownLinks(deps: SteamToolDependencies, caller: SteamCaller): SteamLink[]
   return [...links.values()].sort((a, b) => a.linkedAt - b.linkedAt);
 }
 
-export async function steamLinkAccount(deps: SteamToolDependencies, caller: SteamCaller, params: { reference: string; confirm?: boolean }): Promise<unknown> {
+/** Who a link is for: the sender by default; the owner may name another member of the group by a trusted mention, reply or alias. */
+type Mirror = (steamId: string, label: string) => string | undefined;
+type Subject = { senderKey: string; personId?: string; links: SteamLink[]; mirror: Mirror } | { status: string; reason: string };
+
+function linkSubject(deps: SteamToolDependencies, caller: SteamCaller, person: Person | undefined): Subject {
   const senderKey = requireSender(caller);
+  if (!person || person.reference === 'self') return { senderKey, links: ownLinks(deps, caller), mirror: (steamId, label) => caller.mirrorLink?.(steamId, label) };
+  // Only the owner binds for someone else, and only inside a group where that someone is named by trusted metadata.
+  if (!caller.isOwner) return { status: 'refused', reason: 'owner_only_for_other_members' };
+  if (!caller.groupId) return { status: 'refused', reason: 'only_available_in_a_group' };
+  let key: string | undefined;
+  let personId: string | undefined;
+  let mirror: Mirror;
+  if (person.reference === 'mention') {
+    const index = person.mentionIndex ?? 0;
+    key = caller.mentions[index] || undefined;
+    personId = caller.mentionPerson?.(index);
+    mirror = (steamId, label) => caller.mirrorLinkFor?.({ type: 'mention', index }, steamId, label);
+  } else if (person.reference === 'reply_sender') {
+    key = caller.replySender;
+    personId = caller.replyPerson?.();
+    mirror = (steamId, label) => caller.mirrorLinkFor?.({ type: 'reply_sender' }, steamId, label);
+  } else {
+    personId = caller.personForAlias?.(person.alias);
+    key = personId ? deps.store.linksByPerson(personId)[0]?.senderKey : undefined;
+    mirror = () => personId;
+  }
+  if (!key) return { status: 'not_found', reason: 'trusted_member_metadata_unavailable' };
+  const links = merge(deps.store.linksBySender(key), personId ? deps.store.linksByPerson(personId) : []);
+  return { senderKey: key, ...(personId ? { personId } : {}), links, mirror };
+}
+
+export async function steamLinkAccount(deps: SteamToolDependencies, caller: SteamCaller, params: { reference: string; confirm?: boolean; person?: Person }): Promise<unknown> {
+  const subject = linkSubject(deps, caller, params.person);
+  if ('status' in subject) return subject;
   const parsed = parseSteamReference(params.reference);
   if (!parsed) return { status: 'invalid_reference', reason: 'not_a_steam_id_link_or_name' };
   return guarded(deps, async () => {
@@ -89,20 +124,21 @@ export async function steamLinkAccount(deps: SteamToolDependencies, caller: Stea
     if (params.confirm !== true) {
       return { status: 'needs_confirmation', candidate, instruction: '请把昵称告诉用户并问是不是这个账号；用户明确确认后，再用 confirm=true 重新调用。' };
     }
-    const personId = caller.mirrorLink?.(steamId, summary.name);
-    const own = ownLinks(deps, caller);
+    const personId = subject.mirror(steamId, summary.name) ?? subject.personId;
+    const own = subject.links;
     const holder = deps.store.linkBySteamId(steamId);
     if (holder && !own.some((link) => link.steamId === steamId) && !(personId && holder.personId === personId)) {
       return { status: 'conflict', reason: 'steam_account_already_linked_by_someone_else' };
     }
     // Accounts are added, never replaced; new ones go under the key the person's accounts already use.
-    const key = holder?.senderKey ?? own[0]?.senderKey ?? senderKey;
+    const key = holder?.senderKey ?? own[0]?.senderKey ?? subject.senderKey;
     const result = deps.store.link({ senderKey: key, steamId, personaName: summary.name || steamId, ...(personId ? { personId } : {}), now: (deps.now ?? Date.now)() });
     if (result.status === 'conflict') return { status: 'conflict', reason: 'steam_account_already_linked_by_someone_else' };
     if (caller.groupId) deps.store.enroll(caller.groupId, key);
     return {
       status: 'linked', name: summary.name, broadcast: true, alreadyLinked: own.some((link) => link.steamId === steamId),
-      accountCount: ownLinks(deps, caller).length,
+      accountCount: (() => { const after = linkSubject(deps, caller, params.person); return 'links' in after ? after.links.length : own.length; })(),
+      ...(params.person && params.person.reference !== 'self' ? { forOtherMember: true } : {}),
       groupEnrolled: Boolean(caller.groupId), groupAnnouncementsEnabled: caller.groupId ? deps.store.groupEnabled(caller.groupId) : undefined,
     };
   });

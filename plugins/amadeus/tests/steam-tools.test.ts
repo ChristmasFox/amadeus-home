@@ -297,3 +297,44 @@ test('owner friends with several accounts: friends of all accounts merged once, 
   assert.deepEqual(result.friends.map((entry) => entry.name), ['Friend1', 'Friend2']);
   assert.deepEqual([result.friendCount, result.accountsChecked, result.accountsWithPrivateFriendList], [2, 3, 1]);
 });
+
+test('the owner can bind a Steam account for another group member; anyone else can only bind their own', async () => {
+  const { store, deps, caller } = setup();
+  const owner = (extra: Partial<SteamCaller> = {}) => caller({ isOwner: true, mentions: [OTHER], mentionPerson: () => 'p-other', mirrorLinkFor: () => 'p-other', ...extra });
+  // a non-owner naming someone else is refused, before anything is looked up or written
+  const refused = await steamLinkAccount(deps, caller({ mentions: [OTHER] }), { reference: ID, confirm: true, person: { reference: 'mention', mentionIndex: 0 } }) as { status: string; reason: string };
+  assert.deepEqual([refused.status, refused.reason], ['refused', 'owner_only_for_other_members']);
+  assert.equal(store.linksBySender(OTHER).length, 0);
+  // the owner is asked to confirm first, exactly as for themselves
+  const first = await steamLinkAccount(deps, owner(), { reference: ID, person: { reference: 'mention', mentionIndex: 0 } }) as { status: string };
+  assert.equal(first.status, 'needs_confirmation');
+  assert.equal(store.linksBySender(OTHER).length, 0);
+  const done = await steamLinkAccount(deps, owner(), { reference: ID, confirm: true, person: { reference: 'mention', mentionIndex: 0 } }) as { status: string; forOtherMember?: boolean };
+  assert.deepEqual([done.status, done.forOtherMember], ['linked', true]);
+  // bound under the mentioned member, not under the owner, and enrolled in this group's announcements
+  assert.deepEqual(store.linksBySender(OTHER).map((link) => [link.steamId, link.personId]), [[ID, 'p-other']]);
+  assert.equal(store.linksBySender(ME).length, 0);
+  assert.ok(store.broadcastMembers(GROUP).some((link) => link.senderKey === OTHER));
+  // a second account for the same member is added, and an account held by somebody else still conflicts
+  const second = '76561190000000002';
+  await steamLinkAccount(deps, owner(), { reference: second, confirm: true, person: { reference: 'mention' } });
+  assert.equal(store.linksBySender(OTHER).length, 2);
+  const taken = await steamLinkAccount(deps, caller({ isOwner: true, mentions: ['whatsapp:15550100003'], mentionPerson: () => 'p-third', mirrorLinkFor: () => 'p-third' }), { reference: ID, confirm: true, person: { reference: 'mention' } }) as { status: string };
+  assert.equal(taken.status, 'conflict');
+});
+
+test('the owner binding for another needs a group and a trusted target; reply_sender works, a missing target is not guessed', async () => {
+  const { store, deps, caller } = setup();
+  const { groupId: _none, ...inDirectChat } = caller({ isOwner: true, mentions: [OTHER] });
+  const direct = await steamLinkAccount(deps, inDirectChat, { reference: ID, confirm: true, person: { reference: 'mention' } }) as { status: string; reason: string };
+  assert.deepEqual([direct.status, direct.reason], ['refused', 'only_available_in_a_group']);
+  const none = await steamLinkAccount(deps, caller({ isOwner: true }), { reference: ID, confirm: true, person: { reference: 'mention' } }) as { status: string };
+  assert.equal(none.status, 'not_found');
+  const reply = await steamLinkAccount(deps, caller({ isOwner: true, replySender: OTHER, replyPerson: () => 'p-other', mirrorLinkFor: () => 'p-other' }), { reference: ID, confirm: true, person: { reference: 'reply_sender' } }) as { status: string };
+  assert.equal(reply.status, 'linked');
+  assert.equal(store.linksBySender(OTHER).length, 1);
+  // naming self is the ordinary path for everybody
+  const self = await steamLinkAccount(deps, caller(), { reference: '76561190000000003', confirm: true, person: { reference: 'self' } }) as { status: string; forOtherMember?: boolean };
+  assert.deepEqual([self.status, self.forOtherMember], ['linked', undefined]);
+  assert.equal(store.linksBySender(ME).length, 1);
+});

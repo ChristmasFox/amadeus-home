@@ -354,10 +354,10 @@ export async function identityConfirmCandidate(config: AmadeusConfig, input: Ide
 }
 
 /** Best effort: a Steam account linked by a sender who is a known person is mirrored into that person's external accounts. */
-export function identityMirrorExternalAccount(config: AmadeusConfig, context: OpenClawPluginToolContext, provider: string, externalId: string, label?: string): string | undefined {
+export function identityMirrorExternalAccount(config: AmadeusConfig, context: OpenClawPluginToolContext, provider: string, externalId: string, label?: string, reference: { type: 'self' } | { type: 'reply_sender' } | { type: 'mention'; index: number } = { type: 'self' }): string | undefined {
   try {
     const store = identityStore(config);
-    const resolution = store.resolve({ type: 'self' }, baseContext(context)) as { status?: string; person?: { personId?: string } };
+    const resolution = store.resolve(reference, baseContext(context)) as { status?: string; person?: { personId?: string } };
     const personId = resolution.status === 'resolved' ? resolution.person?.personId : undefined;
     if (!personId) return undefined;
     store.linkAccount({ personId, provider, externalId, ...(label ? { label } : {}), source: 'confirmed', confidence: 1 });
