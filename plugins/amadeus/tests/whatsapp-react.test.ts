@@ -14,6 +14,9 @@ test('no tag leaves text untouched', () => {
 });
 test('invalid emoji is stripped but not used', () => {
   assert.deepEqual(extractReactTag('hi [react:thumbsup]'), { text: 'hi' });
+  assert.deepEqual(extractReactTag('……笨蛋冈部。[react:]'), { text: '……笨蛋冈部。' });
+  assert.deepEqual(extractReactTag('结尾空标记 [react: ]'), { text: '结尾空标记' });
+  assert.deepEqual(extractReactTag('[react:]'), { text: '' });
   assert.equal(normalizeReactEmoji('<script>'), undefined);
   assert.equal(normalizeReactEmoji('❤️'), '❤️');
 });
@@ -40,4 +43,11 @@ test('store reacts once and expires', async () => {
   runReactions.set('bad', '😂');
   await assert.doesNotReject(reactAfterDelivery('bad', async () => { throw new Error('boom'); }, log));
   assert.match(logs.at(-1)!, /react_failed/u);
+});
+
+test('empty react tag is stripped without reacting', () => {
+  const env = createTextDelivery({ runId: 'r-empty', sessionKey: 's', channel: 'whatsapp', origin: 'external_user' } as never, '比打工战士薄得多。\n\n……笨蛋冈部。[react:]');
+  const out = stripReactFromEnvelope(env);
+  assert.equal(out.emoji, undefined);
+  assert.deepEqual(out.envelope.parts, [{ kind: 'text', text: '比打工战士薄得多。\n\n……笨蛋冈部。' }]);
 });

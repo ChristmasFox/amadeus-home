@@ -3,9 +3,11 @@ import { createDeliveryEnvelope, createSilentDelivery, type DeliveryEnvelope, ty
 /**
  * Kurisu ends a WhatsApp reply with `[react:<emoji>]`. The delivery boundary
  * strips the tag before any sender sees text and reacts once on the inbound
- * message after the typed reply settles. No extra model call, no message tool.
+ * message after the typed reply settles. Empty or invalid tags (e.g. `[react:]`)
+ * are still removed from visible text; only a pictographic emoji triggers a
+ * reaction. No extra model call, no message tool.
  */
-const TAG = /\s*\[\s*react\s*[:：]\s*([^\]\r\n]{1,24}?)\s*\]\s*/giu;
+const TAG = /\s*\[\s*react\s*[:：]\s*([^\]\r\n]{0,24}?)\s*\]\s*/giu;
 const PICTOGRAPHIC = /\p{Extended_Pictographic}/u;
 const FORBIDDEN = /[A-Za-z0-9<>`"'\\]/u;
 
