@@ -33,14 +33,14 @@ class GroupImagePolicyTest(unittest.TestCase):
         self.assertEqual(channel["allowFrom"], ["*"])
         for group in [*channel["groups"].values(), *channel["accounts"]["secondary"]["groups"].values()]:
             self.assertEqual(group["tools"], {"allow": list(prepare.GROUP_IMAGE_TOOL_ALLOWLIST)})
-            self.assertNotIn("steam_friends_status", group["tools"]["allow"])
+            self.assertIn("steam_friends_status", group["tools"]["allow"])
             self.assertEqual(group["toolsBySender"], {key: {"allow": list(prepare.GROUP_OWNER_TOOL_ALLOWLIST)} for key in keys})
             for rule in group["toolsBySender"].values():
                 self.assertNotIn("*", rule["allow"])
-                self.assertLessEqual(len(rule["allow"]), 31)
+                self.assertLessEqual(len(rule["allow"]), 32)
                 self.assertTrue(set(prepare.GROUP_IMAGE_TOOL_ALLOWLIST) <= set(rule["allow"]))
                 self.assertEqual(len(rule["allow"]), len(set(rule["allow"])), "no duplicates")
-                for forbidden in ("exec", "read", "write", "edit", "apply_patch", "gateway", "steam_friends_status") + tuple(
+                for forbidden in ("exec", "read", "write", "edit", "apply_patch", "gateway") + tuple(
                         name for name in rule["allow"] if name.startswith("amadeus_vps_")):
                     self.assertNotIn(forbidden, rule["allow"])
         self.assertFalse(channel["groups"]["*"]["requireMention"])
@@ -71,7 +71,7 @@ class GroupImagePolicyTest(unittest.TestCase):
         prepare.ensure_group_image_policies(channel)
         self.assertEqual(channel["direct"], before)
         self.assertEqual(channel["groups"]["*"]["tools"], {"allow": list(prepare.GROUP_IMAGE_TOOL_ALLOWLIST)})
-        self.assertNotIn("steam_friends_status", channel["groups"]["*"]["tools"]["allow"])
+        self.assertIn("steam_friends_status", channel["groups"]["*"]["tools"]["allow"])
         self.assertNotIn("toolsBySender", channel["groups"]["*"])
 
     def test_legacy_group_image_policy_is_upgraded_to_include_pubg_tools(self):
@@ -121,17 +121,18 @@ class GroupImagePolicyTest(unittest.TestCase):
         with self.assertRaisesRegex(SystemExit, "groups must be an object"):
             prepare.ensure_group_image_policies({"groups": []})
 
-    def test_previous_steam_lists_without_achievements_are_migrated(self):
+    def test_previous_steam_lists_are_migrated(self):
+        """Live configs from before the achievements tool and from before the friends tool both upgrade in place."""
         keys = prepare.owner_tool_policy_keys("+15555550123")
-        channel = {"groups": {"*": {
-            "tools": {"allow": list(prepare.LEGACY_GROUP_NO_ACHIEVEMENTS_TOOL_ALLOWLIST)},
-            "toolsBySender": {key: {"allow": list(prepare.LEGACY_GROUP_OWNER_NO_ACHIEVEMENTS_TOOL_ALLOWLIST)} for key in keys},
-        }}}
-        prepare.ensure_group_image_policies(channel, keys)
-        group = channel["groups"]["*"]
-        self.assertIn("steam_get_achievements", group["tools"]["allow"])
-        self.assertTrue(all("steam_get_achievements" in rule["allow"] for rule in group["toolsBySender"].values()))
-        self.assertEqual(len(prepare.LEGACY_GROUP_NO_ACHIEVEMENTS_TOOL_ALLOWLIST) + 1, len(prepare.GROUP_IMAGE_TOOL_ALLOWLIST))
+        for tools, owner in ((prepare.LEGACY_GROUP_NO_ACHIEVEMENTS_TOOL_ALLOWLIST, prepare.LEGACY_GROUP_OWNER_NO_ACHIEVEMENTS_TOOL_ALLOWLIST),
+                             (prepare.LEGACY_GROUP_NO_FRIENDS_TOOL_ALLOWLIST, prepare.LEGACY_GROUP_OWNER_NO_FRIENDS_TOOL_ALLOWLIST)):
+            channel = {"groups": {"*": {"tools": {"allow": list(tools)}, "toolsBySender": {key: {"allow": list(owner)} for key in keys}}}}
+            prepare.ensure_group_image_policies(channel, keys)
+            group = channel["groups"]["*"]
+            for name in ("steam_get_achievements", "steam_friends_status"):
+                self.assertIn(name, group["tools"]["allow"])
+                self.assertTrue(all(name in rule["allow"] for rule in group["toolsBySender"].values()))
+        self.assertEqual(len(prepare.LEGACY_GROUP_NO_FRIENDS_TOOL_ALLOWLIST) + 1, len(prepare.GROUP_IMAGE_TOOL_ALLOWLIST))
 
     def test_core_patch_passes_every_group_tool_except_the_core_web_pair(self):
         """The pinned core patch lets only the tools it lists through the global sender layer; a group

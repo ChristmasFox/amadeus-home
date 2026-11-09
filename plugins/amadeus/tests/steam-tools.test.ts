@@ -156,18 +156,34 @@ test('friends status: the owner in a direct chat sees who is playing; filters, n
   assert.deepEqual(named.friends.map((entry) => entry.name), ['Friend1']);
 });
 
-test('friends status is refused for non-owners, in groups and without a trusted sender; nothing is exposed', async () => {
-  const { deps, caller } = friendsSetup([friend(1, { gameId: '10', gameName: 'Placeholder One' })]);
-  for (const refused of [caller({ isOwner: true }), caller({ isOwner: false, groupId: undefined as never }), { isOwner: true, mentions: [] }] as SteamCaller[]) {
-    assert.deepEqual(await steamFriendsStatus(deps, refused, {}), { status: 'refused', reason: 'owner_direct_chat_only' });
-  }
+test('friends in a group: the asker by default, capped shorter than in a direct chat, nobody without a trusted sender', async () => {
+  const many = Array.from({ length: 40 }, (_, index) => friend(index % 10, { name: `F${String(index).padStart(2, '0')}`, steamId: `7656119000000020${String(index).padStart(2, '0')}`, gameId: '10', gameName: 'Placeholder One' }));
+  const { deps, caller } = friendsSetup(many);
+  const inGroup = await steamFriendsStatus(deps, caller({ isOwner: false }), {}) as { status: string; friendCount: number; matched: number; friends: unknown[] };
+  assert.deepEqual([inGroup.status, inGroup.friendCount, inGroup.matched, inGroup.friends.length], ['ok', 40, 40, 15]);
+  const biggest = await steamFriendsStatus(deps, caller({ isOwner: false }), { limit: 100 }) as { friends: unknown[] };
+  assert.equal(biggest.friends.length, 30, 'a group answer never lists more than 30');
+  const direct = await steamFriendsStatus(deps, caller({ isOwner: true, groupId: undefined as never }), {}) as { friends: unknown[] };
+  assert.equal(direct.friends.length, 30, 'a direct chat keeps its longer default');
+  assert.deepEqual(await steamFriendsStatus(deps, { isOwner: false, mentions: [] } as SteamCaller, {}), { status: 'refused', reason: 'trusted_sender_metadata_unavailable' });
   const env = setup();
-  assert.deepEqual(await steamFriendsStatus(env.deps, env.caller({ isOwner: true, groupId: undefined as never }), {}), { status: 'not_linked', reason: 'link_your_own_steam_account_first' });
+  assert.deepEqual(await steamFriendsStatus(env.deps, env.caller({ isOwner: false }), {}), { status: 'not_linked', reason: 'link_your_own_steam_account_first' });
+});
+
+test('friends of another linked member can be asked for; switching their announcements off hides them', async () => {
+  const { store, deps, caller } = friendsSetup([friend(1, { gameId: '10', gameName: 'Placeholder One' })]);
+  store.link({ senderKey: OTHER, steamId: '76561190000000002', personaName: 'Other', now: 2 });
+  const asker = caller({ senderKey: 'whatsapp:15550100009', mentions: [OTHER], isOwner: false });
+  const answer = await steamFriendsStatus(deps, asker, { person: { reference: 'mention' } }) as { status: string; friends: Array<{ name: string }> };
+  assert.equal(answer.status, 'ok');
+  assert.equal(answer.friends[0]?.name, 'Friend1');
+  store.setBroadcast('76561190000000002', false);
+  assert.deepEqual(await steamFriendsStatus(deps, asker, { person: { reference: 'mention' } }), { status: 'refused', reason: 'sharing_off' });
 });
 
 test('a private friend list is unknown, and a missing key is reported', async () => {
   const { deps, ownerDm } = friendsSetup('private');
-  assert.deepEqual(await steamFriendsStatus(deps, ownerDm(), {}), { status: 'ok', friends: { known: false, reason: 'profile_private' } });
+  assert.deepEqual(await steamFriendsStatus(deps, ownerDm(), {}), { status: 'ok', friends: { known: false, reason: 'profile_private', note: '好友列表未公开' } });
   const noKey = friendsSetup([]);
   (noKey.deps.client as unknown as { hasKey: () => Promise<boolean> }).hasKey = async () => false;
   assert.deepEqual(await steamFriendsStatus(noKey.deps, noKey.ownerDm(), {}), { status: 'unavailable', reason: 'steam_api_key_missing' });

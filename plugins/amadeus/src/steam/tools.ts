@@ -366,21 +366,30 @@ export const FRIENDS_MAX = 500;
 
 export type FriendFilter = 'playing' | 'online' | 'all';
 
+/** A group reply stays short: fewer friends listed per answer there than in a direct chat. */
+export const FRIENDS_LIMIT_DIRECT = { default: 30, max: 100 };
+export const FRIENDS_LIMIT_GROUP = { default: 15, max: 30 };
+
 /**
- * The owner's own Steam friends, on demand and only in the owner's direct chat. Nothing here is stored beyond a
- * short cache and nothing is ever announced: friends are not part of the group announcement flow.
+ * A person's Steam friends, read from the Steam Web API (GetFriendList + GetPlayerSummaries) on demand, in a direct chat
+ * or in a group. The person defaults to the asker's own linked account(s); another linked member can be asked about
+ * unless they switched their announcements off. Several accounts are merged, a private friend list is reported as
+ * such, and the answer is capped. Nothing is stored beyond a short cache and nothing is ever announced.
  */
-export async function steamFriendsStatus(deps: SteamToolDependencies, caller: SteamCaller, params: { filter?: FriendFilter; name?: string; limit?: number }): Promise<unknown> {
-  if (!caller.isOwner || caller.groupId || !caller.senderKey) return { status: 'refused', reason: 'owner_direct_chat_only' };
-  const own = ownLinks(deps, caller);
-  if (!own.length) return { status: 'not_linked', reason: 'link_your_own_steam_account_first' };
+export async function steamFriendsStatus(deps: SteamToolDependencies, caller: SteamCaller, params: { person?: Person; filter?: FriendFilter; name?: string; limit?: number }): Promise<unknown> {
+  if (!caller.senderKey) return { status: 'refused', reason: 'trusted_sender_metadata_unavailable' };
+  const target = targetFor(deps, caller, params.person ?? { reference: 'self' });
+  if (!('links' in target)) return target.status === 'not_linked' && (params.person ?? { reference: 'self' }).reference === 'self'
+    ? { status: 'not_linked', reason: 'link_your_own_steam_account_first' } : target;
+  const own = target.links;
+  const cap = caller.groupId ? FRIENDS_LIMIT_GROUP : FRIENDS_LIMIT_DIRECT;
   return guarded(deps, async () => {
     const now = (deps.now ?? Date.now)();
     const cache = deps.friendsCache ??= new Map();
     const cacheKey = own.map((link) => link.steamId).sort().join(',');
     let entry = cache.get(cacheKey);
     if (!entry || now - entry.at > FRIENDS_CACHE_MS) {
-      // Several accounts: the friends of all of them, once each, without the owner's own accounts.
+      // Several accounts: the friends of all of them, once each, without the person's own accounts.
       const mine = new Set(own.map((link) => link.steamId));
       const merged = new Set<string>();
       let hidden = 0;
@@ -390,7 +399,7 @@ export async function steamFriendsStatus(deps: SteamToolDependencies, caller: St
         if (!list.known) { hidden += 1; privateReason = list.reason; continue; }
         for (const id of list.value) if (!mine.has(id)) merged.add(id);
       }
-      if (hidden === own.length) return { status: 'ok', friends: { known: false, reason: privateReason }, ...(own.length > 1 ? { accountsChecked: own.length } : {}) };
+      if (hidden === own.length) return { status: 'ok', friends: { known: false, reason: privateReason, note: '好友列表未公开' }, ...(own.length > 1 ? { accountsChecked: own.length } : {}) };
       const all = [...merged];
       const ids = all.slice(0, FRIENDS_MAX);
       const summaries = await deps.client.playerSummaries(ids);
@@ -405,7 +414,7 @@ export async function steamFriendsStatus(deps: SteamToolDependencies, caller: St
       .filter((friend) => !wanted || friend.name.toLowerCase().includes(wanted))
       .filter((friend) => filter === 'all' || (filter === 'online' ? rank(friend) <= 1 : rank(friend) === 0))
       .sort((a, b) => rank(a) - rank(b) || a.name.localeCompare(b.name));
-    const limit = Math.min(Math.max(params.limit ?? 30, 1), 100);
+    const limit = Math.min(Math.max(params.limit ?? cap.default, 1), cap.max);
     const hidden = entry.friends.filter((friend) => !friend.profilePublic && friend.personaState === 0 && !friend.gameId).length;
     return {
       status: 'ok',

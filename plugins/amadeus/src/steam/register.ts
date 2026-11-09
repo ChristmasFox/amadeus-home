@@ -40,6 +40,7 @@ const PlaytimeParameters = Type.Object({
   date: Type.Optional(Type.String({ pattern: '^\\d{4}-\\d{2}-\\d{2}$', description: '指定某一天，格式 YYYY-MM-DD（period 可省略或填 date）。' })),
 }, { additionalProperties: false });
 const FriendsParameters = Type.Object({
+  person: Type.Optional(PersonParameters),
   filter: Type.Optional(Type.Union([Type.Literal('playing'), Type.Literal('online'), Type.Literal('all')], { description: 'playing=正在玩游戏（默认）；online=在线（含玩游戏）；all=全部能看到状态的好友。' })),
   name: Type.Optional(Type.String({ minLength: 1, maxLength: 64, description: '只看昵称包含这段文字的好友，用来回答“XX 在干嘛”。' })),
   limit: Type.Optional(Type.Integer({ minimum: 1, maximum: 100 })),
@@ -116,7 +117,7 @@ export function registerSteamTools(api: OpenClawPluginApi): void {
       const typed = params as Static<typeof AchievementParameters>;
       return steamGetAchievements(deps(), caller(context), { person: person(typed), ...(typed.game ? { game: typed.game } : {}), ...(typed.mode ? { mode: typed.mode } : {}), ...(typed.limit ? { limit: typed.limit } : {}) });
     });
-  registerTool(api, 'steam_friends_status', 'Arthur 本人在私聊里问他自己的 Steam 好友现在谁在玩什么、某个好友在干嘛时调用（需要他已绑定自己的 Steam）。好友列表不公开时返回 known:false。只在 owner 私聊可用，群里不可用，也不要在群里透露任何好友信息。', FriendsParameters,
+  registerTool(api, 'steam_friends_status', '查某个已绑定 Steam 的人的好友列表和好友现在的状态（谁在玩什么、谁在线），数据来自 Steam Web API。用户问“我的好友列表/我有哪些好友/好友谁在玩/某某在干嘛”时必须调用本工具，禁止 web_fetch 或搜索 steamcommunity 去爬好友页。默认查提问者自己已绑定的账号（person 不填=self）；也可以用 person 查群里其他已绑定、且没关播报的成员；多个账号会合并。好友列表没公开时返回 known:false（“好友列表未公开”），如实说，不要编造；列表有数量上限（群里更短），可用 name 查某个好友。', FriendsParameters,
     async (params, context) => steamFriendsStatus(deps(), caller(context), params as Static<typeof FriendsParameters>));
   registerTool(api, 'steam_group_settings', '查看或（仅 owner）开启/关闭当前群的 Steam 自动播报（默认开启；播报内容含上线、开始玩、换游戏、离开后回来、成就解锁）。返回的是开关和名单人数，不列出播报事件；事件范围见技能说明。', GroupParameters,
     async (params, context) => steamGroupSettings(deps(), caller(context), params as Static<typeof GroupParameters>));
