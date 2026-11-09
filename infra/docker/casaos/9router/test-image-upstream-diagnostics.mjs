@@ -18,8 +18,8 @@ assert.equal(safeDiagnosticToken('prompt secret\nBearer token'), '');
 const source = [
   'd?.debug?.("IMAGE",`${w.toUpperCase()} | ${x} | prompt="${a.prompt.slice(0,50)}..." (executor)`);',
   'd?.debug?.("IMAGE",`${w.toUpperCase()} | ${x} | prompt="${a.prompt.slice(0,50)}..."`);',
-  'async function n(a,b,c={}){return null}let o={stream:!0,buildUrl:()=>h',
-  'async parseResponse(a,{log:b,streamToClient:c,onRequestSuccess:d,onUsage:f}){return null},normalize:a=>a}},8128:a=>',
+  'async function s(a,b,c={}){return null}let t={stream:!0,canUseCredentials:',
+  'async parseResponse(a,{log:b,streamToClient:c,onRequestSuccess:d,onUsage:f,requestBody:g}){return null},normalize:a=>a}},8128:a=>',
   'if(!u.ok){let{statusCode:a,message:b}=await (0,e.zL)(u),c=(0,e.lR)(Error(b),w,x,a);',
 ].join('');
 const patched = patchCodexRouteSource(source);
@@ -37,15 +37,16 @@ assert.match(patched, /b\?\.error\|\|b\?\.response\?\.error/);
 assert.match(patched, /"boolean"==typeof c\?c/);
 assert.match(patched, /x-amadeus-image-error-type/);
 assert.match(patched, /amadeusImageDiagnosticHeaders/);
-assert.match(patched, /Error\("codex_image_http_"\+a\)/);
+assert.match(patched, /Error\(amadeusImageHttpMessage\(a,b\)\)/);
+assert.match(patched, /return"codex_image_http_"\+a|:"codex_image_http_"\+a/u);
 assert.equal(patchCodexRouteSource(patched), patched);
 
-const parserStart = patched.indexOf('async function n(');
-const parserEnd = patched.indexOf('}let o={stream:!0,buildUrl:()=>h', parserStart);
+const parserStart = patched.indexOf('async function s(');
+const parserEnd = patched.indexOf('}let t={stream:!0,canUseCredentials:', parserStart);
 assert.ok(parserStart >= 0 && parserEnd > parserStart);
 const runtimeHelpers = patched.slice(patched.indexOf(`/* ${MARKER} */`), parserStart);
 const parserSource = patched.slice(parserStart, parserEnd + 1);
-const parseSse = new Function('Response', `${runtimeHelpers}${parserSource};return n;`)(Response);
+const parseSse = new Function('Response', `${runtimeHelpers}${parserSource};return s;`)(Response);
 const responseFor = events => new Response(new ReadableStream({
   start(controller) {
     const encoder = new TextEncoder();
@@ -66,4 +67,48 @@ await assert.rejects(parseSse(responseFor([
   assert.doesNotMatch(error.message, /sensitive body/u);
   return true;
 });
-console.log('IMAGE_UPSTREAM_DIAGNOSTICS_PATCH_0_5_104=passed');
+// A completed response that only lists the image in its output still counts (new upstream behavior).
+const listed = await parseSse(responseFor([
+  'event: response.completed\ndata: {"response":{"output":[{"type":"image_generation_call","result":"listed-image"}]}}\n\n',
+]), { info() {} });
+assert.equal(listed.result, 'listed-image');
+// An upstream "error" event is a typed terminal failure too, with nothing from its body in the message.
+await assert.rejects(parseSse(responseFor([
+  'event: error\ndata: {"error":{"type":"server_error","code":"server_overloaded","message":"private detail"}}\n\n',
+]), { info() {} }), error => {
+  assert.equal(error.code, 'amadeus_image_upstream_failed');
+  assert.doesNotMatch(error.message, /private detail/u);
+  return true;
+});
+await assert.rejects(parseSse(responseFor(['event: response.created\ndata: {}\n\n']), { info() {} }), error => error.code === 'amadeus_image_sse_incomplete');
+
+// parseResponse itself: the Images API (JSON) branch used for plain text-to-image, and the failure shape for streaming clients.
+const responseStart = patched.indexOf('async parseResponse(');
+const responseEnd = patched.indexOf(',normalize:a=>a}},8128:a=>', responseStart);
+const parseResponseSource = patched.slice(responseStart, responseEnd);
+const usage = value => (value ? { prompt_tokens: value.input_tokens, completion_tokens: value.output_tokens, total_tokens: value.input_tokens + value.output_tokens } : null);
+const makeAdapter = () => new Function('Response', 'Headers', 'e', 'r', `${runtimeHelpers}${parserSource}const adapter={${parseResponseSource}};return adapter;`)(Response, Headers, { kv: () => 1700000000 }, usage);
+const adapter = makeAdapter();
+const jsonResponse = body => new Response(JSON.stringify(body), { headers: { 'content-type': 'application/json' } });
+const logs = [];
+const log = { info: (_tag, text) => logs.push(text) };
+const prompt = { prompt: 'private prompt text' };
+const okJson = await adapter.parseResponse(jsonResponse({ created: 7, data: [{ b64_json: 'json-image' }], usage: { input_tokens: 4, output_tokens: 6 } }), { log, streamToClient: false, onRequestSuccess: async () => {}, onUsage: async () => {}, model: 'gpt-image-2.6-sunburst', body: prompt, requestBody: prompt });
+assert.deepEqual(okJson, { created: 7, data: [{ b64_json: 'json-image' }] });
+await assert.rejects(adapter.parseResponse(jsonResponse({ error: { type: 'content_policy_violation', message: 'private detail' } }), { log, streamToClient: false, model: 'gpt-image-2.6-flare', body: prompt, requestBody: prompt }), error => {
+  assert.equal(error.code, 'amadeus_image_safety_refusal');
+  assert.doesNotMatch(error.message, /private detail/u);
+  return true;
+});
+await assert.rejects(adapter.parseResponse(jsonResponse({ data: [] }), { log, streamToClient: false, model: 'gpt-image-2.6-flare', body: prompt, requestBody: prompt }), error => error.code === 'amadeus_image_image_result_missing');
+const streamed = await adapter.parseResponse(jsonResponse({ error: { code: 'server_overloaded' } }), { log, streamToClient: true, model: 'gpt-image-2.6-flare', body: prompt, requestBody: prompt });
+assert.equal(streamed.sseResponse.status, 502, 'a failed image is a non-200 so Combo tries the next model');
+assert.equal(streamed.sseResponse.headers.get('x-amadeus-image-error-code'), 'server_overloaded');
+const streamedOk = await adapter.parseResponse(jsonResponse({ data: [{ b64_json: 'x' }] }), { log, streamToClient: true, onRequestSuccess: async () => {}, model: 'gpt-image-2.6-sunburst', body: prompt, requestBody: prompt });
+assert.equal(streamedOk.sseResponse.status, 200);
+assert.ok(!logs.join('\n').includes('private prompt text'), 'no prompt in logs');
+// HTTP error bodies: a safety refusal keeps its typed token, anything else is reduced to the status.
+const httpMessage = new Function(`${runtimeHelpers}return amadeusImageHttpMessage;`)();
+assert.equal(httpMessage(400, 'Your request was rejected by our safety system'), 'amadeus_image_safety_refusal');
+assert.equal(httpMessage(429, 'rate limit with private text'), 'codex_image_http_429');
+console.log('IMAGE_UPSTREAM_DIAGNOSTICS_PATCH_0_5_116=passed');

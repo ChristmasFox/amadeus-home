@@ -49,7 +49,7 @@ const restricted=policy.imageAccount!==null&&(policy.imageAccount?.provider!=='c
     typeof policy.imageAccount.email!=='string'||
     !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(policy.imageAccount.email));
 // imageAccount null = image generation is not tied to one account (the current production setting).
-if (policy.packageVersion!=='0.5.104'||restricted||
+if (policy.packageVersion!=='0.5.116'||restricted||
     policy.serverActions?.bodySizeLimit!=='20mb') {
   throw Error('private_production_account_policy_invalid');
 }

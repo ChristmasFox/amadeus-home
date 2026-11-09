@@ -1,17 +1,17 @@
 # Pin the matching upstream runtime and package release. The manifest digest is
 # immutable; build locally on the Gate-Local machine for its native platform.
-FROM decolua/9router:0.5.104@sha256:5fc7020f3cf1ca6831bffe80314ecab9dde915d27ee3c479a4bb66f45dabbc27
+FROM decolua/9router:0.5.116@sha256:12086f97857f784ab7762e95595f70d71279a7a60c800af0f100183e8da7ea36
 
 ARG SOURCE_SHA=unknown
-LABEL org.opencontainers.image.version="0.5.104" \
+LABEL org.opencontainers.image.version="0.5.116" \
       org.opencontainers.image.revision="${SOURCE_SHA}"
 RUN if [ "$SOURCE_SHA" != unknown ]; then \
       test "$(printf '%s' "$SOURCE_SHA" | wc -c | tr -d ' ')" = 40 \
       && printf '%s' "$SOURCE_SHA" | grep -Eq '^[0-9a-f]{40}$'; \
     fi
 
-RUN npm install --global 9router@0.5.104 --prefer-online \
-    && test "$(node -p 'require("/usr/local/lib/node_modules/9router/package.json").version')" = "0.5.104" \
+RUN npm install --global 9router@0.5.116 --prefer-online \
+    && test "$(node -p 'require("/usr/local/lib/node_modules/9router/package.json").version')" = "0.5.116" \
     && npm cache clean --force
 
 # Qwen-Audio-3.0-ASR-Flash exposes DashScope multimodal-generation rather than
@@ -40,7 +40,7 @@ RUN node /opt/amadeus/patch-combo-location-fallback.mjs --root /usr/local/lib/no
 COPY infra/docker/casaos/9router/patch-grok-strip-external-web-access.mjs /opt/amadeus/patch-grok-strip-external-web-access.mjs
 RUN node /opt/amadeus/patch-grok-strip-external-web-access.mjs --root /usr/local/lib/node_modules/9router --apply
 # The pinned upstream image also keeps a standalone bundle at /app. Keep its
-# Combo safety behavior identical and require the same exact 0.5.104 version.
+# Combo safety behavior identical and require the same exact 0.5.116 version.
 RUN node /opt/amadeus/patch-image-combo-safety.mjs --root /app --apply
 
 # The upstream Docker image runs the packaged server directly. The npm CLI is

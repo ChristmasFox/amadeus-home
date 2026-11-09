@@ -34,7 +34,7 @@ The untracked `/srv/pubg-saas-9router/.env` stores the full source revision as
 `NINE_ROUTER_SOURCE_SHA`; Compose forms the immutable image tag
 `local/9router-saas:git-<full-sha>`. Build with that same SHA passed as
 `--build-arg SOURCE_SHA`, and use Compose project name `9router` so the existing
-Gate hostname and state remain stable. The Dockerfile pins upstream 0.5.104 by
+Gate hostname and state remain stable. The Dockerfile pins upstream 0.5.116 by
 digest, applies all five local patches, and retains the ASR/TTS bridges and
 launcher. The application env file is
 `9router.env`; it stays separate from the non-secret Compose interpolation file.

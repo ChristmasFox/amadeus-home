@@ -11,4 +11,4 @@ assert.match(patched, /failed_precondition/u);
 assert.equal(patchLocationFallbackSource(patched), patched);
 assert.throws(() => patchLocationFallbackSource(source.replace('{text:"overloaded",backoff:!0}', '{text:"overloaded",backoff:!0},{text:"overloaded",backoff:!0}')), /combo_location_fallback_anchor_drift/u);
 assert.equal(patchLocationFallbackSource('const unrelated={status:404};'), 'const unrelated={status:404};');
-console.log('COMBO_LOCATION_FALLBACK_PATCH_0_5_104=passed');
+console.log('COMBO_LOCATION_FALLBACK_PATCH_0_5_116=passed');

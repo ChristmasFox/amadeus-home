@@ -6,9 +6,9 @@
 import { chmod, readdir, readFile, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
-export const MARKER = "amadeus-grok-strip-extweb-0.5.104";
-export const REASONING_MARKER = "amadeus-grok-reasoning-content-0.5.104";
-export const VERSION = "0.5.104";
+export const MARKER = "amadeus-grok-strip-extweb-0.5.116";
+export const REASONING_MARKER = "amadeus-grok-reasoning-content-0.5.116";
+export const VERSION = "0.5.116";
 const HOSTED_HINT = 'new Set(["web_search","x_search","web_search_preview","file_search","image_generation","code_interpreter","mcp","local_shell"])';
 const NEEDLE1 = "if(r.has(d))return c.add(d),!0;";
 const REPL1 =

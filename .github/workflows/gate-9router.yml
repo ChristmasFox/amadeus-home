@@ -22,12 +22,12 @@ jobs:
           version: 11.19.0
       - name: Focused bridge and patch tests
         run: pnpm test:9router-patches
-      - name: Apply all patches to upstream 0.5.104 package
+      - name: Apply all patches to upstream 0.5.116 package
         shell: bash
         run: |
           fixture="$(mktemp -d)"
-          npm pack 9router@0.5.104 --pack-destination "$fixture" >/dev/null
-          tar -xzf "$fixture/9router-0.5.104.tgz" -C "$fixture"
+          npm pack 9router@0.5.116 --pack-destination "$fixture" >/dev/null
+          tar -xzf "$fixture/9router-0.5.116.tgz" -C "$fixture"
           node infra/docker/casaos/9router/patch-selfhosted-tts-style.mjs --root "$fixture/package"
           node infra/docker/casaos/9router/patch-runtime-policy.mjs --root "$fixture/package" --policy infra/9router/runtime-policy.example.json --apply
           node infra/docker/casaos/9router/patch-image-upstream-diagnostics.mjs --root "$fixture/package" --apply
