@@ -131,7 +131,7 @@ test('bare record request: a person the model carried in from earlier chat is re
 
   dispatch({ body: '今日战绩' }, context);
   const forced = toolCall({ toolName: 'pubg_query_stats', params: { selector, playerNames: ['SG_LabmemNo008'], operation: 'report' } }, context);
-  assert.deepEqual(forced.params, { selector, operation: 'report', team: true });
+  assert.deepEqual(forced.params, { selector, operation: 'report', team: true, playerIds: [], playerNames: [], personIds: [] });
   assert.equal(toolCall({ toolName: 'pubg_query_stats', params: { selector, team: true } }, context), undefined);
   assert.equal(toolCall({ toolName: 'pubg_search_matches', params: { playerNames: ['x'] } }, context), undefined);
   assert.equal(toolCall({ toolName: 'pubg_query_stats', params: { playerNames: ['x'] } }, { sessionKey: 'other' }), undefined);
@@ -147,6 +147,44 @@ test('bare record detection and scope rewrite', () => {
   for (const request of ['今日战绩', '今天战绩', '昨日战绩', '昨天战绩', '本周战绩', '@Kurisu 今天战绩']) assert.equal(isBareRecordRequest(request), true, request);
   for (const request of ['我的战绩', '我今日战绩', '猴昨日战绩', '']) assert.equal(isBareRecordRequest(request), false, request);
   assert.equal(isBareRecordRequest(undefined), false);
-  assert.deepEqual(forceTeamScope({ personIds: ['p'], metrics: ['matches'] }), { metrics: ['matches'], team: true });
+  assert.deepEqual(forceTeamScope({ personIds: ['p'], metrics: ['matches'] }), { metrics: ['matches'], personIds: [], playerNames: [], playerIds: [], team: true });
+  for (const request of ['昨日战报', '昨天战报', '@Kurisu 昨日战报', '今日日报']) assert.equal(isBareRecordRequest(request), true, request);
+  for (const request of ['我昨日战报', '猴昨日战报', '昨日小队战绩']) assert.equal(isBareRecordRequest(request), false, request);
   assert.equal(forceTeamScope({ team: true, metrics: ['matches'] }), undefined);
+});
+
+// OpenClaw applies a before_tool_call hook's params on top of the model's own: {...original, ...hook.params}.
+const applyLikeOpenClaw = (original: Record<string, unknown>, hook: { params?: Record<string, unknown> } | undefined) => (hook?.params ? { ...original, ...hook.params } : original);
+// The identity rule of the pubg tool: team=true must come with no other subject.
+const conflicts = (params: Record<string, unknown>) => params.team === true && ['playerIds', 'playerNames', 'personIds'].some((key) => Array.isArray(params[key]) && (params[key] as unknown[]).length > 0);
+
+test('the three squad-record phrasings reach the tool as the whole team, never as identity_subject_conflict', () => {
+  const hooks = new Map<string, (event: any, context: any) => any>();
+  registerPubgEvidenceGuard({
+    on: (name: string, handler: (event: any, context: any) => any) => { hooks.set(name, handler); },
+    logger: { warn: () => undefined },
+  } as unknown as OpenClawPluginApi);
+  const dispatch = hooks.get('before_dispatch')!;
+  const toolCall = hooks.get('before_tool_call')!;
+  const selector = { type: 'relative_period', value: 'yesterday' };
+  const base = { metrics: ['matches', 'kills'], selector, operation: 'report' };
+  const cases: Array<[string, Record<string, unknown>]> = [
+    ['昨天战绩', { ...base, personIds: ['arthur'] }],          // 11-09 17:56: two identity_subject_conflict errors
+    ['昨天战绩', { ...base, playerNames: ['SG_LabmemNo007'] }],
+    ['昨日战报', { ...base, groupBy: 'player', team: false, personIds: ['arthur'] }],  // 17:57: a single-person card
+    ['昨日小队战绩', { ...base, groupBy: 'player', team: true }],                      // 17:58: already the team; left alone
+  ];
+  const context = { sessionKey: 'agent:main:whatsapp:group:1@g.us:thread:whatsapp-account-secondary' };
+  const finals: Array<Record<string, unknown>> = [];
+  for (const [request, params] of cases) {
+    dispatch({ body: request, content: request }, context);
+    const final = applyLikeOpenClaw(params, toolCall({ toolName: 'pubg_query_stats', params }, context));
+    assert.equal(final.team, true, request);
+    assert.equal(conflicts(final), false, `${request}: ${JSON.stringify(final)}`);
+    finals.push(final);
+  }
+  // the model's own params, merged the old way (keys deleted instead of emptied), would have conflicted:
+  const oldWay = { ...cases[0]![1], ...{ ...base, team: true } };
+  assert.equal(conflicts(oldWay), true);
+  assert.deepEqual(finals[3], cases[3]![1], 'an explicit team request is untouched');
 });

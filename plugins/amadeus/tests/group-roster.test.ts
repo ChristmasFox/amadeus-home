@@ -64,6 +64,8 @@ test('the local group voice anchor quotes no literal gesture, sign-off or catchp
   assert.ok(!/……笨蛋冈部/u.test(GROUP_VOICE_ANCHOR), 'no sign-off example');
   assert.match(GROUP_VOICE_ANCHOR, /最近几条里用过的开头、动作、比喻和收尾方式，这一条就换个说法/u);
   assert.match(GROUP_VOICE_ANCHOR, /replyGuide/u);
+  assert.match(GROUP_VOICE_ANCHOR, /工具给出的现成内容.*按工具返回的原样交付/u);
+  assert.match(GROUP_VOICE_ANCHOR, /不套模板」只约束你自己说话时的措辞和句式/u);
 });
 
 test('the anchor describes natural speech: nicknames over fixed catchphrases, no counting or position rules', () => {

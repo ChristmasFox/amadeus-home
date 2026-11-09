@@ -4,8 +4,7 @@ import {
   BARE_RECORD_TTL_MS,
   droppedReplyFacts,
   FACT,
-  forceTeamScope,
-  isBareRecordRequest,
+  isBareRecordRequest as sharedIsBareRecordRequest,
   SAFE_REPLY,
 } from '@rine-kit/pubg-reply';
 import { enforceRecentMatches, parseRecentMatchCount } from './recent-matches.js';
@@ -15,10 +14,22 @@ import { enforceRecentMatches, parseRecentMatchCount } from './recent-matches.js
 export {
   assessPubgEvidence,
   droppedReplyFacts,
-  forceTeamScope,
-  isBareRecordRequest,
   type EvidenceVerdict,
 } from '@rine-kit/pubg-reply';
+
+// Interim, same behaviour as @rine-kit/pubg-reply 0.1.10 (committed in rine-kit, not yet published to npm): a bare
+// 战报/日报 is a whole-team request like a bare 战绩, and forcing the team clears the person fields with empty arrays
+// instead of deleting them. OpenClaw applies a before_tool_call hook's params on top of the model's own ({...original,
+// ...hook}), so a deleted personIds survived next to team=true and the tool answered identity_subject_conflict.
+// Drop this block (and use the shared functions again) once Lab consumes pubg-reply >= 0.1.10.
+const BARE_REPORT = /^(?:\s|@\S+\s*)*(?:今天|今日|昨天|昨日|前天|本周|这周|上周|最近)?\s*(?:的)?\s*(?:PUBG|吃鸡)?\s*(?:战报|日报)\s*[?？!！。.~]*\s*$/iu;
+export const isBareRecordRequest = (request: unknown): boolean => sharedIsBareRecordRequest(request) || (typeof request === 'string' && BARE_REPORT.test(request.trim()));
+export function forceTeamScope(params: Record<string, unknown>): Record<string, unknown> | undefined {
+  const present = (value: unknown): boolean => value !== undefined && !(Array.isArray(value) && value.length === 0);
+  const named = ['playerIds', 'playerNames', 'personIds'].some((key) => present(params[key]));
+  if (params.team === true && !named) return undefined;
+  return { ...params, playerIds: [], playerNames: [], personIds: [], team: true };
+}
 
 // Session key -> when the latest inbound message was a bare record request. Module-level on purpose: the plugin is
 // registered several times per process and the dispatch and tool-call hooks may run in different registrations.

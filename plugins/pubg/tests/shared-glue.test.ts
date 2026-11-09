@@ -42,5 +42,8 @@ for (const [name, fixture] of Object.entries(FIXTURES)) {
 
 test('the skill file Lab loads is the same text the shared package carries (no drift)', () => {
   const skill = readFileSync(new URL('../skills/pubg/SKILL.md', import.meta.url), 'utf8');
-  assert.equal(skill.split('---').slice(2).join('---').replace(/^\n+/u, ''), PUBG_SKILL_RULES);
+  const body = skill.split('---').slice(2).join('---').replace(/^\n+/u, '');
+  // Lab may append a clearly marked addendum for rules that the shared package has not published yet.
+  const addendum = body.indexOf('\n\n## Lab addendum');
+  assert.equal(addendum === -1 ? body : body.slice(0, addendum), PUBG_SKILL_RULES.replace(/\n+$/u, '') + (addendum === -1 ? PUBG_SKILL_RULES.match(/\n*$/u)![0] : ''));
 });

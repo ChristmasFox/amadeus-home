@@ -203,3 +203,9 @@ Tool rules:
 The plugin returns structured JSON. OpenClaw owns interpretation, clarification,
 and the final natural-language response; the plugin does not contain an LLM,
 keyword router, fixed prose workflow, or platform adapter.
+
+## Lab addendum (drop once Lab consumes pubg-reply >= 0.1.10, which carries this in the shared rules)
+
+- A bare **战报** (“昨日战报”“昨天战报”“今日战报”, also “日报”) is the same as a bare record request: the team's record card, not one person's. Use `team=true` and only `team=true` — never `personIds`, `playerIds` or `playerNames` next to it (mixing them is an `identity_subject_conflict` error).
+- Never answer a 战绩 or 战报 request with `pubg_search_matches`, also when the stats call failed: correct the call (`team=true` alone for a whole-team ask) and call `pubg_query_stats` again instead of falling back to a per-match list.
+- The record card in the tool result (`displayText` / `replyGuide`) is delivered as returned; do not rewrite or shorten it.
