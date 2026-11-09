@@ -42,6 +42,10 @@ function config(directory: string): AmadeusConfig {
     vpsSshKeyFile: join(directory, 'vps-key'),
     vpsSshKnownHostsFile: join(directory, 'known-hosts'),
     vpsUsageStateFile: join(directory, 'vps-usage-state.json'),
+    steamApiBaseUrl: 'https://steam.example',
+    steamDatabasePath: ':memory:',
+    steamBroadcastMode: 'off',
+    steamWhatsappAccountId: 'secondary',
     replyLinkOrigins: [],
   };
 }

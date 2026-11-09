@@ -132,7 +132,7 @@ function settingsFor(config: unknown): NineRouterSettings {
 }
 
 /** Configured 9router chat model; a plain-text completion with a hard output bound. */
-export function nineRouterCompleter(config: unknown, fetchImpl: typeof fetch = fetch): Completer {
+export function nineRouterCompleter(config: unknown, fetchImpl: typeof fetch = fetch, options: { temperature?: number; maxTokens?: number } = {}): Completer {
   const { baseUrl, model } = settingsFor(config);
   return async (prompt, signal) => {
     const key = process.env.OPENCLAW_9ROUTER_API_KEY;
@@ -140,7 +140,7 @@ export function nineRouterCompleter(config: unknown, fetchImpl: typeof fetch = f
     const response = await fetchImpl(`${baseUrl}/chat/completions`, {
       method: 'POST',
       headers: { 'content-type': 'application/json', authorization: `Bearer ${key}` },
-      body: JSON.stringify({ model, temperature: 0.2, max_tokens: 1400, stream: false, messages: [{ role: 'user', content: prompt }] }),
+      body: JSON.stringify({ model, temperature: options.temperature ?? 0.2, max_tokens: options.maxTokens ?? 1400, stream: false, messages: [{ role: 'user', content: prompt }] }),
       signal,
     });
     if (!response.ok) throw new Error(`digest_http_${response.status}`);

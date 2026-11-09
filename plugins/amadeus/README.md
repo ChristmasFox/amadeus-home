@@ -91,3 +91,24 @@ sessions, and missing or empty files inject nothing.
 Runtime `MEMORY.md`, `USER.md`, `DREAMS.md`, `memory/**`, `.amadeus-private/`,
 session `*.jsonl`, SQLite sidecars and backups are never committed: `.gitignore`
 and `scripts/check-secrets.sh` enforce it; only `workspace-seed/*.seed.md` are tracked.
+
+## Steam (online announcements and lookups)
+
+`src/steam/` is a polling-only Steam integration (Web API; no Steam login, no CM). `domain.ts` (presence state machine,
+debounce, cooldown, merge, quiet hours) is pure and channel-free so it can move to a shared package unchanged; `client.ts`
+is the Web API client (batched `GetPlayerSummaries`, rate spacing, retries, private data reported as `known:false`);
+`store.ts` is SQLite (links, group switches, presence ledger, announcement log); `poller.ts` runs one cycle and the
+announcement queue; `compose.ts` has the model word the announcement from code-decided facts (a failed compose sends
+nothing); `tools.ts` / `register.ts` register the `steam_*` tools and the `amadeus-steam-presence` service.
+
+- Linking is by the sender themselves (two steps: show the nickname, then confirm). A linked account is announced by
+  default in groups where the owner enabled announcements; `steam_set_broadcast` switches it off or on. Others can read a
+  person's Steam data only while their announcements are on.
+- Polling: 60 s by day, 5 min during the quiet window 00:00-09:00 Asia/Shanghai. Quiet-hour arrivals are dropped, never
+  replayed; the first observation after start only sets a baseline; per group at most 6 per hour; 60 min cooldown per
+  person; arrivals within 3 min share one message.
+- Config (placeholders only, never commit values): `steamApiKeyFile` (path of a protected key file), `steamApiBaseUrl`,
+  `steamDatabasePath`, `steamBroadcastMode` (`off` default, or `deliver`), `steamWhatsappAccountId`. Env equivalents:
+  `STEAM_API_KEY_FILE`, `STEAM_API_BASE_URL`, `STEAM_DATABASE_PATH`, `STEAM_BROADCAST_MODE`, `STEAM_WHATSAPP_ACCOUNT_ID`.
+  Node honours `NODE_USE_ENV_PROXY`/`HTTP(S)_PROXY`/`NO_PROXY` for the built-in fetch; `api.steampowered.com` is reachable
+  directly from the Lab container, so a proxy is not required.
