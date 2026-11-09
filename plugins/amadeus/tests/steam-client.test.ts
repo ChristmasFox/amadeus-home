@@ -73,3 +73,12 @@ test('games and vanity resolution parse the documented shapes', async () => {
   assert.equal(await instance.resolveVanity('nope'), undefined);
   assert.deepEqual(await instance.ownedGames('1'), { known: true, value: [{ appId: 10, name: 'Placeholder Game', totalMinutes: 125, recentMinutes: 30 }] });
 });
+
+test('friend list: ids when public, unknown for a private list (401), other failures still raise', async () => {
+  const open = client(() => json({ friendslist: { friends: [{ steamid: '76561190000000009', relationship: 'friend' }] } }));
+  assert.deepEqual(await open.instance.friendList('1'), { known: true, value: ['76561190000000009'] });
+  assert.equal(open.urls[0]!.searchParams.get('relationship'), 'friend');
+  assert.deepEqual(await client(() => json({}, 401)).instance.friendList('1'), { known: false, reason: 'profile_private' });
+  assert.deepEqual(await client(() => json({})).instance.friendList('1'), { known: false, reason: 'profile_private' });
+  await assert.rejects(client(() => json({}, 403)).instance.friendList('1'), { code: 'forbidden' });
+});

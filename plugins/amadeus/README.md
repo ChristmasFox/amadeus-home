@@ -104,6 +104,7 @@ nothing); `tools.ts` / `register.ts` register the `steam_*` tools and the `amade
 - Linking is by the sender themselves (two steps: show the nickname, then confirm). A linked account is announced by
   default in groups where the owner enabled announcements; `steam_set_broadcast` switches it off or on. Others can read a
   person's Steam data only while their announcements are on.
+- Friends (`steam_friends_status`): the owner, in their own direct chat only, can ask who among their own Steam friends is playing or what one friend is doing. It reads `GetFriendList` (private list -> `known:false`) and batched `GetPlayerSummaries` on demand with a 60 s cache; friends are never stored, never announced and never available in groups.
 - Polling: 60 s by day, 5 min during the quiet window 00:00-09:00 Asia/Shanghai. Quiet-hour arrivals are dropped, never
   replayed; the first observation after start only sets a baseline; per group at most 6 per hour; 60 min cooldown per
   person; arrivals within 3 min share one message.

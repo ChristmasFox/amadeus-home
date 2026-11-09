@@ -134,6 +134,19 @@ export class SteamClient {
     return result;
   }
 
+  /** The user's friends (ids only). Steam answers 401 for a private friend list, which is unknown, not "no friends". */
+  async friendList(steamId: string): Promise<Unknown<string[]>> {
+    try {
+      const body = await this.get('/ISteamUser/GetFriendList/v1/', { steamid: steamId, relationship: 'friend' }) as { friendslist?: { friends?: Array<{ steamid?: unknown }> } };
+      const friends = body.friendslist?.friends;
+      if (!Array.isArray(friends)) return { known: false, reason: 'profile_private' };
+      return { known: true, value: friends.map((friend) => friend.steamid).filter((id): id is string => typeof id === 'string') };
+    } catch (error) {
+      if (error instanceof SteamApiError && error.code === 'forbidden' && error.status === 401) return { known: false, reason: 'profile_private' };
+      throw error;
+    }
+  }
+
   async ownedGames(steamId: string): Promise<Unknown<GameStat[]>> {
     const body = await this.get('/IPlayerService/GetOwnedGames/v1/', { steamid: steamId, include_appinfo: '1', include_played_free_games: '1' }) as { response?: { games?: unknown[]; game_count?: number } };
     if (!Array.isArray(body.response?.games)) return { known: false, reason: 'profile_private' };

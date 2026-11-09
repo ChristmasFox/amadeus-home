@@ -20,7 +20,9 @@ export interface SteamCaller {
 
 export interface SteamToolDependencies {
   store: SteamStore;
-  client: Pick<SteamClient, 'resolveVanity' | 'playerSummaries' | 'ownedGames' | 'recentGames' | 'hasKey'>;
+  client: Pick<SteamClient, 'resolveVanity' | 'playerSummaries' | 'ownedGames' | 'recentGames' | 'friendList' | 'hasKey'>;
+  /** Short-lived friend snapshots, shared by calls so a follow-up question does not refetch. */
+  friendsCache?: Map<string, { at: number; friends: PlayerSummary[]; truncated: boolean }>;
   now?: () => number;
 }
 
@@ -166,5 +168,57 @@ export function steamGetRecentGames(deps: SteamToolDependencies, caller: SteamCa
   return withTarget(deps, caller, params.person, async (link) => {
     const recent = await deps.client.recentGames(link.steamId);
     return recent.known ? { status: 'ok', recent: { known: true, value: recent.value.map(gameView) } } : { status: 'ok', recent };
+  });
+}
+
+export const FRIENDS_CACHE_MS = 60_000;
+export const FRIENDS_MAX = 500;
+
+export type FriendFilter = 'playing' | 'online' | 'all';
+
+/**
+ * The owner's own Steam friends, on demand and only in the owner's direct chat. Nothing here is stored beyond a
+ * short cache and nothing is ever announced: friends are not part of the group announcement flow.
+ */
+export async function steamFriendsStatus(deps: SteamToolDependencies, caller: SteamCaller, params: { filter?: FriendFilter; name?: string; limit?: number }): Promise<unknown> {
+  if (!caller.isOwner || caller.groupId || !caller.senderKey) return { status: 'refused', reason: 'owner_direct_chat_only' };
+  const own = deps.store.linkBySender(caller.senderKey);
+  if (!own) return { status: 'not_linked', reason: 'link_your_own_steam_account_first' };
+  return guarded(deps, async () => {
+    const now = (deps.now ?? Date.now)();
+    const cache = deps.friendsCache ??= new Map();
+    let entry = cache.get(own.steamId);
+    if (!entry || now - entry.at > FRIENDS_CACHE_MS) {
+      const list = await deps.client.friendList(own.steamId);
+      if (!list.known) return { status: 'ok', friends: list };
+      const ids = list.value.slice(0, FRIENDS_MAX);
+      const summaries = await deps.client.playerSummaries(ids);
+      entry = { at: now, friends: ids.flatMap((id) => { const summary = summaries.get(id); return summary ? [summary] : []; }), truncated: list.value.length > FRIENDS_MAX };
+      cache.set(own.steamId, entry);
+    }
+    const filter = params.filter ?? 'playing';
+    const wanted = params.name?.trim().toLowerCase();
+    const rank = (friend: PlayerSummary): number => (friend.gameId ? 0 : friend.personaState && friend.personaState !== 0 ? 1 : 2);
+    const matching = entry.friends
+      .filter((friend) => friend.profilePublic || friend.personaState !== 0 || friend.gameId)
+      .filter((friend) => !wanted || friend.name.toLowerCase().includes(wanted))
+      .filter((friend) => filter === 'all' || (filter === 'online' ? rank(friend) <= 1 : rank(friend) === 0))
+      .sort((a, b) => rank(a) - rank(b) || a.name.localeCompare(b.name));
+    const limit = Math.min(Math.max(params.limit ?? 30, 1), 100);
+    const hidden = entry.friends.filter((friend) => !friend.profilePublic && friend.personaState === 0 && !friend.gameId).length;
+    return {
+      status: 'ok',
+      friendCount: entry.friends.length,
+      truncated: entry.truncated,
+      // Friends with a hidden profile look offline whatever they are doing, so they are counted, never listed as offline.
+      hiddenOrOfflineUnknown: hidden,
+      matched: matching.length,
+      friends: matching.slice(0, limit).map((friend) => ({
+        name: friend.name,
+        state: rank(friend) === 0 ? 'in_game' : rank(friend) === 1 ? 'online' : 'offline',
+        game: friend.gameName ?? null,
+        ...(rank(friend) === 2 && friend.lastLogoff ? { lastSeenAt: new Date(friend.lastLogoff).toISOString() } : {}),
+      })),
+    };
   });
 }
