@@ -292,3 +292,13 @@ export function appendDeliveryParts(envelope: DeliveryEnvelope, parts: readonly 
     parts: [...envelope.parts, ...parts],
   });
 }
+
+/**
+ * The visible text of a validated envelope (its text parts, in order), or undefined when it has none. A payload that
+ * carries only channelData is understood by the Amadeus delivery boundary, but any native sender that does not know
+ * channelData (for example a replay after a restart) rejects it: this is the plain rendering it can send instead.
+ */
+export function envelopePlainText(envelope: DeliveryEnvelope): string | undefined {
+  const text = envelope.parts.flatMap((part) => (part.kind === 'text' && part.text.trim() ? [part.text] : [])).join('\n\n');
+  return text || undefined;
+}

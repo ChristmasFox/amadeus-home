@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { OpenClawPluginApi } from 'openclaw/plugin-sdk/core';
-import { validateDeliveryEnvelope, type DeliveryOrigin } from './delivery-envelope.js';
+import { envelopePlainText, validateDeliveryEnvelope, type DeliveryEnvelope, type DeliveryOrigin } from './delivery-envelope.js';
 import { deliveryRuns } from './delivery-runs.js';
 import { registerDeliveryBoundary, type DeliveryBoundaryOptions } from './delivery-boundary.js';
 import { settleTelegramDelivery } from './telegram-runtime.js';
@@ -10,6 +10,12 @@ import { configFor } from './config.js';
 import { turnReplyLink } from './reply-links.js';
 
 export const WHATSAPP_VOICE_RUNS_GLOBAL = '__amadeusWhatsAppVoiceRuns20260925';
+/** The typed envelope for the Amadeus boundary, plus its plain text so a native sender that ignores channelData still has something to send. */
+function typedPayload(envelope: DeliveryEnvelope): { channelData: { amadeusDelivery: DeliveryEnvelope }; text?: string } {
+  const text = envelopePlainText(envelope);
+  return { channelData: { amadeusDelivery: envelope }, ...(text ? { text } : {}) };
+}
+
 export function hasActiveWhatsAppVoiceLease(channel: unknown, sessionKey: unknown): boolean {
   if (typeof channel !== 'string' || channel.trim().toLowerCase() !== 'whatsapp' || typeof sessionKey !== 'string') return false;
   const registry = (globalThis as Record<string, unknown>)[WHATSAPP_VOICE_RUNS_GLOBAL];
@@ -113,7 +119,7 @@ export function registerVoiceReplyPrompt(api: OpenClawPluginApi, boundaryOptions
           return { cancel: true, reason: 'delivery_preparation_failed' };
         }
       }
-      return { payload: { channelData: { amadeusDelivery: prepared } } };
+      return { payload: typedPayload(prepared) };
     }
     if (!runId) return { cancel: true, reason: 'delivery_run_missing' };
     try {
@@ -135,7 +141,7 @@ export function registerVoiceReplyPrompt(api: OpenClawPluginApi, boundaryOptions
         api.logger.info(`amadeus image completion ${JSON.stringify({ event: 'image_completion_delivery_settled', run_id: envelope.runId, delivery_id: envelope.deliveryId, channel, caption_source: captionSource })}`);
         return { cancel: true, reason: 'delivery_settled' };
       }
-      return { payload: { channelData: { amadeusDelivery: envelope } } };
+      return { payload: typedPayload(envelope) };
     } catch (error) { api.logger.warn(`amadeus envelope preparation failed closed ${JSON.stringify({ run_id: runId, reason: failureCode(error) })}`); return { cancel: true, reason: 'delivery_preparation_failed' }; }
   }, { timeoutMs: 180_000 });
 }
