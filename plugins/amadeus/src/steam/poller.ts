@@ -109,8 +109,8 @@ export class PresencePoller {
         const counts = closed !== undefined && closed.reason !== 'gap' && minutes >= MIN_STOP_MINUTES;
         // Leaving one game for another is announced once, as the switch (with the length of the game just left); only a real stop gets its own notice.
         // The switch always says which game was left; the length is added only when that session was long enough to count.
-        const leftName = (closed?.gameName ?? before?.gameName ?? event?.previous?.gameName) || undefined;
-        const leftId = (closed?.appId ?? before?.gameId ?? event?.previous?.gameId) || undefined;
+        const leftName = (closed?.gameName ?? before?.gameName) || undefined;
+        const leftId = (closed?.appId ?? before?.gameId) || undefined;
         const enriched = event && event.kind === 'switched_game' && (leftName || (closed && counts))
           ? { ...event, previous: { ...(leftId ? { gameId: leftId } : {}), ...(leftName ? { gameName: leftName } : {}), ...(closed && counts ? { minutes } : {}) } }
           : event;

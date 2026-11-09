@@ -114,35 +114,6 @@ test('who is playing and play time come back as finished Amadeus cards with the 
   assert.match(CARD_REPLY_GUIDE, /原样/u);
 });
 
-test('quitting one game and starting another a little later is announced as a 世界线变动 naming both games', async () => {
-  const { sent, run } = env();
-  await run(1, { state: 0 });
-  await run(4, { state: 1, game: { id: '10', name: 'Game A' } });
-  await run(4, { state: 1 }); // the gap: online without a game while the next one launches
-  await run(1, { state: 1, game: { id: '20', name: 'Game B' } });
-  await run(5, { state: 1, game: { id: '20', name: 'Game B' } });
-  const switches = sent.filter((text) => text.includes('世界线变动'));
-  assert.equal(switches.length, 1, titles(sent).join(' | '));
-  assert.match(switches[0]!, /kim 从 Game A 切换到 Game B。/u);
-  assert.equal(sent.filter((text) => text.includes('Steam 开局')).length, 0, 'not announced as an unrelated start');
-});
-
-test('the same game again, or a different one after a long break, is a start, not a switch', async () => {
-  const same = env();
-  await same.run(1, { state: 0 });
-  await same.run(4, { state: 1, game: { id: '10', name: 'Game A' } });
-  await same.run(2, { state: 1 });
-  await same.run(5, { state: 1, game: { id: '10', name: 'Game A' } });
-  assert.equal(same.sent.filter((text) => text.includes('世界线变动')).length, 0);
-  const late = env();
-  await late.run(1, { state: 0 });
-  await late.run(4, { state: 1, game: { id: '10', name: 'Game A' } });
-  await late.run(15, { state: 1 }); // longer than the switch window
-  await late.run(5, { state: 1, game: { id: '20', name: 'Game B' } });
-  assert.equal(late.sent.filter((text) => text.includes('世界线变动')).length, 0);
-  assert.equal(late.sent.filter((text) => text.includes('Steam 开局')).length, 1);
-});
-
 test('several people asked at once: one merged card with each person\'s games and total, delivered once', async () => {
   const { renderPlaytimeGroupCard } = await import('../src/steam/cards.js');
   const at = new Date('2026-11-09T12:00:00Z');

@@ -60,12 +60,7 @@ export interface PresenceRecord {
   since: number;
   gameId?: string;
   gameName?: string;
-  /** The game this person was in just before they stopped being in one (kept while they are online without a game). */
-  lastGame?: { gameId: string; gameName?: string; leftAt: number };
 }
-
-/** Quitting one game and starting another within this long is one switch, not a stop followed by an unrelated start. */
-export const SWITCH_WINDOW_MS = 10 * 60_000;
 
 export interface PresenceChange {
   steamId: string;
@@ -101,25 +96,14 @@ export function applyObservation(previous: StoredPresence | undefined, observati
   const observed = { state: observation.state, ...(observation.gameId ? { gameId: observation.gameId } : {}), ...(observation.gameName ? { gameName: observation.gameName } : {}) };
   if (!previous) return { next: { ...observed, since: now } };
   if (observation.state === previous.state && observation.gameId === previous.gameId) {
-    return { next: { ...observed, since: previous.since, ...(previous.lastGame && now - previous.lastGame.leftAt <= SWITCH_WINDOW_MS ? { lastGame: previous.lastGame } : {}) } };
+    return { next: { ...observed, since: previous.since } };
   }
   const next: StoredPresence = { ...observed, since: now };
-  // Quitting a game always clears the game for at least a tick before the next one starts, so a real switch is "game A, a gap
-  // without a game, game B": remember A for a while so B can be announced as the switch it is.
-  if (observed.state !== 'in_game') {
-    if (previous.state === 'in_game' && previous.gameId) next.lastGame = { gameId: previous.gameId, ...(previous.gameName ? { gameName: previous.gameName } : {}), leftAt: now };
-    else if (previous.lastGame && now - previous.lastGame.leftAt <= SWITCH_WINDOW_MS && observed.state !== 'offline') next.lastGame = previous.lastGame;
-  }
-  let kind = eventFor(previous, observed);
-  let left: PresenceChange['previous'];
-  if (kind === 'started_playing' && previous.lastGame && now - previous.lastGame.leftAt <= SWITCH_WINDOW_MS && previous.lastGame.gameId !== observed.gameId) {
-    kind = 'switched_game';
-    left = { gameId: previous.lastGame.gameId, ...(previous.lastGame.gameName ? { gameName: previous.lastGame.gameName } : {}) };
-  }
+  const kind = eventFor(previous, observed);
   if (!kind) return { next };
   return {
     next,
-    event: { steamId: observation.steamId, kind, at: now, ...(observed.gameId ? { gameId: observed.gameId } : {}), ...(observed.gameName ? { gameName: observed.gameName } : {}), ...(left ? { previous: left } : {}) },
+    event: { steamId: observation.steamId, kind, at: now, ...(observed.gameId ? { gameId: observed.gameId } : {}), ...(observed.gameName ? { gameName: observed.gameName } : {}) },
   };
 }
 
