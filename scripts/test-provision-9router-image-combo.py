@@ -65,7 +65,7 @@ class ImageComboTest(unittest.TestCase):
     def test_exact_git_desired_state(self):
         self.assertEqual(self.desired, {
             "name": "amadeus-image", "kind": "image", "strategy": "fallback",
-            "models": ["xai/grok-imagine-image-2.0", "cx/gpt-image-2.5"],
+            "models": ["cx/gpt-image-2.5", "xai/grok-imagine-image-2.0"],
         })
 
     def test_creation_idempotence_preserves_unrelated_state(self):
