@@ -68,8 +68,8 @@ test('stopping a game, going away or going offline are not announced; the first 
   assert.deepEqual(run(undefined, [obs('in_game', { gameId: '1' })]).events, []);
 });
 
-test('polling is once a minute around the clock, and nothing else limits announcements', () => {
-  assert.equal(POLL_INTERVAL_MS, 60_000);
+test('polling is every 30 seconds around the clock, and nothing else limits announcements', () => {
+  assert.equal(POLL_INTERVAL_MS, 30_000);
   assert.deepEqual(DEFAULT_POLICY, { mergeWindowMs: 3 * 60_000 });
 });
 

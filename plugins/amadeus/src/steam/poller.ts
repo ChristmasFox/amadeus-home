@@ -63,11 +63,18 @@ const slotOf = (change: PresenceChange): string => (change.kind === 'achievement
 /** An unlock older than this when first seen (offline sync, a long gap) is absorbed silently: nothing historic is announced. */
 const FRESH_UNLOCK_MS = 30 * 60_000;
 
+/** Achievements are read on their own slower clock: at most once per account and game in this window, however often presence is polled. */
+export const ACHIEVEMENT_INTERVAL_MS = 2 * 60_000;
+
 export class PresencePoller {
   private readonly queue = new Map<string, Map<string, Candidate>>();
   private readonly policy: BroadcastPolicy;
   private readonly now: () => number;
   private catalog: AchievementCatalog | undefined;
+  /** When each account's achievements for a game were last read (memory only: a restart simply reads once more). */
+  private readonly achievementReadAt = new Map<string, number>();
+  /** Games that just ended and still owe their one last read (unlocks often sync right after), waiting for the throttle. */
+  private readonly finalReads = new Map<string, { steamId: string; appId: string; gameName?: string }>();
 
   constructor(private readonly deps: PollerDependencies) {
     this.policy = deps.policy ?? DEFAULT_POLICY;
@@ -114,9 +121,9 @@ export class PresencePoller {
         }
         // Achievements are read for the game being played now, and once more right after it ends (unlocks often sync then).
         if (next.state === 'in_game' && next.gameId) playing.push({ steamId, appId: next.gameId, ...(next.gameName ? { gameName: next.gameName } : {}) });
-        else if (before?.state === 'in_game' && before.gameId) playing.push({ steamId, appId: before.gameId, ...(before.gameName ? { gameName: before.gameName } : {}) });
+        else if (before?.state === 'in_game' && before.gameId) this.finalReads.set(`${steamId}|${before.gameId}`, { steamId, appId: before.gameId, ...(before.gameName ? { gameName: before.gameName } : {}) });
       }
-      report.events += await this.checkAchievements(playing, now);
+      report.events += await this.checkAchievements([...playing, ...this.finalReads.values()], now);
     }
     await this.flush(report);
     return report;
@@ -144,6 +151,11 @@ export class PresencePoller {
     const { store } = this.deps;
     let queued = 0;
     for (const { steamId, appId, gameName } of playing) {
+      const readKey = `${steamId}|${appId}`;
+      const last = this.achievementReadAt.get(readKey);
+      if (last !== undefined && now - last < ACHIEVEMENT_INTERVAL_MS) continue; // too soon: this account is read again on a later tick
+      this.achievementReadAt.set(readKey, now);
+      this.finalReads.delete(readKey);
       try {
         const result = await client.playerAchievements(steamId, appId);
         if (!result.known) continue;

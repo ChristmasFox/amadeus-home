@@ -122,13 +122,13 @@ test('unlocks: the first sight is only a baseline; a later unlock is announced o
   const unlocked = { value: ['A1'] };
   const { poller, facts, advance } = pollerSetup(unlocked);
   await poller.tick();                       // baseline (also the presence baseline)
-  advance(60_000);
+  advance(2 * 60_000);
   await poller.tick();
   advance(4 * 60_000);
   await poller.tick();
   assert.equal(facts.length, 0, 'nothing historic or unchanged is announced');
   unlocked.value = ['A1', 'A2'];
-  advance(60_000);
+  advance(2 * 60_000);
   await poller.tick();
   advance(4 * 60_000);
   await poller.tick();
@@ -136,7 +136,7 @@ test('unlocks: the first sight is only a baseline; a later unlock is announced o
   const person = facts[0]!.people[0]!;
   assert.equal(person.kind, 'achievement_unlocked');
   assert.deepEqual(person.achievements, [{ apiName: 'A2', name: 'Rare One', globalPercent: 2.5 }]);
-  advance(60_000);
+  advance(2 * 60_000);
   await poller.tick();
   advance(4 * 60_000);
   await poller.tick();
@@ -167,4 +167,44 @@ test('several unlocks in one window are merged into one message; stale unlocks a
   old.advance(4 * 60_000);
   await old.poller.tick();
   assert.equal(old.facts.length, 0, 'an unlock from hours ago is not announced');
+});
+
+test('achievements are read on their own clock: presence every 30 s, at most one read per playing account every 2 minutes', async () => {
+  const store = new SteamStore(':memory:');
+  store.link({ senderKey: 'whatsapp:1', steamId: ID, personaName: 'Alpha', personId: 'p1', now: DAY });
+  store.enroll(GROUP, 'whatsapp:1');
+  let now = DAY;
+  let playing = true;
+  let summaries = 0;
+  let reads = 0;
+  const unlocked = ['A1'];
+  const facts: AnnouncementFacts[] = [];
+  const poller = new PresencePoller({
+    store,
+    client: {
+      playerSummaries: async (ids) => { summaries += 1; return new Map(ids.map((id): [string, PlayerSummary] => [id, { steamId: id, name: 'Alpha', profilePublic: true, personaState: 1, ...(playing ? { gameId: '10', gameName: 'Current Game' } : {}) }])); },
+      playerAchievements: async () => { reads += 1; return { known: true, value: states(unlocked).map((entry) => (entry.unlockedAt === undefined ? entry : { ...entry, unlockedAt: now - 1000 })) }; },
+      achievementSchema: async () => [{ apiName: 'A1', name: 'First', hidden: false }, { apiName: 'A2', name: 'Second', hidden: false }],
+      achievementPercentages: async () => new Map(),
+    },
+    compose: async (value) => { facts.push(value); return 'x'; },
+    send: async () => undefined,
+    now: () => now,
+  });
+  // ten minutes of 30-second ticks: 20 presence calls, but only one achievement read per 2 minutes (5)
+  for (let index = 0; index < 20; index += 1) { await poller.tick(); now += 30_000; }
+  assert.equal(summaries, 20);
+  assert.equal(reads, 5);
+  // an unlock is seen at the next permitted read, within 2 minutes
+  unlocked.push('A2');
+  const before = reads;
+  for (let index = 0; index < 4; index += 1) { await poller.tick(); now += 30_000; }
+  assert.equal(reads - before, 1);
+  for (let index = 0; index < 6; index += 1) { await poller.tick(); now += 30_000; } // the merge window closes, then it goes out
+  assert.ok(facts.some((fact) => fact.people[0]!.kind === 'achievement_unlocked'));
+  // the one last read after the game ends still happens, once it is allowed
+  playing = false;
+  const beforeEnd = reads;
+  for (let index = 0; index < 6; index += 1) { await poller.tick(); now += 30_000; }
+  assert.equal(reads - beforeEnd, 1, 'one final read after the game, and nothing while nothing is played');
 });

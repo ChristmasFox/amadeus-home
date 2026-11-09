@@ -107,8 +107,8 @@ export function applyObservation(previous: StoredPresence | undefined, observati
   };
 }
 
-/** One poll a minute, day and night. */
-export const POLL_INTERVAL_MS = 60_000;
+/** One presence poll every 30 seconds, day and night: a single GetPlayerSummaries call per batch of up to 100 accounts. */
+export const POLL_INTERVAL_MS = 30_000;
 
 export interface BroadcastPolicy {
   /** Events landing within this window of the first one are merged into one message. */
