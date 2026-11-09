@@ -25,10 +25,10 @@ Use the native `steam_*` tools for questions about a person's Steam account: who
 
 ## Play time per day (steam_get_playtime with a period)
 - "我昨天/今天/这周玩了多久", "X 昨天玩了啥": call `steam_get_playtime` with `person` (self by default; a group member via mention/alias) and `period` = today / yesterday / this_week, or `date` = YYYY-MM-DD. The answer lists the time per game and the total, accounts of one person merged. Without `period` the tool returns Steam's lifetime totals instead.
-- **A day is cut at 06:00 Singapore time**: "昨天" is yesterday 06:00 to today 06:00, a week starts on Monday 06:00, and a session crossing 06:00 is split between the two days. Say this when it matters (for example for late-night play).
+- **A day is cut at the PUBG business-day boundary (06:00 Asia/Shanghai by default, the same day the PUBG daily review and 战报 use)**: "昨天" is yesterday 06:00 to today 06:00, a week starts on Monday 06:00, and a session crossing 06:00 is split between the two days. Say this when it matters (for example for late-night play).
 - Play time is recorded by the poller once a minute for linked members whose announcements are on, from the moment recording began; the result carries `trackingSince` / `partial` / `before_tracking`. Days before that have no data: say so plainly, never estimate or invent hours. Accuracy is about a minute.
 - Example answer shape: "昨天（06:00→今天 06:00）：PUBG 3小时20分钟，GTA5 1小时5分钟，一共 4小时25分钟"。
-- Every day at 09:30 Singapore time a separate Amadeus message "Steam 昨日游戏时长" lists, per announcing member, the games and times of the business day that just ended (06:00 → 06:00); it is skipped when nobody played. It is independent of the PUBG daily review.
+- Every day at 09:30 (the same clock and time zone as the PUBG daily review) a separate Amadeus message "Steam 昨日游戏时长" lists, per announcing member, the games and times of the business day that just ended (06:00 → 06:00); it is skipped when nobody played. It is independent of the PUBG daily review.
 
 ## Steam data comes from the steam_* tools, not from scraping
 - For anything about a person's **Steam** account (profile, friends, games, play time, achievements), use the `steam_*` tools. Do not `web_fetch` or search steamcommunity.com, the Steam store or third-party mirrors (for example r.jina.ai) to get data a `steam_*` tool already covers; those pages are unreliable from here.

@@ -1,4 +1,5 @@
 import { SteamApiError, type GameStat, type PlayerSummary, type SteamClient, type Unknown } from './client.js';
+import { businessCalendar, type BusinessCalendar } from './business-day.js';
 import { AchievementCatalog, summariseAchievements, type AchievementClient, type AchievementMode } from './achievements.js';
 import { parseSteamReference } from './domain.js';
 import type { SteamLink, SteamStore } from './store.js';
@@ -26,6 +27,8 @@ export interface SteamCaller {
 export interface SteamToolDependencies {
   store: SteamStore;
   client: Pick<SteamClient, 'resolveVanity' | 'playerSummaries' | 'ownedGames' | 'recentGames' | 'friendList' | 'hasKey'> & Partial<AchievementClient>;
+  /** The business day used for play time: the same calendar the PUBG daily review uses (defaults to PUBG's own defaults). */
+  calendar?: BusinessCalendar;
   /** Cached achievement names and rarity; created on first use. */
   achievementCatalog?: AchievementCatalog;
   /** Short-lived friend snapshots, shared by calls so a follow-up question does not refetch. */
@@ -200,33 +203,26 @@ export function steamGetProfile(deps: SteamToolDependencies, caller: SteamCaller
   });
 }
 
-/**
- * The play-time day is the business day: Asia/Singapore 06:00 to 06:00 the next morning (the same cut as the daily
- * squad review). Shifting by 2 hours (UTC+8 minus 6) makes "floor to a day" land on 06:00 Singapore time.
- */
-const BUSINESS_SHIFT_MS = 2 * 3_600_000;
-const DAY_MS = 86_400_000;
 export type PlaytimePeriod = 'today' | 'yesterday' | 'this_week' | 'date';
 
-export const businessDayStart = (at: number): number => Math.floor((at + BUSINESS_SHIFT_MS) / DAY_MS) * DAY_MS - BUSINESS_SHIFT_MS;
-/** Label of the business day that contains `at`: the calendar date it starts on. */
-export const businessDayLabel = (at: number): string => new Date(at + BUSINESS_SHIFT_MS).toISOString().slice(0, 10);
-
-export function playtimeWindow(period: PlaytimePeriod, date: string | undefined, now: number): { from: number; to: number; label: string } | undefined {
-  const today = businessDayStart(now);
-  const span = (from: number): string => `${businessDayLabel(from)} 06:00 → 次日 06:00`;
-  if (period === 'today') return { from: today, to: today + DAY_MS, label: `今天（${span(today)}）` };
-  if (period === 'yesterday') return { from: today - DAY_MS, to: today, label: `昨天（${span(today - DAY_MS)}）` };
-  if (period === 'this_week') {
-    const weekday = new Date(today + BUSINESS_SHIFT_MS).getUTCDay(); // 0 = Sunday
-    const monday = today - ((weekday + 6) % 7) * DAY_MS;
-    return { from: monday, to: today + DAY_MS, label: `本周（${businessDayLabel(monday)} 06:00 起，周一为一周开始）` };
+/** today / yesterday / this week (Monday first) / a given date, as business-day windows of the shared (PUBG) calendar. */
+export function playtimeWindow(calendar: BusinessCalendar, period: PlaytimePeriod, date: string | undefined, now: number): { from: number; to: number; label: string } | undefined {
+  const today = calendar.windowAt(now);
+  const span = (day: string): string => `${day} ${calendar.start} → 次日 ${calendar.start}`;
+  if (period === 'today') return { from: today.startMs, to: today.endMs, label: `今天（${span(calendar.label(today.startMs))}）` };
+  if (period === 'yesterday') {
+    const yesterday = calendar.windowAt(today.startMs - 1);
+    return { from: yesterday.startMs, to: yesterday.endMs, label: `昨天（${span(calendar.label(yesterday.startMs))}）` };
   }
-  const match = /^(\d{4})-(\d{2})-(\d{2})$/u.exec(date ?? '');
-  if (!match) return undefined;
-  const from = Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3])) - BUSINESS_SHIFT_MS;
-  if (!Number.isFinite(from) || businessDayLabel(from) !== date) return undefined;
-  return { from, to: from + DAY_MS, label: `${date}（${span(from)}）` };
+  if (period === 'this_week') {
+    const [year, month, day] = calendar.label(today.startMs).split('-').map(Number);
+    const weekday = new Date(Date.UTC(year!, month! - 1, day!)).getUTCDay(); // 0 = Sunday
+    let monday = today;
+    for (let back = (weekday + 6) % 7; back > 0; back -= 1) monday = calendar.windowAt(monday.startMs - 1);
+    return { from: monday.startMs, to: today.endMs, label: `本周（${calendar.label(monday.startMs)} ${calendar.start} 起，周一为一周开始）` };
+  }
+  const window = date ? calendar.windowOf(date) : undefined;
+  return window ? { from: window.startMs, to: window.endMs, label: `${date}（${span(date!)}）` } : undefined;
 }
 
 export const durationText = (minutes: number): string => {
@@ -237,8 +233,8 @@ export const durationText = (minutes: number): string => {
 
 interface PlaySession { appId: string; gameName?: string; start: number; end: number }
 
-/** Clips sessions to [from, to) and sums them per game and per business day; a session crossing 06:00 is split between the two days. */
-export function aggregatePlay(sessions: PlaySession[], from: number, to: number, game?: string): { games: Array<{ name: string; minutes: number; text: string }>; totalMinutes: number; days: Array<{ date: string; minutes: number; text: string }> } {
+/** Clips sessions to [from, to) and sums them per game and per business day; a session crossing the day boundary is split between the two days. */
+export function aggregatePlay(calendar: BusinessCalendar, sessions: PlaySession[], from: number, to: number, game?: string): { games: Array<{ name: string; minutes: number; text: string }>; totalMinutes: number; days: Array<{ date: string; minutes: number; text: string }> } {
   const wanted = game?.trim().toLowerCase();
   const perGame = new Map<string, { name: string; ms: number }>();
   const perDay = new Map<string, number>();
@@ -251,9 +247,9 @@ export function aggregatePlay(sessions: PlaySession[], from: number, to: number,
     const entry = perGame.get(session.appId) ?? { name, ms: 0 };
     entry.ms += end - start;
     perGame.set(session.appId, entry);
-    for (let cursor = start; cursor < end; cursor = businessDayStart(cursor) + DAY_MS) {
-      const dayEnd = Math.min(end, businessDayStart(cursor) + DAY_MS);
-      perDay.set(businessDayLabel(cursor), (perDay.get(businessDayLabel(cursor)) ?? 0) + (dayEnd - cursor));
+    for (let cursor = start; cursor < end; cursor = calendar.windowAt(cursor).endMs) {
+      const dayEnd = Math.min(end, calendar.windowAt(cursor).endMs);
+      perDay.set(calendar.label(cursor), (perDay.get(calendar.label(cursor)) ?? 0) + (dayEnd - cursor));
     }
   }
   const games = [...perGame.values()].map((entry) => ({ name: entry.name, minutes: Math.round(entry.ms / 60_000) })).filter((entry) => entry.minutes > 0)
@@ -265,23 +261,24 @@ export function aggregatePlay(sessions: PlaySession[], from: number, to: number,
 /** Time actually spent in games, from the sessions the poller recorded (not Steam's lifetime totals). */
 function trackedPlaytime(deps: SteamToolDependencies, caller: SteamCaller, person: Person, period: PlaytimePeriod, date: string | undefined, game: string | undefined): unknown {
   const now = (deps.now ?? Date.now)();
-  const window = playtimeWindow(period, date, now);
+  const calendar = deps.calendar ?? businessCalendar();
+  const window = playtimeWindow(calendar, period, date, now);
   if (!window) return { status: 'invalid_date', reason: 'date_must_be_YYYY-MM-DD' };
   const target = targetFor(deps, caller, person);
   if (!('links' in target)) return target;
   const trackingSince = deps.store.playTrackingStartedAt();
-  const base = { period: period === 'date' ? 'date' : period, label: window.label, timezone: 'Asia/Singapore', dayBoundary: '每天新加坡时间 06:00 切日', accountCount: target.links.length };
+  const base = { period: period === 'date' ? 'date' : period, label: window.label, timezone: calendar.timezone, dayBoundary: calendar.describe(), accountCount: target.links.length };
   if (window.to <= trackingSince) {
-    return { status: 'ok', ...base, known: false, reason: 'before_tracking', trackingSince: new Date(trackingSince + 8 * 3_600_000).toISOString().slice(0, 16).replace('T', ' ') + '（新加坡时间）', note: '游戏时长是从这个时间之后才开始记录的，更早的日子没有数据。' };
+    return { status: 'ok', ...base, known: false, reason: 'before_tracking', trackingSince: `${calendar.format(trackingSince)}（${calendar.timezone}）`, note: '游戏时长是从这个时间之后才开始记录的，更早的日子没有数据。' };
   }
   if (target.links.every((link) => !link.broadcast)) return { status: 'ok', ...base, known: false, reason: 'tracking_off_while_announcements_off' };
   const sessions = deps.store.playSessions(target.links.map((link) => link.steamId), window.from, window.to, now);
-  const { games, totalMinutes, days } = aggregatePlay(sessions, window.from, window.to, game);
+  const { games, totalMinutes, days } = aggregatePlay(calendar, sessions, window.from, window.to, game);
   const partial = window.from < trackingSince;
   return {
     status: 'ok', ...base, known: true, games, totalMinutes, totalText: durationText(totalMinutes),
     ...(period === 'this_week' || days.length > 1 ? { days } : {}),
-    ...(partial ? { partial: true, trackingSince: new Date(trackingSince + 8 * 3_600_000).toISOString().slice(0, 16).replace('T', ' ') + '（新加坡时间）', note: '记录是从这个时间才开始的，这段时间之前的游戏时长没有数据，上面只是记录开始之后的部分。' } : {}),
+    ...(partial ? { partial: true, trackingSince: `${calendar.format(trackingSince)}（${calendar.timezone}）`, note: '记录是从这个时间才开始的，这段时间之前的游戏时长没有数据，上面只是记录开始之后的部分。' } : {}),
     ...(totalMinutes === 0 ? { note: '这段时间没有记录到游戏时长（只记录绑定账号在播报开启时的游戏状态，每分钟采样一次，误差约一分钟）。' } : {}),
   };
 }

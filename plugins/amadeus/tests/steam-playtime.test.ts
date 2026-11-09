@@ -5,8 +5,10 @@ import { runDailyPlaytime, steamPlaytimeSection } from '../src/steam/daily.js';
 import { PresencePoller } from '../src/steam/poller.js';
 import { SteamStore } from '../src/steam/store.js';
 import { renderSteamNotifications } from '../src/steam/notify.js';
-import { aggregatePlay, businessDayLabel, businessDayStart, playtimeWindow, steamGetPlaytime, type SteamCaller, type SteamToolDependencies } from '../src/steam/tools.js';
+import { BUSINESS_DAY_START, DEFAULT_TIMEZONE, businessCalendar, businessCalendarFromConfig, DAILY_PLAYTIME_CLOCK } from '../src/steam/business-day.js';
+import { aggregatePlay, playtimeWindow, steamGetPlaytime, type SteamCaller, type SteamToolDependencies } from '../src/steam/tools.js';
 
+const CAL = businessCalendar();
 const MIN = 60_000;
 const HOUR = 3_600_000;
 const ID1 = '76561190000000001';
@@ -15,18 +17,51 @@ const GROUP = '120363000000000000@g.us';
 // Singapore 06:00 on 2026-11-09 (= 2026-11-08T22:00Z): the start of business day 2026-11-09.
 const D9 = Date.parse('2026-11-08T22:00:00Z');
 
-test('the business day starts at 06:00 Singapore time and is labelled by its start date', () => {
-  assert.equal(businessDayStart(D9 + 5 * HOUR), D9);
-  assert.equal(businessDayStart(D9 - 1), D9 - 24 * HOUR);
-  assert.equal(businessDayLabel(D9), '2026-11-09');
-  assert.equal(businessDayLabel(D9 - 1), '2026-11-08'); // 05:59 still belongs to the previous day
+test('the business day starts at 06:00 Asia/Shanghai (PUBG\'s own) and is labelled by its start date', () => {
+  assert.equal(CAL.windowAt(D9 + 5 * HOUR).startMs, D9);
+  assert.equal(CAL.windowAt(D9 - 1).startMs, D9 - 24 * HOUR);
+  assert.equal(CAL.label(D9), '2026-11-09');
+  assert.equal(CAL.label(D9 - 1), '2026-11-08'); // 05:59 still belongs to the previous day
   const now = D9 + 3 * HOUR; // 09:00 on the 9th
-  assert.deepEqual([playtimeWindow('today', undefined, now)!.from, playtimeWindow('yesterday', undefined, now)!.from], [D9, D9 - 24 * HOUR]);
-  assert.equal(playtimeWindow('date', '2026-11-05', now)!.from, D9 - 4 * 24 * HOUR);
-  assert.equal(playtimeWindow('date', '2026-02-31', now), undefined);
+  assert.deepEqual([playtimeWindow(CAL, 'today', undefined, now)!.from, playtimeWindow(CAL, 'yesterday', undefined, now)!.from], [D9, D9 - 24 * HOUR]);
+  assert.equal(playtimeWindow(CAL, 'date', '2026-11-05', now)!.from, D9 - 4 * 24 * HOUR);
+  assert.equal(playtimeWindow(CAL, 'date', '2026-02-31', now), undefined);
   // 2026-11-09 is a Monday: the week starts that business day; a Wednesday looks back to the same Monday.
-  assert.equal(playtimeWindow('this_week', undefined, now)!.from, D9);
-  assert.equal(playtimeWindow('this_week', undefined, D9 + 2 * 24 * HOUR + 3 * HOUR)!.from, D9);
+  assert.equal(playtimeWindow(CAL, 'this_week', undefined, now)!.from, D9);
+  assert.equal(playtimeWindow(CAL, 'this_week', undefined, D9 + 2 * 24 * HOUR + 3 * HOUR)!.from, D9);
+});
+
+test('Steam and PUBG share one business day: same defaults, same configuration, same day arithmetic, same clock', async () => {
+  const { readFileSync } = await import('node:fs');
+  const pubgIndex = readFileSync(new URL('../../pubg/src/index.ts', import.meta.url), 'utf8');
+  const pubgService = readFileSync(new URL('../../pubg/src/daily-review-service.ts', import.meta.url), 'utf8');
+  const pubgReview = readFileSync(new URL('../../pubg/src/daily-review.ts', import.meta.url), 'utf8');
+  // PUBG's fallbacks are literal in its sources; Steam must resolve to exactly those when nothing is configured.
+  assert.match(pubgIndex, new RegExp(`'timezone', 'PUBG_TIMEZONE'\\) \\?\\? '${DEFAULT_TIMEZONE}'`, 'u'));
+  assert.match(pubgIndex, new RegExp(`'businessDayStart', 'PUBG_BUSINESS_DAY_START'\\) \\?\\? '${BUSINESS_DAY_START}'`, 'u'));
+  assert.match(pubgService, new RegExp(`config\\.timezone \\?\\? '${DEFAULT_TIMEZONE}'`, 'u'));
+  assert.match(pubgReview, new RegExp(`DAILY_REVIEW_TIME = '${DAILY_PLAYTIME_CLOCK}'`, 'u'));
+  assert.deepEqual([DEFAULT_TIMEZONE, BUSINESS_DAY_START, DAILY_PLAYTIME_CLOCK], ['Asia/Shanghai', '06:00', '09:30']);
+  const bare = businessCalendarFromConfig({}, {});
+  assert.deepEqual([bare.timezone, bare.start], ['Asia/Shanghai', '06:00']);
+  // the pubg plugin's configuration (and its environment fallbacks) drive Steam too
+  const configured = businessCalendarFromConfig({ plugins: { entries: { pubg: { config: { timezone: 'Asia/Tokyo', businessDayStart: '05:00' } } } } }, {});
+  assert.deepEqual([configured.timezone, configured.start], ['Asia/Tokyo', '05:00']);
+  const fromEnv = businessCalendarFromConfig({}, { PUBG_TIMEZONE: 'Europe/Paris', PUBG_BUSINESS_DAY_START: '04:30' } as NodeJS.ProcessEnv);
+  assert.deepEqual([fromEnv.timezone, fromEnv.start], ['Europe/Paris', '04:30']);
+  // the same business day boundaries as the PUBG domain gives the daily review for the same instants
+  const domain = await import('@rine-kit/pubg-domain/core');
+  for (const at of [D9 - 1, D9, D9 + 3 * HOUR, D9 + 20 * HOUR, D9 + 30 * HOUR]) {
+    assert.equal(CAL.label(at), domain.businessDayLabel(at, 'Asia/Shanghai', '06:00'));
+    const window = domain.businessDayWindow(CAL.label(at), 'Asia/Shanghai', '06:00');
+    assert.deepEqual(CAL.windowAt(at), { startMs: window.startMs, endMs: window.endMs });
+  }
+  assert.equal(CAL.latestComplete(D9 + 3 * HOUR + 30 * MIN), domain.latestCompleteBusinessDay(new Date(D9 + 3 * HOUR + 30 * MIN), 'Asia/Shanghai', '06:00'));
+  assert.equal(CAL.dueAt('2026-11-08'), D9 + 3 * HOUR + 30 * MIN, '09:30 local on the morning after the business day');
+  // no leftover hard-coded Singapore anywhere in the Steam wording or code
+  const { readdirSync } = await import('node:fs');
+  const dir = new URL('../src/steam/', import.meta.url);
+  for (const file of readdirSync(dir)) assert.doesNotMatch(readFileSync(new URL(file, dir), 'utf8'), /Singapore|新加坡/u, file);
 });
 
 test('sessions: one per game, a game change or leaving closes it, and a long gap ends it at the last sighting', () => {
@@ -54,14 +89,14 @@ test('sessions: one per game, a game change or leaving closes it, and a long gap
 
 test('a session crossing 06:00 is split between the two business days; a game filter and totals work', () => {
   const sessions = [{ appId: '10', gameName: 'Game A', start: D9 - HOUR, end: D9 + 2 * HOUR }, { appId: '20', gameName: 'Game B', start: D9 + 3 * HOUR, end: D9 + 3 * HOUR + 30 * MIN }];
-  const day9 = aggregatePlay(sessions, D9, D9 + 24 * HOUR);
+  const day9 = aggregatePlay(CAL, sessions, D9, D9 + 24 * HOUR);
   assert.deepEqual(day9.games.map((g) => [g.name, g.minutes]), [['Game A', 120], ['Game B', 30]]);
   assert.equal(day9.totalMinutes, 150);
-  const day8 = aggregatePlay(sessions, D9 - 24 * HOUR, D9);
+  const day8 = aggregatePlay(CAL, sessions, D9 - 24 * HOUR, D9);
   assert.deepEqual(day8.games.map((g) => [g.name, g.minutes]), [['Game A', 60]]);
-  const week = aggregatePlay(sessions, D9 - 24 * HOUR, D9 + 24 * HOUR);
+  const week = aggregatePlay(CAL, sessions, D9 - 24 * HOUR, D9 + 24 * HOUR);
   assert.deepEqual(week.days.map((d) => [d.date, d.minutes]), [['2026-11-08', 60], ['2026-11-09', 150]]);
-  assert.deepEqual(aggregatePlay(sessions, D9, D9 + 24 * HOUR, 'game b').games.map((g) => g.name), ['Game B']);
+  assert.deepEqual(aggregatePlay(CAL, sessions, D9, D9 + 24 * HOUR, 'game b').games.map((g) => g.name), ['Game B']);
 });
 
 function toolEnv(now: number) {
@@ -69,7 +104,7 @@ function toolEnv(now: number) {
   store.link({ senderKey: 'whatsapp:1', steamId: ID1, personaName: 'Main', personId: 'p1', now: 1 });
   store.link({ senderKey: 'whatsapp:1', steamId: ID2, personaName: 'Alt', personId: 'p1', now: 2 });
   store.enroll(GROUP, 'whatsapp:1');
-  const deps = { store, now: () => now, client: { hasKey: async () => true } } as unknown as SteamToolDependencies;
+  const deps = { store, calendar: CAL, now: () => now, client: { hasKey: async () => true } } as unknown as SteamToolDependencies;
   const caller: SteamCaller = { senderKey: 'whatsapp:1', groupId: GROUP, isOwner: false, mentions: [], selfPerson: () => 'p1' };
   return { store, deps, caller };
 }
@@ -154,14 +189,14 @@ test('the standalone morning message: Amadeus shape, one line per person with pe
   const { store, setTracking, names } = dailyEnv();
   const window = { startMs: D9 - 24 * HOUR, endMs: D9 };
   const links = store.broadcastMembers(GROUP);
-  assert.equal(steamPlaytimeSection(store, links, window, D9 + 4 * HOUR, names), undefined, 'nobody played: nothing is sent');
+  assert.equal(steamPlaytimeSection(CAL, store, links, window, D9 + 4 * HOUR, names), undefined, 'nobody played: nothing is sent');
   play(store, ID1, { appId: '578080', name: 'PUBG' }, D9 - 10 * HOUR, 130);
   play(store, ID2, { appId: '271590', name: 'GTA5' }, D9 - 5 * HOUR, 95);
   play(store, '76561190000000003', { appId: '578080', name: 'PUBG' }, D9 - 4 * HOUR, 40);
-  assert.equal(steamPlaytimeSection(store, links, window, D9 + 4 * HOUR, names), [
+  assert.equal(steamPlaytimeSection(CAL, store, links, window, D9 + 4 * HOUR, names), [
     'Amadeus • 世界线观测 · Steam 昨日游戏时长',
     '',
-    '业务日 2026-11-08（新加坡时间 06:00 → 次日 06:00）各成员的游戏时长。',
+    '业务日 2026-11-08（Asia/Shanghai 06:00 → 次日 06:00）各成员的游戏时长。',
     '',
     '- Arthur：PUBG 2 小时 10 分钟，GTA5 1 小时 35 分钟（合计 3 小时 45 分钟）',
     '- Nori：PUBG 40 分钟',
@@ -169,16 +204,16 @@ test('the standalone morning message: Amadeus shape, one line per person with pe
     'El Psy Kongroo.',
   ].join('\n'));
   setTracking(D9 - 12 * HOUR);
-  assert.match(steamPlaytimeSection(store, links, window, D9 + 4 * HOUR, names)!, /记录从 .* 起，之前的部分没有数据/u);
+  assert.match(steamPlaytimeSection(CAL, store, links, window, D9 + 4 * HOUR, names)!, /记录从 .* 起，之前的部分没有数据/u);
   setTracking(D9 + HOUR);
-  assert.equal(steamPlaytimeSection(store, links, window, D9 + 4 * HOUR, names), undefined, 'recording began after the day: nothing invented');
-  assert.equal(steamPlaytimeSection(new SteamStore(':memory:'), [], window, D9, names), undefined);
+  assert.equal(steamPlaytimeSection(CAL, store, links, window, D9 + 4 * HOUR, names), undefined, 'recording began after the day: nothing invented');
+  assert.equal(steamPlaytimeSection(CAL, new SteamStore(':memory:'), [], window, D9, names), undefined);
 });
 
 test('the 09:30 Singapore job: once per group per day, only that group\'s members, skipped when nobody played, no old days after a late start', async () => {
   const { store, names } = dailyEnv();
   const sent: Array<{ group: string; text: string }> = [];
-  const run = (now: number) => runDailyPlaytime({ store, now, nameOf: names, send: async (group, text) => { sent.push({ group, text }); } });
+  const run = (now: number) => runDailyPlaytime({ store, calendar: CAL, now, nameOf: names, send: async (group, text) => { sent.push({ group, text }); } });
   play(store, ID1, { appId: '578080', name: 'PUBG' }, D9 - 10 * HOUR, 130);                    // yesterday (business day 2026-11-08)
   const other = '76561190000000004';
   play(store, other, { appId: '271590', name: 'GTA5' }, D9 - 6 * HOUR, 60);
@@ -200,9 +235,9 @@ test('the 09:30 Singapore job: once per group per day, only that group\'s member
   // a failing send is recorded once and not retried in a loop
   const failing = dailyEnv();
   play(failing.store, ID1, { appId: '578080', name: 'PUBG' }, D9 - 10 * HOUR, 130);
-  const result = await runDailyPlaytime({ store: failing.store, now: at0930, nameOf: failing.names, send: async () => { throw new Error('down'); } });
+  const result = await runDailyPlaytime({ store: failing.store, calendar: CAL, now: at0930, nameOf: failing.names, send: async () => { throw new Error('down'); } });
   assert.deepEqual(result, { sent: 0, skipped: 1, failed: 1 });
-  assert.deepEqual(await runDailyPlaytime({ store: failing.store, now: at0930 + MIN, nameOf: failing.names, send: async () => undefined }), { sent: 0, skipped: 0, failed: 0 });
+  assert.deepEqual(await runDailyPlaytime({ store: failing.store, calendar: CAL, now: at0930 + MIN, nameOf: failing.names, send: async () => undefined }), { sent: 0, skipped: 0, failed: 0 });
 });
 
 function stopEnv(people: Array<[string, string]> = [[ID1, 'p1']]) {

@@ -143,6 +143,9 @@ importers:
       '@rine-kit/presentation':
         specifier: 0.1.5
         version: 0.1.5
+      '@rine-kit/pubg-domain':
+        specifier: 0.1.5
+        version: 0.1.5
       '@rine-kit/pubg-reply':
         specifier: 0.1.5
         version: 0.1.5

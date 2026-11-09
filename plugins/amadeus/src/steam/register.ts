@@ -7,6 +7,7 @@ import { registerTool } from '../shared/register-tool.js';
 import { SteamClient } from './client.js';
 import { renderSteamNotifications } from './notify.js';
 import { POLL_INTERVAL_MS } from './domain.js';
+import { businessCalendarFromConfig } from './business-day.js';
 import { runDailyPlaytime } from './daily.js';
 import { PresencePoller } from './poller.js';
 import { SteamStore } from './store.js';
@@ -36,7 +37,7 @@ const ProfileParameters = Type.Object({ person: PersonParameters }, { additional
 const PlaytimeParameters = Type.Object({
   person: PersonParameters,
   game: Type.Optional(Type.String({ minLength: 1, maxLength: 128, description: '只看某个游戏时填游戏名（部分匹配）。' })),
-  period: Type.Optional(Type.Union([Type.Literal('today'), Type.Literal('yesterday'), Type.Literal('this_week'), Type.Literal('date')], { description: '问“某一天/这周玩了多久”时填：today=今天，yesterday=昨天，this_week=本周（周一起），date=配合 date 指定某天。不填则返回 Steam 的总时长。每天按新加坡时间 06:00 切日（06:00→次日 06:00 算一天，“昨天”指昨天 06:00 到今天 06:00）。' })),
+  period: Type.Optional(Type.Union([Type.Literal('today'), Type.Literal('yesterday'), Type.Literal('this_week'), Type.Literal('date')], { description: '问“某一天/这周玩了多久”时填：today=今天，yesterday=昨天，this_week=本周（周一起），date=配合 date 指定某天。不填则返回 Steam 的总时长。按 PUBG 同一个业务日切天（默认 Asia/Shanghai 每天 06:00 切日：06:00→次日 06:00 算一天，“昨天”指昨天 06:00 到今天 06:00）。' })),
   date: Type.Optional(Type.String({ pattern: '^\\d{4}-\\d{2}-\\d{2}$', description: '指定某一天，格式 YYYY-MM-DD（period 可省略或填 date）。' })),
 }, { additionalProperties: false });
 const FriendsParameters = Type.Object({
@@ -93,7 +94,7 @@ export function callerFrom(config: AmadeusConfig, context: OpenClawPluginToolCon
 }
 
 export function registerSteamTools(api: OpenClawPluginApi): void {
-  const deps = (): SteamToolDependencies => steamRuntime(configFor(api));
+  const deps = (): SteamToolDependencies => ({ ...steamRuntime(configFor(api)), calendar: businessCalendarFromConfig(api.config) });
   const caller = (context: OpenClawPluginToolContext): SteamCaller => callerFrom(configFor(api), context);
   const person = (params: { person: unknown }): Person => params.person as Person;
 
@@ -105,7 +106,7 @@ export function registerSteamTools(api: OpenClawPluginApi): void {
     async (params, context) => steamSetBroadcast(deps(), caller(context), params as Static<typeof BroadcastParameters>));
   registerTool(api, 'steam_get_profile', '查某个已绑定 Steam 的人的资料：昵称、当前在线状态与正在玩的游戏、账号创建时间。资料不公开的字段会返回 known:false，不要编造。', ProfileParameters,
     async (params, context) => steamGetProfile(deps(), caller(context), { person: person(params as { person: unknown }) }));
-  registerTool(api, 'steam_get_playtime', '查某个已绑定 Steam 的人的游戏时长。不带 period：Steam 的总时长、最常玩的游戏或某个游戏的时长（游戏详情不公开时 known:false）。带 period（today/yesterday/this_week/date+date）：每天按新加坡时间 06:00 切日（06:00→次日 06:00 为一天，回答时要说明按 6 点切日），返回那段时间里实际玩了哪些游戏各多久和合计，多个账号合并；例如“我昨天玩了多久”用 person=self、period=yesterday，再按游戏列出时长。记录只从开始记录的时间起有，更早的日子如实说没有数据，不要编造。', PlaytimeParameters,
+  registerTool(api, 'steam_get_playtime', '查某个已绑定 Steam 的人的游戏时长。不带 period：Steam 的总时长、最常玩的游戏或某个游戏的时长（游戏详情不公开时 known:false）。带 period（today/yesterday/this_week/date+date）：按 PUBG 同一个业务日切天（默认 Asia/Shanghai，每天 06:00 切日，06:00→次日 06:00 为一天；回答时说明按 6 点切日，和 PUBG 战报同一天），返回那段时间里实际玩了哪些游戏各多久和合计，多个账号合并；例如“我昨天玩了多久”用 person=self、period=yesterday，再按游戏列出时长。记录只从开始记录的时间起有，更早的日子如实说没有数据，不要编造。', PlaytimeParameters,
     async (params, context) => {
       const typed = params as Static<typeof PlaytimeParameters>;
       return steamGetPlaytime(deps(), caller(context), { person: person(typed), ...(typed.game ? { game: typed.game } : {}), ...(typed.period ? { period: typed.period } : {}), ...(typed.date ? { date: typed.date } : {}) });
@@ -161,9 +162,9 @@ export function registerSteamPresenceService(api: OpenClawPluginApi): void {
           api.logger.warn(`amadeus steam presence tick failed: ${error instanceof Error ? error.message : 'unknown'}`);
         }
         try {
-          // The 09:30 (Singapore) play-time message uses only local data, so it does not wait for the Steam key.
+          // The 09:30 play-time message (same business day and clock as the PUBG daily review) uses only local data, so it does not wait for the Steam key.
           const daily = await runDailyPlaytime({
-            store, now: Date.now(), send: sendToGroup, log: (message) => api.logger.info(`amadeus ${message}`),
+            store, calendar: businessCalendarFromConfig(api.config), now: Date.now(), send: sendToGroup, log: (message) => api.logger.info(`amadeus ${message}`),
             nameOf: (personId, fallback) => (personId ? identityDisplayName(config, personId) : undefined) ?? fallback,
           });
           if (daily.sent || daily.failed) api.logger.info(`amadeus steam daily playtime sent=${daily.sent} failed=${daily.failed}`);
