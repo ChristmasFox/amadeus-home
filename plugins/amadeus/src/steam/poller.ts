@@ -19,7 +19,7 @@ export interface AnnouncementPerson {
   /** For stopped_playing: how long the session lasted. */
   durationMinutes?: number;
   /** For switched_game: the game just left and its length, when long enough to count. */
-  previous?: { gameName?: string; minutes: number };
+  previous?: { gameName?: string; minutes?: number };
 }
 
 export interface AnnouncementFacts {
@@ -100,8 +100,10 @@ export class PresencePoller {
         const minutes = closed ? Math.round((closed.endedAt - closed.startedAt) / 60_000) : 0;
         const counts = closed !== undefined && closed.reason !== 'gap' && minutes >= MIN_STOP_MINUTES;
         // Leaving one game for another is announced once, as the switch (with the length of the game just left); only a real stop gets its own notice.
-        const enriched = event && event.kind === 'switched_game' && closed && counts
-          ? { ...event, previous: { ...(closed.gameName ? { gameName: closed.gameName } : {}), minutes } }
+        // The switch always says which game was left; the length is added only when that session was long enough to count.
+        const leftName = (closed?.gameName ?? before?.gameName) || undefined;
+        const enriched = event && event.kind === 'switched_game' && (leftName || (closed && counts))
+          ? { ...event, previous: { ...(leftName ? { gameName: leftName } : {}), ...(closed && counts ? { minutes } : {}) } }
           : event;
         if (enriched) { report.events += 1; this.enqueue(enriched); }
         if (closed && counts && closed.reason === 'stopped') {
@@ -178,9 +180,14 @@ export class PresencePoller {
       const slot = slotOf(event);
       const earlier = group.get(slot);
       // Unlocks arriving before the merge window closes join the earlier ones instead of replacing them.
+      // A person who just came online (or back) and starts or changes a game before the window closes is still announced as
+      // coming online, now with the game: the newest event must not replace the arrival.
+      const arrival = earlier && (earlier.kind === 'came_online' || earlier.kind === 'back_from_away') && (event.kind === 'started_playing' || event.kind === 'switched_game');
       const merged = event.kind === 'achievement_unlocked' && earlier?.achievements
         ? { ...event, at: earlier.at, achievements: [...earlier.achievements, ...(event.achievements ?? []).filter((item) => !earlier.achievements!.some((known) => known.apiName === item.apiName))] }
-        : { ...event };
+        : arrival
+          ? { steamId: event.steamId, kind: earlier.kind, at: earlier.at, ...(event.gameId ? { gameId: event.gameId } : {}), ...(event.gameName ? { gameName: event.gameName } : {}) }
+          : { ...event };
       group.set(slot, merged);
       this.queue.set(groupId, group);
     }

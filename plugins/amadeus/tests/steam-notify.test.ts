@@ -18,7 +18,10 @@ test('came online, started playing and switched game; missing facts are left out
   assert.equal(render([{ name: 'kim', kind: 'started_playing', game: 'GTA5' }])[0], 'Amadeus • 世界线观测 · Steam 开局\n\nkim 开始玩 GTA5。\n\n- 成员：kim\n- 游戏：GTA5\n- 状态：游戏中\n\nEl Psy Kongroo.');
   assert.equal(render([{ name: 'kim', kind: 'started_playing' }])[0], 'Amadeus • 世界线观测 · Steam 开局\n\nkim 开始玩游戏了。\n\n- 成员：kim\n- 状态：游戏中\n\nEl Psy Kongroo.');
   const switched = render([{ name: 'kim', kind: 'switched_game', game: 'GTA5', previous: { gameName: 'PUBG: BATTLEGROUNDS', minutes: 83 } }])[0]!;
-  assert.match(switched, /^Amadeus • 世界线观测 · Steam 换台\n\nkim 换成了 GTA5。\n\n- 成员：kim\n- 游戏：GTA5\n- 状态：游戏中\n- 上一局：PUBG: BATTLEGROUNDS，1 小时 23 分钟\n\nEl Psy Kongroo\.$/u);
+  assert.match(switched, /^Amadeus • 世界线观测 · 世界线变动\n\nkim 从 PUBG: BATTLEGROUNDS 切换到 GTA5。\n\n- 成员：kim\n- 游戏：GTA5\n- 状态：游戏中\n- 上一局：PUBG: BATTLEGROUNDS，1 小时 23 分钟\n\nEl Psy Kongroo\.$/u);
+  // The left game is named even when the session was too short to count; then there is no 上一局 length line.
+  assert.equal(render([{ name: 'kim', kind: 'switched_game', game: 'GTA5', previous: { gameName: 'Notepad' } }])[0], 'Amadeus • 世界线观测 · 世界线变动\n\nkim 从 Notepad 切换到 GTA5。\n\n- 成员：kim\n- 游戏：GTA5\n- 状态：游戏中\n\nEl Psy Kongroo.');
+  assert.match(render([{ name: 'kim', kind: 'switched_game', game: 'GTA5' }])[0]!, /kim 切换到了 GTA5。/u);
 });
 
 test('achievements: game, achievement and the global rate only when known', () => {

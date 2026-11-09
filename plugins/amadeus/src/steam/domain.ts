@@ -74,7 +74,7 @@ export interface PresenceChange {
   /** For stopped_playing: how long the play session that just ended lasted. */
   durationMinutes?: number;
   /** For switched_game: the game just left and how long it was played, when that session was long enough to count. */
-  previous?: { gameName?: string; minutes: number };
+  previous?: { gameName?: string; minutes?: number };
 }
 
 /** What the poller remembers per SteamID: the last seen state. There is no debounce: one observation is enough. */

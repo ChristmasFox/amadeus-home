@@ -14,7 +14,7 @@ const TITLES: Record<EventKind, string> = {
   came_online: 'Steam 上线',
   back_from_away: 'Steam 回归信号',
   started_playing: 'Steam 开局',
-  switched_game: 'Steam 换台',
+  switched_game: '世界线变动',
   achievement_unlocked: 'Steam 成就',
   stopped_playing: 'Steam 收束',
 };
@@ -36,7 +36,7 @@ function sentence(person: AnnouncementPerson, detailed: boolean): string {
     case 'came_online': return game ? `${name} 上线了，正在玩 ${game}。` : `${name} 上线了。`;
     case 'back_from_away': return game ? `${name} 离开了一阵后又上线了，正在玩 ${game}。` : `${name} 离开了一阵后又上线了。`;
     case 'started_playing': return game ? `${name} 开始玩 ${game}。` : `${name} 开始玩游戏了。`;
-    case 'switched_game': return game ? `${name} 换成了 ${game}。` : `${name} 换了个游戏。`;
+    case 'switched_game': return person.previous?.gameName && game ? `${name} 从 ${person.previous.gameName} 切换到 ${game}。` : game ? `${name} 切换到了 ${game}。` : `${name} 换了个游戏。`;
     case 'achievement_unlocked': {
       const count = person.achievements?.length ?? 0;
       const where = game ? `在 ${game} 里` : '';
@@ -58,7 +58,7 @@ function singleFacts(person: AnnouncementPerson): PresentationFact[] {
     case 'came_online': return [...facts, ...game, fact('状态', person.game ? '游戏中' : '在线')];
     case 'back_from_away': return [...facts, ...game, fact('状态', person.game ? '游戏中' : '在线')];
     case 'started_playing': return [...facts, ...game, fact('状态', '游戏中')];
-    case 'switched_game': return [...facts, ...game, fact('状态', '游戏中'), ...(person.previous ? [fact('上一局', `${person.previous.gameName ? `${person.previous.gameName}，` : ''}${minutesText(person.previous.minutes)}`)] : [])];
+    case 'switched_game': return [...facts, ...game, fact('状态', '游戏中'), ...(person.previous?.minutes !== undefined ? [fact('上一局', `${person.previous.gameName ? `${person.previous.gameName}，` : ''}${minutesText(person.previous.minutes)}`)] : [])];
     case 'achievement_unlocked': {
       const items = person.achievements ?? [];
       const rates = items.filter((item) => item.globalPercent !== undefined);

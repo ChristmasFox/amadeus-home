@@ -282,9 +282,9 @@ test('switching games sends only the switch notice, carrying the length of the g
   await run(40, { id: '10', name: 'Game A' });
   await run(40, { id: '20', name: 'Game B' });
   await run(5, { id: '20', name: 'Game B' });
-  const switches = sent.filter((text) => text.includes('Steam 换台'));
+  const switches = sent.filter((text) => text.includes('世界线变动'));
   assert.equal(switches.length, 1);
-  assert.match(switches[0]!, /kim 换成了 Game B。/u);
+  assert.match(switches[0]!, /kim 从 Game A 切换到 Game B。/u);
   assert.match(switches[0]!, /- 上一局：Game A，\d+ 分钟/u);
   assert.equal(sent.filter((text) => text.includes('Steam 收束')).length, 0, 'no stop notice for leaving a game to start another');
 });
