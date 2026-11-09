@@ -56,3 +56,11 @@ test('every turn of that group gets its roster, even after a reset; other conver
     await rm(directory, { recursive: true, force: true });
   }
 });
+
+test('the local group voice anchor quotes no literal gesture, sign-off or catchphrase', () => {
+  for (const phrase of ['双手抱胸', '斜眼', '笨蛋冈部', '（双手', 'D-Mail', '辉光管', '理智值', '世界线']) {
+    assert.ok(!GROUP_VOICE_ANCHOR.includes(phrase), phrase);
+  }
+  assert.match(GROUP_VOICE_ANCHOR, /不要重复前面几条用过的动作/u);
+  assert.match(GROUP_VOICE_ANCHOR, /replyGuide/u);
+});

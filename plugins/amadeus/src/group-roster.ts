@@ -1,8 +1,9 @@
 import type { OpenClawPluginApi } from 'openclaw/plugin-sdk/core';
 import type { AddressingRecord } from '@agent/identity';
-import { KURISU_VOICE_ANCHOR as GROUP_VOICE_ANCHOR, renderGroupRoster } from '@rine-kit/pubg-reply';
+import { renderGroupRoster } from '@rine-kit/pubg-reply';
 import { configFor } from './config.js';
 import { groupAddressing } from './identity.js';
+import { GROUP_VOICE_ANCHOR } from './voice-anchor.js';
 
 /**
  * Group roster: the reviewed forms of address of a group's members, injected into every turn of that group's

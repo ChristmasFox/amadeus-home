@@ -1,4 +1,4 @@
-import { KURISU_VOICE_ANCHOR } from '@rine-kit/pubg-reply';
+import { GROUP_VOICE_ANCHOR as KURISU_VOICE_ANCHOR } from '../voice-anchor.js';
 import { nineRouterCompleter, type Completer } from '../dm-digest.js';
 import type { EventKind } from './domain.js';
 import type { AnnouncementFacts, AnnouncementPerson } from './poller.js';
