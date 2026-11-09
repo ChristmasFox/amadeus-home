@@ -49,6 +49,20 @@ GROUP_IMAGE_TOOL_ALLOWLIST = [
     *GROUP_MAC_HOST_TOOL_ALLOWLIST,
     *GROUP_STEAM_TOOL_ALLOWLIST,
 ]
+# The owner's tool set inside groups: the group allowlist plus a few tools the owner actually uses there. A wildcard
+# gave ~99 tools, which correlated with truncated one-character replies, so it is replaced by this explicit list.
+# Direct chats are unaffected (global tools.toolsBySender keeps the owner wildcard).
+GROUP_OWNER_EXTRA_TOOL_ALLOWLIST = [
+    "identity_resolve",
+    "identity_add_alias",
+    "amadeus_remember",
+    "view_image",
+    "amadeus_image_upscale",
+    "amadeus_web_image",
+    "memory_search",
+    "memory_get",
+]
+GROUP_OWNER_TOOL_ALLOWLIST = [*GROUP_IMAGE_TOOL_ALLOWLIST, *GROUP_OWNER_EXTRA_TOOL_ALLOWLIST]
 LEGACY_GROUP_IMAGE_TOOL_ALLOWLIST = [*NON_OWNER_TOOL_ALLOWLIST, "image_generate"]
 LEGACY_GROUP_PUBG_TOOL_ALLOWLIST = [
     *NON_OWNER_TOOL_ALLOWLIST,
@@ -288,7 +302,8 @@ def ensure_group_image_policies(channel: dict, owner_keys: list[str] | None = No
                     raise SystemExit("account groups must be an object")
                 scopes.append(account["groups"])
     wanted_tools = {"allow": GROUP_IMAGE_TOOL_ALLOWLIST}
-    wanted_owner = {key: {"allow": ["*"]} for key in owner_keys or []}
+    wanted_owner = {key: {"allow": list(GROUP_OWNER_TOOL_ALLOWLIST)} for key in owner_keys or []}
+    legacy_owner = {key: {"allow": ["*"]} for key in owner_keys or []}
     for group_map in scopes:
         for group in group_map.values():
             if not isinstance(group, dict):
@@ -300,11 +315,11 @@ def ensure_group_image_policies(channel: dict, owner_keys: list[str] | None = No
             if old_tools is not None and old_tools != wanted_tools and old_tools not in legacy_tools:
                 raise SystemExit("unexpected group tool policy; refuse to replace unrelated restrictions")
             old_senders = group.get("toolsBySender")
-            if old_senders is not None and old_senders != wanted_owner:
+            if old_senders is not None and old_senders not in (wanted_owner, legacy_owner):
                 raise SystemExit("unexpected group sender policy; refuse to replace unrelated restrictions")
             group["tools"] = {"allow": list(GROUP_IMAGE_TOOL_ALLOWLIST)}
             if owner_keys:
-                group["toolsBySender"] = {key: {"allow": ["*"]} for key in owner_keys}
+                group["toolsBySender"] = {key: {"allow": list(GROUP_OWNER_TOOL_ALLOWLIST)} for key in owner_keys}
 
 def main() -> None:
     if len(sys.argv) != 9:

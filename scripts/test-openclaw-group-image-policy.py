@@ -34,13 +34,35 @@ class GroupImagePolicyTest(unittest.TestCase):
         for group in [*channel["groups"].values(), *channel["accounts"]["secondary"]["groups"].values()]:
             self.assertEqual(group["tools"], {"allow": list(prepare.GROUP_IMAGE_TOOL_ALLOWLIST)})
             self.assertNotIn("steam_friends_status", group["tools"]["allow"])
-            self.assertEqual(group["toolsBySender"], {key: {"allow": ["*"]} for key in keys})
+            self.assertEqual(group["toolsBySender"], {key: {"allow": list(prepare.GROUP_OWNER_TOOL_ALLOWLIST)} for key in keys})
+            for rule in group["toolsBySender"].values():
+                self.assertNotIn("*", rule["allow"])
+                self.assertLessEqual(len(rule["allow"]), 30)
+                self.assertTrue(set(prepare.GROUP_IMAGE_TOOL_ALLOWLIST) <= set(rule["allow"]))
+                self.assertEqual(len(rule["allow"]), len(set(rule["allow"])), "no duplicates")
+                for forbidden in ("exec", "read", "write", "edit", "apply_patch", "gateway", "steam_friends_status") + tuple(
+                        name for name in rule["allow"] if name.startswith("amadeus_vps_")):
+                    self.assertNotIn(forbidden, rule["allow"])
         self.assertFalse(channel["groups"]["*"]["requireMention"])
         self.assertTrue(channel["groups"]["fixture-group"]["requireMention"])
         self.assertEqual(set(channel["groups"]), {"*", "fixture-group"}, "admission keys must not be added or removed")
         once = copy.deepcopy(channel)
         prepare.ensure_group_image_policies(channel, keys)
         self.assertEqual(channel, once, "prepare must be idempotent")
+
+    def test_legacy_owner_wildcard_is_replaced_and_global_owner_stays_full(self):
+        keys = prepare.owner_tool_policy_keys("+15555550123")
+        channel = {"groups": {"*": {"requireMention": False, "tools": {"allow": list(prepare.GROUP_IMAGE_TOOL_ALLOWLIST)},
+                                    "toolsBySender": {key: {"allow": ["*"]} for key in keys}}}}
+        prepare.ensure_group_image_policies(channel, keys)
+        self.assertEqual(channel["groups"]["*"]["toolsBySender"], {key: {"allow": list(prepare.GROUP_OWNER_TOOL_ALLOWLIST)} for key in keys})
+        # Direct chats and the global owner rule are not touched by the group policy: they keep the wildcard.
+        config = {"tools": {}, "channels": {"whatsapp": {}, "telegram": {}}}
+        owner_rules = {key: {"allow": ["*"]} for key in keys}
+        config["tools"]["toolsBySender"] = {"*": {"allow": prepare.NON_OWNER_TOOL_ALLOWLIST}, **owner_rules}
+        prepare.ensure_group_image_policies(config["channels"]["whatsapp"], keys)
+        for key in keys:
+            self.assertEqual(config["tools"]["toolsBySender"][key], {"allow": ["*"]})
 
     def test_telegram_group_has_no_owner_wildcard_or_direct_change(self):
         channel = {"direct": {"*": {"tools": {"deny": ["exec"]}}},
