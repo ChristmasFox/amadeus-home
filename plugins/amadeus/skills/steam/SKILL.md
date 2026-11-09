@@ -41,3 +41,10 @@ Use the native `steam_*` tools for questions about a person's Steam account: who
 - If game details are not public the tool says so (`known:false`, 游戏详情未公开): say it is not visible, never say 0, and in a ranking name who was left out and why. Results are cached for a few minutes.
 - Total hours here are Steam's lifetime totals; for "how long did I play yesterday/this week" use `steam_get_playtime` with a period.
 
+## More Steam reads (all official Web API; never scrape)
+- **Level / badges / bans:** `steam_get_account_info` — "我几级、谁的 Steam 等级最高、有没有被封过". Default is the asker; `person` for another linked member; `all: true` ranks the group by level (members whose level is private are left out and named). Bans (VAC / game / community / economy, days since the last one) are stated as facts only: never accuse, never guess a reason.
+- **A game right now:** `steam_game_info` — current players online and the latest news for a game (name or app id; found in the asker's library, else the official store search). Use it for "XX 现在多少人玩 / 有什么更新新闻". If a game has no news or no count, say that.
+- **A person's numbers in one game:** `steam_get_game_stats` — per-game statistics such as CS2 kills (`stat` filters by name). If the game exposes no statistics or the details are private, say so. **PUBG is excluded:** PUBG questions go to the `pubg_*` tools only.
+- **Shared games and wishlists:** `steam_library_overlap` — `mode: "common"` for games several members all own (`all: true` for the whole group, or `people`), `mode: "wishlist"` for wishlists and their overlap. Members with private game details or an empty/hidden wishlist are named and left out, never counted as zero.
+- There is no automatic game-update announcement; news is only read when someone asks.
+

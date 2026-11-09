@@ -8,6 +8,7 @@ import { normalizeState, type PresenceObservation } from './domain.js';
  * can be pointed at a relay when direct access is unavailable.
  */
 export const STEAM_API_BASE = 'https://api.steampowered.com';
+export const STEAM_STORE_BASE = 'https://store.steampowered.com';
 export const SUMMARIES_BATCH = 100;
 
 export class SteamApiError extends Error {
@@ -18,6 +19,8 @@ export class SteamApiError extends Error {
 
 export interface SteamClientOptions {
   baseUrl?: string;
+  /** The public storefront (name search); the Web API base is used for everything else. */
+  storeBaseUrl?: string;
   keyFile?: string;
   /** Injected for tests; the key is otherwise read from keyFile on first use. */
   apiKey?: string;
@@ -60,6 +63,38 @@ export interface AchievementDefinition {
   name: string;
   description?: string;
   hidden: boolean;
+}
+
+export interface PlayerBans {
+  steamId: string;
+  communityBanned: boolean;
+  vacBanned: boolean;
+  vacBans: number;
+  gameBans: number;
+  daysSinceLastBan: number;
+  economyBan: string;
+}
+
+export interface BadgeSummary {
+  level: number;
+  xp: number;
+  xpToNextLevel: number;
+  badgeCount: number;
+}
+
+export interface NewsItem {
+  gid: string;
+  title: string;
+  url: string;
+  feedLabel?: string;
+  date: number;
+  contents: string;
+}
+
+export interface WishlistEntry {
+  appId: number;
+  priority: number;
+  addedAt?: number;
 }
 
 export interface GameStat {
@@ -172,6 +207,130 @@ export class SteamClient {
     const body = await this.get('/IPlayerService/GetOwnedGames/v1/', { steamid: steamId, include_appinfo: '1', include_played_free_games: '1' }) as { response?: { games?: unknown[]; game_count?: number } };
     if (!Array.isArray(body.response?.games)) return { known: false, reason: 'profile_private' };
     return { known: true, value: body.response!.games!.map(parseGame).filter((game): game is GameStat => game !== undefined) };
+  }
+
+  /** The Steam level; Steam answers an empty response for a private profile. */
+  async steamLevel(steamId: string): Promise<Unknown<number>> {
+    const body = await this.get('/IPlayerService/GetSteamLevel/v1/', { steamid: steamId }) as { response?: { player_level?: unknown } };
+    const level = body.response?.player_level;
+    return typeof level === 'number' ? { known: true, value: level } : { known: false, reason: 'profile_private' };
+  }
+
+  async badges(steamId: string): Promise<Unknown<BadgeSummary>> {
+    const body = await this.get('/IPlayerService/GetBadges/v1/', { steamid: steamId }) as { response?: { badges?: unknown[]; player_xp?: unknown; player_level?: unknown; player_xp_needed_to_level_up?: unknown } };
+    const response = body.response;
+    if (!response || typeof response.player_level !== 'number') return { known: false, reason: 'profile_private' };
+    return {
+      known: true,
+      value: {
+        level: response.player_level,
+        xp: typeof response.player_xp === 'number' ? response.player_xp : 0,
+        xpToNextLevel: typeof response.player_xp_needed_to_level_up === 'number' ? response.player_xp_needed_to_level_up : 0,
+        badgeCount: Array.isArray(response.badges) ? response.badges.length : 0,
+      },
+    };
+  }
+
+  /** Ban status is public on every profile; batched in groups of 100. */
+  async playerBans(steamIds: string[]): Promise<Map<string, PlayerBans>> {
+    const result = new Map<string, PlayerBans>();
+    for (let index = 0; index < steamIds.length; index += SUMMARIES_BATCH) {
+      const body = await this.get('/ISteamUser/GetPlayerBans/v1/', { steamids: steamIds.slice(index, index + SUMMARIES_BATCH).join(',') }) as { players?: unknown[] };
+      if (!Array.isArray(body.players)) throw new SteamApiError('bad_response');
+      for (const raw of body.players) {
+        const item = raw as Record<string, unknown> | null;
+        if (!item || typeof item.SteamId !== 'string') continue;
+        result.set(item.SteamId, {
+          steamId: item.SteamId, communityBanned: item.CommunityBanned === true, vacBanned: item.VACBanned === true,
+          vacBans: typeof item.NumberOfVACBans === 'number' ? item.NumberOfVACBans : 0,
+          gameBans: typeof item.NumberOfGameBans === 'number' ? item.NumberOfGameBans : 0,
+          daysSinceLastBan: typeof item.DaysSinceLastBan === 'number' ? item.DaysSinceLastBan : 0,
+          economyBan: typeof item.EconomyBan === 'string' ? item.EconomyBan : 'none',
+        });
+      }
+    }
+    return result;
+  }
+
+  /** How many people are playing a game right now; undefined when Steam does not report it. */
+  async currentPlayers(appId: string): Promise<number | undefined> {
+    const body = await this.get('/ISteamUserStats/GetNumberOfCurrentPlayers/v1/', { appid: appId }, { acceptBadRequest: true }) as { response?: { player_count?: unknown; result?: unknown } };
+    return body.response?.result === 1 && typeof body.response.player_count === 'number' ? body.response.player_count : undefined;
+  }
+
+  async news(appId: string, count: number): Promise<NewsItem[]> {
+    const body = await this.get('/ISteamNews/GetNewsForApp/v2/', { appid: appId, count: String(count), maxlength: '400' }, { acceptBadRequest: true }) as { appnews?: { newsitems?: unknown[] } };
+    return (body.appnews?.newsitems ?? []).flatMap((raw): NewsItem[] => {
+      const item = raw as Record<string, unknown> | null;
+      if (!item || typeof item.title !== 'string') return [];
+      return [{
+        gid: String(item.gid ?? ''), title: item.title, url: typeof item.url === 'string' ? item.url : '',
+        ...(typeof item.feedlabel === 'string' ? { feedLabel: item.feedlabel } : {}),
+        date: typeof item.date === 'number' ? item.date * 1000 : 0,
+        contents: typeof item.contents === 'string' ? item.contents : '',
+      }];
+    });
+  }
+
+  /** A person's own numbers in one game (CS2 and similar). Private details and games without stats are unknown, never zero. */
+  async userStats(steamId: string, appId: string): Promise<Unknown<{ gameName?: string; stats: Array<{ name: string; value: number }> }>> {
+    try {
+      const body = await this.get('/ISteamUserStats/GetUserStatsForGame/v2/', { steamid: steamId, appid: appId }) as { playerstats?: { gameName?: unknown; stats?: unknown[] } };
+      const stats = body.playerstats?.stats;
+      if (!Array.isArray(stats) || !stats.length) return { known: false, reason: 'not_available' };
+      return {
+        known: true,
+        value: {
+          ...(typeof body.playerstats?.gameName === 'string' ? { gameName: body.playerstats.gameName } : {}),
+          stats: stats.flatMap((raw) => { const item = raw as Record<string, unknown> | null; return item && typeof item.name === 'string' && typeof item.value === 'number' ? [{ name: item.name, value: item.value }] : []; }),
+        },
+      };
+    } catch (error) {
+      if (error instanceof SteamApiError && error.code === 'forbidden') return { known: false, reason: 'profile_private' };
+      if (error instanceof SteamApiError && error.code === 'http_error' && error.status === 400) return { known: false, reason: 'not_available' };
+      throw error;
+    }
+  }
+
+  /** The official wishlist endpoint. An empty answer is both "private" and "nothing on it", so it is reported as not available. */
+  async wishlist(steamId: string): Promise<Unknown<WishlistEntry[]>> {
+    const body = await this.get('/IWishlistService/GetWishlist/v1/', { steamid: steamId }) as { response?: { items?: unknown[] } };
+    const items = body.response?.items;
+    if (!Array.isArray(items) || !items.length) return { known: false, reason: 'not_available' };
+    return {
+      known: true,
+      value: items.flatMap((raw): WishlistEntry[] => {
+        const item = raw as Record<string, unknown> | null;
+        return item && typeof item.appid === 'number' ? [{ appId: item.appid, priority: typeof item.priority === 'number' ? item.priority : 0, ...(typeof item.date_added === 'number' ? { addedAt: item.date_added * 1000 } : {}) }] : [];
+      }),
+    };
+  }
+
+  /** Store names for app ids, in batches (official IStoreBrowseService). Ids the store does not know are simply absent. */
+  async storeNames(appIds: number[]): Promise<Map<number, string>> {
+    const result = new Map<number, string>();
+    for (let index = 0; index < appIds.length; index += 50) {
+      const input = JSON.stringify({ ids: appIds.slice(index, index + 50).map((appid) => ({ appid })), context: { language: 'schinese', country_code: 'CN' }, data_request: {} });
+      const body = await this.get('/IStoreBrowseService/GetItems/v1/', { input_json: input }) as { response?: { store_items?: unknown[] } };
+      for (const raw of body.response?.store_items ?? []) {
+        const item = raw as Record<string, unknown> | null;
+        if (item && typeof item.appid === 'number' && typeof item.name === 'string') result.set(item.appid, item.name);
+      }
+    }
+    return result;
+  }
+
+  /** Name search on the public storefront JSON endpoint (no scraping, no key); best matches first. */
+  async storeSearch(term: string): Promise<Array<{ appId: number; name: string }>> {
+    const base = (this.options.storeBaseUrl ?? STEAM_STORE_BASE).replace(/\/$/u, '');
+    const url = new URL(`${base}/api/storesearch/`);
+    url.searchParams.set('term', term);
+    url.searchParams.set('l', 'schinese');
+    url.searchParams.set('cc', 'CN');
+    const response = await this.fetchImpl(url, { signal: AbortSignal.timeout(this.options.timeoutMs ?? 10_000), headers: { accept: 'application/json' } }).catch(() => undefined);
+    if (!response?.ok) throw new SteamApiError(response && response.status === 429 ? 'rate_limited' : 'network', response?.status);
+    const body = await response.json().catch(() => ({})) as { items?: unknown[] };
+    return (body.items ?? []).flatMap((raw) => { const item = raw as Record<string, unknown> | null; return item && item.type === 'app' && typeof item.id === 'number' && typeof item.name === 'string' ? [{ appId: item.id, name: item.name }] : []; });
   }
 
   async recentGames(steamId: string): Promise<Unknown<GameStat[]>> {

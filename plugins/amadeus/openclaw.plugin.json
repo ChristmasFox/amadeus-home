@@ -115,6 +115,10 @@
       "steam_get_recent_games",
       "steam_get_achievements",
       "steam_get_owned_games",
+      "steam_get_account_info",
+      "steam_game_info",
+      "steam_get_game_stats",
+      "steam_library_overlap",
       "steam_friends_status",
       "steam_group_settings"
     ],

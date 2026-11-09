@@ -6,6 +6,7 @@ import { identityContextFromOpenClaw, identityMirrorExternalAccount, identityPer
 import { registerTool } from '../shared/register-tool.js';
 import { SteamClient } from './client.js';
 import { renderSteamNotifications } from './notify.js';
+import { steamGameInfo, steamGetAccountInfo, steamGetGameStats, steamLibraryOverlap } from './tools-extra.js';
 import { POLL_INTERVAL_MS } from './domain.js';
 import { businessCalendarFromConfig } from './business-day.js';
 import { runDailyPlaytime } from './daily.js';
@@ -57,6 +58,29 @@ const OwnedParameters = Type.Object({
   all: Type.Optional(Type.Boolean({ description: 'true=本群全部已绑定、没关播报的成员，用来排名（谁拥有的游戏最多/总时长最长）；此时不要填 person。' })),
   rankBy: Type.Optional(Type.Union([Type.Literal('games'), Type.Literal('hours')], { description: 'all=true 时的排序：games=拥有游戏数（默认），hours=总游戏时长。' })),
   limit: Type.Optional(Type.Integer({ minimum: 1, maximum: 20 })),
+}, { additionalProperties: false });
+const AccountInfoParameters = Type.Object({
+  person: Type.Optional(PersonParameters),
+  all: Type.Optional(Type.Boolean({ description: 'true=本群全部已绑定成员的 Steam 等级排名；此时不要填 person。' })),
+  include: Type.Optional(Type.Array(Type.Union([Type.Literal('level'), Type.Literal('badges'), Type.Literal('bans')]), { maxItems: 3, description: '要查什么：level=Steam 等级（默认），badges=徽章数/经验，bans=封禁情况（默认也会带）。' })),
+  limit: Type.Optional(Type.Integer({ minimum: 1, maximum: 15 })),
+}, { additionalProperties: false });
+const GameInfoParameters = Type.Object({
+  game: Type.String({ minLength: 1, maxLength: 128, description: '游戏名（中英文均可）或 Steam 应用 ID。' }),
+  info: Type.Optional(Type.Union([Type.Literal('players'), Type.Literal('news'), Type.Literal('both')], { description: 'players=当前在线人数，news=最新新闻，both=两个都要（默认）。' })),
+  count: Type.Optional(Type.Integer({ minimum: 1, maximum: 5, description: '新闻条数，默认 3。' })),
+}, { additionalProperties: false });
+const GameStatsParameters = Type.Object({
+  person: Type.Optional(PersonParameters),
+  game: Type.String({ minLength: 1, maxLength: 128, description: '游戏名或 Steam 应用 ID（例如 CS2）。' }),
+  stat: Type.Optional(Type.String({ minLength: 1, maxLength: 64, description: '只看名字里含这段文字的统计项，例如 kills。' })),
+  limit: Type.Optional(Type.Integer({ minimum: 1, maximum: 40 })),
+}, { additionalProperties: false });
+const OverlapParameters = Type.Object({
+  mode: Type.Union([Type.Literal('common'), Type.Literal('wishlist')], { description: 'common=共同拥有的游戏；wishlist=愿望单（多人时还会给出愿望单交集）。' }),
+  people: Type.Optional(Type.Array(PersonParameters, { maxItems: 6, description: '要比较的成员；不填且没有 all 时只看提问者自己。' })),
+  all: Type.Optional(Type.Boolean({ description: 'true=本群全部已绑定成员。' })),
+  limit: Type.Optional(Type.Integer({ minimum: 1, maximum: 30 })),
 }, { additionalProperties: false });
 const GroupParameters = Type.Object({ enabled: Type.Optional(Type.Boolean({ description: '只有 owner 能设置：true=本群开启 Steam 自动播报（含成就解锁），false=关闭。不填则只查看当前状态。' })) }, { additionalProperties: false });
 
@@ -129,6 +153,23 @@ export function registerSteamTools(api: OpenClawPluginApi): void {
     async (params, context) => {
       const typed = params as Static<typeof OwnedParameters>;
       return steamGetOwnedGames(deps(), caller(context), { ...(typed.person ? { person: person(typed as { person: unknown }) } : {}), ...(typed.all ? { all: true } : {}), ...(typed.rankBy ? { rankBy: typed.rankBy } : {}), ...(typed.limit ? { limit: typed.limit } : {}) });
+    });
+  registerTool(api, 'steam_get_account_info', '查已绑定 Steam 的人的账号等级（Steam 等级）、徽章数/经验和封禁情况（VAC/游戏封禁、距上次封禁多少天、社区/交易封禁）。问“我几级/谁的等级最高/有没有被封过”时调用；默认查提问者自己，person 可查其他已绑定成员，all=true 对全群按等级排名（等级未公开的会排除并注明）。封禁只陈述事实，不要指控或推测原因；多个账号分别列出。', AccountInfoParameters,
+    async (params, context) => {
+      const typed = params as Static<typeof AccountInfoParameters>;
+      return steamGetAccountInfo(deps(), caller(context), { ...(typed.person ? { person: person(typed as { person: unknown }) } : {}), ...(typed.all ? { all: true } : {}), ...(typed.include ? { include: typed.include } : {}), ...(typed.limit ? { limit: typed.limit } : {}) });
+    });
+  registerTool(api, 'steam_game_info', '查某个游戏当前的 Steam 在线人数和最新新闻（官方接口）。问“XX 现在多少人在玩/有什么新闻、更新了什么”时调用；game 可填游戏名或应用 ID，会先在提问者的游戏库里找，再用官方商店搜索。不要爬网页。PUBG 的战绩/数据仍然用 pubg_* 工具。', GameInfoParameters,
+    async (params, context) => steamGameInfo(deps(), caller(context), params as Static<typeof GameInfoParameters>));
+  registerTool(api, 'steam_get_game_stats', '查某个已绑定 Steam 的人在某个游戏里的个人统计数字（如 CS2 的击杀、胜场等，官方 GetUserStatsForGame）。游戏没有统计或对方游戏详情未公开时如实说，不要编造。PUBG 不适用：PUBG 的战绩请用 pubg_* 工具。', GameStatsParameters,
+    async (params, context) => {
+      const typed = params as Static<typeof GameStatsParameters>;
+      return steamGetGameStats(deps(), caller(context), { game: typed.game, ...(typed.person ? { person: person(typed as { person: unknown }) } : {}), ...(typed.stat ? { stat: typed.stat } : {}), ...(typed.limit ? { limit: typed.limit } : {}) });
+    });
+  registerTool(api, 'steam_library_overlap', '比较已绑定成员：mode=common 找几位成员共同拥有的游戏（可 all=true 全群，或 people 指定），mode=wishlist 查愿望单（官方 GetWishlist；多人时给出愿望单交集）。问“我们都有什么游戏/一起玩什么/谁想要 XX/愿望单”时调用。游戏详情或愿望单没公开的成员会列出并排除，不要当成 0。', OverlapParameters,
+    async (params, context) => {
+      const typed = params as Static<typeof OverlapParameters>;
+      return steamLibraryOverlap(deps(), caller(context), { mode: typed.mode, ...(typed.people ? { people: typed.people.map((entry) => entry as unknown as Person) } : {}), ...(typed.all ? { all: true } : {}), ...(typed.limit ? { limit: typed.limit } : {}) });
     });
   registerTool(api, 'steam_friends_status', '查某个已绑定 Steam 的人的好友列表和好友现在的状态（谁在玩什么、谁在线），数据来自 Steam Web API。用户问“我的好友列表/我有哪些好友/好友谁在玩/某某在干嘛”时必须调用本工具，禁止 web_fetch 或搜索 steamcommunity 去爬好友页。默认查提问者自己已绑定的账号（person 不填=self）；也可以用 person 查群里其他已绑定、且没关播报的成员；多个账号会合并。好友列表没公开时返回 known:false（“好友列表未公开”），如实说，不要编造；列表有数量上限（群里更短），可用 name 查某个好友。', FriendsParameters,
     async (params, context) => steamFriendsStatus(deps(), caller(context), params as Static<typeof FriendsParameters>));

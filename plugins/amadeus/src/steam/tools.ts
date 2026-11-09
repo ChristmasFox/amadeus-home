@@ -28,7 +28,9 @@ export interface SteamCaller {
 
 export interface SteamToolDependencies {
   store: SteamStore;
-  client: Pick<SteamClient, 'resolveVanity' | 'playerSummaries' | 'ownedGames' | 'recentGames' | 'friendList' | 'hasKey'> & Partial<AchievementClient>;
+  client: Pick<SteamClient, 'resolveVanity' | 'playerSummaries' | 'ownedGames' | 'recentGames' | 'friendList' | 'hasKey'> & Partial<AchievementClient> & Partial<Pick<SteamClient, 'steamLevel' | 'badges' | 'playerBans' | 'currentPlayers' | 'news' | 'userStats' | 'wishlist' | 'storeNames' | 'storeSearch'>>;
+  /** Short-lived answers of the extra Web API reads (level, bans, players online, news, wishlists, names). */
+  extraCache?: Map<string, { at: number; value: unknown }>;
   /** The business day used for play time: the same calendar the PUBG daily review uses (defaults to PUBG's own defaults). */
   calendar?: BusinessCalendar;
   /** Cached achievement names and rarity; created on first use. */
@@ -48,7 +50,7 @@ export type Person =
 
 const keyUnavailable = { status: 'unavailable', reason: 'steam_api_key_missing' } as const;
 
-async function guarded<T>(deps: SteamToolDependencies, work: () => Promise<T>): Promise<T | typeof keyUnavailable | { status: 'unavailable'; reason: string }> {
+export async function guarded<T>(deps: SteamToolDependencies, work: () => Promise<T>): Promise<T | typeof keyUnavailable | { status: 'unavailable'; reason: string }> {
   if (!await deps.client.hasKey()) return keyUnavailable;
   try {
     return await work();
@@ -151,7 +153,7 @@ type Target = { links: SteamLink[]; self: boolean } | { status: string; reason: 
 
 const merge = (...lists: SteamLink[][]): SteamLink[] => [...new Map(lists.flat().map((link) => [link.steamId, link])).values()].sort((a, b) => a.linkedAt - b.linkedAt);
 
-function targetFor(deps: SteamToolDependencies, caller: SteamCaller, person: Person): Target {
+export function targetFor(deps: SteamToolDependencies, caller: SteamCaller, person: Person): Target {
   let links: SteamLink[] = [];
   const byPerson = (personId: string | undefined): SteamLink[] => (personId ? deps.store.linksByPerson(personId) : []);
   if (person.reference === 'self') {
@@ -188,8 +190,8 @@ async function withTarget(deps: SteamToolDependencies, caller: SteamCaller, pers
   });
 }
 
-const minutesToHours = (minutes: number): number => Math.round(minutes / 6) / 10;
-const gameView = (game: GameStat) => ({ appId: game.appId, name: game.name ?? null, totalHours: minutesToHours(game.totalMinutes), ...(game.recentMinutes !== undefined ? { recentHours: minutesToHours(game.recentMinutes) } : {}) });
+export const minutesToHours = (minutes: number): number => Math.round(minutes / 6) / 10;
+export const gameView = (game: GameStat) => ({ appId: game.appId, name: game.name ?? null, totalHours: minutesToHours(game.totalMinutes), ...(game.recentMinutes !== undefined ? { recentHours: minutesToHours(game.recentMinutes) } : {}) });
 
 export function steamGetProfile(deps: SteamToolDependencies, caller: SteamCaller, params: { person: Person }): Promise<unknown> {
   return withTarget(deps, caller, params.person, async (link) => {
@@ -313,11 +315,24 @@ export function steamGetPlaytime(deps: SteamToolDependencies, caller: SteamCalle
   });
 }
 
+/** Linked members of the caller's group (announcements on), one entry per person with all their accounts. */
+export function groupMembersOf(deps: SteamToolDependencies, caller: SteamCaller): Array<{ key: string; name: string; links: SteamLink[] }> {
+  if (!caller.groupId) return [];
+  const byPerson = new Map<string, { key: string; name: string; links: SteamLink[] }>();
+  for (const link of deps.store.broadcastMembers(caller.groupId)) {
+    const key = link.personId ?? link.senderKey;
+    const entry = byPerson.get(key) ?? { key, name: (link.personId ? caller.displayName?.(link.personId) : undefined) ?? link.personaName, links: [] };
+    entry.links.push(link);
+    byPerson.set(key, entry);
+  }
+  return [...byPerson.values()];
+}
+
 export const OWNED_CACHE_MS = 5 * 60_000;
 export const OWNED_TOP_MAX = 20;
 export const OWNED_RANK_MAX = 15;
 
-async function ownedFor(deps: SteamToolDependencies, steamId: string): Promise<Unknown<GameStat[]>> {
+export async function ownedFor(deps: SteamToolDependencies, steamId: string): Promise<Unknown<GameStat[]>> {
   const now = (deps.now ?? Date.now)();
   const cache = deps.ownedCache ??= new Map();
   const hit = cache.get(steamId);
@@ -337,7 +352,7 @@ interface LibraryResult {
 }
 
 /** One person's library over all their accounts: a game owned on two accounts counts once, play time adds up. */
-async function libraryOf(deps: SteamToolDependencies, links: SteamLink[]): Promise<LibraryResult> {
+export async function libraryOf(deps: SteamToolDependencies, links: SteamLink[]): Promise<LibraryResult> {
   const merged = new Map<number, GameStat>();
   const accounts: LibraryResult['accounts'] = [];
   let readable = 0;

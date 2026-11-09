@@ -42,6 +42,10 @@ GROUP_STEAM_TOOL_ALLOWLIST = [
     "steam_get_recent_games",
     "steam_get_achievements",
     "steam_get_owned_games",
+    "steam_get_account_info",
+    "steam_game_info",
+    "steam_get_game_stats",
+    "steam_library_overlap",
     "steam_friends_status",
     "steam_group_settings",
 ]
@@ -81,12 +85,21 @@ LEGACY_GROUP_IMAGE_PUBG_MAC_TOOL_ALLOWLIST = [
 ]
 # Previous Steam group lists (before steam_get_achievements) so prepare can migrate a live config that has them.
 # Earlier live lists, each missing the Steam tools added after it, so prepare can upgrade them in place.
-LEGACY_GROUP_NO_OWNED_TOOL_ALLOWLIST = [name for name in GROUP_IMAGE_TOOL_ALLOWLIST if name != "steam_get_owned_games"]
-LEGACY_GROUP_OWNER_NO_OWNED_TOOL_ALLOWLIST = [name for name in GROUP_OWNER_TOOL_ALLOWLIST if name != "steam_get_owned_games"]
-LEGACY_GROUP_NO_FRIENDS_TOOL_ALLOWLIST = [name for name in GROUP_IMAGE_TOOL_ALLOWLIST if name not in ("steam_get_owned_games", "steam_friends_status")]
-LEGACY_GROUP_OWNER_NO_FRIENDS_TOOL_ALLOWLIST = [name for name in GROUP_OWNER_TOOL_ALLOWLIST if name not in ("steam_get_owned_games", "steam_friends_status")]
-LEGACY_GROUP_NO_ACHIEVEMENTS_TOOL_ALLOWLIST = [name for name in GROUP_IMAGE_TOOL_ALLOWLIST if name not in ("steam_get_owned_games", "steam_friends_status", "steam_get_achievements")]
-LEGACY_GROUP_OWNER_NO_ACHIEVEMENTS_TOOL_ALLOWLIST = [name for name in GROUP_OWNER_TOOL_ALLOWLIST if name not in ("steam_get_owned_games", "steam_friends_status", "steam_get_achievements")]
+_STEAM_BATCH = ("steam_get_account_info", "steam_game_info", "steam_get_game_stats", "steam_library_overlap")
+
+
+def _without(names: list[str], *removed: str) -> list[str]:
+    return [name for name in names if name not in removed]
+
+
+LEGACY_GROUP_NO_BATCH_TOOL_ALLOWLIST = _without(GROUP_IMAGE_TOOL_ALLOWLIST, *_STEAM_BATCH)
+LEGACY_GROUP_OWNER_NO_BATCH_TOOL_ALLOWLIST = _without(GROUP_OWNER_TOOL_ALLOWLIST, *_STEAM_BATCH)
+LEGACY_GROUP_NO_OWNED_TOOL_ALLOWLIST = _without(GROUP_IMAGE_TOOL_ALLOWLIST, "steam_get_owned_games", *_STEAM_BATCH)
+LEGACY_GROUP_OWNER_NO_OWNED_TOOL_ALLOWLIST = _without(GROUP_OWNER_TOOL_ALLOWLIST, "steam_get_owned_games", *_STEAM_BATCH)
+LEGACY_GROUP_NO_FRIENDS_TOOL_ALLOWLIST = _without(GROUP_IMAGE_TOOL_ALLOWLIST, "steam_get_owned_games", "steam_friends_status", *_STEAM_BATCH)
+LEGACY_GROUP_OWNER_NO_FRIENDS_TOOL_ALLOWLIST = _without(GROUP_OWNER_TOOL_ALLOWLIST, "steam_get_owned_games", "steam_friends_status", *_STEAM_BATCH)
+LEGACY_GROUP_NO_ACHIEVEMENTS_TOOL_ALLOWLIST = _without(GROUP_IMAGE_TOOL_ALLOWLIST, "steam_get_owned_games", "steam_friends_status", "steam_get_achievements", *_STEAM_BATCH)
+LEGACY_GROUP_OWNER_NO_ACHIEVEMENTS_TOOL_ALLOWLIST = _without(GROUP_OWNER_TOOL_ALLOWLIST, "steam_get_owned_games", "steam_friends_status", "steam_get_achievements", *_STEAM_BATCH)
 
 
 def ensure_owner(path: Path, mode: int = 0o600) -> None:
@@ -318,6 +331,7 @@ def ensure_group_image_policies(channel: dict, owner_keys: list[str] | None = No
     legacy_owner_no_achievements = {key: {"allow": list(LEGACY_GROUP_OWNER_NO_ACHIEVEMENTS_TOOL_ALLOWLIST)} for key in owner_keys or []}
     legacy_owner_no_friends = {key: {"allow": list(LEGACY_GROUP_OWNER_NO_FRIENDS_TOOL_ALLOWLIST)} for key in owner_keys or []}
     legacy_owner_no_owned = {key: {"allow": list(LEGACY_GROUP_OWNER_NO_OWNED_TOOL_ALLOWLIST)} for key in owner_keys or []}
+    legacy_owner_no_batch = {key: {"allow": list(LEGACY_GROUP_OWNER_NO_BATCH_TOOL_ALLOWLIST)} for key in owner_keys or []}
     for group_map in scopes:
         for group in group_map.values():
             if not isinstance(group, dict):
@@ -328,11 +342,12 @@ def ensure_group_image_policies(channel: dict, owner_keys: list[str] | None = No
                             {"allow": LEGACY_GROUP_IMAGE_PUBG_MAC_TOOL_ALLOWLIST},
                             {"allow": LEGACY_GROUP_NO_ACHIEVEMENTS_TOOL_ALLOWLIST},
                             {"allow": LEGACY_GROUP_NO_FRIENDS_TOOL_ALLOWLIST},
-                            {"allow": LEGACY_GROUP_NO_OWNED_TOOL_ALLOWLIST})
+                            {"allow": LEGACY_GROUP_NO_OWNED_TOOL_ALLOWLIST},
+                            {"allow": LEGACY_GROUP_NO_BATCH_TOOL_ALLOWLIST})
             if old_tools is not None and old_tools != wanted_tools and old_tools not in legacy_tools:
                 raise SystemExit("unexpected group tool policy; refuse to replace unrelated restrictions")
             old_senders = group.get("toolsBySender")
-            if old_senders is not None and old_senders not in (wanted_owner, legacy_owner, legacy_owner_no_achievements, legacy_owner_no_friends, legacy_owner_no_owned):
+            if old_senders is not None and old_senders not in (wanted_owner, legacy_owner, legacy_owner_no_achievements, legacy_owner_no_friends, legacy_owner_no_owned, legacy_owner_no_batch):
                 raise SystemExit("unexpected group sender policy; refuse to replace unrelated restrictions")
             group["tools"] = {"allow": list(GROUP_IMAGE_TOOL_ALLOWLIST)}
             if owner_keys:
