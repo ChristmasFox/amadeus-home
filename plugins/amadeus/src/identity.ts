@@ -376,3 +376,13 @@ export function identityPersonIdForAlias(config: AmadeusConfig, alias: string, c
     return undefined;
   }
 }
+
+/** The person a trusted sender reference (self, mention, replied-to message) resolves to, if any. */
+export function identityPersonIdForSender(config: AmadeusConfig, reference: { type: 'self' } | { type: 'reply_sender' } | { type: 'mention'; index: number }, context: OpenClawPluginToolContext): string | undefined {
+  try {
+    const resolution = identityStore(config).resolve(reference, baseContext(context)) as { status?: string; person?: { personId?: string } };
+    return resolution.status === 'resolved' ? resolution.person?.personId : undefined;
+  } catch {
+    return undefined;
+  }
+}

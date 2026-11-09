@@ -2,7 +2,7 @@ import { Type, type Static } from 'typebox';
 import type { OpenClawPluginApi, OpenClawPluginToolContext } from 'openclaw/plugin-sdk/core';
 import { configFor, type AmadeusConfig } from '../config.js';
 import { groupIdFromSessionKey } from '../group-roster.js';
-import { identityContextFromOpenClaw, identityMirrorExternalAccount, identityPersonIdForAlias } from '../identity.js';
+import { identityContextFromOpenClaw, identityMirrorExternalAccount, identityPersonIdForAlias, identityPersonIdForSender } from '../identity.js';
 import { registerTool } from '../shared/register-tool.js';
 import { SteamClient } from './client.js';
 import { nineRouterComposer } from './compose.js';
@@ -68,6 +68,9 @@ export function callerFrom(config: AmadeusConfig, context: OpenClawPluginToolCon
     mentions: (identity.mentions ?? []).map((mention) => senderKeyOf(mention.channel ?? identity.channel, mention.platformUserId) ?? ''),
     ...(replyKey ? { replySender: replyKey } : {}),
     personForAlias: (alias) => identityPersonIdForAlias(config, alias, context),
+    selfPerson: () => identityPersonIdForSender(config, { type: 'self' }, context),
+    mentionPerson: (index) => identityPersonIdForSender(config, { type: 'mention', index }, context),
+    replyPerson: () => identityPersonIdForSender(config, { type: 'reply_sender' }, context),
     mirrorLink: (steamId, label) => identityMirrorExternalAccount(config, context, 'steam', steamId, label),
   };
 }

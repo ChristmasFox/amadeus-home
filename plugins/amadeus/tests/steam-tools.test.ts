@@ -186,3 +186,27 @@ test('friend data is cached briefly, refetched after it expires, and never store
   assert.deepEqual(store.watchedSteamIds(), []);
   assert.equal(store.linkBySteamId('76561190000000101'), undefined);
 });
+
+test('one known person shares a link across sender keys: phone-bound, group id finds and re-confirms it', async () => {
+  const { store, deps, caller } = setup();
+  const PHONE = 'whatsapp:111';
+  const LID = 'whatsapp:222';
+  const me = (key: string): Partial<SteamCaller> => ({ senderKey: key, selfPerson: () => 'p1', mirrorLink: () => 'p1' });
+  await steamLinkAccount(deps, caller(me(PHONE)), { reference: ID, confirm: true });
+  const viaGroup = await steamGetProfile(deps, caller(me(LID)), { person: { reference: 'self' } }) as { status: string };
+  assert.equal(viaGroup.status, 'ok');
+  const again = await steamLinkAccount(deps, caller(me(LID)), { reference: ID, confirm: true }) as { status: string };
+  assert.equal(again.status, 'linked');
+  assert.equal(store.linkBySender(LID), undefined);
+  assert.deepEqual(store.broadcastMembers(GROUP).map((link) => link.senderKey), [PHONE]);
+  assert.equal((steamSetBroadcast(deps, caller(me(LID)), { enabled: false }) as { status: string }).status, 'ok');
+  assert.equal(store.linkBySender(PHONE)?.broadcast, false);
+});
+
+test('a different person still conflicts on the same account; unknown people stay keyed by sender', async () => {
+  const { deps, caller } = setup();
+  await steamLinkAccount(deps, caller({ senderKey: 'whatsapp:111', selfPerson: () => 'p1', mirrorLink: () => 'p1' }), { reference: ID, confirm: true });
+  const other = await steamLinkAccount(deps, caller({ senderKey: 'whatsapp:222', selfPerson: () => 'p2', mirrorLink: () => 'p2' }), { reference: ID, confirm: true }) as { status: string };
+  assert.equal(other.status, 'conflict');
+  assert.equal((await steamGetProfile(deps, caller({ senderKey: 'whatsapp:333' }), { person: { reference: 'self' } }) as { status: string }).status, 'not_linked');
+});

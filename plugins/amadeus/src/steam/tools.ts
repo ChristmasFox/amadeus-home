@@ -14,6 +14,10 @@ export interface SteamCaller {
   replySender?: string;
   /** Resolves a reviewed group alias to a person id. */
   personForAlias?: (alias: string) => string | undefined;
+  /** Resolve a trusted sender reference to a known person, so one person's link is shared across their phone and group (LID) identities. */
+  selfPerson?: () => string | undefined;
+  mentionPerson?: (index: number) => string | undefined;
+  replyPerson?: () => string | undefined;
   /** Mirrors a new link into the identity store; returns the person id when the sender is a known person. */
   mirrorLink?: (steamId: string, label: string) => string | undefined;
 }
@@ -51,6 +55,14 @@ function requireSender(caller: SteamCaller): string {
   return caller.senderKey;
 }
 
+/** The sender's link: by their own key, else the link of the same known person under another key (phone vs group id). */
+function ownLink(deps: SteamToolDependencies, caller: SteamCaller): SteamLink | undefined {
+  const direct = deps.store.linkBySender(requireSender(caller));
+  if (direct) return direct;
+  const personId = caller.selfPerson?.();
+  return personId ? deps.store.linkByPerson(personId) : undefined;
+}
+
 export async function steamLinkAccount(deps: SteamToolDependencies, caller: SteamCaller, params: { reference: string; confirm?: boolean }): Promise<unknown> {
   const senderKey = requireSender(caller);
   const parsed = parseSteamReference(params.reference);
@@ -65,21 +77,30 @@ export async function steamLinkAccount(deps: SteamToolDependencies, caller: Stea
       return { status: 'needs_confirmation', candidate, instruction: '请把昵称告诉用户并问是不是这个账号；用户明确确认后，再用 confirm=true 重新调用。' };
     }
     const personId = caller.mirrorLink?.(steamId, summary.name);
-    const result = deps.store.link({ senderKey, steamId, personaName: summary.name || steamId, ...(personId ? { personId } : {}), now: (deps.now ?? Date.now)() });
+    // A person already linked under another sender key keeps that key (their one link), so nothing is duplicated.
+    const known = ownLink(deps, caller);
+    const holder = deps.store.linkBySteamId(steamId);
+    if (holder && holder.senderKey !== (known?.senderKey ?? senderKey) && !(personId && holder.personId === personId)) {
+      return { status: 'conflict', reason: 'steam_account_already_linked_by_someone_else' };
+    }
+    const key = holder && personId && holder.personId === personId ? holder.senderKey : known?.senderKey ?? senderKey;
+    const result = deps.store.link({ senderKey: key, steamId, personaName: summary.name || steamId, ...(personId ? { personId } : {}), now: (deps.now ?? Date.now)() });
     if (result.status === 'conflict') return { status: 'conflict', reason: 'steam_account_already_linked_by_someone_else' };
-    if (caller.groupId) deps.store.enroll(caller.groupId, senderKey);
+    if (caller.groupId) deps.store.enroll(caller.groupId, key);
     return { status: 'linked', name: summary.name, broadcast: true, groupEnrolled: Boolean(caller.groupId), groupAnnouncementsEnabled: caller.groupId ? deps.store.groupEnabled(caller.groupId) : undefined };
   });
 }
 
 export function steamUnlink(deps: SteamToolDependencies, caller: SteamCaller): unknown {
-  return { status: deps.store.unlink(requireSender(caller)) ? 'unlinked' : 'not_linked' };
+  const link = ownLink(deps, caller);
+  return { status: link && deps.store.unlink(link.senderKey) ? 'unlinked' : 'not_linked' };
 }
 
 /** The personal "announce me" switch. Turning it on inside a group also enrols the person in that group. */
 export function steamSetBroadcast(deps: SteamToolDependencies, caller: SteamCaller, params: { enabled: boolean }): unknown {
-  const senderKey = requireSender(caller);
-  if (!deps.store.linkBySender(senderKey)) return { status: 'not_linked' };
+  const link = ownLink(deps, caller);
+  if (!link) return { status: 'not_linked' };
+  const senderKey = link.senderKey;
   deps.store.setBroadcast(senderKey, params.enabled);
   if (caller.groupId) {
     if (params.enabled) deps.store.enroll(caller.groupId, senderKey);
@@ -102,20 +123,24 @@ type Target = { link: SteamLink; self: boolean } | { status: string; reason: str
 function targetFor(deps: SteamToolDependencies, caller: SteamCaller, person: Person): Target {
   let link: SteamLink | undefined;
   if (person.reference === 'self') {
-    link = deps.store.linkBySender(requireSender(caller));
+    link = ownLink(deps, caller);
   } else if (person.reference === 'mention') {
-    const key = caller.mentions[person.mentionIndex ?? 0];
+    const index = person.mentionIndex ?? 0;
+    const key = caller.mentions[index];
     if (!key) return { status: 'not_found', reason: 'trusted_mention_metadata_unavailable' };
-    link = deps.store.linkBySender(key);
+    const personId = caller.mentionPerson?.(index);
+    link = deps.store.linkBySender(key) ?? (personId ? deps.store.linkByPerson(personId) : undefined);
   } else if (person.reference === 'reply_sender') {
     if (!caller.replySender) return { status: 'not_found', reason: 'trusted_reply_sender_metadata_unavailable' };
-    link = deps.store.linkBySender(caller.replySender);
+    const personId = caller.replyPerson?.();
+    link = deps.store.linkBySender(caller.replySender) ?? (personId ? deps.store.linkByPerson(personId) : undefined);
   } else {
     const personId = caller.personForAlias?.(person.alias);
     link = personId ? deps.store.linkByPerson(personId) : undefined;
   }
   if (!link) return { status: 'not_linked', reason: 'no_steam_account_linked' };
-  const self = link.senderKey === caller.senderKey;
+  const mine = caller.senderKey ? ownLink(deps, caller) : undefined;
+  const self = mine?.senderKey === link.senderKey;
   // Switching announcements off also stops other people reading that person's Steam data.
   if (!self && !link.broadcast) return { status: 'refused', reason: 'sharing_off' };
   return { link, self };
@@ -182,7 +207,7 @@ export type FriendFilter = 'playing' | 'online' | 'all';
  */
 export async function steamFriendsStatus(deps: SteamToolDependencies, caller: SteamCaller, params: { filter?: FriendFilter; name?: string; limit?: number }): Promise<unknown> {
   if (!caller.isOwner || caller.groupId || !caller.senderKey) return { status: 'refused', reason: 'owner_direct_chat_only' };
-  const own = deps.store.linkBySender(caller.senderKey);
+  const own = ownLink(deps, caller);
   if (!own) return { status: 'not_linked', reason: 'link_your_own_steam_account_first' };
   return guarded(deps, async () => {
     const now = (deps.now ?? Date.now)();
