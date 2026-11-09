@@ -62,12 +62,13 @@ test('the local group voice anchor quotes no literal gesture, sign-off or catchp
     assert.ok(!GROUP_VOICE_ANCHOR.includes(phrase), phrase);
   }
   assert.ok(!/……笨蛋冈部/u.test(GROUP_VOICE_ANCHOR), 'no sign-off example');
-  assert.match(GROUP_VOICE_ANCHOR, /不要重复前面几条用过的动作/u);
+  assert.match(GROUP_VOICE_ANCHOR, /最近几条里用过的开头、动作、比喻和收尾方式，这一条就换个说法/u);
   assert.match(GROUP_VOICE_ANCHOR, /replyGuide/u);
 });
 
-test('the anchor forbids a fixed form of address and tells the model to use members\' nicknames', () => {
-  assert.match(GROUP_VOICE_ANCHOR, /称呼群成员用其昵称/u);
-  assert.match(GROUP_VOICE_ANCHOR, /不要用「笨蛋冈部」这类固定称呼或口头禅/u);
-  assert.match(GROUP_VOICE_ANCHOR, /同一条回复里最多出现一次/u);
+test('the anchor describes natural speech: nicknames over fixed catchphrases, no counting or position rules', () => {
+  assert.match(GROUP_VOICE_ANCHOR, /通常直接用昵称/u);
+  assert.match(GROUP_VOICE_ANCHOR, /「笨蛋冈部」这类固定叫法和口头禅不是默认套路/u);
+  for (const mechanical of ['最多出现一次', '最多一次', '开头和结尾', '每条回复都用', '不要每条']) assert.ok(!GROUP_VOICE_ANCHOR.includes(mechanical), mechanical);
+  assert.ok(!/……笨蛋冈部/u.test(GROUP_VOICE_ANCHOR), 'no sign-off example');
 });
