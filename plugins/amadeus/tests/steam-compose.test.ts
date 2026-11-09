@@ -32,3 +32,8 @@ test('each event type states its own fact, with the game name where there is one
   assert.match(prompt, /C，离开了一阵后回来了\n/u);
   assert.match(prompt, /D，离开了一阵后回来了，正在玩 G3/u);
 });
+
+test('a person with several accounts gets the Steam nickname in the facts', () => {
+  const prompt = buildAnnouncementPrompt({ groupId: 'g', people: [{ name: 'P', steamName: 'AltNick', kind: 'came_online' }] });
+  assert.match(prompt, /P（Steam 账号昵称：AltNick/u);
+});

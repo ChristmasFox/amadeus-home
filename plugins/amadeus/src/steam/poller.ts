@@ -3,10 +3,13 @@ import {
   type BroadcastPolicy, type Candidate, type EventKind, type PresenceChange, type StoredPresence,
 } from './domain.js';
 import { observationFrom, type PlayerSummary } from './client.js';
-import type { SteamStore } from './store.js';
+import type { SteamLink, SteamStore } from './store.js';
 
 export interface AnnouncementPerson {
+  /** The person's name (their identity display name, else the Steam nickname). */
   name: string;
+  /** The Steam nickname, given only when the person has several accounts so they can be told apart. */
+  steamName?: string;
   kind: EventKind;
   game?: string;
 }
@@ -27,6 +30,8 @@ export interface PollerDependencies {
   /** Optional membership check before sending; a false answer (or a failure) skips that person. */
   isMember?: (groupId: string, senderKey: string) => Promise<boolean>;
   /** Known members per group (from the identity store); linked people among them are enrolled before each poll. */
+  /** The person's display name from the identity store, if known. */
+  displayName?: (personId: string) => string | undefined;
   groupPeople?: () => Array<{ groupId: string; personIds: string[] }>;
   log?: (message: string) => void;
 }
@@ -122,8 +127,7 @@ export class PresencePoller {
       }
       if (!group.size) { this.queue.delete(groupId); continue; }
       const now = this.now();
-      const plan = planBroadcast([...group.values()], now, store.announcedInLastHour(groupId, now), this.policy);
-      for (const dropped of plan.skipped) { group.delete(dropped.steamId); report.skipped += 1; this.log(`steam announcement skipped reason=${dropped.reason}`); }
+      const plan = planBroadcast([...group.values()], now, this.policy);
       if (plan.send) {
         for (const change of plan.send) group.delete(change.steamId);
         await this.announce(groupId, plan.send, members, report);
@@ -132,16 +136,23 @@ export class PresencePoller {
     }
   }
 
-  private async announce(groupId: string, changes: PresenceChange[], members: Map<string, { personaName: string }>, report: TickReport): Promise<void> {
+  private async announce(groupId: string, changes: PresenceChange[], members: Map<string, SteamLink>, report: TickReport): Promise<void> {
     const { store } = this.deps;
     const key = announcementKey(groupId, changes);
     if (store.alreadyAnnounced(key)) return;
     const now = this.now();
-    const people = changes.map((change) => ({
-      name: members.get(change.steamId)?.personaName ?? '',
-      kind: change.kind,
-      ...(change.gameName ? { game: change.gameName } : {}),
-    })).filter((person) => person.name);
+    const people = changes.flatMap((change) => {
+      const link = members.get(change.steamId);
+      if (!link) return [];
+      const shown = (link.personId ? this.deps.displayName?.(link.personId) : undefined) || link.personaName;
+      const multiple = store.accountCount(link) > 1;
+      return [{
+        name: shown,
+        ...(multiple && shown !== link.personaName ? { steamName: link.personaName } : {}),
+        kind: change.kind,
+        ...(change.gameName ? { game: change.gameName } : {}),
+      }];
+    });
     if (!people.length) return;
     let text: string;
     try {

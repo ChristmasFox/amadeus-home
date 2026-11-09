@@ -95,24 +95,21 @@ test('an arrival that goes away again inside the merge window is not announced',
   assert.equal(env.sent.length, 0);
 });
 
-test('quiet hours drop the arrival for good; nothing is replayed in the morning', async () => {
+test('there are no quiet hours: a night-time arrival is announced like any other', async () => {
   const env = setup();
   env.setNow(NIGHT);
   const poller = env.poller();
   env.states.set(A.steam, { personaState: 0 });
   await cycle(env, poller);
   env.states.set(A.steam, { personaState: 1 });
-  await cycle(env, poller, 8);
-  assert.equal(env.sent.length, 0);
-  env.setNow(DAY);
-  await cycle(env, poller, 8);
-  assert.equal(env.sent.length, 0);
+  await cycle(env, poller, 6);
+  assert.equal(env.sent.length, 1);
 });
 
 test('switched-off person, disabled group and a failed compose all stay silent; a failed compose is recorded, not templated', async () => {
   for (const scenario of ['opt-out', 'group-off', 'compose-fails'] as const) {
     const env = setup({ enabled: scenario !== 'group-off', compose: scenario === 'compose-fails' ? async () => { throw new Error('model down'); } : undefined as never });
-    if (scenario === 'opt-out') env.store.setBroadcast(A.sender, false);
+    if (scenario === 'opt-out') env.store.setBroadcast(A.steam, false);
     const poller = env.poller();
     env.states.set(A.steam, { personaState: 0 });
     await cycle(env, poller);
@@ -164,7 +161,7 @@ test('default-on group: linked people seen in the group are enrolled on their ow
   const store = new SteamStore(':memory:');
   store.link({ senderKey: 'whatsapp:1', steamId: A.steam, personaName: 'Alpha', personId: 'pa', now: DAY });
   store.link({ senderKey: 'whatsapp:2', steamId: B.steam, personaName: 'Bravo', personId: 'pb', now: DAY });
-  store.setBroadcast('whatsapp:2', false);
+  store.setBroadcast(B.steam, false);
   assert.equal(store.groupEnabled(GROUP), true);
   assert.deepEqual(store.watchedSteamIds(), []);
   const poller = new PresencePoller({
@@ -197,4 +194,29 @@ test('an online person who starts a game, then switches game, is announced each 
   env.states.set(A.steam, { personaState: 1, gameId: '10', gameName: 'Game One' });
   await cycle(env, poller, 6);
   assert.equal(env.sent.length, 3);
+});
+
+test('every account of a person is announced; the person name leads and the Steam nickname tells accounts apart', async () => {
+  const store = new SteamStore(':memory:');
+  store.link({ senderKey: 'whatsapp:1', steamId: A.steam, personaName: 'MainNick', personId: 'pa', now: DAY });
+  store.link({ senderKey: 'whatsapp:1', steamId: B.steam, personaName: 'AltNick', personId: 'pa', now: DAY });
+  store.enroll(GROUP, 'whatsapp:1');
+  const states = new Map<string, number>([[A.steam, 0], [B.steam, 0]]);
+  const facts: AnnouncementFacts[] = [];
+  let now = DAY;
+  const poller = new PresencePoller({
+    store,
+    client: { playerSummaries: async (ids) => new Map(ids.map((id): [string, PlayerSummary] => [id, { steamId: id, name: id, profilePublic: true, personaState: states.get(id) ?? 0 }])) },
+    compose: async (value) => { facts.push(value); return 'x'; },
+    send: async () => undefined,
+    now: () => now,
+    displayName: () => 'Kurisu Fan',
+  });
+  await poller.tick();
+  now += 60_000; states.set(A.steam, 1); states.set(B.steam, 1);
+  await poller.tick();
+  now += 4 * 60_000;
+  await poller.tick();
+  assert.equal(facts.length, 1);
+  assert.deepEqual(facts[0]!.people.map((person) => [person.name, person.steamName]), [['Kurisu Fan', 'MainNick'], ['Kurisu Fan', 'AltNick']]);
 });

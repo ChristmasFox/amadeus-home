@@ -15,7 +15,7 @@ const EVENT_FACT: Record<EventKind, (game?: string) => string> = {
 
 /** The facts are decided by code; the model only words them. No fixed template exists as a fallback. */
 export function buildAnnouncementPrompt(facts: AnnouncementFacts): string {
-  const lines = facts.people.map((person) => `- ${person.name}，${EVENT_FACT[person.kind](person.game)}`);
+  const lines = facts.people.map((person) => `- ${person.name}${person.steamName ? `（Steam 账号昵称：${person.steamName}，同一个人有多个账号，需要时可带上昵称区分）` : ''}，${EVENT_FACT[person.kind](person.game)}`);
   return [
     KURISU_VOICE_ANCHOR,
     '',

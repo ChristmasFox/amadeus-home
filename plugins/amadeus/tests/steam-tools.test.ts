@@ -36,10 +36,10 @@ test('linking is two-step: the nickname is shown first, only a confirmed call bi
   const first = await steamLinkAccount(deps, caller(), { reference: 'known_name' }) as { status: string; candidate: { name: string } };
   assert.equal(first.status, 'needs_confirmation');
   assert.equal(first.candidate.name, 'Name1');
-  assert.equal(store.linkBySender(ME), undefined);
+  assert.deepEqual(store.linksBySender(ME), []);
   const done = await steamLinkAccount(deps, caller(), { reference: 'known_name', confirm: true }) as { status: string; broadcast: boolean };
   assert.deepEqual([done.status, done.broadcast], ['linked', true]);
-  assert.equal(store.linkBySender(ME)?.broadcast, true);
+  assert.equal(store.linksBySender(ME)[0]?.broadcast, true);
   assert.deepEqual(store.broadcastMembers(GROUP).map((link) => link.steamId), [ID]);
 });
 
@@ -74,7 +74,7 @@ test('broadcast switch: default on, off and on again, enrolment follows the grou
   assert.deepEqual(store.broadcastMembers(GROUP), []);
   steamSetBroadcast(deps, caller(), { enabled: true });
   assert.equal(store.broadcastMembers(GROUP).length, 1);
-  assert.equal(steamUnlink(deps, caller()) && store.linkBySender(ME), undefined);
+  assert.deepEqual([(steamUnlink(deps, caller()) as { status: string }).status, store.linksBySender(ME)], ['unlinked', []]);
 });
 
 test('others can be queried while their broadcast is on; switching it off hides them', async () => {
@@ -82,7 +82,7 @@ test('others can be queried while their broadcast is on; switching it off hides 
   deps.store.link({ senderKey: OTHER, steamId: '76561190000000002', personaName: 'Other', now: 1 });
   const viaMention = caller({ mentions: [OTHER] });
   assert.equal((await steamGetProfile(deps, viaMention, { person: { reference: 'mention' } }) as { status: string }).status, 'ok');
-  deps.store.setBroadcast(OTHER, false);
+  deps.store.setBroadcast('76561190000000002', false);
   assert.deepEqual(await steamGetProfile(deps, viaMention, { person: { reference: 'mention' } }), { status: 'refused', reason: 'sharing_off' });
   assert.deepEqual(await steamGetProfile(deps, caller(), { person: { reference: 'self' } }), { status: 'not_linked', reason: 'no_steam_account_linked' });
   assert.equal((await steamGetProfile(deps, caller({ personForAlias: () => undefined }), { person: { reference: 'alias', alias: 'x' } }) as { status: string }).status, 'not_linked');
@@ -198,10 +198,10 @@ test('one known person shares a link across sender keys: phone-bound, group id f
   assert.equal(viaGroup.status, 'ok');
   const again = await steamLinkAccount(deps, caller(me(LID)), { reference: ID, confirm: true }) as { status: string };
   assert.equal(again.status, 'linked');
-  assert.equal(store.linkBySender(LID), undefined);
+  assert.deepEqual(store.linksBySender(LID), []);
   assert.deepEqual(store.broadcastMembers(GROUP).map((link) => link.senderKey), [PHONE]);
   assert.equal((steamSetBroadcast(deps, caller(me(LID)), { enabled: false }) as { status: string }).status, 'ok');
-  assert.equal(store.linkBySender(PHONE)?.broadcast, false);
+  assert.equal(store.linksBySender(PHONE)[0]?.broadcast, false);
 });
 
 test('a different person still conflicts on the same account; unknown people stay keyed by sender', async () => {
@@ -210,4 +210,74 @@ test('a different person still conflicts on the same account; unknown people sta
   const other = await steamLinkAccount(deps, caller({ senderKey: 'whatsapp:222', selfPerson: () => 'p2', mirrorLink: () => 'p2' }), { reference: ID, confirm: true }) as { status: string };
   assert.equal(other.status, 'conflict');
   assert.equal((await steamGetProfile(deps, caller({ senderKey: 'whatsapp:333' }), { person: { reference: 'self' } }) as { status: string }).status, 'not_linked');
+});
+
+const ID2 = '76561190000000002';
+const ID3 = '76561190000000003';
+
+test('one person can link several accounts: the new one is added, never replaces the old, and both are read', async () => {
+  const { store, deps, caller } = setup();
+  const me = caller({ selfPerson: () => 'p1', mirrorLink: () => 'p1' });
+  await steamLinkAccount(deps, me, { reference: ID, confirm: true });
+  const second = await steamLinkAccount(deps, caller({ senderKey: 'whatsapp:222', selfPerson: () => 'p1', mirrorLink: () => 'p1' }), { reference: ID2, confirm: true }) as { status: string; accountCount: number };
+  assert.deepEqual([second.status, second.accountCount], ['linked', 2]);
+  assert.equal(store.linksByPerson('p1').length, 2);
+  assert.deepEqual(new Set(store.linksByPerson('p1').map((link) => link.senderKey)).size, 1);
+  assert.deepEqual(store.broadcastMembers(GROUP).map((link) => link.steamId).sort(), [ID, ID2]);
+  const profile = await steamGetProfile(deps, me, { person: { reference: 'self' } }) as { status: string; accountCount: number; accounts: Array<{ account: string }> };
+  assert.equal(profile.accountCount, 2);
+  assert.equal(profile.accounts.length, 2);
+  // re-confirming an existing account is not a second one
+  const again = await steamLinkAccount(deps, me, { reference: ID2, confirm: true }) as { alreadyLinked: boolean; accountCount: number };
+  assert.deepEqual([again.alreadyLinked, again.accountCount], [true, 2]);
+});
+
+test('a SteamID belongs to one person; another person gets a conflict even when the first has several accounts', async () => {
+  const { deps, caller } = setup();
+  await steamLinkAccount(deps, caller({ selfPerson: () => 'p1', mirrorLink: () => 'p1' }), { reference: ID, confirm: true });
+  await steamLinkAccount(deps, caller({ selfPerson: () => 'p1', mirrorLink: () => 'p1' }), { reference: ID2, confirm: true });
+  const other = await steamLinkAccount(deps, caller({ senderKey: OTHER, selfPerson: () => 'p2', mirrorLink: () => 'p2' }), { reference: ID2, confirm: true }) as { status: string };
+  assert.equal(other.status, 'conflict');
+});
+
+test('unlinking names one account; with several and no name it asks which; all removes everything', async () => {
+  const { store, deps, caller } = setup();
+  const me = caller({ selfPerson: () => 'p1', mirrorLink: () => 'p1' });
+  await steamLinkAccount(deps, me, { reference: ID, confirm: true });
+  await steamLinkAccount(deps, me, { reference: ID2, confirm: true });
+  await steamLinkAccount(deps, me, { reference: ID3, confirm: true });
+  assert.equal((steamUnlink(deps, me) as { status: string }).status, 'needs_choice');
+  assert.equal((steamUnlink(deps, me, { account: 'nobody' }) as { status: string }).status, 'account_not_found');
+  assert.deepEqual(steamUnlink(deps, me, { account: ID2 }), { status: 'unlinked', removed: ['Name2'], remaining: 2 });
+  assert.deepEqual(store.linksByPerson('p1').map((link) => link.steamId), [ID, ID3]);
+  assert.deepEqual(steamUnlink(deps, me, { all: true }), { status: 'unlinked', removed: ['Name1', 'Name3'], remaining: 0 });
+  assert.deepEqual(store.broadcastMembers(GROUP), []);
+});
+
+test('the broadcast switch covers every account of the person', async () => {
+  const { store, deps, caller } = setup();
+  const me = caller({ selfPerson: () => 'p1', mirrorLink: () => 'p1' });
+  await steamLinkAccount(deps, me, { reference: ID, confirm: true });
+  await steamLinkAccount(deps, me, { reference: ID2, confirm: true });
+  steamSetBroadcast(deps, me, { enabled: false });
+  assert.deepEqual(store.linksByPerson('p1').map((link) => link.broadcast), [false, false]);
+  assert.deepEqual(store.broadcastMembers(GROUP), []);
+  steamSetBroadcast(deps, me, { enabled: true });
+  assert.equal(store.broadcastMembers(GROUP).length, 2);
+});
+
+test('owner friends with several accounts: friends of all accounts merged once, the owner accounts themselves left out, a private list counted', async () => {
+  const env = setup();
+  const me = env.caller({ isOwner: true, groupId: undefined as never, selfPerson: () => 'p1' });
+  env.store.link({ senderKey: ME, steamId: ID, personaName: 'Main', personId: 'p1', now: 1 });
+  env.store.link({ senderKey: ME, steamId: ID2, personaName: 'Alt', personId: 'p1', now: 2 });
+  env.store.link({ senderKey: ME, steamId: ID3, personaName: 'Third', personId: 'p1', now: 3 });
+  const f1 = friend(1, { gameId: '10', gameName: 'Placeholder One' });
+  const f2 = friend(2, { personaState: 1 });
+  const client = env.deps.client as unknown as Record<string, unknown>;
+  client.friendList = async (id: string) => (id === ID ? { known: true, value: [f1.steamId, f2.steamId, ID2] } : id === ID2 ? { known: true, value: [f1.steamId] } : { known: false, reason: 'profile_private' });
+  client.playerSummaries = async (ids: string[]) => new Map([f1, f2].filter((friend) => ids.includes(friend.steamId)).map((entry) => [entry.steamId, entry]));
+  const result = await steamFriendsStatus(env.deps, me, { filter: 'online' }) as { friends: Array<{ name: string }>; accountsChecked: number; accountsWithPrivateFriendList: number; friendCount: number };
+  assert.deepEqual(result.friends.map((entry) => entry.name), ['Friend1', 'Friend2']);
+  assert.deepEqual([result.friendCount, result.accountsChecked, result.accountsWithPrivateFriendList], [2, 3, 1]);
 });

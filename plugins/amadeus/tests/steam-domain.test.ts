@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
-  announcementKey, applyObservation, DEFAULT_POLICY, inQuietHours, normalizeState, parseSteamReference, planBroadcast, pollIntervalMs,
+  announcementKey, applyObservation, DEFAULT_POLICY, normalizeState, parseSteamReference, planBroadcast, POLL_INTERVAL_MS,
   type PresenceObservation, type StoredPresence,
 } from '../src/steam/domain.js';
 
@@ -34,22 +34,7 @@ test('the first observation is a baseline and never an event', () => {
   assert.equal(result.next.state, 'online');
 });
 
-test('a change needs two consecutive observations; a flap is absorbed', () => {
-  let record: StoredPresence = applyObservation(undefined, obs('offline'), DAY).next;
-  const first = applyObservation(record, obs('online'), DAY + 60_000);
-  assert.equal(first.event, undefined);
-  assert.equal(first.next.state, 'offline');
-  const flapBack = applyObservation(first.next, obs('offline'), DAY + 120_000);
-  assert.equal(flapBack.event, undefined);
-  assert.equal(flapBack.next.pending, undefined);
-  record = flapBack.next;
-  const a = applyObservation(record, obs('in_game', { gameId: '730', gameName: 'Some Game' }), DAY + 180_000);
-  const b = applyObservation(a.next, obs('in_game', { gameId: '730', gameName: 'Some Game' }), DAY + 240_000);
-  assert.deepEqual(b.event, { steamId: ID, kind: 'came_online', gameId: '730', gameName: 'Some Game', at: DAY + 180_000 });
-  assert.equal(b.next.state, 'in_game');
-});
-
-/** Feed observations one minute apart; returns every confirmed event. */
+/** Feed one observation per minute; returns every event. */
 function run(start: StoredPresence | undefined, steps: PresenceObservation[], from = DAY): { record: StoredPresence | undefined; events: Array<NonNullable<ReturnType<typeof applyObservation>['event']>> } {
   let record = start;
   const events: Array<NonNullable<ReturnType<typeof applyObservation>['event']>> = [];
@@ -61,71 +46,42 @@ function run(start: StoredPresence | undefined, steps: PresenceObservation[], fr
   return { record, events };
 }
 
-test('online -> in_game is started_playing after two observations; one is not enough', () => {
-  const base = applyObservation(undefined, obs('online'), DAY).next;
-  assert.deepEqual(run(base, [obs('in_game', { gameId: '1', gameName: 'G1' })], DAY + 60_000).events, []);
-  const { events } = run(base, [obs('in_game', { gameId: '1', gameName: 'G1' }), obs('in_game', { gameId: '1', gameName: 'G1' })], DAY + 60_000);
-  assert.deepEqual(events.map((event) => [event.kind, event.gameName]), [['started_playing', 'G1']]);
+test('there is no debounce: one observation of a change is an event', () => {
+  const base = applyObservation(undefined, obs('offline'), DAY).next;
+  const result = applyObservation(base, obs('in_game', { gameId: '730', gameName: 'Some Game' }), DAY + 60_000);
+  assert.deepEqual(result.event, { steamId: ID, kind: 'came_online', gameId: '730', gameName: 'Some Game', at: DAY + 60_000 });
+  assert.equal(result.next.state, 'in_game');
+  assert.equal(applyObservation(result.next, obs('in_game', { gameId: '730' }), DAY + 120_000).event, undefined);
 });
 
-test('switching games is announced after two observations; a one-poll blip and stopping a game are not', () => {
-  const playing = run(undefined, [obs('in_game', { gameId: '1', gameName: 'G1' })]).record;
-  const blip = run(playing, [obs('in_game', { gameId: '2', gameName: 'G2' }), obs('in_game', { gameId: '1', gameName: 'G1' }), obs('in_game', { gameId: '1', gameName: 'G1' })], DAY + 60_000);
-  assert.deepEqual(blip.events, []);
-  assert.equal(blip.record?.gameId, '1');
-  const swap = run(playing, [obs('in_game', { gameId: '2', gameName: 'G2' }), obs('in_game', { gameId: '2', gameName: 'G2' })], DAY + 60_000);
-  assert.deepEqual(swap.events.map((event) => [event.kind, event.gameName]), [['switched_game', 'G2']]);
-  assert.deepEqual(run(playing, [obs('online'), obs('online')], DAY + 60_000).events, []);
+test('the four event types: came online, started playing, switched game, back from away', () => {
+  const kinds = (steps: PresenceObservation[], start?: StoredPresence) => run(start, steps).events.map((event) => event.kind);
+  assert.deepEqual(kinds([obs('offline'), obs('online')]), ['came_online']);
+  assert.deepEqual(kinds([obs('online'), obs('in_game', { gameId: '1', gameName: 'G1' })]), ['started_playing']);
+  assert.deepEqual(kinds([obs('in_game', { gameId: '1' }), obs('in_game', { gameId: '2' }), obs('in_game', { gameId: '1' })]), ['switched_game', 'switched_game']);
+  assert.deepEqual(kinds([obs('away'), obs('online')]), ['back_from_away']);
+  assert.deepEqual(kinds([obs('away'), obs('in_game', { gameId: '3' })]), ['back_from_away']);
 });
 
-test('coming back from away is back_from_away and carries how long the away lasted', () => {
-  const online = applyObservation(undefined, obs('online'), DAY).next;
-  const away = run(online, [obs('away'), obs('away')], DAY + 60_000).record;
-  assert.equal(away?.state, 'away');
-  const back = run(away, [obs('in_game', { gameId: '3', gameName: 'G3' }), obs('in_game', { gameId: '3', gameName: 'G3' })], DAY + 20 * 60_000);
-  assert.equal(back.events[0]?.kind, 'back_from_away');
-  assert.equal(back.events[0]?.gameName, 'G3');
-  assert.deepEqual(run(away, [obs('offline'), obs('offline')], DAY + 20 * 60_000).events, []);
+test('stopping a game, going away or going offline are not announced; the first observation is silent', () => {
+  assert.deepEqual(run(undefined, [obs('in_game', { gameId: '1' }), obs('online'), obs('away'), obs('offline')]).events, []);
+  assert.deepEqual(run(undefined, [obs('in_game', { gameId: '1' })]).events, []);
 });
 
-test('there is no per-person cooldown: events of one person are all planned, only quiet hours and the group cap drop them', () => {
-  const events = ['came_online', 'started_playing', 'switched_game', 'back_from_away'] as const;
-  const plan = planBroadcast(events.map((kind, index) => ({ steamId: `p${index}`, kind, at: DAY })), DAY + 200_000, 0);
-  assert.equal(plan.send?.length, 4);
-  assert.deepEqual(plan.skipped, []);
-  assert.equal('cooldownMs' in DEFAULT_POLICY, false);
+test('polling is once a minute around the clock, and nothing else limits announcements', () => {
+  assert.equal(POLL_INTERVAL_MS, 60_000);
+  assert.deepEqual(DEFAULT_POLICY, { mergeWindowMs: 3 * 60_000 });
 });
 
-test('polling is once a minute around the clock; quiet hours silence announcements only', () => {
-  assert.equal(pollIntervalMs(DAY), 60_000);
-  assert.equal(pollIntervalMs(NIGHT), 60_000);
-  assert.equal(inQuietHours(NIGHT), true);
-});
-
-test('quiet hours 00:00-09:00 Asia/Shanghai and the matching poll interval', () => {
-  assert.equal(inQuietHours(NIGHT), true);
-  assert.equal(inQuietHours(DAY), false);
-  assert.equal(inQuietHours(Date.parse('2026-11-08T16:00:00Z')), true); // 00:00 sharp
-  assert.equal(inQuietHours(Date.parse('2026-11-09T00:59:59Z')), true); // 08:59
-  assert.equal(inQuietHours(Date.parse('2026-11-09T01:00:00Z')), false); // 09:00
-  assert.equal(pollIntervalMs(DAY), 60_000);
-  assert.equal(pollIntervalMs(NIGHT), 60_000);
-});
-
-test('planning: quiet-hour and cooldown drops are final, simultaneous arrivals wait then merge', () => {
+test('planning: events inside the merge window wait, then everything queued goes out in one batch, at any hour', () => {
   const a = { steamId: 'a', kind: 'came_online' as const, at: DAY };
-  const b = { steamId: 'b', kind: 'came_online' as const, at: DAY + 60_000 };
-  assert.deepEqual(planBroadcast([a], DAY, 0).skipped, []);
-  assert.deepEqual(planBroadcast([a, b], DAY + 60_000, 0).waiting, ['a', 'b']);
-  const merged = planBroadcast([a, b], DAY + 200_000, 0);
-  assert.deepEqual(merged.send?.map((entry) => entry.steamId), ['a', 'b']);
-  assert.deepEqual(planBroadcast([{ steamId: 'n', kind: 'came_online', at: NIGHT }], NIGHT + 600_000, 0).skipped, [{ steamId: 'n', reason: 'quiet_hours' }]);
-});
-
-test('planning: at most six announcements per group per hour', () => {
-  const plan = planBroadcast([{ steamId: 'a', kind: 'came_online', at: DAY }], DAY + 200_000, DEFAULT_POLICY.maxPerGroupPerHour);
-  assert.equal(plan.send, undefined);
-  assert.deepEqual(plan.skipped, [{ steamId: 'a', reason: 'rate_limited' }]);
+  const b = { steamId: 'b', kind: 'switched_game' as const, at: DAY + 60_000 };
+  assert.deepEqual(planBroadcast([a, b], DAY + 60_000).waiting, ['a', 'b']);
+  assert.deepEqual(planBroadcast([a, b], DAY + 200_000).send?.map((entry) => entry.steamId), ['a', 'b']);
+  const night = { steamId: 'n', kind: 'came_online' as const, at: NIGHT };
+  assert.equal(planBroadcast([night], NIGHT + 600_000).send?.length, 1);
+  const many = Array.from({ length: 20 }, (_, index) => ({ steamId: `p${index}`, kind: 'came_online' as const, at: DAY }));
+  assert.equal(planBroadcast(many, DAY + 200_000).send?.length, 20);
 });
 
 test('announcement keys are stable regardless of order', () => {

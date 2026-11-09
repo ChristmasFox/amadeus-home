@@ -26,7 +26,7 @@ export interface SteamToolDependencies {
   store: SteamStore;
   client: Pick<SteamClient, 'resolveVanity' | 'playerSummaries' | 'ownedGames' | 'recentGames' | 'friendList' | 'hasKey'>;
   /** Short-lived friend snapshots, shared by calls so a follow-up question does not refetch. */
-  friendsCache?: Map<string, { at: number; friends: PlayerSummary[]; truncated: boolean }>;
+  friendsCache?: Map<string, { at: number; friends: PlayerSummary[]; truncated: boolean; accountCount: number; accountsHidden: number }>;
   now?: () => number;
 }
 
@@ -55,12 +55,13 @@ function requireSender(caller: SteamCaller): string {
   return caller.senderKey;
 }
 
-/** The sender's link: by their own key, else the link of the same known person under another key (phone vs group id). */
-function ownLink(deps: SteamToolDependencies, caller: SteamCaller): SteamLink | undefined {
-  const direct = deps.store.linkBySender(requireSender(caller));
-  if (direct) return direct;
+/** Every account of the sender: under their own key, plus those of the same known person under another key (phone vs group id). */
+function ownLinks(deps: SteamToolDependencies, caller: SteamCaller): SteamLink[] {
+  const links = new Map<string, SteamLink>();
+  for (const link of deps.store.linksBySender(requireSender(caller))) links.set(link.steamId, link);
   const personId = caller.selfPerson?.();
-  return personId ? deps.store.linkByPerson(personId) : undefined;
+  if (personId) for (const link of deps.store.linksByPerson(personId)) links.set(link.steamId, link);
+  return [...links.values()].sort((a, b) => a.linkedAt - b.linkedAt);
 }
 
 export async function steamLinkAccount(deps: SteamToolDependencies, caller: SteamCaller, params: { reference: string; confirm?: boolean }): Promise<unknown> {
@@ -77,36 +78,54 @@ export async function steamLinkAccount(deps: SteamToolDependencies, caller: Stea
       return { status: 'needs_confirmation', candidate, instruction: '请把昵称告诉用户并问是不是这个账号；用户明确确认后，再用 confirm=true 重新调用。' };
     }
     const personId = caller.mirrorLink?.(steamId, summary.name);
-    // A person already linked under another sender key keeps that key (their one link), so nothing is duplicated.
-    const known = ownLink(deps, caller);
+    const own = ownLinks(deps, caller);
     const holder = deps.store.linkBySteamId(steamId);
-    if (holder && holder.senderKey !== (known?.senderKey ?? senderKey) && !(personId && holder.personId === personId)) {
+    if (holder && !own.some((link) => link.steamId === steamId) && !(personId && holder.personId === personId)) {
       return { status: 'conflict', reason: 'steam_account_already_linked_by_someone_else' };
     }
-    const key = holder && personId && holder.personId === personId ? holder.senderKey : known?.senderKey ?? senderKey;
+    // Accounts are added, never replaced; new ones go under the key the person's accounts already use.
+    const key = holder?.senderKey ?? own[0]?.senderKey ?? senderKey;
     const result = deps.store.link({ senderKey: key, steamId, personaName: summary.name || steamId, ...(personId ? { personId } : {}), now: (deps.now ?? Date.now)() });
     if (result.status === 'conflict') return { status: 'conflict', reason: 'steam_account_already_linked_by_someone_else' };
     if (caller.groupId) deps.store.enroll(caller.groupId, key);
-    return { status: 'linked', name: summary.name, broadcast: true, groupEnrolled: Boolean(caller.groupId), groupAnnouncementsEnabled: caller.groupId ? deps.store.groupEnabled(caller.groupId) : undefined };
+    return {
+      status: 'linked', name: summary.name, broadcast: true, alreadyLinked: own.some((link) => link.steamId === steamId),
+      accountCount: ownLinks(deps, caller).length,
+      groupEnrolled: Boolean(caller.groupId), groupAnnouncementsEnabled: caller.groupId ? deps.store.groupEnabled(caller.groupId) : undefined,
+    };
   });
 }
 
-export function steamUnlink(deps: SteamToolDependencies, caller: SteamCaller): unknown {
-  const link = ownLink(deps, caller);
-  return { status: link && deps.store.unlink(link.senderKey) ? 'unlinked' : 'not_linked' };
+/** Removes one of the sender's accounts (named by SteamID, link or nickname), or all of them when asked, or the only one. */
+export function steamUnlink(deps: SteamToolDependencies, caller: SteamCaller, params: { account?: string; all?: boolean } = {}): unknown {
+  const own = ownLinks(deps, caller);
+  if (!own.length) return { status: 'not_linked' };
+  let chosen: SteamLink[];
+  if (params.all) chosen = own;
+  else if (params.account) {
+    const parsed = parseSteamReference(params.account);
+    const wanted = params.account.trim().toLowerCase();
+    chosen = own.filter((link) => (parsed?.kind === 'steamid' && link.steamId === parsed.steamId) || link.personaName.toLowerCase() === wanted);
+    if (!chosen.length) chosen = own.filter((link) => link.personaName.toLowerCase().includes(wanted));
+    if (chosen.length !== 1) return { status: chosen.length ? 'needs_choice' : 'account_not_found', accounts: own.map((link) => link.personaName) };
+  } else if (own.length === 1) chosen = own;
+  else return { status: 'needs_choice', accounts: own.map((link) => link.personaName) };
+  for (const link of chosen) deps.store.unlink(link.senderKey, link.steamId);
+  return { status: 'unlinked', removed: chosen.map((link) => link.personaName), remaining: own.length - chosen.length };
 }
 
 /** The personal "announce me" switch. Turning it on inside a group also enrols the person in that group. */
 export function steamSetBroadcast(deps: SteamToolDependencies, caller: SteamCaller, params: { enabled: boolean }): unknown {
-  const link = ownLink(deps, caller);
-  if (!link) return { status: 'not_linked' };
-  const senderKey = link.senderKey;
-  deps.store.setBroadcast(senderKey, params.enabled);
+  const own = ownLinks(deps, caller);
+  if (!own.length) return { status: 'not_linked' };
+  for (const link of own) deps.store.setBroadcast(link.steamId, params.enabled);
   if (caller.groupId) {
-    if (params.enabled) deps.store.enroll(caller.groupId, senderKey);
-    else deps.store.leaveGroup(caller.groupId, senderKey);
+    for (const key of new Set(own.map((link) => link.senderKey))) {
+      if (params.enabled) deps.store.enroll(caller.groupId, key);
+      else deps.store.leaveGroup(caller.groupId, key);
+    }
   }
-  return { status: 'ok', broadcast: params.enabled, group: caller.groupId ? 'this_group' : undefined };
+  return { status: 'ok', broadcast: params.enabled, accountCount: own.length, group: caller.groupId ? 'this_group' : undefined };
 }
 
 export function steamGroupSettings(deps: SteamToolDependencies, caller: SteamCaller, params: { enabled?: boolean }): unknown {
@@ -118,38 +137,45 @@ export function steamGroupSettings(deps: SteamToolDependencies, caller: SteamCal
   return { status: 'ok', announcementsEnabled: deps.store.groupEnabled(caller.groupId), announced: deps.store.broadcastMembers(caller.groupId).length };
 }
 
-type Target = { link: SteamLink; self: boolean } | { status: string; reason: string };
+type Target = { links: SteamLink[]; self: boolean } | { status: string; reason: string };
+
+const merge = (...lists: SteamLink[][]): SteamLink[] => [...new Map(lists.flat().map((link) => [link.steamId, link])).values()].sort((a, b) => a.linkedAt - b.linkedAt);
 
 function targetFor(deps: SteamToolDependencies, caller: SteamCaller, person: Person): Target {
-  let link: SteamLink | undefined;
+  let links: SteamLink[] = [];
+  const byPerson = (personId: string | undefined): SteamLink[] => (personId ? deps.store.linksByPerson(personId) : []);
   if (person.reference === 'self') {
-    link = ownLink(deps, caller);
+    links = ownLinks(deps, caller);
   } else if (person.reference === 'mention') {
     const index = person.mentionIndex ?? 0;
     const key = caller.mentions[index];
     if (!key) return { status: 'not_found', reason: 'trusted_mention_metadata_unavailable' };
-    const personId = caller.mentionPerson?.(index);
-    link = deps.store.linkBySender(key) ?? (personId ? deps.store.linkByPerson(personId) : undefined);
+    links = merge(deps.store.linksBySender(key), byPerson(caller.mentionPerson?.(index)));
   } else if (person.reference === 'reply_sender') {
     if (!caller.replySender) return { status: 'not_found', reason: 'trusted_reply_sender_metadata_unavailable' };
-    const personId = caller.replyPerson?.();
-    link = deps.store.linkBySender(caller.replySender) ?? (personId ? deps.store.linkByPerson(personId) : undefined);
+    links = merge(deps.store.linksBySender(caller.replySender), byPerson(caller.replyPerson?.()));
   } else {
-    const personId = caller.personForAlias?.(person.alias);
-    link = personId ? deps.store.linkByPerson(personId) : undefined;
+    links = byPerson(caller.personForAlias?.(person.alias));
   }
-  if (!link) return { status: 'not_linked', reason: 'no_steam_account_linked' };
-  const mine = caller.senderKey ? ownLink(deps, caller) : undefined;
-  const self = mine?.senderKey === link.senderKey;
-  // Switching announcements off also stops other people reading that person's Steam data.
-  if (!self && !link.broadcast) return { status: 'refused', reason: 'sharing_off' };
-  return { link, self };
+  if (!links.length) return { status: 'not_linked', reason: 'no_steam_account_linked' };
+  const mine = caller.senderKey ? new Set(ownLinks(deps, caller).map((link) => link.steamId)) : new Set<string>();
+  const self = links.every((link) => mine.has(link.steamId));
+  // Switching announcements off also stops other people reading that account's Steam data.
+  if (!self) links = links.filter((link) => mine.has(link.steamId) || link.broadcast);
+  if (!links.length) return { status: 'refused', reason: 'sharing_off' };
+  return { links, self };
 }
 
+/** One account answers as before; several accounts answer as a list, each labelled with its Steam nickname. */
 async function withTarget(deps: SteamToolDependencies, caller: SteamCaller, person: Person, work: (link: SteamLink) => Promise<unknown>): Promise<unknown> {
   const target = targetFor(deps, caller, person);
-  if (!('link' in target)) return target;
-  return guarded(deps, () => work(target.link));
+  if (!('links' in target)) return target;
+  return guarded(deps, async () => {
+    if (target.links.length === 1) return work(target.links[0]!);
+    const accounts = [];
+    for (const link of target.links) accounts.push({ account: link.personaName, result: await work(link) });
+    return { status: 'ok', accountCount: accounts.length, accounts };
+  });
 }
 
 const minutesToHours = (minutes: number): number => Math.round(minutes / 6) / 10;
@@ -207,19 +233,30 @@ export type FriendFilter = 'playing' | 'online' | 'all';
  */
 export async function steamFriendsStatus(deps: SteamToolDependencies, caller: SteamCaller, params: { filter?: FriendFilter; name?: string; limit?: number }): Promise<unknown> {
   if (!caller.isOwner || caller.groupId || !caller.senderKey) return { status: 'refused', reason: 'owner_direct_chat_only' };
-  const own = ownLink(deps, caller);
-  if (!own) return { status: 'not_linked', reason: 'link_your_own_steam_account_first' };
+  const own = ownLinks(deps, caller);
+  if (!own.length) return { status: 'not_linked', reason: 'link_your_own_steam_account_first' };
   return guarded(deps, async () => {
     const now = (deps.now ?? Date.now)();
     const cache = deps.friendsCache ??= new Map();
-    let entry = cache.get(own.steamId);
+    const cacheKey = own.map((link) => link.steamId).sort().join(',');
+    let entry = cache.get(cacheKey);
     if (!entry || now - entry.at > FRIENDS_CACHE_MS) {
-      const list = await deps.client.friendList(own.steamId);
-      if (!list.known) return { status: 'ok', friends: list };
-      const ids = list.value.slice(0, FRIENDS_MAX);
+      // Several accounts: the friends of all of them, once each, without the owner's own accounts.
+      const mine = new Set(own.map((link) => link.steamId));
+      const merged = new Set<string>();
+      let hidden = 0;
+      let privateReason = 'friend_list_private';
+      for (const link of own) {
+        const list = await deps.client.friendList(link.steamId);
+        if (!list.known) { hidden += 1; privateReason = list.reason; continue; }
+        for (const id of list.value) if (!mine.has(id)) merged.add(id);
+      }
+      if (hidden === own.length) return { status: 'ok', friends: { known: false, reason: privateReason }, ...(own.length > 1 ? { accountsChecked: own.length } : {}) };
+      const all = [...merged];
+      const ids = all.slice(0, FRIENDS_MAX);
       const summaries = await deps.client.playerSummaries(ids);
-      entry = { at: now, friends: ids.flatMap((id) => { const summary = summaries.get(id); return summary ? [summary] : []; }), truncated: list.value.length > FRIENDS_MAX };
-      cache.set(own.steamId, entry);
+      entry = { at: now, friends: ids.flatMap((id) => { const summary = summaries.get(id); return summary ? [summary] : []; }), truncated: all.length > FRIENDS_MAX, accountCount: own.length, accountsHidden: hidden };
+      cache.set(cacheKey, entry);
     }
     const filter = params.filter ?? 'playing';
     const wanted = params.name?.trim().toLowerCase();
@@ -235,6 +272,8 @@ export async function steamFriendsStatus(deps: SteamToolDependencies, caller: St
       status: 'ok',
       friendCount: entry.friends.length,
       truncated: entry.truncated,
+      accountsChecked: entry.accountCount,
+      accountsWithPrivateFriendList: entry.accountsHidden,
       // Friends with a hidden profile look offline whatever they are doing, so they are counted, never listed as offline.
       hiddenOrOfflineUnknown: hidden,
       matched: matching.length,

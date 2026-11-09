@@ -404,3 +404,12 @@ export function identityWhatsAppGroupPeople(config: AmadeusConfig): Array<{ grou
   add(db.prepare(`SELECT scope_id AS group_id, person_id FROM addressing WHERE scope = 'group'`).all() as Array<Record<string, unknown>>);
   return [...groups].map(([groupId, people]) => ({ groupId, personIds: [...people] }));
 }
+
+/** The display name of a known person, if any. */
+export function identityDisplayName(config: AmadeusConfig, personId: string): string | undefined {
+  try {
+    return identityStore(config).getPerson(personId)?.displayName || undefined;
+  } catch {
+    return undefined;
+  }
+}

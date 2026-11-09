@@ -1,5 +1,5 @@
-import { mkdirSync } from 'node:fs';
-import { dirname } from 'node:path';
+import { copyFileSync, existsSync, mkdirSync } from 'node:fs';
+import { basename, dirname, join } from 'node:path';
 import { createRequire } from 'node:module';
 import type { StoredPresence } from './domain.js';
 
@@ -26,6 +26,23 @@ export interface GroupSettings {
   enabled: boolean;
 }
 
+/** The old schema allowed one account per sender (sender_key was the primary key); copy the file aside before changing it. */
+function backUpBeforeMigration(filename: string): void {
+  if (!existsSync(filename)) return;
+  let old = false;
+  try {
+    const probe = new DatabaseSync(filename);
+    old = /sender_key\s+TEXT\s+PRIMARY\s+KEY/iu.test(String(probe.prepare(`SELECT sql FROM sqlite_master WHERE name = 'steam_links'`).get()?.sql ?? ''));
+    if (old) probe.exec('PRAGMA wal_checkpoint(TRUNCATE)');
+    probe.close();
+  } catch { return; }
+  if (!old) return;
+  const dir = join(dirname(filename), 'backups');
+  mkdirSync(dir, { recursive: true });
+  const stamp = new Date().toISOString().replace(/[-:]/gu, '').replace(/\..*/u, '');
+  copyFileSync(filename, join(dir, `${basename(filename)}.before-multi-account-${stamp}`));
+}
+
 /**
  * Steam state (links, group switches, the presence ledger and the announcement log). Account links are mirrored into
  * the identity store's external_accounts when the sender is a known person, but this database is what the poller reads.
@@ -35,20 +52,24 @@ export class SteamStore {
 
   constructor(filename = ':memory:') {
     if (filename !== ':memory:') mkdirSync(dirname(filename), { recursive: true });
+    if (filename !== ':memory:') backUpBeforeMigration(filename);
     this.db = new DatabaseSync(filename);
+    this.migrateSingleAccountSchema();
     this.db.exec(`
       PRAGMA journal_mode = WAL;
       CREATE TABLE IF NOT EXISTS steam_links (
-        sender_key TEXT PRIMARY KEY,
-        steam_id TEXT NOT NULL UNIQUE,
+        steam_id TEXT PRIMARY KEY,
+        sender_key TEXT NOT NULL,
         persona_name TEXT NOT NULL,
         person_id TEXT,
         broadcast INTEGER NOT NULL DEFAULT 1,
         linked_at INTEGER NOT NULL
       );
+      CREATE INDEX IF NOT EXISTS idx_steam_links_sender ON steam_links(sender_key);
+      CREATE INDEX IF NOT EXISTS idx_steam_links_person ON steam_links(person_id);
       CREATE TABLE IF NOT EXISTS steam_group_members (
         group_id TEXT NOT NULL,
-        sender_key TEXT NOT NULL REFERENCES steam_links(sender_key) ON DELETE CASCADE,
+        sender_key TEXT NOT NULL,
         PRIMARY KEY (group_id, sender_key)
       );
       CREATE TABLE IF NOT EXISTS steam_group_settings (
@@ -69,6 +90,34 @@ export class SteamStore {
     `);
   }
 
+  /** One-time upgrade from "one account per sender" to many accounts per person; rows and group lists are kept as they are. */
+  private migrateSingleAccountSchema(): void {
+    const sql = String(this.db.prepare(`SELECT sql FROM sqlite_master WHERE name = 'steam_links'`).get()?.sql ?? '');
+    if (!/sender_key\s+TEXT\s+PRIMARY\s+KEY/iu.test(sql)) return;
+    this.db.exec(`
+      PRAGMA foreign_keys = OFF;
+      BEGIN IMMEDIATE;
+      ALTER TABLE steam_links RENAME TO steam_links_old;
+      ALTER TABLE steam_group_members RENAME TO steam_group_members_old;
+      CREATE TABLE steam_links (
+        steam_id TEXT PRIMARY KEY,
+        sender_key TEXT NOT NULL,
+        persona_name TEXT NOT NULL,
+        person_id TEXT,
+        broadcast INTEGER NOT NULL DEFAULT 1,
+        linked_at INTEGER NOT NULL
+      );
+      INSERT INTO steam_links (steam_id, sender_key, persona_name, person_id, broadcast, linked_at)
+        SELECT steam_id, sender_key, persona_name, person_id, broadcast, linked_at FROM steam_links_old;
+      CREATE TABLE steam_group_members (group_id TEXT NOT NULL, sender_key TEXT NOT NULL, PRIMARY KEY (group_id, sender_key));
+      INSERT INTO steam_group_members (group_id, sender_key) SELECT group_id, sender_key FROM steam_group_members_old;
+      DROP TABLE steam_group_members_old;
+      DROP TABLE steam_links_old;
+      COMMIT;
+      PRAGMA foreign_keys = ON;
+    `);
+  }
+
   close(): void { this.db.close(); }
 
   private linkFrom(row: Row): SteamLink {
@@ -79,35 +128,33 @@ export class SteamStore {
     };
   }
 
-  /** Rebinding the same sender replaces their account; a SteamID already held by another sender is a conflict. */
+  /** Adds an account (never replaces another one). A SteamID held under a different sender key is a conflict. */
   link(input: { senderKey: string; steamId: string; personaName: string; personId?: string; now: number }): { status: 'linked' | 'conflict'; link?: SteamLink } {
-    const holder = this.db.prepare('SELECT sender_key FROM steam_links WHERE steam_id = ?').get(input.steamId);
-    if (holder && holder.sender_key !== input.senderKey) return { status: 'conflict' };
-    const existing = this.linkBySender(input.senderKey);
-    this.db.prepare(`INSERT INTO steam_links (sender_key, steam_id, persona_name, person_id, broadcast, linked_at) VALUES (?, ?, ?, ?, 1, ?)
-      ON CONFLICT(sender_key) DO UPDATE SET steam_id = excluded.steam_id, persona_name = excluded.persona_name, person_id = excluded.person_id`)
-      .run(input.senderKey, input.steamId, input.personaName, input.personId ?? null, input.now);
-    if (existing && existing.steamId !== input.steamId) this.db.prepare('DELETE FROM steam_presence WHERE steam_id = ?').run(existing.steamId);
-    return { status: 'linked', link: this.linkBySender(input.senderKey)! };
+    const holder = this.linkBySteamId(input.steamId);
+    if (holder && holder.senderKey !== input.senderKey) return { status: 'conflict' };
+    this.db.prepare(`INSERT INTO steam_links (steam_id, sender_key, persona_name, person_id, broadcast, linked_at) VALUES (?, ?, ?, ?, 1, ?)
+      ON CONFLICT(steam_id) DO UPDATE SET persona_name = excluded.persona_name, person_id = COALESCE(excluded.person_id, steam_links.person_id)`)
+      .run(input.steamId, input.senderKey, input.personaName, input.personId ?? null, input.now);
+    return { status: 'linked', link: this.linkBySteamId(input.steamId)! };
   }
 
-  unlink(senderKey: string): boolean {
-    const link = this.linkBySender(senderKey);
-    if (!link) return false;
-    this.db.prepare('DELETE FROM steam_group_members WHERE sender_key = ?').run(senderKey);
-    this.db.prepare('DELETE FROM steam_links WHERE sender_key = ?').run(senderKey);
-    this.db.prepare('DELETE FROM steam_presence WHERE steam_id = ?').run(link.steamId);
-    return true;
+  /** Removes one account, or every account of the sender when no SteamID is given. Returns how many were removed. */
+  unlink(senderKey: string, steamId?: string): number {
+    const links = this.linksBySender(senderKey).filter((link) => !steamId || link.steamId === steamId);
+    for (const link of links) {
+      this.db.prepare('DELETE FROM steam_links WHERE steam_id = ?').run(link.steamId);
+      this.db.prepare('DELETE FROM steam_presence WHERE steam_id = ?').run(link.steamId);
+    }
+    if (links.length && this.linksBySender(senderKey).length === 0) this.db.prepare('DELETE FROM steam_group_members WHERE sender_key = ?').run(senderKey);
+    return links.length;
   }
 
-  linkBySender(senderKey: string): SteamLink | undefined {
-    const row = this.db.prepare('SELECT * FROM steam_links WHERE sender_key = ?').get(senderKey);
-    return row ? this.linkFrom(row) : undefined;
+  linksBySender(senderKey: string): SteamLink[] {
+    return this.db.prepare('SELECT * FROM steam_links WHERE sender_key = ? ORDER BY linked_at, steam_id').all(senderKey).map((row) => this.linkFrom(row));
   }
 
-  linkByPerson(personId: string): SteamLink | undefined {
-    const row = this.db.prepare('SELECT * FROM steam_links WHERE person_id = ? ORDER BY linked_at LIMIT 1').get(personId);
-    return row ? this.linkFrom(row) : undefined;
+  linksByPerson(personId: string): SteamLink[] {
+    return this.db.prepare('SELECT * FROM steam_links WHERE person_id = ? ORDER BY linked_at, steam_id').all(personId).map((row) => this.linkFrom(row));
   }
 
   linkBySteamId(steamId: string): SteamLink | undefined {
@@ -115,8 +162,8 @@ export class SteamStore {
     return row ? this.linkFrom(row) : undefined;
   }
 
-  setBroadcast(senderKey: string, enabled: boolean): boolean {
-    const changed = this.db.prepare('UPDATE steam_links SET broadcast = ? WHERE sender_key = ?').run(enabled ? 1 : 0, senderKey) as { changes?: number };
+  setBroadcast(steamId: string, enabled: boolean): boolean {
+    const changed = this.db.prepare('UPDATE steam_links SET broadcast = ? WHERE steam_id = ?').run(enabled ? 1 : 0, steamId) as { changes?: number };
     return (changed.changes ?? 0) > 0;
   }
 
@@ -144,12 +191,17 @@ export class SteamStore {
   enrollPeople(groupId: string, personIds: string[]): number {
     let added = 0;
     for (const personId of new Set(personIds)) {
-      const row = this.db.prepare('SELECT sender_key FROM steam_links WHERE person_id = ? AND broadcast = 1').get(personId);
-      if (!row) continue;
-      const changed = this.db.prepare('INSERT OR IGNORE INTO steam_group_members (group_id, sender_key) VALUES (?, ?)').run(groupId, String(row.sender_key)) as { changes?: number };
-      added += changed.changes ?? 0;
+      for (const row of this.db.prepare('SELECT DISTINCT sender_key FROM steam_links WHERE person_id = ? AND broadcast = 1').all(personId)) {
+        const changed = this.db.prepare('INSERT OR IGNORE INTO steam_group_members (group_id, sender_key) VALUES (?, ?)').run(groupId, String(row.sender_key)) as { changes?: number };
+        added += changed.changes ?? 0;
+      }
     }
     return added;
+  }
+
+  /** How many accounts the same person (or, without a person, the same sender) has linked. */
+  accountCount(link: SteamLink): number {
+    return link.personId ? this.linksByPerson(link.personId).length : this.linksBySender(link.senderKey).length;
   }
 
   enabledGroups(): GroupSettings[] {

@@ -2,11 +2,11 @@ import { Type, type Static } from 'typebox';
 import type { OpenClawPluginApi, OpenClawPluginToolContext } from 'openclaw/plugin-sdk/core';
 import { configFor, type AmadeusConfig } from '../config.js';
 import { groupIdFromSessionKey } from '../group-roster.js';
-import { identityContextFromOpenClaw, identityMirrorExternalAccount, identityPersonIdForAlias, identityPersonIdForSender, identityWhatsAppGroupPeople } from '../identity.js';
+import { identityContextFromOpenClaw, identityMirrorExternalAccount, identityPersonIdForAlias, identityDisplayName, identityPersonIdForSender, identityWhatsAppGroupPeople } from '../identity.js';
 import { registerTool } from '../shared/register-tool.js';
 import { SteamClient } from './client.js';
 import { nineRouterComposer } from './compose.js';
-import { pollIntervalMs } from './domain.js';
+import { POLL_INTERVAL_MS } from './domain.js';
 import { PresencePoller } from './poller.js';
 import { SteamStore } from './store.js';
 import {
@@ -24,6 +24,10 @@ const PersonParameters = Type.Union([
 const LinkParameters = Type.Object({
   reference: Type.String({ minLength: 1, maxLength: 256, description: 'Steam 个人资料链接、自定义主页名或 17 位 SteamID。' }),
   confirm: Type.Optional(Type.Boolean({ description: '用户明确确认昵称无误后才传 true。' })),
+}, { additionalProperties: false });
+const UnlinkParameters = Type.Object({
+  account: Type.Optional(Type.String({ minLength: 1, maxLength: 256, description: '要解除哪一个账号：SteamID、个人资料链接或 Steam 昵称。只有一个账号时可不填。' })),
+  all: Type.Optional(Type.Boolean({ description: 'true=解除自己所有 Steam 账号。' })),
 }, { additionalProperties: false });
 const BroadcastParameters = Type.Object({ enabled: Type.Boolean({ description: 'true=打开我的上线播报；false=关掉我的上线播报。' }) }, { additionalProperties: false });
 const EmptyParameters = Type.Object({}, { additionalProperties: false });
@@ -80,10 +84,10 @@ export function registerSteamTools(api: OpenClawPluginApi): void {
   const caller = (context: OpenClawPluginToolContext): SteamCaller => callerFrom(configFor(api), context);
   const person = (params: { person: unknown }): Person => params.person as Person;
 
-  registerTool(api, 'steam_link_account', '把发消息的人自己的 Steam 账号绑定起来（用于查询自己的 Steam 信息，并默认在开启了播报的群里被播报上线）。先不带 confirm 调用得到昵称，让用户确认后再 confirm=true。只能绑定发消息的人自己。', LinkParameters,
+  registerTool(api, 'steam_link_account', '给发消息的人自己绑定一个 Steam 账号；一个人可以绑多个账号，新的不会覆盖旧的（用于查询自己的 Steam 信息，并默认在开启了播报的群里被播报上线）。先不带 confirm 调用得到昵称，让用户确认后再 confirm=true。只能绑定发消息的人自己。', LinkParameters,
     async (params, context) => steamLinkAccount(deps(), caller(context), params as Static<typeof LinkParameters>));
-  registerTool(api, 'steam_unlink', '解除发消息的人自己的 Steam 绑定，并删除相关记录。', EmptyParameters,
-    async (_params, context) => steamUnlink(deps(), caller(context)));
+  registerTool(api, 'steam_unlink', '解除发消息的人自己的一个 Steam 账号（有多个账号时用 account 指定哪一个，或 all=true 全部解除），并删除相关记录。', UnlinkParameters,
+    async (params, context) => steamUnlink(deps(), caller(context), params as Static<typeof UnlinkParameters>));
   registerTool(api, 'steam_set_broadcast', '打开或关闭发消息的人自己的 Steam 上线播报（在群里打开会把这个人加入本群的播报名单）。用户说“关掉/打开我的播报”时调用。', BroadcastParameters,
     async (params, context) => steamSetBroadcast(deps(), caller(context), params as Static<typeof BroadcastParameters>));
   registerTool(api, 'steam_get_profile', '查某个已绑定 Steam 的人的资料：昵称、当前在线状态与正在玩的游戏、账号创建时间。资料不公开的字段会返回 known:false，不要编造。', ProfileParameters,
@@ -101,7 +105,7 @@ export function registerSteamTools(api: OpenClawPluginApi): void {
     async (params, context) => steamGroupSettings(deps(), caller(context), params as Static<typeof GroupParameters>));
 }
 
-/** Timer loop: 60 s by day, 5 min inside the quiet window. Idle (and silent) unless the mode is 'deliver'. */
+/** Timer loop: one poll every 60 s, day and night. Idle (and silent) unless the mode is 'deliver'. */
 export function registerSteamPresenceService(api: OpenClawPluginApi): void {
   let timer: ReturnType<typeof setTimeout> | undefined;
   let stopped = true;
@@ -115,6 +119,7 @@ export function registerSteamPresenceService(api: OpenClawPluginApi): void {
         store,
         client,
         compose: nineRouterComposer(api.config),
+        displayName: (personId) => identityDisplayName(config, personId),
         groupPeople: () => identityWhatsAppGroupPeople(config),
         send: async (groupId, message, idempotencyKey) => {
           await (api.runtime.gateway as unknown as { request(method: string, params: Record<string, unknown>, options?: Record<string, unknown>): Promise<unknown> })
@@ -136,7 +141,7 @@ export function registerSteamPresenceService(api: OpenClawPluginApi): void {
         } catch (error) {
           api.logger.warn(`amadeus steam presence tick failed: ${error instanceof Error ? error.message : 'unknown'}`);
         }
-        if (!stopped) timer = setTimeout(() => { void loop(); }, pollIntervalMs(Date.now()));
+        if (!stopped) timer = setTimeout(() => { void loop(); }, POLL_INTERVAL_MS);
       };
       void loop();
     },

@@ -64,13 +64,8 @@ export interface PresenceChange {
   at: number;
 }
 
-/**
- * One observation applied to the stored record. A change (state or game) must be seen on two consecutive
- * observations to count (`pending`), which absorbs reconnect flaps. The very first observation of an id only sets the baseline.
- */
-export interface StoredPresence extends PresenceRecord {
-  pending?: { state: PresenceState; gameId?: string; gameName?: string; since: number };
-}
+/** What the poller remembers per SteamID: the last seen state. There is no debounce: one observation is enough. */
+export type StoredPresence = PresenceRecord;
 
 function eventFor(previous: StoredPresence, observed: { state: PresenceState; gameId?: string }): EventKind | undefined {
   if (!isOnlineState(observed.state)) return undefined;
@@ -80,102 +75,51 @@ function eventFor(previous: StoredPresence, observed: { state: PresenceState; ga
   return undefined;
 }
 
+/**
+ * One observation applied to the stored record: any change of state or game is an event at once. The very first
+ * observation of an id only sets the baseline, so a restart never replays history.
+ */
 export function applyObservation(previous: StoredPresence | undefined, observation: PresenceObservation, now: number): { next: StoredPresence; event?: PresenceChange } {
   const observed = { state: observation.state, ...(observation.gameId ? { gameId: observation.gameId } : {}), ...(observation.gameName ? { gameName: observation.gameName } : {}) };
   if (!previous) return { next: { ...observed, since: now } };
-  const { pending, gameId: _gameId, gameName: _gameName, ...rest } = previous;
-  // Same state and same game: nothing changed, any half-seen change was a flap.
   if (observation.state === previous.state && observation.gameId === previous.gameId) {
-    return { next: { ...rest, ...(observed.gameId ? { gameId: observed.gameId } : {}), ...(observed.gameName ? { gameName: observed.gameName } : {}) } };
+    return { next: { ...observed, since: previous.since } };
   }
-  if (!pending || pending.state !== observation.state || pending.gameId !== observation.gameId) {
-    return { next: { ...previous, pending: { ...observed, since: now } } };
-  }
-  // Confirmed on the second consecutive observation.
-  const confirmedAt = pending.since;
-  const next: StoredPresence = { ...rest, ...observed, since: confirmedAt };
+  const next: StoredPresence = { ...observed, since: now };
   const kind = eventFor(previous, observed);
   if (!kind) return { next };
   return {
     next,
-    event: {
-      steamId: observation.steamId, kind, at: confirmedAt,
-      ...(observed.gameId ? { gameId: observed.gameId } : {}),
-      ...(observed.gameName ? { gameName: observed.gameName } : {}),
-    },
+    event: { steamId: observation.steamId, kind, at: now, ...(observed.gameId ? { gameId: observed.gameId } : {}), ...(observed.gameName ? { gameName: observed.gameName } : {}) },
   };
 }
 
-export interface QuietHours {
-  /** Hour of day, local, 0-23. Start is inclusive, end exclusive; start > end wraps midnight. */
-  startHour: number;
-  endHour: number;
-  timeZone: string;
-}
-
-export const DEFAULT_QUIET: QuietHours = { startHour: 0, endHour: 9, timeZone: 'Asia/Shanghai' };
-
-export function localHour(at: number, timeZone: string): number {
-  const hour = new Intl.DateTimeFormat('en-GB', { timeZone, hour: '2-digit', hourCycle: 'h23' }).format(new Date(at));
-  return Number(hour);
-}
-
-export function inQuietHours(at: number, quiet: QuietHours = DEFAULT_QUIET): boolean {
-  const hour = localHour(at, quiet.timeZone);
-  return quiet.startHour <= quiet.endHour ? hour >= quiet.startHour && hour < quiet.endHour : hour >= quiet.startHour || hour < quiet.endHour;
-}
-
-/** One poll a minute, day and night; the quiet window only silences announcements, it does not slow the polling. */
-export function pollIntervalMs(_at: number = Date.now(), _quiet: QuietHours = DEFAULT_QUIET, intervalMs = 60_000): number {
-  return intervalMs;
-}
+/** One poll a minute, day and night. */
+export const POLL_INTERVAL_MS = 60_000;
 
 export interface BroadcastPolicy {
-  quiet: QuietHours;
   /** Events landing within this window of the first one are merged into one message. */
   mergeWindowMs: number;
-  maxPerGroupPerHour: number;
 }
 
-/** No per-person or per-event cooldown by decision: every confirmed event is announced, bounded only by the group cap. */
-export const DEFAULT_POLICY: BroadcastPolicy = { quiet: DEFAULT_QUIET, mergeWindowMs: 3 * 60_000, maxPerGroupPerHour: 6 };
-
-export type SkipReason = 'quiet_hours' | 'rate_limited' | 'stale';
+/** By decision there is no cooldown, no debounce, no quiet hours and no per-group cap: only the merge window remains. */
+export const DEFAULT_POLICY: BroadcastPolicy = { mergeWindowMs: 3 * 60_000 };
 
 export type Candidate = PresenceChange;
 
 export interface BroadcastPlan {
-  /** One merged batch of people to announce, or undefined. */
+  /** One merged batch to announce, or undefined. */
   send?: PresenceChange[];
-  /** Candidates dropped for good (never retried or made up later). */
-  skipped: Array<{ steamId: string; reason: SkipReason }>;
   /** Candidates not yet due: they stay queued until the merge window closes. */
   waiting: string[];
 }
 
-/**
- * Decide what one group announces now. Quiet-hour drops are final; a rate-limited batch is dropped
- * too (nothing is replayed later). People inside the merge window wait so that simultaneous arrivals share one message.
- */
-export function planBroadcast(candidates: Candidate[], now: number, sentInLastHour: number, policy: BroadcastPolicy = DEFAULT_POLICY): BroadcastPlan {
-  const plan: BroadcastPlan = { skipped: [], waiting: [] };
-  const eligible: Candidate[] = [];
-  for (const candidate of candidates) {
-    if (inQuietHours(candidate.at, policy.quiet) || inQuietHours(now, policy.quiet)) plan.skipped.push({ steamId: candidate.steamId, reason: 'quiet_hours' });
-    else eligible.push(candidate);
-  }
-  if (!eligible.length) return plan;
-  const first = Math.min(...eligible.map((entry) => entry.at));
-  if (now - first < policy.mergeWindowMs) {
-    plan.waiting.push(...eligible.map((entry) => entry.steamId));
-    return plan;
-  }
-  if (sentInLastHour >= policy.maxPerGroupPerHour) {
-    plan.skipped.push(...eligible.map((entry) => ({ steamId: entry.steamId, reason: 'rate_limited' as const })));
-    return plan;
-  }
-  plan.send = eligible;
-  return plan;
+/** People inside the merge window wait so that simultaneous events share one message; then everything queued goes out. */
+export function planBroadcast(candidates: Candidate[], now: number, policy: BroadcastPolicy = DEFAULT_POLICY): BroadcastPlan {
+  if (!candidates.length) return { waiting: [] };
+  const first = Math.min(...candidates.map((entry) => entry.at));
+  if (now - first < policy.mergeWindowMs) return { waiting: candidates.map((entry) => entry.steamId) };
+  return { send: candidates, waiting: [] };
 }
 
 /** Idempotency key of one announcement: the group, and every included id with its event type and the moment it happened. */
