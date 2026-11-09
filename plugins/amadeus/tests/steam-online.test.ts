@@ -113,3 +113,76 @@ test('who is playing and play time come back as finished Amadeus cards with the 
   assert.equal(who, 'Amadeus • 世界线观测 · Steam 在线情况\n\n当前观测到 2 位。\n\n- A：Phantom Blade Zero（游戏中）\n- B：在线\n\nEl Psy Kongroo.');
   assert.match(CARD_REPLY_GUIDE, /原样/u);
 });
+
+test('quitting one game and starting another a little later is announced as a 世界线变动 naming both games', async () => {
+  const { sent, run } = env();
+  await run(1, { state: 0 });
+  await run(4, { state: 1, game: { id: '10', name: 'Game A' } });
+  await run(4, { state: 1 }); // the gap: online without a game while the next one launches
+  await run(1, { state: 1, game: { id: '20', name: 'Game B' } });
+  await run(5, { state: 1, game: { id: '20', name: 'Game B' } });
+  const switches = sent.filter((text) => text.includes('世界线变动'));
+  assert.equal(switches.length, 1, titles(sent).join(' | '));
+  assert.match(switches[0]!, /kim 从 Game A 切换到 Game B。/u);
+  assert.equal(sent.filter((text) => text.includes('Steam 开局')).length, 0, 'not announced as an unrelated start');
+});
+
+test('the same game again, or a different one after a long break, is a start, not a switch', async () => {
+  const same = env();
+  await same.run(1, { state: 0 });
+  await same.run(4, { state: 1, game: { id: '10', name: 'Game A' } });
+  await same.run(2, { state: 1 });
+  await same.run(5, { state: 1, game: { id: '10', name: 'Game A' } });
+  assert.equal(same.sent.filter((text) => text.includes('世界线变动')).length, 0);
+  const late = env();
+  await late.run(1, { state: 0 });
+  await late.run(4, { state: 1, game: { id: '10', name: 'Game A' } });
+  await late.run(15, { state: 1 }); // longer than the switch window
+  await late.run(5, { state: 1, game: { id: '20', name: 'Game B' } });
+  assert.equal(late.sent.filter((text) => text.includes('世界线变动')).length, 0);
+  assert.equal(late.sent.filter((text) => text.includes('Steam 开局')).length, 1);
+});
+
+test('several people asked at once: one merged card with each person\'s games and total, delivered once', async () => {
+  const { renderPlaytimeGroupCard } = await import('../src/steam/cards.js');
+  const at = new Date('2026-11-09T12:00:00Z');
+  const card = renderPlaytimeGroupCard({
+    label: '今天（2026-11-09 06:00 → 次日 06:00）',
+    members: [
+      { name: '猴', known: true, games: [{ appId: '4115450', name: 'Phantom Blade Zero', text: '2小时19分钟' }, { appId: '578080', name: 'PUBG: BATTLEGROUNDS', text: '3分钟' }], totalText: '2小时22分钟' },
+      { name: 'kim', known: true, games: [{ appId: '578080', name: 'PUBG: BATTLEGROUNDS', text: '5分钟' }], totalText: '5分钟' },
+      { name: '胶', known: true, games: [], totalText: '0分钟' },
+    ],
+  }, at);
+  assert.equal(card, 'Amadeus • 世界线观测 · Steam 游戏时长\n\n猴、kim、胶 今天的游戏时长。\n\n- 时段：今天（2026-11-09 06:00 → 次日 06:00）\n- 猴 · Phantom Blade Zero：2小时19分钟\n- 猴 · PUBG: BATTLEGROUNDS（吃鸡）：3分钟\n- 猴 · 合计：2小时22分钟\n- kim · PUBG: BATTLEGROUNDS（吃鸡）：5分钟\n- kim · 合计：5分钟\n- 胶：没有记录到游戏时长\n\nEl Psy Kongroo.');
+  assert.equal((card.match(/El Psy Kongroo/gu) ?? []).length, 1, 'one card, one sign-off');
+});
+
+test('steam_get_playtime with people returns one card for everybody; several people without a period is refused', async () => {
+  const { SteamStore } = await import('../src/steam/store.js');
+  const { steamGetPlaytime } = await import('../src/steam/tools.js');
+  const store = new SteamStore(':memory:');
+  const NOW = Date.parse('2026-11-09T12:00:00Z');
+  const A = '76561190000000001';
+  const B = '76561190000000002';
+  store.link({ senderKey: 'whatsapp:1', steamId: A, personaName: 'Alpha', personId: 'p1', now: NOW - 5 * 3_600_000 });
+  store.link({ senderKey: 'whatsapp:2', steamId: B, personaName: 'Beta', personId: 'p2', now: NOW - 5 * 3_600_000 });
+  store.enroll(GROUP, 'whatsapp:1'); store.enroll(GROUP, 'whatsapp:2');
+  for (const [id, game, from] of [[A, { appId: '10', name: 'Game A' }, NOW - 3 * 3_600_000], [B, { appId: '578080', name: 'PUBG: BATTLEGROUNDS' }, NOW - 2 * 3_600_000]] as const) {
+    store.recordPlay(id, game, from);
+    store.recordPlay(id, game, NOW - 60_000);
+    store.recordPlay(id, undefined, NOW);
+  }
+  const deps = { store, client: {} as never, now: () => NOW };
+  const caller = { senderKey: 'whatsapp:1', groupId: GROUP, isOwner: true, mentions: ['whatsapp:1', 'whatsapp:2'], mentionPerson: (index: number) => (index === 0 ? 'p1' : 'p2'), displayName: (id: string) => (id === 'p1' ? '猴' : 'kim') };
+  const result = await steamGetPlaytime(deps, caller, { people: [{ reference: 'mention', mentionIndex: 0 }, { reference: 'mention', mentionIndex: 1 }], period: 'today' }) as { status: string; displayText: string; people: unknown[] };
+  assert.equal(result.status, 'ok');
+  assert.equal(result.people.length, 2);
+  assert.equal((result.displayText.match(/El Psy Kongroo/gu) ?? []).length, 1);
+  assert.match(result.displayText, /猴 · Game A/u);
+  assert.match(result.displayText, /kim · PUBG: BATTLEGROUNDS（吃鸡）/u);
+  const refused = await steamGetPlaytime(deps, caller, { people: [{ reference: 'mention', mentionIndex: 0 }, { reference: 'mention', mentionIndex: 1 }] }) as { status: string };
+  assert.equal(refused.status, 'invalid_request');
+  const single = await steamGetPlaytime(deps, caller, { person: { reference: 'mention', mentionIndex: 0 }, period: 'today' }) as { displayText: string };
+  assert.match(single.displayText, /猴 今天玩了/u);
+});

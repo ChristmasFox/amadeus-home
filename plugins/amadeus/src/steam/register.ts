@@ -37,7 +37,8 @@ const BroadcastParameters = Type.Object({ enabled: Type.Boolean({ description: '
 const EmptyParameters = Type.Object({}, { additionalProperties: false });
 const ProfileParameters = Type.Object({ person: PersonParameters }, { additionalProperties: false });
 const PlaytimeParameters = Type.Object({
-  person: PersonParameters,
+  person: Type.Optional(PersonParameters),
+  people: Type.Optional(Type.Array(PersonParameters, { minItems: 2, maxItems: 8, description: '一次问多个人（“猴和kim玩了多久”）时把每个人都列在这里，只调用一次；此时不要填 person，必须带 period。结果是一张合并的卡片。' })),
   game: Type.Optional(Type.String({ minLength: 1, maxLength: 128, description: '只看某个游戏时填游戏名（部分匹配）。' })),
   period: Type.Optional(Type.Union([Type.Literal('today'), Type.Literal('yesterday'), Type.Literal('this_week'), Type.Literal('date')], { description: '问“某一天/这周玩了多久”时填：today=今天，yesterday=昨天，this_week=本周（周一起），date=配合 date 指定某天。不填则返回 Steam 的总时长。按 PUBG 同一个业务日切天（默认 Asia/Shanghai 每天 06:00 切日：06:00→次日 06:00 算一天，“昨天”指昨天 06:00 到今天 06:00）。' })),
   date: Type.Optional(Type.String({ pattern: '^\\d{4}-\\d{2}-\\d{2}$', description: '指定某一天，格式 YYYY-MM-DD（period 可省略或填 date）。' })),
@@ -139,10 +140,10 @@ export function registerSteamTools(api: OpenClawPluginApi): void {
     async (params, context) => steamSetBroadcast(deps(), caller(context), params as Static<typeof BroadcastParameters>));
   registerTool(api, 'steam_get_profile', '查某个已绑定 Steam 的人的资料：昵称、当前在线状态与正在玩的游戏、账号创建时间。资料不公开的字段会返回 known:false，不要编造。', ProfileParameters,
     async (params, context) => steamGetProfile(deps(), caller(context), { person: person(params as { person: unknown }) }));
-  registerTool(api, 'steam_get_playtime', '查某个已绑定 Steam 的人的游戏时长。问“玩了多久/玩了几个小时/玩了多长时间”而没有说生涯、总共、入坑以来、一共这类意思时，问的是今天：用 period=today，不要用不带 period 的总时长顶替；只有用户明确问生涯/总共/一共玩了多少才不带 period。不带 period：Steam 的总时长（生涯累计）、最常玩的游戏或某个游戏的时长（游戏详情不公开时 known:false）。带 period（today/yesterday/this_week/date+date）：按 PUBG 同一个业务日切天（默认 Asia/Shanghai，每天 06:00 切日，06:00→次日 06:00 为一天；回答时说明按 6 点切日，和 PUBG 战报同一天），返回那段时间里实际玩了哪些游戏各多久和合计，多个账号合并；例如“我昨天玩了多久”用 person=self、period=yesterday，再按游戏列出时长。记录只从开始记录的时间起有，更早的日子如实说没有数据，不要编造。结果带 displayText 时那是写好的 Amadeus 卡片，原样作为回复发出，不要改写。', PlaytimeParameters,
+  registerTool(api, 'steam_get_playtime', '查某个已绑定 Steam 的人的游戏时长。问“玩了多久/玩了几个小时/玩了多长时间”而没有说生涯、总共、入坑以来、一共这类意思时，问的是今天：用 period=today，不要用不带 period 的总时长顶替；只有用户明确问生涯/总共/一共玩了多少才不带 period。不带 period：Steam 的总时长（生涯累计）、最常玩的游戏或某个游戏的时长（游戏详情不公开时 known:false）。带 period（today/yesterday/this_week/date+date）：按 PUBG 同一个业务日切天（默认 Asia/Shanghai，每天 06:00 切日，06:00→次日 06:00 为一天；回答时说明按 6 点切日，和 PUBG 战报同一天），返回那段时间里实际玩了哪些游戏各多久和合计，多个账号合并；例如“我昨天玩了多久”用 person=self、period=yesterday，再按游戏列出时长。记录只从开始记录的时间起有，更早的日子如实说没有数据，不要编造。一次问多个人时用 people 只调用一次（不要每人调一次）；结果带 displayText 时那是写好的 Amadeus 卡片（多人是一张合并卡片），原样作为回复发出一次，不要改写、不要复述。', PlaytimeParameters,
     async (params, context) => {
       const typed = params as Static<typeof PlaytimeParameters>;
-      return steamGetPlaytime(deps(), caller(context), { person: person(typed), ...(typed.game ? { game: typed.game } : {}), ...(typed.period ? { period: typed.period } : {}), ...(typed.date ? { date: typed.date } : {}) });
+      return steamGetPlaytime(deps(), caller(context), { ...(typed.person ? { person: typed.person as Person } : {}), ...(typed.people ? { people: typed.people as Person[] } : {}), ...(typed.game ? { game: typed.game } : {}), ...(typed.period ? { period: typed.period } : {}), ...(typed.date ? { date: typed.date } : {}) });
     });
   registerTool(api, 'steam_get_recent_games', '查某个已绑定 Steam 的人近两周玩过的游戏及时长。不公开时返回 known:false。', ProfileParameters,
     async (params, context) => steamGetRecentGames(deps(), caller(context), { person: person(params as { person: unknown }) }));

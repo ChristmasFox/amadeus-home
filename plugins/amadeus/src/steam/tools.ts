@@ -2,7 +2,7 @@ import { SteamApiError, type GameStat, type PlayerSummary, type SteamClient, typ
 import { businessCalendar, type BusinessCalendar } from './business-day.js';
 import { AchievementCatalog, summariseAchievements, type AchievementClient, type AchievementMode } from './achievements.js';
 import { parseSteamReference } from './domain.js';
-import { CARD_REPLY_GUIDE, renderPlayingCard, renderPlaytimeCard } from './cards.js';
+import { CARD_REPLY_GUIDE, renderPlayingCard, renderPlaytimeCard, renderPlaytimeGroupCard } from './cards.js';
 import type { SteamLink, SteamStore } from './store.js';
 
 /** Everything a tool needs to know about who is asking, taken from the host's trusted metadata (never message text). */
@@ -301,6 +301,24 @@ export function aggregatePlay(calendar: BusinessCalendar, sessions: PlaySession[
   return { games, totalMinutes: games.reduce((sum, entry) => sum + entry.minutes, 0), days };
 }
 
+/** Several people asked about at once: one merged card, delivered once (the model hands it over, it does not restate each person). */
+function groupPlaytime(deps: SteamToolDependencies, caller: SteamCaller, people: Person[], period: PlaytimePeriod, date: string | undefined, game: string | undefined): unknown {
+  const results = people.slice(0, 8).map((person) => trackedPlaytime(deps, caller, person, period, date, game) as Record<string, unknown>);
+  const bad = results.find((result) => result.status !== 'ok' && result.status !== undefined);
+  if (bad) return bad;
+  const first = results[0]!;
+  const members = results.map((result) => ({
+    name: typeof result.member === 'string' ? result.member : '成员',
+    known: result.known === true,
+    games: Array.isArray(result.games) ? result.games as Array<{ appId?: string; name: string; text: string }> : [],
+    ...(typeof result.totalText === 'string' ? { totalText: result.totalText } : {}),
+  }));
+  const partial = results.find((result) => result.partial === true);
+  const now = (deps.now ?? Date.now)();
+  const displayText = renderPlaytimeGroupCard({ label: String(first.label), members, ...(partial && typeof partial.trackingSince === 'string' ? { partialSince: partial.trackingSince } : {}) }, new Date(now));
+  return { status: 'ok', period: first.period, label: first.label, timezone: first.timezone, dayBoundary: first.dayBoundary, people: members, displayText, replyGuide: CARD_REPLY_GUIDE };
+}
+
 /** Time actually spent in games, from the sessions the poller recorded (not Steam's lifetime totals). */
 function trackedPlaytime(deps: SteamToolDependencies, caller: SteamCaller, person: Person, period: PlaytimePeriod, date: string | undefined, game: string | undefined): unknown {
   const now = (deps.now ?? Date.now)();
@@ -325,7 +343,7 @@ function trackedPlaytime(deps: SteamToolDependencies, caller: SteamCaller, perso
     ...(partial ? { partialSince: `${calendar.format(trackingSince)}（${calendar.timezone}）` } : {}),
   }, new Date(now));
   return {
-    status: 'ok', ...base, known: true, games, totalMinutes, totalText: durationText(totalMinutes),
+    status: 'ok', ...base, known: true, member: name, games, totalMinutes, totalText: durationText(totalMinutes),
     displayText, replyGuide: CARD_REPLY_GUIDE,
     ...(period === 'this_week' || days.length > 1 ? { days } : {}),
     ...(partial ? { partial: true, trackingSince: `${calendar.format(trackingSince)}（${calendar.timezone}）`, note: '记录是从这个时间才开始的，这段时间之前的游戏时长没有数据，上面只是记录开始之后的部分。' } : {}),
@@ -337,12 +355,17 @@ function trackedPlaytime(deps: SteamToolDependencies, caller: SteamCaller, perso
  * Without a period: Steam's lifetime hours (total, top games, or one game). With a period (today / yesterday / this
  * week / a date): the time actually played in that window, per game and in total, merged over the person's accounts.
  */
-export function steamGetPlaytime(deps: SteamToolDependencies, caller: SteamCaller, params: { person: Person; game?: string; period?: PlaytimePeriod; date?: string }): Promise<unknown> {
+export function steamGetPlaytime(deps: SteamToolDependencies, caller: SteamCaller, params: { person?: Person; people?: Person[]; game?: string; period?: PlaytimePeriod; date?: string }): Promise<unknown> {
+  const everyone = params.people?.length ? params.people : params.person ? [params.person] : [];
+  if (!everyone.length) return Promise.resolve({ status: 'invalid_request', reason: 'person_or_people_required' });
   if (params.period || params.date) {
     const period: PlaytimePeriod = params.period ?? 'date';
-    return Promise.resolve(trackedPlaytime(deps, caller, params.person, period, params.date, params.game));
+    if (everyone.length > 1) return Promise.resolve(groupPlaytime(deps, caller, everyone, period, params.date, params.game));
+    return Promise.resolve(trackedPlaytime(deps, caller, everyone[0]!, period, params.date, params.game));
   }
-  return withTarget(deps, caller, params.person, async (link) => {
+  if (everyone.length > 1) return Promise.resolve({ status: 'invalid_request', reason: 'several_people_need_a_period', note: '一次问多个人的时长时请带 period（例如 today）。' });
+  const only = everyone[0]!;
+  return withTarget(deps, caller, only, async (link) => {
     const owned = unknownValue(await deps.client.ownedGames(link.steamId));
     if (!owned.known) return { status: 'ok', games: owned };
     const games = owned.value;

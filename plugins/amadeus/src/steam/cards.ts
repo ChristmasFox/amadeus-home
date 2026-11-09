@@ -74,3 +74,37 @@ export function renderPlayingCard(card: PlayingCard, now: Date = new Date()): st
     worldLineClosing: true,
   }), { now: occurredAt });
 }
+
+export interface PlaytimeGroupCard {
+  label: string;
+  members: Array<{ name: string; games: Array<{ appId?: string; name: string; text: string }>; totalText?: string; known: boolean }>;
+  /** Set when the record starts inside the window. */
+  partialSince?: string;
+}
+
+/** One card for several people: each person's games and total, delivered once. */
+export function renderPlaytimeGroupCard(card: PlaytimeGroupCard, now: Date = new Date()): string {
+  const occurredAt = now.toISOString();
+  const when = card.label.split('（')[0];
+  const facts: PresentationFact[] = [fact('时段', card.label)];
+  for (const member of card.members) {
+    if (!member.known || !member.games.length) { facts.push(fact(member.name, member.known ? '没有记录到游戏时长' : '没有可用的记录')); continue; }
+    for (const game of member.games) facts.push(fact(`${member.name} · ${gameLabel(game.appId, game.name) ?? game.name}`, game.text));
+    facts.push(fact(`${member.name} · 合计`, member.totalText ?? ''));
+  }
+  if (card.partialSince) facts.push(fact('记录起点', card.partialSince));
+  return renderOwnerNotification(adaptWorldlineNotification({
+    type: 'worldline_notification_intent',
+    eventType: 'steam.playtime_group',
+    kind: 'steam_activity',
+    severity: 'info',
+    significance: 'minor',
+    eventKey: `steam:playtime-group:${occurredAt}`,
+    source: 'steam',
+    headline: 'Steam 游戏时长',
+    summary: `${card.members.map((member) => member.name).join('、')} ${when}的游戏时长。`,
+    facts,
+    occurredAt,
+    worldLineClosing: true,
+  }), { now: occurredAt });
+}
