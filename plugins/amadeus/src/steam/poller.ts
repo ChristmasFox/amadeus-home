@@ -1,8 +1,9 @@
 import {
   announcementKey, applyObservation, DEFAULT_POLICY, planBroadcast,
-  type BroadcastPolicy, type Candidate, type EventKind, type PresenceChange, type StoredPresence,
+  type BroadcastPolicy, type Candidate, type EventKind, type PresenceChange, type StoredPresence, type UnlockedAchievement,
 } from './domain.js';
-import { observationFrom, type PlayerSummary } from './client.js';
+import { AchievementCatalog, type AchievementClient } from './achievements.js';
+import { observationFrom, SteamApiError, type PlayerSummary } from './client.js';
 import type { SteamLink, SteamStore } from './store.js';
 
 export interface AnnouncementPerson {
@@ -12,6 +13,8 @@ export interface AnnouncementPerson {
   steamName?: string;
   kind: EventKind;
   game?: string;
+  /** For achievement_unlocked. */
+  achievements?: UnlockedAchievement[];
 }
 
 export interface AnnouncementFacts {
@@ -21,7 +24,7 @@ export interface AnnouncementFacts {
 
 export interface PollerDependencies {
   store: SteamStore;
-  client: { playerSummaries(ids: string[]): Promise<Map<string, PlayerSummary>> };
+  client: { playerSummaries(ids: string[]): Promise<Map<string, PlayerSummary>> } & Partial<AchievementClient>;
   /** Writes the announcement text from the facts (the Kurisu voice); rejects when no valid text could be made. */
   compose: (facts: AnnouncementFacts) => Promise<string>;
   send: (groupId: string, text: string, idempotencyKey: string) => Promise<void>;
@@ -48,10 +51,17 @@ export interface TickReport {
  * One poll cycle plus the announcement queue. The first observation of a SteamID only sets its baseline, so a restart
  * never replays history; queued arrivals live in memory only and are dropped by a restart on purpose.
  */
+/** One queue slot per person for presence events (the newest wins); achievements of one game share a slot and are merged. */
+const slotOf = (change: PresenceChange): string => (change.kind === 'achievement_unlocked' ? `${change.steamId}|achievements|${change.gameId ?? ''}` : change.steamId);
+
+/** An unlock older than this when first seen (offline sync, a long gap) is absorbed silently: nothing historic is announced. */
+const FRESH_UNLOCK_MS = 30 * 60_000;
+
 export class PresencePoller {
   private readonly queue = new Map<string, Map<string, Candidate>>();
   private readonly policy: BroadcastPolicy;
   private readonly now: () => number;
+  private catalog: AchievementCatalog | undefined;
 
   constructor(private readonly deps: PollerDependencies) {
     this.policy = deps.policy ?? DEFAULT_POLICY;
@@ -69,15 +79,21 @@ export class PresencePoller {
     if (ids.length) {
       const summaries = await this.deps.client.playerSummaries(ids);
       const now = this.now();
+      const playing: Array<{ steamId: string; appId: string; gameName?: string }> = [];
       for (const steamId of ids) {
         const summary = summaries.get(steamId);
         if (!summary) continue;
         const observation = observationFrom(summary);
-        const { next, event } = applyObservation(store.presence(steamId), observation, now);
+        const before = store.presence(steamId);
+        const { next, event } = applyObservation(before, observation, now);
         store.savePresence(steamId, next);
         if (next.state === 'offline') this.dropFromQueues(steamId);
         if (event) { report.events += 1; this.enqueue(event); }
+        // Achievements are read for the game being played now, and once more right after it ends (unlocks often sync then).
+        if (next.state === 'in_game' && next.gameId) playing.push({ steamId, appId: next.gameId, ...(next.gameName ? { gameName: next.gameName } : {}) });
+        else if (before?.state === 'in_game' && before.gameId) playing.push({ steamId, appId: before.gameId, ...(before.gameName ? { gameName: before.gameName } : {}) });
       }
+      report.events += await this.checkAchievements(playing, now);
     }
     await this.flush(report);
     return report;
@@ -97,6 +113,39 @@ export class PresencePoller {
     }
   }
 
+  /** Diffs each playing account's unlocked achievements against its baseline; returns how many events were queued. */
+  private async checkAchievements(playing: Array<{ steamId: string; appId: string; gameName?: string }>, now: number): Promise<number> {
+    const client = this.deps.client;
+    if (!client.playerAchievements || !client.achievementSchema || !client.achievementPercentages || !playing.length) return 0;
+    const catalog = this.catalog ??= new AchievementCatalog({ achievementSchema: client.achievementSchema.bind(client), achievementPercentages: client.achievementPercentages.bind(client) }, this.now);
+    const { store } = this.deps;
+    let queued = 0;
+    for (const { steamId, appId, gameName } of playing) {
+      try {
+        const result = await client.playerAchievements(steamId, appId);
+        if (!result.known) continue;
+        const unlocked = result.value.filter((entry) => entry.achieved);
+        const baseline = store.achievementBaseline(steamId, appId);
+        store.saveAchievementBaseline(steamId, appId, unlocked.map((entry) => entry.apiName));
+        if (!baseline) continue; // first sight of this game: baseline only, nothing is replayed
+        const known = new Set(baseline);
+        const fresh = unlocked.filter((entry) => !known.has(entry.apiName) && (entry.unlockedAt === undefined || now - entry.unlockedAt <= FRESH_UNLOCK_MS));
+        if (!fresh.length) continue;
+        const detail = await catalog.lookup(appId);
+        const achievements = fresh.map((entry): UnlockedAchievement => {
+          const percent = detail.percent.get(entry.apiName);
+          return { apiName: entry.apiName, name: entry.name ?? detail.definitions.get(entry.apiName)?.name ?? entry.apiName, ...(percent !== undefined ? { globalPercent: percent } : {}) };
+        });
+        this.enqueue({ steamId, kind: 'achievement_unlocked', at: now, gameId: appId, ...(gameName ? { gameName } : {}), achievements });
+        queued += 1;
+      } catch (error) {
+        // Private or unsupported games are skipped quietly; a rate limit ends this round of reads early.
+        if (error instanceof SteamApiError && error.code === 'rate_limited') break;
+      }
+    }
+    return queued;
+  }
+
   private dropFromQueues(steamId: string): void {
     for (const group of this.queue.values()) group.delete(steamId);
   }
@@ -107,7 +156,13 @@ export class PresencePoller {
     for (const groupId of this.deps.store.groupsOf(link.senderKey)) {
       if (!this.deps.store.groupEnabled(groupId)) continue;
       const group = this.queue.get(groupId) ?? new Map<string, Candidate>();
-      group.set(event.steamId, { ...event });
+      const slot = slotOf(event);
+      const earlier = group.get(slot);
+      // Unlocks arriving before the merge window closes join the earlier ones instead of replacing them.
+      const merged = event.kind === 'achievement_unlocked' && earlier?.achievements
+        ? { ...event, at: earlier.at, achievements: [...earlier.achievements, ...(event.achievements ?? []).filter((item) => !earlier.achievements!.some((known) => known.apiName === item.apiName))] }
+        : { ...event };
+      group.set(slot, merged);
       this.queue.set(groupId, group);
     }
   }
@@ -117,19 +172,19 @@ export class PresencePoller {
     for (const [groupId, group] of [...this.queue]) {
       const members = new Map(store.broadcastMembers(groupId).map((link) => [link.steamId, link]));
       // A switched-off group, an opted-out person or someone who left is dropped, never announced.
-      for (const steamId of [...group.keys()]) {
-        const link = members.get(steamId);
+      for (const [slot, candidate] of [...group]) {
+        const link = members.get(candidate.steamId);
         let allowed = store.groupEnabled(groupId) && link !== undefined;
         if (allowed && this.deps.isMember) {
           try { allowed = await this.deps.isMember(groupId, link!.senderKey); } catch { allowed = false; }
         }
-        if (!allowed) { group.delete(steamId); report.skipped += 1; }
+        if (!allowed) { group.delete(slot); report.skipped += 1; }
       }
       if (!group.size) { this.queue.delete(groupId); continue; }
       const now = this.now();
       const plan = planBroadcast([...group.values()], now, this.policy);
       if (plan.send) {
-        for (const change of plan.send) group.delete(change.steamId);
+        for (const change of plan.send) group.delete(slotOf(change));
         await this.announce(groupId, plan.send, members, report);
       }
       if (!group.size) this.queue.delete(groupId);
@@ -151,6 +206,7 @@ export class PresencePoller {
         ...(multiple && shown !== link.personaName ? { steamName: link.personaName } : {}),
         kind: change.kind,
         ...(change.gameName ? { game: change.gameName } : {}),
+        ...(change.achievements ? { achievements: change.achievements } : {}),
       }];
     });
     if (!people.length) return;

@@ -37,7 +37,7 @@ class GroupImagePolicyTest(unittest.TestCase):
             self.assertEqual(group["toolsBySender"], {key: {"allow": list(prepare.GROUP_OWNER_TOOL_ALLOWLIST)} for key in keys})
             for rule in group["toolsBySender"].values():
                 self.assertNotIn("*", rule["allow"])
-                self.assertLessEqual(len(rule["allow"]), 30)
+                self.assertLessEqual(len(rule["allow"]), 31)
                 self.assertTrue(set(prepare.GROUP_IMAGE_TOOL_ALLOWLIST) <= set(rule["allow"]))
                 self.assertEqual(len(rule["allow"]), len(set(rule["allow"])), "no duplicates")
                 for forbidden in ("exec", "read", "write", "edit", "apply_patch", "gateway", "steam_friends_status") + tuple(
@@ -120,6 +120,18 @@ class GroupImagePolicyTest(unittest.TestCase):
                     prepare.ensure_group_image_policies(channel, prepare.owner_tool_policy_keys("+15555550123"))
         with self.assertRaisesRegex(SystemExit, "groups must be an object"):
             prepare.ensure_group_image_policies({"groups": []})
+
+    def test_previous_steam_lists_without_achievements_are_migrated(self):
+        keys = prepare.owner_tool_policy_keys("+15555550123")
+        channel = {"groups": {"*": {
+            "tools": {"allow": list(prepare.LEGACY_GROUP_NO_ACHIEVEMENTS_TOOL_ALLOWLIST)},
+            "toolsBySender": {key: {"allow": list(prepare.LEGACY_GROUP_OWNER_NO_ACHIEVEMENTS_TOOL_ALLOWLIST)} for key in keys},
+        }}}
+        prepare.ensure_group_image_policies(channel, keys)
+        group = channel["groups"]["*"]
+        self.assertIn("steam_get_achievements", group["tools"]["allow"])
+        self.assertTrue(all("steam_get_achievements" in rule["allow"] for rule in group["toolsBySender"].values()))
+        self.assertEqual(len(prepare.LEGACY_GROUP_NO_ACHIEVEMENTS_TOOL_ALLOWLIST) + 1, len(prepare.GROUP_IMAGE_TOOL_ALLOWLIST))
 
     def test_core_patch_passes_every_group_tool_except_the_core_web_pair(self):
         """The pinned core patch lets only the tools it lists through the global sender layer; a group

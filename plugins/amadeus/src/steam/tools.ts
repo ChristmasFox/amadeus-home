@@ -1,4 +1,5 @@
 import { SteamApiError, type GameStat, type PlayerSummary, type SteamClient, type Unknown } from './client.js';
+import { AchievementCatalog, summariseAchievements, type AchievementClient, type AchievementMode } from './achievements.js';
 import { parseSteamReference } from './domain.js';
 import type { SteamLink, SteamStore } from './store.js';
 
@@ -24,7 +25,9 @@ export interface SteamCaller {
 
 export interface SteamToolDependencies {
   store: SteamStore;
-  client: Pick<SteamClient, 'resolveVanity' | 'playerSummaries' | 'ownedGames' | 'recentGames' | 'friendList' | 'hasKey'>;
+  client: Pick<SteamClient, 'resolveVanity' | 'playerSummaries' | 'ownedGames' | 'recentGames' | 'friendList' | 'hasKey'> & Partial<AchievementClient>;
+  /** Cached achievement names and rarity; created on first use. */
+  achievementCatalog?: AchievementCatalog;
   /** Short-lived friend snapshots, shared by calls so a follow-up question does not refetch. */
   friendsCache?: Map<string, { at: number; friends: PlayerSummary[]; truncated: boolean; accountCount: number; accountsHidden: number }>;
   now?: () => number;
@@ -219,6 +222,48 @@ export function steamGetRecentGames(deps: SteamToolDependencies, caller: SteamCa
   return withTarget(deps, caller, params.person, async (link) => {
     const recent = await deps.client.recentGames(link.steamId);
     return recent.known ? { status: 'ok', recent: { known: true, value: recent.value.map(gameView) } } : { status: 'ok', recent };
+  });
+}
+
+const ACHIEVEMENT_LIMIT_MAX = 20;
+
+/** Which game: a numeric app id as given, else the best match among the person's games by name, else what they are playing now or played last. */
+async function achievementGame(deps: SteamToolDependencies, link: SteamLink, game: string | undefined): Promise<{ appId: string; name?: string } | { status: string; reason: string }> {
+  const wanted = game?.trim();
+  if (wanted && /^\d{1,10}$/u.test(wanted)) return { appId: wanted };
+  if (wanted) {
+    const owned = unknownValue(await deps.client.ownedGames(link.steamId));
+    if (!owned.known) return { status: 'ok', reason: owned.reason };
+    const lower = wanted.toLowerCase();
+    const matches = owned.value.filter((entry) => entry.name?.toLowerCase().includes(lower))
+      .sort((a, b) => Number(b.name?.toLowerCase() === lower) - Number(a.name?.toLowerCase() === lower) || b.totalMinutes - a.totalMinutes);
+    const best = matches[0];
+    return best ? { appId: String(best.appId), ...(best.name ? { name: best.name } : {}) } : { status: 'not_found', reason: 'game_not_in_library' };
+  }
+  const summary = (await deps.client.playerSummaries([link.steamId])).get(link.steamId);
+  if (summary?.gameId) return { appId: summary.gameId, ...(summary.gameName ? { name: summary.gameName } : {}) };
+  const recent = unknownValue(await deps.client.recentGames(link.steamId));
+  const last = recent.known ? recent.value[0] : undefined;
+  return last ? { appId: String(last.appId), ...(last.name ? { name: last.name } : {}) } : { status: 'not_found', reason: 'no_game_to_look_up' };
+}
+
+/**
+ * One person's achievements in one game (the one named, else the one they are playing or played last): how many are
+ * unlocked, the rarest and the latest, or what is still missing. Needs the person's game details to be public.
+ */
+export function steamGetAchievements(deps: SteamToolDependencies, caller: SteamCaller, params: { person: Person; game?: string; mode?: AchievementMode; limit?: number }): Promise<unknown> {
+  const client = deps.client;
+  if (!client.playerAchievements || !client.achievementSchema || !client.achievementPercentages) return Promise.resolve({ status: 'unavailable', reason: 'achievements_not_supported' });
+  const catalog = deps.achievementCatalog ??= new AchievementCatalog({ achievementSchema: client.achievementSchema.bind(client), achievementPercentages: client.achievementPercentages.bind(client) }, deps.now);
+  const limit = Math.min(Math.max(params.limit ?? 5, 1), ACHIEVEMENT_LIMIT_MAX);
+  return withTarget(deps, caller, params.person, async (link) => {
+    const chosen = await achievementGame(deps, link, params.game);
+    if (!('appId' in chosen)) return chosen.status === 'ok' ? { status: 'ok', achievements: { known: false, reason: chosen.reason } } : chosen;
+    const result = await client.playerAchievements!(link.steamId, chosen.appId);
+    if (!result.known) return { status: 'ok', game: { appId: chosen.appId, ...(chosen.name ? { name: chosen.name } : {}) }, achievements: { known: false, reason: result.reason } };
+    if (!result.value.length) return { status: 'ok', game: { appId: chosen.appId, ...(chosen.name ? { name: chosen.name } : {}) }, achievements: { known: false, reason: 'not_available' } };
+    const entry = await catalog.lookup(chosen.appId);
+    return { status: 'ok', game: { appId: chosen.appId, ...(chosen.name ? { name: chosen.name } : {}) }, achievements: { known: true, value: summariseAchievements(result.value, entry, params.mode ?? 'summary', limit) } };
   });
 }
 

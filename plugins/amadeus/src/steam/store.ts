@@ -80,6 +80,12 @@ export class SteamStore {
         steam_id TEXT PRIMARY KEY,
         record TEXT NOT NULL
       );
+      CREATE TABLE IF NOT EXISTS steam_achievement_state (
+        steam_id TEXT NOT NULL,
+        app_id TEXT NOT NULL,
+        unlocked TEXT NOT NULL,
+        PRIMARY KEY (steam_id, app_id)
+      );
       CREATE TABLE IF NOT EXISTS steam_announcements (
         idempotency_key TEXT PRIMARY KEY,
         group_id TEXT NOT NULL,
@@ -144,6 +150,7 @@ export class SteamStore {
     for (const link of links) {
       this.db.prepare('DELETE FROM steam_links WHERE steam_id = ?').run(link.steamId);
       this.db.prepare('DELETE FROM steam_presence WHERE steam_id = ?').run(link.steamId);
+      this.db.prepare('DELETE FROM steam_achievement_state WHERE steam_id = ?').run(link.steamId);
     }
     if (links.length && this.linksBySender(senderKey).length === 0) this.db.prepare('DELETE FROM steam_group_members WHERE sender_key = ?').run(senderKey);
     return links.length;
@@ -232,6 +239,17 @@ export class SteamStore {
 
   savePresence(steamId: string, record: StoredPresence): void {
     this.db.prepare('INSERT INTO steam_presence (steam_id, record) VALUES (?, ?) ON CONFLICT(steam_id) DO UPDATE SET record = excluded.record').run(steamId, JSON.stringify(record));
+  }
+
+  /** The unlocked achievements last seen for this account in this game; undefined means no baseline yet. */
+  achievementBaseline(steamId: string, appId: string): string[] | undefined {
+    const row = this.db.prepare('SELECT unlocked FROM steam_achievement_state WHERE steam_id = ? AND app_id = ?').get(steamId, appId);
+    if (!row) return undefined;
+    try { const parsed = JSON.parse(String(row.unlocked)) as unknown; return Array.isArray(parsed) ? parsed.filter((name): name is string => typeof name === 'string') : undefined; } catch { return undefined; }
+  }
+
+  saveAchievementBaseline(steamId: string, appId: string, unlocked: string[]): void {
+    this.db.prepare('INSERT INTO steam_achievement_state (steam_id, app_id, unlocked) VALUES (?, ?, ?) ON CONFLICT(steam_id, app_id) DO UPDATE SET unlocked = excluded.unlocked').run(steamId, appId, JSON.stringify(unlocked));
   }
 
   announcedInLastHour(groupId: string, now: number): number {

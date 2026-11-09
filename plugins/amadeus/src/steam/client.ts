@@ -44,6 +44,24 @@ export interface PlayerSummary {
 
 export type Unknown<T> = { known: true; value: T } | { known: false; reason: 'profile_private' | 'not_available' };
 
+const ACHIEVEMENT_LANGUAGE = 'schinese';
+
+export interface AchievementState {
+  apiName: string;
+  achieved: boolean;
+  /** When it was unlocked (ms); absent when not unlocked or Steam gave no time. */
+  unlockedAt?: number;
+  name?: string;
+  description?: string;
+}
+
+export interface AchievementDefinition {
+  apiName: string;
+  name: string;
+  description?: string;
+  hidden: boolean;
+}
+
 export interface GameStat {
   appId: number;
   name?: string;
@@ -86,7 +104,7 @@ export class SteamClient {
     try { await this.apiKey(); return true; } catch { return false; }
   }
 
-  private async get(path: string, params: Record<string, string>): Promise<unknown> {
+  private async get(path: string, params: Record<string, string>, options: { acceptBadRequest?: boolean } = {}): Promise<unknown> {
     const key = await this.apiKey();
     const url = new URL(`${this.baseUrl}${path}`);
     for (const [name, value] of Object.entries(params)) url.searchParams.set(name, value);
@@ -101,6 +119,9 @@ export class SteamClient {
         const response = await this.fetchImpl(url, { signal: AbortSignal.timeout(this.options.timeoutMs ?? 10_000), headers: { accept: 'application/json' } });
         status = response.status;
         if (response.ok) {
+          try { return await response.json(); } catch { throw new SteamApiError('bad_response', status); }
+        }
+        if (status === 400 && options.acceptBadRequest) {
           try { return await response.json(); } catch { throw new SteamApiError('bad_response', status); }
         }
         if (status === 401 || status === 403) throw new SteamApiError('forbidden', status);
@@ -160,6 +181,59 @@ export class SteamClient {
     // Steam omits `games` both for a private profile and for nothing played; a total_count of 0 is the genuine "none".
     if (!Array.isArray(response.games)) return response.total_count === 0 ? { known: true, value: [] } : { known: false, reason: 'profile_private' };
     return { known: true, value: response.games.map(parseGame).filter((game): game is GameStat => game !== undefined) };
+  }
+  /**
+   * One person's achievements in one game. Steam answers 400 for a private profile ("not public") and for a game
+   * without stats; both are unknown, never "zero achievements".
+   */
+  async playerAchievements(steamId: string, appId: string): Promise<Unknown<AchievementState[]>> {
+    const body = await this.get('/ISteamUserStats/GetPlayerAchievements/v1/', { steamid: steamId, appid: appId, l: ACHIEVEMENT_LANGUAGE }, { acceptBadRequest: true }) as { playerstats?: { success?: boolean; error?: string; achievements?: unknown[] } };
+    const stats = body.playerstats;
+    if (!stats?.success) return { known: false, reason: /not public/iu.test(stats?.error ?? '') ? 'profile_private' : 'not_available' };
+    if (!Array.isArray(stats.achievements)) return { known: false, reason: 'not_available' };
+    return {
+      known: true,
+      value: stats.achievements.flatMap((raw): AchievementState[] => {
+        const item = raw as Record<string, unknown> | null;
+        if (!item || typeof item.apiname !== 'string') return [];
+        const achieved = item.achieved === 1 || item.achieved === true;
+        return [{
+          apiName: item.apiname, achieved,
+          ...(achieved && typeof item.unlocktime === 'number' && item.unlocktime > 0 ? { unlockedAt: item.unlocktime * 1000 } : {}),
+          ...(typeof item.name === 'string' && item.name ? { name: item.name } : {}),
+          ...(typeof item.description === 'string' && item.description ? { description: item.description } : {}),
+        }];
+      }),
+    };
+  }
+
+  /** Display names, descriptions and hidden flags of a game's achievements. Empty when the game has none. */
+  async achievementSchema(appId: string): Promise<AchievementDefinition[]> {
+    const body = await this.get('/ISteamUserStats/GetSchemaForGame/v2/', { appid: appId, l: ACHIEVEMENT_LANGUAGE }) as { game?: { availableGameStats?: { achievements?: unknown[] } } };
+    const list = body.game?.availableGameStats?.achievements;
+    if (!Array.isArray(list)) return [];
+    return list.flatMap((raw): AchievementDefinition[] => {
+      const item = raw as Record<string, unknown> | null;
+      if (!item || typeof item.name !== 'string') return [];
+      return [{
+        apiName: item.name,
+        name: typeof item.displayName === 'string' && item.displayName ? item.displayName : item.name,
+        ...(typeof item.description === 'string' && item.description ? { description: item.description } : {}),
+        hidden: item.hidden === 1,
+      }];
+    });
+  }
+
+  /** Share of all players who unlocked each achievement, in percent, keyed by api name. */
+  async achievementPercentages(appId: string): Promise<Map<string, number>> {
+    const body = await this.get('/ISteamUserStats/GetGlobalAchievementPercentagesForApp/v2/', { gameid: appId }, { acceptBadRequest: true }) as { achievementpercentages?: { achievements?: unknown[] } };
+    const result = new Map<string, number>();
+    for (const raw of body.achievementpercentages?.achievements ?? []) {
+      const item = raw as Record<string, unknown> | null;
+      const percent = typeof item?.percent === 'number' ? item.percent : typeof item?.percent === 'string' ? Number(item.percent) : NaN;
+      if (item && typeof item.name === 'string' && Number.isFinite(percent)) result.set(item.name, Math.round(percent * 10) / 10);
+    }
+    return result;
   }
 }
 

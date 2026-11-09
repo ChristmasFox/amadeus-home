@@ -45,7 +45,14 @@ export function normalizeState(personaState: number | undefined, gameId: string 
 
 export const isOnlineState = (state: PresenceState): boolean => state === 'online' || state === 'in_game';
 
-export type EventKind = 'came_online' | 'started_playing' | 'switched_game' | 'back_from_away';
+export type EventKind = 'came_online' | 'started_playing' | 'switched_game' | 'back_from_away' | 'achievement_unlocked';
+
+export interface UnlockedAchievement {
+  apiName: string;
+  name: string;
+  /** Share of all players who unlocked it, in percent, when known. */
+  globalPercent?: number;
+}
 
 export interface PresenceRecord {
   state: PresenceState;
@@ -62,6 +69,8 @@ export interface PresenceChange {
   gameName?: string;
   /** When the new state was first observed (ms). */
   at: number;
+  /** For achievement_unlocked: what was just unlocked. */
+  achievements?: UnlockedAchievement[];
 }
 
 /** What the poller remembers per SteamID: the last seen state. There is no debounce: one observation is enough. */
@@ -124,5 +133,5 @@ export function planBroadcast(candidates: Candidate[], now: number, policy: Broa
 
 /** Idempotency key of one announcement: the group, and every included id with its event type and the moment it happened. */
 export function announcementKey(groupId: string, changes: PresenceChange[]): string {
-  return `steam:${groupId}:${[...changes].sort((a, b) => a.steamId.localeCompare(b.steamId)).map((entry) => `${entry.steamId}:${entry.kind}@${entry.at}`).join(',')}`;
+  return `steam:${groupId}:${[...changes].sort((a, b) => a.steamId.localeCompare(b.steamId)).map((entry) => `${entry.steamId}:${entry.kind}@${entry.at}${entry.achievements ? `[${entry.achievements.map((item) => item.apiName).sort().join('+')}]` : ''}`).join(',')}`;
 }

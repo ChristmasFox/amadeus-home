@@ -70,7 +70,7 @@ for channel in ("whatsapp", "telegram"):
         "amadeus_macos_host_status", "amadeus_macos_host_processes",
         "steam_link_account", "steam_unlink", "steam_set_broadcast",
         "steam_get_profile", "steam_get_playtime", "steam_get_recent_games",
-        "steam_group_settings",
+        "steam_get_achievements", "steam_group_settings",
     ]}
 assert c["tools"]["toolsBySender"]["*"]["allow"] == ["web_search", "web_fetch"]
 voice_skill = (ROOT / "plugins/amadeus/skills/voice-reply/SKILL.md").read_text()
