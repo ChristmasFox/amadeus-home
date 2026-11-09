@@ -151,18 +151,27 @@ await port.sendReaction('😂');assert.deepEqual(reactions.at(-1).slice(0,3),['c
  scope.sendReactionWhatsApp=planReaction;
  console.log('WHATSAPP_STATUS_REACTION_CONTEXTUAL_TERMINAL=passed');
 }
-// ❌ is for failed runs only: silence / NO_REPLY (completed, nothing queued) ends as done.
+// A user turn never ends in silence: a completed run with no queued reply (NO_REPLY / empty) sends a
+// short text fallback and ends ✅; ❌ is only for failed runs or when not even the fallback reached the user.
 {
  const { createStatusReactionController } = await import(createRequire(host+'/package.json').resolve('openclaw/plugin-sdk/channel-feedback'));
  const ctl=createStatusReactionController({enabled:true,adapter:{setReaction:async()=>{}},initialEmoji:'👀'});
- const settle=(visible,terminal)=>{hooks.visible=visible;hooks.terminal=terminal;hooks.outcomes.length=0;scope.globalThis.createPlan({...params,statusReactionController:ctl}).finalize({});return hooks.outcomes[0];};
- assert.equal(settle(false,'completed'),'done','completed with no payload (NO_REPLY) is not an error');
- assert.equal(settle(true,'completed'),'done');
- assert.equal(settle(true,'failed'),'error','failed run is an error even if something was delivered');
- assert.equal(settle(false,'failed'),'error');
- assert.equal(settle(false,undefined),'error','unknown outcome with nothing delivered stays an error');
- hooks.visible=true;hooks.terminal='completed';
- console.log('WHATSAPP_SILENT_COMPLETION_NOT_ERROR=passed');
+ const settle=async(visible,terminal,p=params)=>{hooks.visible=visible;hooks.terminal=terminal;hooks.outcomes.length=0;const before=provider.length;
+  const returned=scope.globalThis.createPlan({...p,statusReactionController:ctl}).finalize({});
+  for(let i=0;i<20&&!hooks.outcomes.length;i++) await new Promise(resolve=>setTimeout(resolve,0));
+  return {outcome:hooks.outcomes[0],returned,sent:provider.slice(before).map(item=>item.text)};};
+ const silent=await settle(false,'completed');
+ assert.equal(silent.outcome,'done','completed-with-fallback ends as done');
+ assert.equal(silent.returned,true,'a fallback reply counts as a reply');
+ assert.equal(silent.sent.length,1,'NO_REPLY / empty completion must send a visible text');assert.match(silent.sent[0],/\S/u);
+ const delivered=await settle(true,'completed');assert.equal(delivered.outcome,'done');assert.deepEqual(delivered.sent,[],'a delivered reply gets no fallback');
+ const failedAfterDelivery=await settle(true,'failed');assert.equal(failedAfterDelivery.outcome,'error');assert.deepEqual(failedAfterDelivery.sent,[]);
+ const failed=await settle(false,'failed');assert.equal(failed.outcome,'error');assert.equal(failed.sent.length,1,'a failed run also tells the user in text');
+ const unknown=await settle(false,undefined);assert.equal(unknown.outcome,'error','unknown outcome with nothing delivered stays an error');assert.equal(unknown.sent.length,1);
+ const rejected=await settle(false,'completed',{...params,transport:{...params.transport,reply:async()=>{throw new Error('send failed');}}});
+ assert.equal(rejected.outcome,'error','nothing reached the user (fallback send failed) is the only silent-completion error');
+ hooks.visible=true;hooks.terminal='completed';scope.globalThis.createPlan(params);// restore the shared port for the transport checks below
+ console.log('WHATSAPP_NO_DELIBERATE_SILENCE_FALLBACK=passed');
 }
 params.transport.sendMedia=async()=>{throw new Error('document rejected');};await assert.rejects(port.sendDocument({bytes:Buffer.from('document'),mimeType:'image/png',fileName:'file.png'}));
 scope.globalThis.__amadeusDeliveryBoundaryV2_20260930=undefined;assert.throws(()=>scope.globalThis.createPlan(params),/unavailable/u);

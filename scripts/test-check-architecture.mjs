@@ -14,7 +14,7 @@ const copies = [
   'infra/docker/homelab/immich/docker-compose.example.yml',
   'plugins/amadeus/src', 'plugins/amadeus/openclaw.plugin.json', 'plugins/amadeus/skills',
   'integrations/openclaw/workspace-seed/SOUL.seed.md', 'integrations/openclaw/workspace-seed/AGENTS.seed.md',
-  'integrations/openclaw/workspace-seed/USER.seed.md', 'integrations/openclaw/workspace-seed/MEMORY.seed.md',
+  'integrations/openclaw/workspace-seed/USER.seed.md', 'integrations/openclaw/workspace-seed/MEMORY.seed.md', 'integrations/openclaw/workspace-seed/IDENTITY.seed.md',
   'integrations/openclaw/workspace-seed/README.md',
   'plugins/pubg/src', 'plugins/pubg/config/default-team.json',
   'apps/pubg-saas/src',

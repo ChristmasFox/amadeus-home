@@ -45,10 +45,10 @@ def chat_smoke(machine: str, key: str) -> None:
 
 
 def pubg_smoke(machine: str, key: str) -> None:
-    # count=100: the newest few stored matches are not a reliable probe. The model may also swap in a
-    # "today" time range (empty before the squad plays), so only an all-attempts failure counts.
-    prompt = ('Use the native pubg_query_stats tool with team=true, selector={"type":"last_n_matches","count":100}, '
-              'metrics=["matches","kills","damage"], and refresh=false. Do not guess or use memory. '
+    # recentMatches is a first-class count (no date), so the model cannot swap in "today", which is empty before
+    # the squad plays. Only an all-attempts failure counts.
+    prompt = ('Use the native pubg_query_stats tool with team=true, recentMatches=5, metrics=["matches","kills","damage"], '
+              'and refresh=false. Do not guess or use memory. '
               'If the tool returns ok or partial, reply LAB_STATS_QUERY_OK. Otherwise reply '
               'LAB_STATS_QUERY_FAILED. Do not include player names, identifiers, or statistics in the reply.')
     for attempt in range(1, ATTEMPTS + 1):

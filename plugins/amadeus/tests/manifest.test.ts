@@ -76,6 +76,7 @@ test('Amadeus registers typed inbound identity context hooks', () => {
     logger: { info() {}, warn() {} },
     on(name: string, handler: (...args: unknown[]) => unknown) { hooks.set(name, [...(hooks.get(name) ?? []), handler]); },
     registerService() {},
+    registerHook() {},
     registerTool(_factory: unknown, options: { name: string }) {
       registered.push(options.name);
       registeredFactories.set(options.name, _factory);

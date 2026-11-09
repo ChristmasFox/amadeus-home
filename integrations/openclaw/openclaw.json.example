@@ -28,9 +28,7 @@
         "idleMinutes": 360
       },
       "direct": {
-        "mode": "daily",
-        "atHour": 4,
-        "idleMinutes": 360
+        "mode": "none"
       }
     }
   },
@@ -48,6 +46,14 @@
         }
       },
       "sources": ["memory"],
+      "store": {
+        "fts": {
+          "tokenizer": "trigram"
+        }
+      },
+      "query": {
+        "minScore": 0.25
+      },
       "rememberAcrossConversations": false
     }
   },
@@ -69,6 +75,10 @@
         }
       },
       "userTimezone": "Asia/Shanghai",
+      "silentReply": {
+        "group": "disallow",
+        "internal": "allow"
+      },
       "typingMode": "instant",
       "typingIntervalSeconds": 3,
       "timeoutSeconds": 300,
@@ -84,7 +94,7 @@
       "entries": {
         "session-memory": {
           "enabled": true,
-          "messages": 60
+          "messages": 200
         }
       }
     }

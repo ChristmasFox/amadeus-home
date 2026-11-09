@@ -8,6 +8,7 @@ import {
   isBareRecordRequest,
   SAFE_REPLY,
 } from '@rine-kit/pubg-reply';
+import { enforceRecentMatches, parseRecentMatchCount } from './recent-matches.js';
 
 // This is an outbound evidence policy, not an intent router: it neither chooses a tool nor answers a PUBG question.
 // The checks themselves are shared (moved unchanged to @rine-kit/pubg-reply); only the OpenClaw hooks stay here.
@@ -22,6 +23,8 @@ export {
 // Session key -> when the latest inbound message was a bare record request. Module-level on purpose: the plugin is
 // registered several times per process and the dispatch and tool-call hooks may run in different registrations.
 const bareRecordTurns = new Map<string, number>();
+// Session key -> the N of the latest inbound "last N matches" request (same lifetime rules as bare record turns).
+const recentMatchTurns = new Map<string, { count: number; at: number }>();
 
 export function registerPubgEvidenceGuard(api: OpenClawPluginApi): void {
   api.on('before_dispatch', (event, context) => {
@@ -29,16 +32,35 @@ export function registerPubgEvidenceGuard(api: OpenClawPluginApi): void {
     if (!sessionKey) return;
     if (isBareRecordRequest(event.body ?? event.content)) bareRecordTurns.set(sessionKey, Date.now());
     else bareRecordTurns.delete(sessionKey);
+    const recent = parseRecentMatchCount(event.body ?? event.content);
+    if (recent === null) recentMatchTurns.delete(sessionKey);
+    else recentMatchTurns.set(sessionKey, { count: recent, at: Date.now() });
   });
   api.on('before_tool_call', (event, context) => {
     if (event.toolName !== 'pubg_query_stats') return;
     const sessionKey = context.sessionKey;
+    let params: Record<string, unknown> | null | undefined = event.params as Record<string, unknown> | undefined;
+    let changed = false;
+    // "近N场战绩" is a count, not a period: a model-chosen date range (today) must not replace it.
+    const recent = sessionKey ? recentMatchTurns.get(sessionKey) : undefined;
+    if (recent && Date.now() - recent.at <= BARE_RECORD_TTL_MS) {
+      const enforced = enforceRecentMatches(params, recent.count);
+      if (enforced) {
+        api.logger.warn(`pubg last-${recent.count}-matches request: replacing the model-chosen selector with recentMatches=${recent.count}`);
+        params = enforced;
+        changed = true;
+      }
+    }
     const at = sessionKey ? bareRecordTurns.get(sessionKey) : undefined;
-    if (at === undefined || Date.now() - at > BARE_RECORD_TTL_MS) return;
-    const params = forceTeamScope(event.params);
-    if (!params) return;
-    api.logger.warn('pubg bare record request: forcing team=true over a model-chosen person subject');
-    return { params };
+    if (at !== undefined && Date.now() - at <= BARE_RECORD_TTL_MS) {
+      const forced = params ? forceTeamScope(params) : null;
+      if (forced) {
+        api.logger.warn('pubg bare record request: forcing team=true over a model-chosen person subject');
+        params = forced;
+        changed = true;
+      }
+    }
+    return changed && params ? { params } : undefined;
   }, { matcher: ['pubg_query_stats'] });
   const shapeRevised = new Set<string>();
   const pending = new Map<string, { at: number; delivered: boolean }>();

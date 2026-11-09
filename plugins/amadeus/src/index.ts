@@ -15,6 +15,10 @@ import { registerImageGenerationToolPolicy } from './image-generation-policy.js'
 import { registerImageAssets } from './image-assets.js';
 import { registerIdentityLifecycle, registerOwnerNotificationWorker } from './shared/lifecycle.js';
 import { registerRealtimeFacts } from './realtime-facts.js';
+import { registerRemember } from './remember.js';
+import { registerDmDigest } from './dm-digest.js';
+import { registerMemoryOwnerOnly } from './memory-owner-only.js';
+import { registerOwnerDmPreferences } from './owner-dm-preferences.js';
 
 const entry = definePluginEntry({
   id: 'amadeus',
@@ -29,6 +33,10 @@ const entry = definePluginEntry({
     registerImageAssets(api);
     registerOwnerNotificationWorker(api, config);
     registerRealtimeFacts(api);
+    registerRemember(api);
+    registerDmDigest(api);
+    registerOwnerDmPreferences(api);
+    registerMemoryOwnerOnly(api);
     registerIdentity(api);
     registerProductRadar(api);
     registerMedia(api);

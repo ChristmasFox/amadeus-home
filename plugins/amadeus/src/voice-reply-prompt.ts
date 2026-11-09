@@ -22,7 +22,7 @@ function failureCode(error: unknown): string {
   const message = error instanceof Error ? error.message : '';
   return /^[a-z0-9_:.-]{1,80}$/u.test(message) ? message : 'unknown';
 }
-function originFor(context: { trigger?: string; inputProvenance?: { kind?: string; sourceTool?: string; sourceSessionKey?: string } }): DeliveryOrigin {
+export function originFor(context: { trigger?: string; inputProvenance?: { kind?: string; sourceTool?: string; sourceSessionKey?: string } }): DeliveryOrigin {
   if (context.trigger === 'heartbeat' || context.inputProvenance?.kind === 'heartbeat') return 'heartbeat';
   if (context.trigger === 'cron' || context.inputProvenance?.kind === 'cron' || context.inputProvenance?.sourceTool === 'cron') return 'cron';
   if (context.inputProvenance?.kind === 'inter_session') {

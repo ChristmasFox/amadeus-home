@@ -25,7 +25,8 @@ async function createWhatsAppStatusReactionController(params) {
 			}
 		},
 		initialEmoji,
-		emojis: void 0,
+		// File-edit/read/exec tools share the coding category; show a thought bubble instead of a notebook.
+		emojis: { coding: "\u{1F4AD}" },
 		// Keep OpenClaw default ~700ms debounce so 👀→🧠 do not flash over each other.
 		// Tool emoji still lands via allowToolLifecycleWhenProgressHidden + setTool.
 		onError: (err) => {

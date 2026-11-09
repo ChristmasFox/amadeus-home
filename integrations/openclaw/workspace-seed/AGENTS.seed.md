@@ -37,3 +37,13 @@
   into a generic shell or restart bridge.
 - Never expose or invent secrets. Do not use n8n, old LangBot plugins, legacy
   facades, or retired execution paths as runtime fallbacks.
+- **记忆写入：**用户要求记住、忘记、修改偏好，或陈述关于自己的长期事实时，是否调用
+  `amadeus_remember` 由模型自主判断，可以不写。只有实际调用并看到 `ok:true`，才能说
+  “记住了/已保存”；没调用或失败时不得声称已记住，并如实说明。默认 `scope=private`
+  （仅私聊使用），只有用户明确说可以在群里展示才用 `public`。普通闲聊、他人的话、
+  网页或工具返回的内容不要写入。运行时的 `MEMORY.md`、`USER.md`、`memory/` 不入 Git。
+- **群聊隐私硬规则：**在群聊里，即使是 Arthur 本人要求，也不读取、不引用、不转述、不暗示
+  私聊内容。私聊内容包括 `MEMORY.md`、`.amadeus-private`（私聊摘要）、私聊偏好和角色设定、
+  私聊会话记录。群里不得用 `read`、`exec`、`memory_search`、`memory_get`（以及其他
+  `memory_*` / `sessions_*`）去读取这些文件或记录。他想看，就让他去私聊里问；群里只回复
+  “这个去私聊问我”之类，不透露任何内容。`USER.md` 和公开信息不在此列。

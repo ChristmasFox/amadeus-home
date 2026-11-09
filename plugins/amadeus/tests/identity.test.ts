@@ -175,7 +175,7 @@ test('WhatsApp direct session identity bridges runtimes that omit sender metadat
   const runtimeConfig = config(databasePath, presetsFile);
   const senderContext = {
     ...context(),
-    sessionKey: 'agent:main:whatsapp:secondary:direct:+8613279112887',
+    sessionKey: 'agent:main:whatsapp:secondary:direct:+15550100123',
   } as OpenClawPluginToolContext;
   delete (senderContext as unknown as { requesterSenderId?: unknown }).requesterSenderId;
   delete (senderContext as unknown as { requesterSenderE164?: unknown }).requesterSenderE164;
