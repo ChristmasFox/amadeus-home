@@ -17,6 +17,7 @@ import { registerIdentityLifecycle, registerOwnerNotificationWorker } from './sh
 import { registerRealtimeFacts } from './realtime-facts.js';
 import { registerRemember } from './remember.js';
 import { registerDmDigest } from './dm-digest.js';
+import { registerSteamPresenceService, registerSteamTools } from './steam/register.js';
 import { registerMemoryOwnerOnly } from './memory-owner-only.js';
 import { registerOwnerDmPreferences } from './owner-dm-preferences.js';
 
@@ -47,6 +48,8 @@ const entry = definePluginEntry({
     registerMacosHost(api);
     registerNotification(api);
     registerVps(api);
+    registerSteamTools(api);
+    registerSteamPresenceService(api);
     api.logger.info('amadeus native capability plugin registered');
   },
 });

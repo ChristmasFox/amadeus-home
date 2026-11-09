@@ -45,6 +45,11 @@
       "vpsSshKnownHostsFile": { "type": "string", "maxLength": 1024 },
       "vpsUsageStateFile": { "type": "string", "maxLength": 1024 },
       "vpsAccountMapFile": { "type": "string", "maxLength": 1024 },
+      "steamApiKeyFile": { "type": "string", "maxLength": 1024 },
+      "steamApiBaseUrl": { "type": "string", "maxLength": 512 },
+      "steamDatabasePath": { "type": "string", "maxLength": 1024 },
+      "steamBroadcastMode": { "type": "string", "enum": ["off", "deliver"] },
+      "steamWhatsappAccountId": { "type": "string", "maxLength": 128 },
       "replyLinkOrigins": { "type": "array", "maxItems": 8, "items": { "type": "string", "maxLength": 256 } }
     },
     "additionalProperties": false
@@ -64,7 +69,8 @@
     "skills/market",
     "skills/macos-host",
     "skills/owner-notification",
-    "skills/vps"
+    "skills/vps",
+    "skills/steam"
   ],
   "contracts": {
     "tools": [
@@ -100,8 +106,15 @@
       "amadeus_vps_subscription_overview",
       "amadeus_vps_subscription_detail",
       "amadeus_vps_traffic_fuse",
-      "amadeus_vps_report"
+      "amadeus_vps_report",
+      "steam_link_account",
+      "steam_unlink",
+      "steam_set_broadcast",
+      "steam_get_profile",
+      "steam_get_playtime",
+      "steam_get_recent_games",
+      "steam_group_settings"
     ],
-    "services": ["amadeus-owner-notification-worker"]
+    "services": ["amadeus-owner-notification-worker", "amadeus-steam-presence"]
   }
 }

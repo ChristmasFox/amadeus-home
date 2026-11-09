@@ -1,0 +1,137 @@
+import { Type, type Static } from 'typebox';
+import type { OpenClawPluginApi, OpenClawPluginToolContext } from 'openclaw/plugin-sdk/core';
+import { configFor, type AmadeusConfig } from '../config.js';
+import { groupIdFromSessionKey } from '../group-roster.js';
+import { identityContextFromOpenClaw, identityMirrorExternalAccount, identityPersonIdForAlias } from '../identity.js';
+import { registerTool } from '../shared/register-tool.js';
+import { SteamClient } from './client.js';
+import { nineRouterComposer } from './compose.js';
+import { pollIntervalMs } from './domain.js';
+import { PresencePoller } from './poller.js';
+import { SteamStore } from './store.js';
+import {
+  steamGetPlaytime, steamGetProfile, steamGetRecentGames, steamGroupSettings, steamLinkAccount, steamSetBroadcast, steamUnlink,
+  type Person, type SteamCaller, type SteamToolDependencies,
+} from './tools.js';
+
+const PersonParameters = Type.Union([
+  Type.Object({ reference: Type.Literal('self') }, { additionalProperties: false }),
+  Type.Object({ reference: Type.Literal('mention'), mentionIndex: Type.Optional(Type.Integer({ minimum: 0, maximum: 64 })) }, { additionalProperties: false }),
+  Type.Object({ reference: Type.Literal('reply_sender') }, { additionalProperties: false }),
+  Type.Object({ reference: Type.Literal('alias'), alias: Type.String({ minLength: 1, maxLength: 128 }) }, { additionalProperties: false }),
+], { description: '查谁：self=发消息的人自己；mention=@的人；reply_sender=被回复的人；alias=群里的称呼。只能查已绑定 Steam 且没有关闭播报的人。' });
+
+const LinkParameters = Type.Object({
+  reference: Type.String({ minLength: 1, maxLength: 256, description: 'Steam 个人资料链接、自定义主页名或 17 位 SteamID。' }),
+  confirm: Type.Optional(Type.Boolean({ description: '用户明确确认昵称无误后才传 true。' })),
+}, { additionalProperties: false });
+const BroadcastParameters = Type.Object({ enabled: Type.Boolean({ description: 'true=打开我的上线播报；false=关掉我的上线播报。' }) }, { additionalProperties: false });
+const EmptyParameters = Type.Object({}, { additionalProperties: false });
+const ProfileParameters = Type.Object({ person: PersonParameters }, { additionalProperties: false });
+const PlaytimeParameters = Type.Object({ person: PersonParameters, game: Type.Optional(Type.String({ minLength: 1, maxLength: 128, description: '只看某个游戏时填游戏名（部分匹配）。' })) }, { additionalProperties: false });
+const GroupParameters = Type.Object({ enabled: Type.Optional(Type.Boolean({ description: '只有 owner 能设置：true=本群开启 Steam 上线播报，false=关闭。不填则只查看当前状态。' })) }, { additionalProperties: false });
+
+const runtimes = new Map<string, { store: SteamStore; client: SteamClient }>();
+
+export function steamRuntime(config: AmadeusConfig): { store: SteamStore; client: SteamClient } {
+  const key = `${config.steamDatabasePath}\u0000${config.steamApiBaseUrl}\u0000${config.steamApiKeyFile ?? ''}`;
+  let runtime = runtimes.get(key);
+  if (!runtime) {
+    runtime = {
+      store: new SteamStore(config.steamDatabasePath),
+      client: new SteamClient({ baseUrl: config.steamApiBaseUrl, ...(config.steamApiKeyFile ? { keyFile: config.steamApiKeyFile } : {}) }),
+    };
+    runtimes.set(key, runtime);
+  }
+  return runtime;
+}
+
+const senderKeyOf = (channel: string | undefined, id: string | undefined): string | undefined => {
+  const digits = id?.split('@')[0]?.replace(/\D/gu, '');
+  return channel === 'whatsapp' && digits ? `whatsapp:${digits}` : undefined;
+};
+
+export function callerFrom(config: AmadeusConfig, context: OpenClawPluginToolContext): SteamCaller {
+  const identity = identityContextFromOpenClaw(context);
+  const groupId = groupIdFromSessionKey(context.sessionKey);
+  const replyKey = senderKeyOf(identity.replySender?.channel, identity.replySender?.platformUserId);
+  const senderKey = senderKeyOf(identity.channel, identity.senderId);
+  return {
+    ...(senderKey ? { senderKey } : {}),
+    ...(groupId ? { groupId } : {}),
+    isOwner: context.senderIsOwner === true,
+    mentions: (identity.mentions ?? []).map((mention) => senderKeyOf(mention.channel ?? identity.channel, mention.platformUserId) ?? ''),
+    ...(replyKey ? { replySender: replyKey } : {}),
+    personForAlias: (alias) => identityPersonIdForAlias(config, alias, context),
+    mirrorLink: (steamId, label) => identityMirrorExternalAccount(config, context, 'steam', steamId, label),
+  };
+}
+
+export function registerSteamTools(api: OpenClawPluginApi): void {
+  const deps = (): SteamToolDependencies => steamRuntime(configFor(api));
+  const caller = (context: OpenClawPluginToolContext): SteamCaller => callerFrom(configFor(api), context);
+  const person = (params: { person: unknown }): Person => params.person as Person;
+
+  registerTool(api, 'steam_link_account', '把发消息的人自己的 Steam 账号绑定起来（用于查询自己的 Steam 信息，并默认在开启了播报的群里被播报上线）。先不带 confirm 调用得到昵称，让用户确认后再 confirm=true。只能绑定发消息的人自己。', LinkParameters,
+    async (params, context) => steamLinkAccount(deps(), caller(context), params as Static<typeof LinkParameters>));
+  registerTool(api, 'steam_unlink', '解除发消息的人自己的 Steam 绑定，并删除相关记录。', EmptyParameters,
+    async (_params, context) => steamUnlink(deps(), caller(context)));
+  registerTool(api, 'steam_set_broadcast', '打开或关闭发消息的人自己的 Steam 上线播报（在群里打开会把这个人加入本群的播报名单）。用户说“关掉/打开我的播报”时调用。', BroadcastParameters,
+    async (params, context) => steamSetBroadcast(deps(), caller(context), params as Static<typeof BroadcastParameters>));
+  registerTool(api, 'steam_get_profile', '查某个已绑定 Steam 的人的资料：昵称、当前在线状态与正在玩的游戏、账号创建时间。资料不公开的字段会返回 known:false，不要编造。', ProfileParameters,
+    async (params, context) => steamGetProfile(deps(), caller(context), { person: person(params as { person: unknown }) }));
+  registerTool(api, 'steam_get_playtime', '查某个已绑定 Steam 的人的游戏时长：总时长、最常玩的游戏，或某个游戏的时长。游戏详情不公开时返回 known:false，不要编造。', PlaytimeParameters,
+    async (params, context) => {
+      const typed = params as Static<typeof PlaytimeParameters>;
+      return steamGetPlaytime(deps(), caller(context), { person: person(typed), ...(typed.game ? { game: typed.game } : {}) });
+    });
+  registerTool(api, 'steam_get_recent_games', '查某个已绑定 Steam 的人近两周玩过的游戏及时长。不公开时返回 known:false。', ProfileParameters,
+    async (params, context) => steamGetRecentGames(deps(), caller(context), { person: person(params as { person: unknown }) }));
+  registerTool(api, 'steam_group_settings', '查看或（仅 owner）开启/关闭当前群的 Steam 上线播报。', GroupParameters,
+    async (params, context) => steamGroupSettings(deps(), caller(context), params as Static<typeof GroupParameters>));
+}
+
+/** Timer loop: 60 s by day, 5 min inside the quiet window. Idle (and silent) unless the mode is 'deliver'. */
+export function registerSteamPresenceService(api: OpenClawPluginApi): void {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let stopped = true;
+  api.registerService({
+    id: 'amadeus-steam-presence',
+    async start() {
+      const config = configFor(api);
+      if (config.steamBroadcastMode !== 'deliver') { api.logger.info('amadeus steam presence is off'); return; }
+      const { store, client } = steamRuntime(config);
+      const poller = new PresencePoller({
+        store,
+        client,
+        compose: nineRouterComposer(api.config),
+        send: async (groupId, message, idempotencyKey) => {
+          await (api.runtime.gateway as unknown as { request(method: string, params: Record<string, unknown>, options?: Record<string, unknown>): Promise<unknown> })
+            .request('send', { channel: 'whatsapp', to: groupId, accountId: config.steamWhatsappAccountId, message, idempotencyKey }, { timeoutMs: 20_000 });
+        },
+        log: (message) => api.logger.info(`amadeus ${message}`),
+      });
+      stopped = false;
+      let missingKeyLogged = false;
+      const loop = async (): Promise<void> => {
+        if (stopped) return;
+        try {
+          if (!await client.hasKey()) {
+            if (!missingKeyLogged) { api.logger.warn('amadeus steam presence waiting for the API key file'); missingKeyLogged = true; }
+          } else {
+            const report = await poller.tick();
+            if (report.sent || report.failed) api.logger.info(`amadeus steam presence tick sent=${report.sent} failed=${report.failed}`);
+          }
+        } catch (error) {
+          api.logger.warn(`amadeus steam presence tick failed: ${error instanceof Error ? error.message : 'unknown'}`);
+        }
+        if (!stopped) timer = setTimeout(() => { void loop(); }, pollIntervalMs(Date.now()));
+      };
+      void loop();
+    },
+    async stop() {
+      stopped = true;
+      if (timer) clearTimeout(timer);
+    },
+  });
+}

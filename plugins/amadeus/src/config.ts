@@ -46,6 +46,12 @@ export interface AmadeusConfig {
   vpsSshKnownHostsFile: string;
   vpsUsageStateFile: string;
   vpsAccountMapFile?: string;
+  steamApiKeyFile?: string;
+  steamApiBaseUrl: string;
+  steamDatabasePath: string;
+  /** 'off' keeps the presence service idle; 'deliver' lets it post to enabled groups. */
+  steamBroadcastMode: 'off' | 'deliver';
+  steamWhatsappAccountId: string;
   /** Origins whose share links a tool may declare as the reply's last line (see reply-links.ts). */
   replyLinkOrigins: string[];
 }
@@ -84,6 +90,9 @@ export function configFor(api: OpenClawPluginApi): AmadeusConfig {
   const macHostAgentTokenFile = optionalFile('macHostAgentTokenFile', 'MAC_HOST_AGENT_TOKEN_FILE');
   const imageAssetServiceTokenFile = optionalFile('imageAssetServiceTokenFile', 'AMADEUS_IMAGE_SERVICE_TOKEN_FILE');
   const vpsAccountMapFile = optionalFile('vpsAccountMapFile', 'VPS_ACCOUNT_MAP_FILE');
+  const steamApiKeyFile = optionalFile('steamApiKeyFile', 'STEAM_API_KEY_FILE');
+  const steamMode = value.steamBroadcastMode ?? env('STEAM_BROADCAST_MODE') ?? 'off';
+  if (steamMode !== 'off' && steamMode !== 'deliver') throw new Error('steamBroadcastMode must be off or deliver');
   const ownerDeliverySetting = value.ownerNotificationDeliveryEnabled ?? env('OWNER_NOTIFICATION_DELIVERY_ENABLED');
   let ownerNotificationDeliveryEnabled: boolean;
   if (ownerDeliverySetting === undefined) ownerNotificationDeliveryEnabled = true;
@@ -130,6 +139,11 @@ export function configFor(api: OpenClawPluginApi): AmadeusConfig {
     vpsSshKnownHostsFile: file('vpsSshKnownHostsFile', 'VPS_SSH_KNOWN_HOSTS_FILE', '/run/secrets/vps_ssh_known_hosts'),
     vpsUsageStateFile: file('vpsUsageStateFile', 'VPS_USAGE_STATE_FILE', '/data/vps-usage-state.json'),
     ...(vpsAccountMapFile ? { vpsAccountMapFile } : {}),
+    ...(steamApiKeyFile ? { steamApiKeyFile } : {}),
+    steamApiBaseUrl: file('steamApiBaseUrl', 'STEAM_API_BASE_URL', 'https://api.steampowered.com').replace(/\/$/u, ''),
+    steamDatabasePath: file('steamDatabasePath', 'STEAM_DATABASE_PATH', '/data/steam.sqlite'),
+    steamBroadcastMode: steamMode,
+    steamWhatsappAccountId: file('steamWhatsappAccountId', 'STEAM_WHATSAPP_ACCOUNT_ID', file('ownerWhatsappAccountId', 'OWNER_WHATSAPP_ACCOUNT_ID', 'secondary')),
     replyLinkOrigins: originList(value.replyLinkOrigins ?? env('AMADEUS_REPLY_LINK_ORIGINS')),
   };
 }
