@@ -7,7 +7,7 @@ import { openClawConversationAdapter } from './adapters/openclaw.js';
 import { registerPubgEvidenceGuard } from './evidence-guard.js';
 import { registerPubgRepeatGuard } from './repeat-guard.js';
 import { registerEmptyReplyGuard } from './empty-reply-guard.js';
-import { statsSelector } from './recent-matches.js';
+import { IGNORED_RECENT_MATCHES, recentMatchesIgnored, statsSelector } from './recent-matches.js';
 import { registerDailyReviewService } from './daily-review-service.js';
 import { dailyStatsSource } from './daily-review-stats.js';
 import { jsonToolResult as sharedJsonToolResult, queryShareFor as sharedQueryShareFor, type ShareAppender } from '@rine-kit/pubg-reply';
@@ -199,7 +199,7 @@ const QueryStatsParameters = Type.Object({
   ...SubjectProperties,
   recentMatches: Type.Optional(Type.Integer({
     minimum: 1, maximum: 100,
-    description: 'The squad\'s most recent N competitive matches (近5场/最近10场/最近三局战绩), with NO date. Use it only with NO selector: when a selector (a date or period) is also given, the selector is used and this count is ignored.',
+    description: 'The squad\'s most recent N competitive matches (近5场/最近10场/最近三局战绩), with NO date. Mutually exclusive with selector: send EITHER recentMatches OR selector, never both. Never copy recentMatches from an earlier call into a call that has a date or period (昨日/今日/time range); if a selector is sent anyway, recentMatches is ignored.',
   })),
   selector: Type.Optional(Selector),
   metrics: Type.Array(Metrics, { minItems: 1, maxItems: 16 }),
@@ -673,22 +673,29 @@ const entry = defineToolPlugin({
     }),
     tool({
       name: 'pubg_query_stats',
-      description: 'Query deterministic PUBG aggregates and return validated presentation/displayText. For a last-N request (近5场战绩) pass recentMatches=N and no date; otherwise pass a period selector.',
+      description: 'Query deterministic PUBG aggregates and return validated presentation/displayText. For a last-N request (近5场战绩) pass recentMatches=N and no selector; for a date or period (昨日战绩) pass a selector and no recentMatches.',
       parameters: QueryStatsParameters,
       factory: ({ config, toolContext }) => makeTool(
         'pubg_query_stats',
-        'Query deterministic PUBG aggregates and return validated presentation/displayText. For a last-N request (近5场战绩) pass recentMatches=N and no date; otherwise pass a period selector.',
+        'Query deterministic PUBG aggregates and return validated presentation/displayText. For a last-N request (近5场战绩) pass recentMatches=N and no selector; for a date or period (昨日战绩) pass a selector and no recentMatches.',
         QueryStatsParameters,
         config,
         toolContext,
         true,
-        (service, input, sessionId, signal) => service.queryStats({
-          ...omitRecentMatches(input as QueryStatsParameters),
-          sessionId,
-          selector: selectorInput(statsSelector((input as QueryStatsParameters).selector, (input as QueryStatsParameters).recentMatches)),
-          metrics: (input as QueryStatsParameters).metrics as Metric[],
-          ...(signal ? { signal } : {}),
-        } as StatsToolInput),
+        async (service, input, sessionId, signal) => {
+          const { selector, recentMatches } = input as QueryStatsParameters;
+          const envelope = await service.queryStats({
+            ...omitRecentMatches(input as QueryStatsParameters),
+            sessionId,
+            selector: selectorInput(statsSelector(selector, recentMatches)),
+            metrics: (input as QueryStatsParameters).metrics as Metric[],
+            ...(signal ? { signal } : {}),
+          } as StatsToolInput);
+          // Say so in the result instead of silently choosing one of the two.
+          return recentMatchesIgnored(selector, recentMatches)
+            ? { ...envelope, queryResolved: { ...envelope.queryResolved, ignoredArguments: [IGNORED_RECENT_MATCHES] } }
+            : envelope;
+        },
       ),
     }),
     tool({

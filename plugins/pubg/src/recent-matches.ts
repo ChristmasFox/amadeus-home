@@ -53,3 +53,19 @@ export function enforceRecentMatches(params: unknown, count: number): Record<str
   const { selector: _dropped, ...rest } = input;
   return { ...rest, recentMatches: count };
 }
+
+export const IGNORED_RECENT_MATCHES = 'recentMatches ignored: a selector was given, and recentMatches is only for a request with no date or period. Send either one, never both.';
+
+/** True when both a selector and recentMatches arrived: they are mutually exclusive and the selector is what is used. */
+export function recentMatchesIgnored(selector: unknown, recentMatches: unknown): boolean {
+  return selector !== undefined && selector !== null && recentMatches !== undefined && recentMatches !== null;
+}
+
+/** before_tool_call rewrite: drops a recentMatches that came together with a selector (the model copying its earlier call). */
+export function dropConflictingRecentMatches(params: unknown): Record<string, unknown> | null {
+  if (!params || typeof params !== 'object' || Array.isArray(params)) return null;
+  const input = params as Record<string, unknown>;
+  if (!recentMatchesIgnored(input.selector, input.recentMatches)) return null;
+  const { recentMatches: _dropped, ...rest } = input;
+  return rest;
+}

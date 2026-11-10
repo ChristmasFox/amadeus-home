@@ -8,7 +8,7 @@ import {
   isBareRecordRequest,
   SAFE_REPLY,
 } from '@rine-kit/pubg-reply';
-import { enforceRecentMatches, parseRecentMatchCount } from './recent-matches.js';
+import { dropConflictingRecentMatches, enforceRecentMatches, parseRecentMatchCount } from './recent-matches.js';
 
 // This is an outbound evidence policy, not an intent router: it neither chooses a tool nor answers a PUBG question.
 // The checks themselves are shared (moved unchanged to @rine-kit/pubg-reply); only the OpenClaw hooks stay here.
@@ -41,6 +41,14 @@ export function registerPubgEvidenceGuard(api: OpenClawPluginApi): void {
     const sessionKey = context.sessionKey;
     let params: Record<string, unknown> | null | undefined = event.params as Record<string, unknown> | undefined;
     let changed = false;
+    // recentMatches and selector are mutually exclusive: a recentMatches sent next to a date/period (typically copied from an
+    // earlier call of the same turn) would silently turn "昨日" into "最近N场".
+    const unconflicted = params ? dropConflictingRecentMatches(params) : null;
+    if (unconflicted) {
+      api.logger.warn('pubg_query_stats: dropping recentMatches that came with a selector');
+      params = unconflicted;
+      changed = true;
+    }
     // "近N场战绩" is a count, not a period: a model-chosen date range (today) must not replace it.
     const recent = sessionKey ? recentMatchTurns.get(sessionKey) : undefined;
     if (recent && Date.now() - recent.at <= BARE_RECORD_TTL_MS) {

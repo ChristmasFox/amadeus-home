@@ -4,7 +4,7 @@ import { getToolPluginMetadata } from 'openclaw/plugin-sdk/tool-plugin';
 import type { OpenClawPluginApi } from 'openclaw/plugin-sdk/core';
 import entry from '../src/index.js';
 import { registerPubgEvidenceGuard } from '../src/evidence-guard.js';
-import { enforceRecentMatches, parseRecentMatchCount, statsSelector } from '../src/recent-matches.js';
+import { dropConflictingRecentMatches, enforceRecentMatches, IGNORED_RECENT_MATCHES, parseRecentMatchCount, recentMatchesIgnored, statsSelector } from '../src/recent-matches.js';
 
 test('last-N requests are recognised; periods and unrelated numbers are not', () => {
   const cases: Array<[string, number | null]> = [
@@ -33,7 +33,8 @@ test('the tool schema exposes recentMatches as a bounded integer and keeps selec
   assert.equal(properties.recentMatches?.maximum, 100);
   assert.match(properties.recentMatches?.description ?? '', /NO date/);
   assert.ok(!(tool.parameters.required as string[] | undefined)?.includes('selector'));
-  assert.match(tool.description, /recentMatches=N and no date/);
+  assert.match(tool.description, /recentMatches=N and no selector/);
+  assert.match(properties.recentMatches?.description ?? '', /Mutually exclusive with selector/);
 });
 
 test('enforceRecentMatches replaces a model-chosen date range and leaves a correct call alone', () => {
@@ -69,4 +70,30 @@ test('the guard rewrites the tool call only on a turn that asked for the last N 
   assert.deepEqual((bare?.params.selector ?? todayCall.params.selector), todayCall.params.selector);
   dispatch({ body: '近3场' }, { sessionKey: 'other-session' });
   assert.equal(beforeTool(todayCall, context) === undefined || (beforeTool(todayCall, context) as any).params.recentMatches === undefined, true, 'sessions do not leak into each other');
+});
+
+test('recentMatches and selector are mutually exclusive: the conflicting recentMatches is dropped and reported', () => {
+  const yesterday = { type: 'relative_period', value: 'yesterday', label: '昨日' };
+  assert.equal(recentMatchesIgnored(yesterday, 15), true);
+  assert.equal(recentMatchesIgnored(undefined, 15), false);
+  assert.equal(recentMatchesIgnored(yesterday, undefined), false);
+  assert.match(IGNORED_RECENT_MATCHES, /Send either one/);
+  assert.deepEqual(dropConflictingRecentMatches({ team: true, selector: yesterday, recentMatches: 15 }), { team: true, selector: yesterday });
+  assert.equal(dropConflictingRecentMatches({ team: true, selector: yesterday }), null);
+  assert.equal(dropConflictingRecentMatches({ team: true, recentMatches: 15 }), null);
+});
+
+test('the guard strips a recentMatches copied next to a 昨日 selector (the 7329ccfe loop) but keeps a real 近N场 request', () => {
+  const handlers: Record<string, (event: any, context: any) => any> = {};
+  const logger = { warn() {}, info() {}, error() {}, debug() {} };
+  registerPubgEvidenceGuard({ logger, on: (name: string, handler: (event: any, context: any) => any) => { handlers[name] = handler; } } as unknown as OpenClawPluginApi);
+  const yesterday = { type: 'relative_period', value: 'yesterday', label: '昨日' };
+  handlers.before_dispatch!({ body: '昨日战绩' }, { sessionKey: 'loop-session' });
+  const stripped = handlers.before_tool_call!({ toolName: 'pubg_query_stats', params: { team: true, recentMatches: 15, selector: yesterday } }, { sessionKey: 'loop-session' });
+  assert.equal(stripped.params.recentMatches, undefined);
+  assert.deepEqual(stripped.params.selector, yesterday);
+  handlers.before_dispatch!({ body: '近5场战绩' }, { sessionKey: 'recent-session' });
+  const kept = handlers.before_tool_call!({ toolName: 'pubg_query_stats', params: { team: true, recentMatches: 5, selector: yesterday } }, { sessionKey: 'recent-session' });
+  assert.equal(kept.params.recentMatches, 5);
+  assert.equal(kept.params.selector, undefined);
 });
