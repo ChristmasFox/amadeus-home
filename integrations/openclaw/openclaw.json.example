@@ -85,7 +85,10 @@
       "compaction": {
         "memoryFlush": {
           "enabled": true
-        }
+        },
+        "model": "nine_router/arthur-combo",
+        "timeoutSeconds": 240,
+        "notifyUser": false
       }
     }
   },
