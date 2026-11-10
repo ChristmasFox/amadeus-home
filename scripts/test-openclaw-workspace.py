@@ -130,7 +130,11 @@ print("OPENCLAW_WORKSPACE_SEED_TEST=passed")
 # Owner DM preferences live in a runtime file read by the plugin; SOUL.md reaches every session including groups.
 soul_seed = (ROOT / "integrations/openclaw/workspace-seed/SOUL.seed.md").read_text()
 agents_seed = (ROOT / "integrations/openclaw/workspace-seed/AGENTS.seed.md").read_text()
-for name, seed in (("SOUL", soul_seed), ("AGENTS", agents_seed)):
+# SOUL may carry exactly one pointer sentence saying that the runtime 【私聊互动偏好】 block wins in Arthur's DM;
+# it names the block but holds none of its content.
+soul_without_pointer = "\n".join(line for line in soul_seed.split("\n") if not line.startswith("仅当上下文中出现【私聊互动偏好】"))
+assert sum("【私聊互动偏好】" in line for line in soul_seed.split("\n")) == 1, "SOUL seed may only name the DM preference block once, in the pointer sentence"
+for name, seed in (("SOUL", soul_without_pointer), ("AGENTS", agents_seed)):
     assert "互动偏好" not in seed, f"{name} seed must not carry owner DM preferences"
     assert "owner-dm-preferences" not in seed, f"{name} seed must not name the runtime file"
 assert "群聊隐私硬规则" in agents_seed
