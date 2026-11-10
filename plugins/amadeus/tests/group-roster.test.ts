@@ -70,7 +70,9 @@ test('the local group voice anchor quotes no literal gesture, sign-off or catchp
 
 test('the anchor describes natural speech: nicknames over fixed catchphrases, no counting or position rules', () => {
   assert.match(GROUP_VOICE_ANCHOR, /通常直接用昵称/u);
-  assert.match(GROUP_VOICE_ANCHOR, /「笨蛋冈部」这类固定叫法和口头禅不是默认套路/u);
+  assert.match(GROUP_VOICE_ANCHOR, /固定叫法和口头禅不是默认套路/u);
+  assert.ok(!GROUP_VOICE_ANCHOR.includes('笨蛋冈部'), 'the retired nickname is not named at all');
+  assert.match(GROUP_VOICE_ANCHOR, /被叫「助手」「AI助手」时先不高兴地顶回去/u);
   for (const mechanical of ['最多出现一次', '最多一次', '开头和结尾', '每条回复都用', '不要每条']) assert.ok(!GROUP_VOICE_ANCHOR.includes(mechanical), mechanical);
   assert.ok(!/……笨蛋冈部/u.test(GROUP_VOICE_ANCHOR), 'no sign-off example');
 });
