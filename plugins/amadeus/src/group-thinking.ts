@@ -4,12 +4,12 @@ import { groupIdFromSessionKey } from './group-roster.js';
 
 /**
  * OpenClaw has no per-channel thinking default (`thinkingDefault` is agent-wide and would change DMs too), and a fresh
- * session carries no level, so group turns fell back to the agent default (medium). This gives every WhatsApp group
- * session an explicit `low` the first time it is seen, at session start and again on its next turn (which also covers
+ * session carries no level, so group turns followed the agent default, which can change independently of groups. This gives every WhatsApp group
+ * session an explicit `medium` the first time it is seen, at session start and again on its next turn (which also covers
  * sessions that already existed without one). Only an unset level is filled: a level someone chose with /think stays,
  * and direct chats are never touched.
  */
-export const GROUP_THINKING_LEVEL = 'low';
+export const GROUP_THINKING_LEVEL = 'medium';
 
 export type ThinkingStore = {
   read(sessionKey: string, agentId?: string): { thinkingLevel?: string | undefined } | undefined;

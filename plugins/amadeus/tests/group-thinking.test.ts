@@ -17,18 +17,18 @@ function setup(levels: Record<string, string | undefined>) {
   return { patched, levels, fire: (name: string, context: object) => hooks.get(name)!({}, context) };
 }
 
-test('a group session with no level gets low at session start, once', async () => {
+test('a group session with no level gets medium at session start, once', async () => {
   const { patched, fire } = setup({});
   await fire('session_start', { sessionKey: GROUP, sessionId: 's1' });
   await fire('agent_turn_prepare', { sessionKey: GROUP, sessionId: 's1' });
   assert.deepEqual(patched, [{ key: GROUP, level: GROUP_THINKING_LEVEL }]);
-  assert.equal(GROUP_THINKING_LEVEL, 'low');
+  assert.equal(GROUP_THINKING_LEVEL, 'medium');
 });
 
 test('an existing group session without a level is fixed on its next turn; a chosen level is left alone', async () => {
   const a = setup({});
   await a.fire('agent_turn_prepare', { sessionKey: GROUP, sessionId: 's1' });
-  assert.equal(a.levels[GROUP], 'low');
+  assert.equal(a.levels[GROUP], 'medium');
   const b = setup({ [GROUP]: 'high' });
   await b.fire('agent_turn_prepare', { sessionKey: GROUP, sessionId: 's1' });
   assert.deepEqual(b.patched, []);
