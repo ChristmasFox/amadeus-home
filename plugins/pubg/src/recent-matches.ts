@@ -29,13 +29,18 @@ export function parseRecentMatchCount(text: unknown): number | null {
 
 export interface RecentMatchesSelector { type: 'last_n_matches'; count: number }
 
-/** The selector for a statistics call: an explicit recentMatches count always beats whatever date range came with it. */
+/**
+ * The selector for a statistics call. recentMatches is only the stand-in for a missing selector: an explicit
+ * selector (a date or period, e.g. 昨日) is what the model asked for, and silently replacing it with the last N matches
+ * returned a result that did not match the request, which made the model retry the same call over and over.
+ * "近N场" requests are still protected by the before_tool_call rewrite (enforceRecentMatches), which keys on the user's words.
+ */
 export function statsSelector(selector: unknown, recentMatches: unknown): unknown {
+  if (selector !== undefined && selector !== null) return selector;
   if (typeof recentMatches === 'number' && Number.isInteger(recentMatches) && recentMatches >= 1 && recentMatches <= 100) {
     return { type: 'last_n_matches', count: recentMatches } satisfies RecentMatchesSelector;
   }
-  if (selector === undefined || selector === null) throw new Error('pubg_query_stats needs either selector or recentMatches');
-  return selector;
+  throw new Error('pubg_query_stats needs either selector or recentMatches');
 }
 
 /** before_tool_call rewrite: this turn asked for the last N matches, so the call must not carry a date range instead. */

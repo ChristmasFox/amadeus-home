@@ -16,13 +16,13 @@ test('last-N requests are recognised; periods and unrelated numbers are not', ()
   assert.equal(parseRecentMatchCount(undefined), null);
 });
 
-test('recentMatches is the whole selector: a date range sent with it is ignored, and it is the only way to omit a selector', () => {
-  const today = { type: 'relative_period', value: 'today' };
-  assert.deepEqual(statsSelector(today, 5), { type: 'last_n_matches', count: 5 });
+test('recentMatches only stands in for a missing selector: an explicit date range is never replaced by the last N matches', () => {
+  const yesterday = { type: 'relative_period', value: 'yesterday', label: '昨日' };
+  assert.equal(statsSelector(yesterday, 15), yesterday, 'the 昨日战绩 loop: recentMatches=15 must not override yesterday');
   assert.deepEqual(statsSelector(undefined, 7), { type: 'last_n_matches', count: 7 });
-  assert.equal(statsSelector(today, undefined), today);
+  assert.equal(statsSelector(yesterday, undefined), yesterday);
   assert.throws(() => statsSelector(undefined, undefined), /selector or recentMatches/);
-  assert.equal(statsSelector(today, 0), today, 'an out-of-range count is not honoured');
+  assert.throws(() => statsSelector(undefined, 0), /selector or recentMatches/, 'an out-of-range count is not honoured');
 });
 
 test('the tool schema exposes recentMatches as a bounded integer and keeps selector optional', () => {

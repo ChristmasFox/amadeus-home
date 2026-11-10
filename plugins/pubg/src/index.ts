@@ -5,6 +5,7 @@ import { defineToolPlugin } from 'openclaw/plugin-sdk/tool-plugin';
 import { Static, Type, type TSchema as TypeSchema } from 'typebox';
 import { openClawConversationAdapter } from './adapters/openclaw.js';
 import { registerPubgEvidenceGuard } from './evidence-guard.js';
+import { registerPubgRepeatGuard } from './repeat-guard.js';
 import { statsSelector } from './recent-matches.js';
 import { registerDailyReviewService } from './daily-review-service.js';
 import { dailyStatsSource } from './daily-review-stats.js';
@@ -197,7 +198,7 @@ const QueryStatsParameters = Type.Object({
   ...SubjectProperties,
   recentMatches: Type.Optional(Type.Integer({
     minimum: 1, maximum: 100,
-    description: 'The squad\'s most recent N competitive matches (近5场/最近10场/最近三局战绩), with NO date. When set it replaces selector; never put a date range here or in selector for a last-N request.',
+    description: 'The squad\'s most recent N competitive matches (近5场/最近10场/最近三局战绩), with NO date. Use it only with NO selector: when a selector (a date or period) is also given, the selector is used and this count is ignored.',
   })),
   selector: Type.Optional(Selector),
   metrics: Type.Array(Metrics, { minItems: 1, maxItems: 16 }),
@@ -803,6 +804,7 @@ const registerTools = entry.register;
 entry.register = (api) => {
   registerTools(api);
   registerPubgEvidenceGuard(api);
+  registerPubgRepeatGuard(api);
   registerDailyReviewService(api, (config) => dailyStatsSource(
     () => serviceFor(config as PluginConfig),
     configString(config as PluginConfig, 'timezone', 'PUBG_TIMEZONE') ?? 'Asia/Shanghai',
