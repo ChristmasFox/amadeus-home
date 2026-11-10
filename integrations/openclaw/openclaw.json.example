@@ -123,7 +123,7 @@
             "contextWindow": 1000000,
             "contextTokens": 100000,
             "maxTokens": 32768,
-            "compat": { "supportsPromptCacheKey": true }
+            "compat": { "supportsPromptCacheKey": true, "supportsReasoningEffort": true }
           }
         ]
       },
