@@ -135,6 +135,8 @@ test('steam_get_playtime with people returns one card for everybody; several peo
   const { steamGetPlaytime } = await import('../src/steam/tools.js');
   const store = new SteamStore(':memory:');
   const NOW = Date.parse('2026-11-09T12:00:00Z');
+  // Tracking began before the fixed clock: the store stamps it with the real time, which drifts past a fixed NOW.
+  (store as unknown as { db: { prepare(sql: string): { run(...args: unknown[]): unknown } } }).db.prepare(`UPDATE steam_meta SET value = ? WHERE key = 'play_tracking_started_at'`).run(String(NOW - 10 * 3_600_000));
   const A = '76561190000000001';
   const B = '76561190000000002';
   store.link({ senderKey: 'whatsapp:1', steamId: A, personaName: 'Alpha', personId: 'p1', now: NOW - 5 * 3_600_000 });
