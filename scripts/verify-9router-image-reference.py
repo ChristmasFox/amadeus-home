@@ -19,13 +19,13 @@ FIXTURE = r'''
  const input=Object.freeze({model:'amadeus-image',prompt:'synthetic fixture',image:'data:image/png;base64,'+png});
  const models=['cx/gpt-image-2.6-sunburst','xai/grok-imagine-image-2.0'],calls=[];
  const assertReference=(body,model)=>{assert.equal(body,input);if(!model.startsWith('cx/'))return;const upstream=codex.buildBody(model.slice(model.indexOf('/')+1),body);assert.equal(upstream.tools[0].action,'edit');assert.equal(upstream.input[0].content.find(x=>x.type==='input_image').image_url,input.image)};
- const out=await w(18910).Pr({body:input,models,comboName:'amadeus-image',comboStrategy:'fallback',log:{info(){},warn(){}},handleSingleModel:async(body,model)=>{
+ const out=await w(25308).Pr({body:input,models,comboName:'amadeus-image',comboStrategy:'fallback',log:{info(){},warn(){}},handleSingleModel:async(body,model)=>{
   assertReference(body,model);calls.push(model);
   return new Response(JSON.stringify({error:{message:'synthetic unavailable'}}),{status:503});
  }});
  assert.equal(out.status,503);assert.deepEqual(calls,models);
  const successCalls=[];
- const success=await w(18910).Pr({body:input,models,comboName:'amadeus-image',comboStrategy:'fallback',log:{info(){},warn(){}},handleSingleModel:async(body,model)=>{
+ const success=await w(25308).Pr({body:input,models,comboName:'amadeus-image',comboStrategy:'fallback',log:{info(){},warn(){}},handleSingleModel:async(body,model)=>{
   assertReference(body,model);successCalls.push(model);
   if(successCalls.length<2)return new Response(JSON.stringify({error:{message:'synthetic unavailable'}}),{status:502});
   return new Response(JSON.stringify({created:1,data:[{b64_json:'c3VjY2Vzcw=='}]}),{status:200});

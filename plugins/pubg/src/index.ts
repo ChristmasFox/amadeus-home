@@ -6,6 +6,7 @@ import { Static, Type, type TSchema as TypeSchema } from 'typebox';
 import { openClawConversationAdapter } from './adapters/openclaw.js';
 import { registerPubgEvidenceGuard } from './evidence-guard.js';
 import { registerPubgRepeatGuard } from './repeat-guard.js';
+import { registerEmptyReplyGuard } from './empty-reply-guard.js';
 import { statsSelector } from './recent-matches.js';
 import { registerDailyReviewService } from './daily-review-service.js';
 import { dailyStatsSource } from './daily-review-stats.js';
@@ -805,6 +806,7 @@ entry.register = (api) => {
   registerTools(api);
   registerPubgEvidenceGuard(api);
   registerPubgRepeatGuard(api);
+  registerEmptyReplyGuard(api);
   registerDailyReviewService(api, (config) => dailyStatsSource(
     () => serviceFor(config as PluginConfig),
     configString(config as PluginConfig, 'timezone', 'PUBG_TIMEZONE') ?? 'Asia/Shanghai',

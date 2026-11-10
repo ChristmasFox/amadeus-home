@@ -29,7 +29,7 @@ FIXTURE = r'''
   const route = require(routePath);
   await route.routeModule._lazyUserland.waitUntilLoaded();
   const webpack = require(runtimeRoot + '/webpack-runtime.js');
-  const runCombo = webpack(18910).Pr;
+  const runCombo = webpack(25308).Pr;
   assert.equal(typeof runCombo, 'function');
   const logicalRequest = { model: 'amadeus-image', prompt: 'synthetic fixture only' };
   const log = { info() {}, warn() {} };
