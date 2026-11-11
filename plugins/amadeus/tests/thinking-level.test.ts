@@ -20,14 +20,14 @@ function setup(levels: Record<string, string | undefined>) {
   return { patched, levels, fire: (name: string, context: object) => hooks.get(name)!({}, context) };
 }
 
-test('the single level is medium and covers groups, direct chats and the main session but not internal sessions', () => {
-  assert.equal(CHAT_THINKING_LEVEL, 'medium');
+test('the single level is low and covers groups, direct chats and the main session but not internal sessions', () => {
+  assert.equal(CHAT_THINKING_LEVEL, 'low');
   for (const key of [GROUP, DIRECT, MAIN, 'agent:main:telegram:direct:1', 'agent:main:kook:group:2']) assert.equal(isChatSessionKey(key), true, key);
   for (const key of [CRON, RELEASE, 'agent:main:explicit:1', undefined, 42]) assert.equal(isChatSessionKey(key), false, String(key));
 });
 
-test('every chat session is brought to the one level, whatever it had (none, low, high), and left alone when already there', async () => {
-  for (const [key, had] of [[GROUP, undefined], [GROUP, 'low'], [DIRECT, 'low'], [DIRECT, 'high'], [MAIN, 'low']] as const) {
+test('every chat session is brought to the one level, whatever it had (none, medium, high), and left alone when already there', async () => {
+  for (const [key, had] of [[GROUP, undefined], [GROUP, 'medium'], [DIRECT, 'medium'], [DIRECT, 'high'], [MAIN, 'medium']] as const) {
     const { patched, levels, fire } = setup({ [key]: had });
     await fire('agent_turn_prepare', { sessionKey: key });
     assert.deepEqual(patched, [{ key, level: CHAT_THINKING_LEVEL }], `${key} had ${had}`);
@@ -42,7 +42,7 @@ test('every chat session is brought to the one level, whatever it had (none, low
 
 test('a later /think change is brought back on the next turn (one source of truth)', async () => {
   const { patched, levels, fire } = setup({ [GROUP]: CHAT_THINKING_LEVEL });
-  levels[GROUP] = 'low';
+  levels[GROUP] = 'high';
   await fire('agent_turn_prepare', { sessionKey: GROUP });
   assert.equal(patched.length, 1);
   assert.equal(levels[GROUP], CHAT_THINKING_LEVEL);

@@ -10,7 +10,7 @@ import { getSessionEntry, patchSessionEntry } from 'openclaw/plugin-sdk/session-
  * a session at its start and again before each turn whenever it differs, so existing sessions follow a change too
  * (a /think chosen in chat lasts until the next turn). Cron, release-check and other internal sessions keep their own.
  */
-export const CHAT_THINKING_LEVEL = 'medium';
+export const CHAT_THINKING_LEVEL = 'low';
 
 const CHAT_SESSION = /^agent:[^:]+:(?:whatsapp|telegram|kook):|^agent:[^:]+:main$/u;
 
