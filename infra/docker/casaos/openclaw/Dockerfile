@@ -100,6 +100,7 @@ COPY scripts/patch-openclaw-group-image-policy.mjs /tmp/patch-openclaw-group-ima
 COPY scripts/patch-openclaw-heartbeat-silence.mjs /tmp/patch-openclaw-heartbeat-silence.mjs
 COPY scripts/patch-openclaw-memory-core.mjs /tmp/patch-openclaw-memory-core.mjs
 COPY scripts/patch-openclaw-memory-provenance.mjs /tmp/patch-openclaw-memory-provenance.mjs
+COPY scripts/patch-openclaw-memory-corpus.mjs /tmp/patch-openclaw-memory-corpus.mjs
 COPY scripts/openclaw-voice-*.mjs /tmp/
 RUN node /tmp/patch-openclaw-channel-identity.mjs --core-root /app/dist \
     && node /tmp/patch-openclaw-whatsapp-voice-lifecycle.mjs --core-root /app/dist \
@@ -107,6 +108,9 @@ RUN node /tmp/patch-openclaw-channel-identity.mjs --core-root /app/dist \
     && node /tmp/patch-openclaw-heartbeat-silence.mjs --core-root /app/dist --apply \
     && node /tmp/patch-openclaw-memory-core.mjs --core-root /app/dist --apply \
     && node /tmp/patch-openclaw-memory-provenance.mjs --core-root /app/dist --apply \
+    && node /tmp/patch-openclaw-memory-corpus.mjs --core-root /app/dist --apply \
+    && node --check /app/dist/memory-tool-contract-Bockpo-h.mjs \
+    && grep -q 'amadeus-memory-corpus-memory-only-v1' /app/dist/memory-tool-contract-Bockpo-h.mjs \
     && node --check /app/dist/memory-artifact-provenance-DfnnFfMY.mjs \
     && node --check /app/dist/plugin-sdk/memory-core-host-runtime-core.js \
     && node --check /app/dist/worker/worker.mjs \
@@ -118,7 +122,7 @@ RUN node /tmp/patch-openclaw-channel-identity.mjs --core-root /app/dist \
     && test -n "$session_bundle" \
     && node --check "$session_bundle" \
     && for backfill_bundle in /app/dist/session-backfill-*.mjs; do [ -f "$backfill_bundle" ] || continue; node --check "$backfill_bundle"; done \
-    && rm /tmp/patch-openclaw-channel-identity.mjs /tmp/patch-openclaw-whatsapp-voice-lifecycle.mjs /tmp/patch-openclaw-group-image-policy.mjs /tmp/patch-openclaw-heartbeat-silence.mjs /tmp/patch-openclaw-memory-core.mjs /tmp/patch-openclaw-memory-provenance.mjs /tmp/openclaw-voice-*.mjs
+    && rm /tmp/patch-openclaw-channel-identity.mjs /tmp/patch-openclaw-whatsapp-voice-lifecycle.mjs /tmp/patch-openclaw-group-image-policy.mjs /tmp/patch-openclaw-heartbeat-silence.mjs /tmp/patch-openclaw-memory-core.mjs /tmp/patch-openclaw-memory-provenance.mjs /tmp/patch-openclaw-memory-corpus.mjs /tmp/openclaw-voice-*.mjs
 
 COPY integrations/openclaw/delivery-boundary /opt/amadeus/delivery-boundary
 RUN node /opt/amadeus/delivery-boundary/core-completion.mjs --host-root /app --apply \

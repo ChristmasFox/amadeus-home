@@ -172,6 +172,8 @@ export function checkArchitecture(root = REPO_ROOT) {
     join(root, 'plugins/amadeus/src/remember.ts'),
     join(root, 'plugins/amadeus/src/dm-digest.ts'),
     join(root, 'plugins/amadeus/src/owner-dm-preferences.ts'),
+    // Tool-behaviour rule for memory_search/memory_get in chat sessions (no persona or private content).
+    join(root, 'plugins/amadeus/src/memory-corpus.ts'),
   ]);
   for (const path of amadeusSourceFiles) {
     const content = readFileSync(path, 'utf8');

@@ -493,10 +493,12 @@ deploy_stage verify
   node --check scripts/patch-openclaw-heartbeat-silence.mjs
   node --check scripts/patch-openclaw-memory-core.mjs
   node --check scripts/patch-openclaw-memory-provenance.mjs
+  node --check scripts/patch-openclaw-memory-corpus.mjs
   node scripts/test-patch-openclaw-group-image-policy.mjs
   node scripts/test-patch-openclaw-heartbeat-silence.mjs
   node scripts/test-patch-openclaw-memory-core.mjs
   node scripts/test-patch-openclaw-memory-provenance.mjs
+  node scripts/test-patch-openclaw-memory-corpus.mjs
   pnpm test:openclaw-image-route-authority
   node scripts/test-delivery-boundary.mjs
   node scripts/test-patch-openclaw-whatsapp-voice-lifecycle.mjs
@@ -615,6 +617,7 @@ for source in \
   "$VOICE_LIFECYCLE_PATCH_RUNTIME" \
   "$ROOT_DIR/scripts/patch-openclaw-memory-core.mjs" \
   "$ROOT_DIR/scripts/patch-openclaw-memory-provenance.mjs" \
+  "$ROOT_DIR/scripts/patch-openclaw-memory-corpus.mjs" \
   "$ROOT_DIR/scripts/openclaw-voice-markers.mjs" \
   "$ROOT_DIR/scripts/openclaw-voice-lease.mjs" \
   "$ROOT_DIR/integrations/openclaw/workspace-seed/AGENTS.seed.md" \

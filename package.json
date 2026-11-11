@@ -24,7 +24,7 @@
     "accept:voice": "bash scripts/accept-voice.sh",
     "test:delivery": "pnpm --filter @agent/amadeus-plugin exec tsx --test tests/delivery-envelope.test.ts tests/delivery-assets.test.ts tests/delivery-runtime.test.ts tests/image-caption.test.ts tests/image-generation-lifecycle.test.ts tests/image-generation-messages.test.ts tests/voice-reply-prompt.test.ts && node scripts/test-delivery-boundary.mjs",
     "test:openclaw-voice-lifecycle": "node scripts/test-patch-openclaw-whatsapp-voice-lifecycle.mjs",
-    "test:openclaw-memory-provenance": "node scripts/test-patch-openclaw-memory-provenance.mjs",
+    "test:openclaw-memory-provenance": "node scripts/test-patch-openclaw-memory-provenance.mjs && node scripts/test-patch-openclaw-memory-corpus.mjs",
     "test:openclaw-secret-bundle": "bash scripts/test-openclaw-secret-bundle.sh",
     "test:skuld-secret-rewrap": "bash scripts/test-skuld-secret-rewrap.sh",
     "test:migration-readiness": "bash scripts/test-migration-readiness.sh",
