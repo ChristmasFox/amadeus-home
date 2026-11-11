@@ -4,7 +4,7 @@
  *
  * Group tools and global toolsBySender are intersecting filters in 2026.9.4.
  * The non-owner global sender allowlist must remain web-only for WhatsApp DMs.
- * Add only the explicit group capabilities (read-only web/image/PUBG/host status plus the group Steam tools) to that sender layer when
+ * Add only the explicit group capabilities (web/image/PUBG/host status, the group Steam tools and the owner-only tools the amadeus group owner gate refuses to non-owners) to that sender layer when
  * a trusted WhatsApp or Telegram group turn has the matching allowlist. The group layer,
  * global deny, and all unrelated sender restrictions still apply. Patch both
  * the normal ESM module and its independently bundled worker copy.
@@ -42,6 +42,14 @@ export const GROUP_READONLY_CAPABILITY_TOOLS = [
   'steam_library_overlap',
   'steam_friends_status',
   'steam_group_settings',
+  'identity_resolve',
+  'identity_add_alias',
+  'amadeus_remember',
+  'view_image',
+  'amadeus_image_upscale',
+  'amadeus_web_image',
+  'memory_search',
+  'memory_get',
 ];
 
 export function extendSenderPolicyForGroupImage(capabilityProfile) {
@@ -62,7 +70,7 @@ export function extendSenderPolicyForGroupImage(capabilityProfile) {
   const offset = sessionParts[0] === 'agent' ? 2 : 0;
   if (sessionParts[offset] !== channel || sessionParts[offset + 1] !== 'group' ||
       !sessionParts[offset + 2]) return senderPolicy;
-  const groupCapabilityTools = ['image_generate', 'pubg_resolve_players', 'pubg_search_matches', 'pubg_query_stats', 'pubg_compare_stats', 'pubg_get_match', 'pubg_get_review_facts', 'pubg_get_period_review', 'pubg_query_team_damage', 'pubg_prefetch_telemetry', 'pubg_telemetry_sync_report', 'amadeus_macos_host_status', 'amadeus_macos_host_processes', 'steam_link_account', 'steam_unlink', 'steam_set_broadcast', 'steam_get_profile', 'steam_get_playtime', 'steam_get_recent_games', 'steam_get_achievements', 'steam_get_owned_games', 'steam_get_account_info', 'steam_game_info', 'steam_get_game_stats', 'steam_library_overlap', 'steam_friends_status', 'steam_group_settings'];
+  const groupCapabilityTools = ['image_generate', 'pubg_resolve_players', 'pubg_search_matches', 'pubg_query_stats', 'pubg_compare_stats', 'pubg_get_match', 'pubg_get_review_facts', 'pubg_get_period_review', 'pubg_query_team_damage', 'pubg_prefetch_telemetry', 'pubg_telemetry_sync_report', 'amadeus_macos_host_status', 'amadeus_macos_host_processes', 'steam_link_account', 'steam_unlink', 'steam_set_broadcast', 'steam_get_profile', 'steam_get_playtime', 'steam_get_recent_games', 'steam_get_achievements', 'steam_get_owned_games', 'steam_get_account_info', 'steam_game_info', 'steam_get_game_stats', 'steam_library_overlap', 'steam_friends_status', 'steam_group_settings', 'identity_resolve', 'identity_add_alias', 'amadeus_remember', 'view_image', 'amadeus_image_upscale', 'amadeus_web_image', 'memory_search', 'memory_get'];
   if (!Array.isArray(groupPolicy?.allow) || !groupPolicy.allow.some((tool) => groupCapabilityTools.includes(tool))) return senderPolicy;
   // Do not remove any deny: the native matcher still gives deny precedence.
   const groupCapabilities = groupPolicy.allow.filter((tool) => groupCapabilityTools.includes(tool));

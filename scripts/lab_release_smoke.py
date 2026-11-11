@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 """Post-switch Lab release smokes. Generic chat always runs; PUBG and voice smokes run only when the
-deployed diff can affect them (see lab_auto_release_contract.smoke_scope). Nothing is sent to WhatsApp."""
+deployed diff can affect them (see lab_auto_release_contract.smoke_scope). Nothing is sent to WhatsApp.
+
+Chat and PUBG smokes run in a throwaway group-shaped session (no delivery, never a real group), so they get the
+group tool set (~37 tools) instead of the owner's ~104: the first request is about 3.3 万 tokens smaller."""
 from __future__ import annotations
 
 import json
@@ -21,6 +24,11 @@ def run(cmd: list[str], timeout: int) -> subprocess.CompletedProcess:
     return subprocess.run(cmd, capture_output=True, text=True, check=False, timeout=timeout)
 
 
+def smoke_group_session(key: str, label: str) -> str:
+    """A group-shaped session key that never matches a real group id; the agent CLI is run without --deliver."""
+    return f"whatsapp:group:{key}-{label}@g.us"
+
+
 def agent(machine: str, session: str, message: str) -> dict | None:
     try:
         response = run(["orb", "-m", machine, "-u", "root", "docker", "exec", "openclaw", "node", "dist/index.js", "agent",
@@ -37,7 +45,7 @@ def chat_smoke(machine: str, key: str) -> None:
     # and roll back a healthy release. Asking for the token somewhere in the reply passed 5/5 on the live model. (A change to this file is a Lab release change, so a smoke fix redeploys.)
     prompt = "System self-check: put the token LAB_CHAT_OK somewhere in your reply, then add anything you like."
     for attempt in range(1, ATTEMPTS + 1):
-        payload = agent(machine, f"{key}-chat{attempt}", prompt)
+        payload = agent(machine, smoke_group_session(key, f"chat{attempt}"), prompt)
         meta = (payload or {}).get("result", {}).get("meta", {}) if payload else {}
         if payload and payload.get("status") == "ok" and "LAB_CHAT_OK" in str(meta.get("finalAssistantVisibleText", "")):
             print("CHAT_SMOKE=passed")
@@ -54,7 +62,7 @@ def pubg_smoke(machine: str, key: str) -> None:
               'If the tool returns ok or partial, reply LAB_STATS_QUERY_OK. Otherwise reply '
               'LAB_STATS_QUERY_FAILED. Do not include player names, identifiers, or statistics in the reply.')
     for attempt in range(1, ATTEMPTS + 1):
-        payload = agent(machine, key + ("" if attempt == 1 else f"-retry{attempt}"), prompt)
+        payload = agent(machine, smoke_group_session(key, "pubg" if attempt == 1 else f"pubg-retry{attempt}"), prompt)
         if payload and valid_pubg_stats_smoke(payload):
             print("PUBG_STATS_QUERY=passed")
             return

@@ -221,6 +221,7 @@ assert "AUTO_RELEASE_ROLLBACK=passed" in deploy
 assert "restored_health" in deploy and "[[ \"$restored_health\" == healthy ]]" in deploy
 assert "[[ \"$restored_health\" == starting ]] || break" in deploy, "rollback waits out Docker's starting state"
 assert "PUBG_STATS_QUERY=retry" in smoke
+assert "smoke_group_session" in smoke and "whatsapp:group:" in smoke, "chat/PUBG smokes use a throwaway group-shaped session, not the owner full-tool session"
 assert "lab-auto-enable" not in devctl and "lab-auto-disable" not in devctl
 assert "LAB_DEPLOYMENT=AFTER_MAIN_UPDATE ci=not_required candidate=automatic formal=on_approval" in devctl
 assert "Lab candidate and manual promotion commands are retired" in release_cli

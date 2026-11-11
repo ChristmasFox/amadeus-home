@@ -34,15 +34,16 @@ class GroupImagePolicyTest(unittest.TestCase):
         for group in [*channel["groups"].values(), *channel["accounts"]["secondary"]["groups"].values()]:
             self.assertEqual(group["tools"], {"allow": list(prepare.GROUP_IMAGE_TOOL_ALLOWLIST)})
             self.assertIn("steam_friends_status", group["tools"]["allow"])
-            self.assertEqual(group["toolsBySender"], {key: {"allow": list(prepare.GROUP_OWNER_TOOL_ALLOWLIST)} for key in keys})
-            for rule in group["toolsBySender"].values():
-                self.assertNotIn("*", rule["allow"])
-                self.assertLessEqual(len(rule["allow"]), 37)
-                self.assertTrue(set(prepare.GROUP_IMAGE_TOOL_ALLOWLIST) <= set(rule["allow"]))
-                self.assertEqual(len(rule["allow"]), len(set(rule["allow"])), "no duplicates")
-                for forbidden in ("exec", "read", "write", "edit", "apply_patch", "gateway") + tuple(
-                        name for name in rule["allow"] if name.startswith("amadeus_vps_")):
-                    self.assertNotIn(forbidden, rule["allow"])
+            self.assertNotIn("toolsBySender", group, "the group tool set is the same for every sender")
+            allow = group["tools"]["allow"]
+            self.assertNotIn("*", allow)
+            self.assertEqual(len(allow), 37)
+            self.assertEqual(len(allow), len(set(allow)), "no duplicates")
+            self.assertTrue(set(prepare.GROUP_BASE_TOOL_ALLOWLIST) <= set(allow))
+            self.assertTrue(set(prepare.GROUP_OWNER_EXTRA_TOOL_ALLOWLIST) <= set(allow))
+            for forbidden in ("exec", "read", "write", "edit", "apply_patch", "gateway") + tuple(
+                    name for name in allow if name.startswith("amadeus_vps_")):
+                self.assertNotIn(forbidden, allow)
         self.assertFalse(channel["groups"]["*"]["requireMention"])
         self.assertTrue(channel["groups"]["fixture-group"]["requireMention"])
         self.assertEqual(set(channel["groups"]), {"*", "fixture-group"}, "admission keys must not be added or removed")
@@ -50,12 +51,14 @@ class GroupImagePolicyTest(unittest.TestCase):
         prepare.ensure_group_image_policies(channel, keys)
         self.assertEqual(channel, once, "prepare must be idempotent")
 
-    def test_legacy_owner_wildcard_is_replaced_and_global_owner_stays_full(self):
+    def test_legacy_owner_rules_are_removed_and_global_owner_stays_full(self):
         keys = prepare.owner_tool_policy_keys("+15555550123")
-        channel = {"groups": {"*": {"requireMention": False, "tools": {"allow": list(prepare.GROUP_IMAGE_TOOL_ALLOWLIST)},
-                                    "toolsBySender": {key: {"allow": ["*"]} for key in keys}}}}
-        prepare.ensure_group_image_policies(channel, keys)
-        self.assertEqual(channel["groups"]["*"]["toolsBySender"], {key: {"allow": list(prepare.GROUP_OWNER_TOOL_ALLOWLIST)} for key in keys})
+        for legacy in ({"allow": ["*"]}, {"allow": list(prepare.GROUP_OWNER_TOOL_ALLOWLIST)}):
+            channel = {"groups": {"*": {"requireMention": False, "tools": {"allow": list(prepare.GROUP_BASE_TOOL_ALLOWLIST)},
+                                        "toolsBySender": {key: dict(legacy) for key in keys}}}}
+            prepare.ensure_group_image_policies(channel, keys)
+            self.assertNotIn("toolsBySender", channel["groups"]["*"])
+            self.assertEqual(channel["groups"]["*"]["tools"], {"allow": list(prepare.GROUP_IMAGE_TOOL_ALLOWLIST)})
         # Direct chats and the global owner rule are not touched by the group policy: they keep the wildcard.
         config = {"tools": {}, "channels": {"whatsapp": {}, "telegram": {}}}
         owner_rules = {key: {"allow": ["*"]} for key in keys}
@@ -63,6 +66,28 @@ class GroupImagePolicyTest(unittest.TestCase):
         prepare.ensure_group_image_policies(config["channels"]["whatsapp"], keys)
         for key in keys:
             self.assertEqual(config["tools"]["toolsBySender"][key], {"allow": ["*"]})
+
+    def test_heartbeat_is_switched_off_without_touching_other_agent_defaults(self):
+        config = {"agents": {"defaults": {"workspace": "/w", "heartbeat": {"every": "30m", "target": "none"}}}}
+        prepare.ensure_heartbeat_disabled(config)
+        self.assertEqual(config["agents"]["defaults"]["heartbeat"], {"every": "0m", "target": "none"})
+        self.assertEqual(config["agents"]["defaults"]["workspace"], "/w")
+        empty = {}
+        prepare.ensure_heartbeat_disabled(empty)
+        prepare.ensure_heartbeat_disabled(empty)
+        self.assertEqual(empty, {"agents": {"defaults": {"heartbeat": {"every": "0m"}}}})
+        template = json.loads((Path(__file__).resolve().parents[1] / "integrations/openclaw/openclaw.json.example").read_text())
+        self.assertEqual(template["agents"]["defaults"]["heartbeat"]["every"], "0m")
+        for channel in ("whatsapp", "telegram"):
+            self.assertEqual(template["channels"][channel]["groups"]["*"]["tools"]["allow"], list(prepare.GROUP_IMAGE_TOOL_ALLOWLIST))
+            self.assertNotIn("toolsBySender", template["channels"][channel]["groups"]["*"])
+
+    def test_group_owner_gate_refuses_exactly_the_owner_extras(self):
+        """The plugin must refuse, at run time, every tool that became visible to all senders."""
+        import re
+        source = (Path(__file__).resolve().parents[1] / "plugins/amadeus/src/group-owner-gate.ts").read_text()
+        listed = re.search(r"GROUP_OWNER_ONLY_TOOLS: readonly string\[\] = \[(.*?)\];", source, re.S).group(1)
+        self.assertEqual(re.findall(r"'([a-z_]+)'", listed), list(prepare.GROUP_OWNER_EXTRA_TOOL_ALLOWLIST))
 
     def test_telegram_group_has_no_owner_wildcard_or_direct_change(self):
         channel = {"direct": {"*": {"tools": {"deny": ["exec"]}}},
@@ -133,8 +158,8 @@ class GroupImagePolicyTest(unittest.TestCase):
             group = channel["groups"]["*"]
             for name in ("steam_get_achievements", "steam_friends_status", "steam_get_owned_games", "steam_get_account_info", "steam_game_info", "steam_get_game_stats", "steam_library_overlap"):
                 self.assertIn(name, group["tools"]["allow"])
-                self.assertTrue(all(name in rule["allow"] for rule in group["toolsBySender"].values()))
-        self.assertEqual(len(prepare.LEGACY_GROUP_NO_BATCH_TOOL_ALLOWLIST) + 4, len(prepare.GROUP_IMAGE_TOOL_ALLOWLIST))
+            self.assertNotIn("toolsBySender", group)
+        self.assertEqual(len(prepare.LEGACY_GROUP_NO_BATCH_TOOL_ALLOWLIST) + 4, len(prepare.GROUP_BASE_TOOL_ALLOWLIST))
 
     def test_core_patch_passes_every_group_tool_except_the_core_web_pair(self):
         """The pinned core patch lets only the tools it lists through the global sender layer; a group

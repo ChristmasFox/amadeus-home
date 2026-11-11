@@ -49,16 +49,17 @@ GROUP_STEAM_TOOL_ALLOWLIST = [
     "steam_friends_status",
     "steam_group_settings",
 ]
-GROUP_IMAGE_TOOL_ALLOWLIST = [
+# The set non-owners had in groups before the group tool set became sender-independent (still accepted as a legacy value).
+GROUP_BASE_TOOL_ALLOWLIST = [
     *NON_OWNER_TOOL_ALLOWLIST,
     "image_generate",
     *GROUP_PUBG_TOOL_ALLOWLIST,
     *GROUP_MAC_HOST_TOOL_ALLOWLIST,
     *GROUP_STEAM_TOOL_ALLOWLIST,
 ]
-# The owner's tool set inside groups: the group allowlist plus a few tools the owner actually uses there. A wildcard
-# gave ~99 tools, which correlated with truncated one-character replies, so it is replaced by this explicit list.
-# Direct chats are unaffected (global tools.toolsBySender keeps the owner wildcard).
+# Tools the owner used in groups on top of the base set. They are owner-only at execution time (the amadeus plugin's
+# group owner gate refuses any other sender), but their definitions are now part of the group tool set for everyone,
+# so the tool list, its order and its schemas no longer depend on who sent the message.
 GROUP_OWNER_EXTRA_TOOL_ALLOWLIST = [
     "identity_resolve",
     "identity_add_alias",
@@ -69,7 +70,10 @@ GROUP_OWNER_EXTRA_TOOL_ALLOWLIST = [
     "memory_search",
     "memory_get",
 ]
-GROUP_OWNER_TOOL_ALLOWLIST = [*GROUP_IMAGE_TOOL_ALLOWLIST, *GROUP_OWNER_EXTRA_TOOL_ALLOWLIST]
+# The one group tool set: the same for every sender (group.tools.allow); group.toolsBySender is no longer used.
+GROUP_IMAGE_TOOL_ALLOWLIST = [*GROUP_BASE_TOOL_ALLOWLIST, *GROUP_OWNER_EXTRA_TOOL_ALLOWLIST]
+# What the per-sender owner rule used to hold; only recognised so prepare can remove it.
+GROUP_OWNER_TOOL_ALLOWLIST = list(GROUP_IMAGE_TOOL_ALLOWLIST)
 LEGACY_GROUP_IMAGE_TOOL_ALLOWLIST = [*NON_OWNER_TOOL_ALLOWLIST, "image_generate"]
 LEGACY_GROUP_PUBG_TOOL_ALLOWLIST = [
     *NON_OWNER_TOOL_ALLOWLIST,
@@ -92,13 +96,13 @@ def _without(names: list[str], *removed: str) -> list[str]:
     return [name for name in names if name not in removed]
 
 
-LEGACY_GROUP_NO_BATCH_TOOL_ALLOWLIST = _without(GROUP_IMAGE_TOOL_ALLOWLIST, *_STEAM_BATCH)
+LEGACY_GROUP_NO_BATCH_TOOL_ALLOWLIST = _without(GROUP_BASE_TOOL_ALLOWLIST, *_STEAM_BATCH)
 LEGACY_GROUP_OWNER_NO_BATCH_TOOL_ALLOWLIST = _without(GROUP_OWNER_TOOL_ALLOWLIST, *_STEAM_BATCH)
-LEGACY_GROUP_NO_OWNED_TOOL_ALLOWLIST = _without(GROUP_IMAGE_TOOL_ALLOWLIST, "steam_get_owned_games", *_STEAM_BATCH)
+LEGACY_GROUP_NO_OWNED_TOOL_ALLOWLIST = _without(GROUP_BASE_TOOL_ALLOWLIST, "steam_get_owned_games", *_STEAM_BATCH)
 LEGACY_GROUP_OWNER_NO_OWNED_TOOL_ALLOWLIST = _without(GROUP_OWNER_TOOL_ALLOWLIST, "steam_get_owned_games", *_STEAM_BATCH)
-LEGACY_GROUP_NO_FRIENDS_TOOL_ALLOWLIST = _without(GROUP_IMAGE_TOOL_ALLOWLIST, "steam_get_owned_games", "steam_friends_status", *_STEAM_BATCH)
+LEGACY_GROUP_NO_FRIENDS_TOOL_ALLOWLIST = _without(GROUP_BASE_TOOL_ALLOWLIST, "steam_get_owned_games", "steam_friends_status", *_STEAM_BATCH)
 LEGACY_GROUP_OWNER_NO_FRIENDS_TOOL_ALLOWLIST = _without(GROUP_OWNER_TOOL_ALLOWLIST, "steam_get_owned_games", "steam_friends_status", *_STEAM_BATCH)
-LEGACY_GROUP_NO_ACHIEVEMENTS_TOOL_ALLOWLIST = _without(GROUP_IMAGE_TOOL_ALLOWLIST, "steam_get_owned_games", "steam_friends_status", "steam_get_achievements", *_STEAM_BATCH)
+LEGACY_GROUP_NO_ACHIEVEMENTS_TOOL_ALLOWLIST = _without(GROUP_BASE_TOOL_ALLOWLIST, "steam_get_owned_games", "steam_friends_status", "steam_get_achievements", *_STEAM_BATCH)
 LEGACY_GROUP_OWNER_NO_ACHIEVEMENTS_TOOL_ALLOWLIST = _without(GROUP_OWNER_TOOL_ALLOWLIST, "steam_get_owned_games", "steam_friends_status", "steam_get_achievements", *_STEAM_BATCH)
 
 
@@ -305,8 +309,22 @@ def owner_tool_policy_keys(phone: str) -> list[str]:
     ]
 
 
+def ensure_heartbeat_disabled(config: dict) -> None:
+    """Lab runs no heartbeat: it polled the shared main session every 30 minutes with nothing to check (no HEARTBEAT.md),
+    about 14% of all input tokens at a ~1% cache hit. A zero interval is the documented way to turn it off; the
+    independent cron jobs (PUBG, Steam, Dreaming, VPS/mac/market reports, skill review) are separate schedules."""
+    defaults = config.setdefault("agents", {}).setdefault("defaults", {})
+    heartbeat = defaults.setdefault("heartbeat", {})
+    if not isinstance(heartbeat, dict):
+        raise SystemExit("agents.defaults.heartbeat must be an object")
+    heartbeat["every"] = "0m"
+
+
 def ensure_group_image_policies(channel: dict, owner_keys: list[str] | None = None) -> None:
-    """Only the admitted groups get the scoped read-only capability set; preserve their admission rules.
+    """Only the admitted groups get the scoped capability set; preserve their admission rules.
+
+    Every sender in a group sees the same tool definitions (group.tools.allow). Owner-only tools in that set are
+    refused for other senders when they run (plugins/amadeus group-owner-gate), never by a different tool list.
 
     The pinned OpenClaw sender allowlist remains read-only web for non-owner
     direct messages. A version-pinned core patch grants only the capabilities
@@ -337,7 +355,8 @@ def ensure_group_image_policies(channel: dict, owner_keys: list[str] | None = No
             if not isinstance(group, dict):
                 raise SystemExit("group config must be an object")
             old_tools = group.get("tools")
-            legacy_tools = ({"allow": LEGACY_GROUP_IMAGE_TOOL_ALLOWLIST},
+            legacy_tools = ({"allow": GROUP_BASE_TOOL_ALLOWLIST},
+                            {"allow": LEGACY_GROUP_IMAGE_TOOL_ALLOWLIST},
                             {"allow": LEGACY_GROUP_PUBG_TOOL_ALLOWLIST},
                             {"allow": LEGACY_GROUP_IMAGE_PUBG_MAC_TOOL_ALLOWLIST},
                             {"allow": LEGACY_GROUP_NO_ACHIEVEMENTS_TOOL_ALLOWLIST},
@@ -350,8 +369,8 @@ def ensure_group_image_policies(channel: dict, owner_keys: list[str] | None = No
             if old_senders is not None and old_senders not in (wanted_owner, legacy_owner, legacy_owner_no_achievements, legacy_owner_no_friends, legacy_owner_no_owned, legacy_owner_no_batch):
                 raise SystemExit("unexpected group sender policy; refuse to replace unrelated restrictions")
             group["tools"] = {"allow": list(GROUP_IMAGE_TOOL_ALLOWLIST)}
-            if owner_keys:
-                group["toolsBySender"] = {key: {"allow": list(GROUP_OWNER_TOOL_ALLOWLIST)} for key in owner_keys}
+            # One tool set for every sender: the recognised per-sender owner rule is removed, not rewritten.
+            group.pop("toolsBySender", None)
 
 def main() -> None:
     if len(sys.argv) != 9:
@@ -491,6 +510,7 @@ def main() -> None:
                 account["allowFrom"] = ["*"]
                 account["configWrites"] = False
     ensure_group_image_policies(whatsapp, owner_tool_policy_keys(phone))
+    ensure_heartbeat_disabled(config)
     ensure_group_image_policies(config.setdefault("channels", {}).setdefault("telegram", {}))
 
     temporary = config_dir / "openclaw.json.codex-tmp"
