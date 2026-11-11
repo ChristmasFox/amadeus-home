@@ -3,6 +3,9 @@ tunnel: REPLACE_WITH_TUNNEL_ID
 credentials-file: /DATA/AppData/cloudflared/credentials.json
 
 ingress:
+  # 9Router：只连内部地址，整个主机名必须由 Cloudflare Access 保护（见 README）。
+  - hostname: router.example.invalid
+    service: http://9router:20128
   - hostname: claw.example.invalid
     service: http://openclaw:18789
   - hostname: radar.example.invalid

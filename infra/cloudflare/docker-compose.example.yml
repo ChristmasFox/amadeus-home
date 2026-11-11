@@ -8,3 +8,11 @@ services:
       TUNNEL_ORIGIN_REQUEST_NO_TLS_VERIFY: ${CLOUDFLARE_TUNNEL_NO_TLS_VERIFY:-false}
     volumes:
       - ${CLOUDFLARE_CONFIG_DIR:-/DATA/AppData/cloudflared}:/etc/cloudflared:ro
+    networks:
+      - upstream
+
+networks:
+  # 与被代理服务共用的内部网络；例如 9Router 所在的 9router_default。
+  upstream:
+    external: true
+    name: ${CLOUDFLARE_UPSTREAM_NETWORK:-9router_default}
