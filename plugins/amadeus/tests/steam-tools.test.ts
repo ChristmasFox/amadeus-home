@@ -154,6 +154,10 @@ test('friends status: the owner in a direct chat sees who is playing; filters, n
   assert.equal(all.friends[2]!.lastSeenAt, '2026-11-01T00:00:00.000Z');
   const named = await steamFriendsStatus(deps, ownerDm(), { name: 'friend1', filter: 'all' }) as { friends: Array<{ name: string }> };
   assert.deepEqual(named.friends.map((entry) => entry.name), ['Friend1']);
+  const miss = await steamFriendsStatus(deps, ownerDm(), { name: 'zzz', filter: 'all' }) as { matched: number; friendCount: number; note?: string };
+  assert.deepEqual([miss.matched, miss.friendCount], [0, 4]);
+  assert.match(miss.note ?? '', /去掉 name/);
+  assert.equal((all as { note?: string }).note, undefined);
 });
 
 test('friends in a group: the asker by default, capped shorter than in a direct chat, nobody without a trusted sender', async () => {

@@ -609,6 +609,7 @@ export async function steamFriendsStatus(deps: SteamToolDependencies, caller: St
       // Friends with a hidden profile look offline whatever they are doing, so they are counted, never listed as offline.
       hiddenOrOfflineUnknown: hidden,
       matched: matching.length,
+      ...(wanted && !matching.length && entry.friends.length ? { note: 'name 只按好友昵称匹配，没有命中不代表没有好友；要列出全部好友请去掉 name，用 filter=all 重查，不要逐个字母试。' } : {}),
       friends: matching.slice(0, limit).map((friend) => ({
         name: friend.name,
         steamId: friend.steamId,
