@@ -558,6 +558,7 @@ export async function steamFriendsStatus(deps: SteamToolDependencies, caller: St
   if (!('links' in target)) return target.status === 'not_linked' && (params.person ?? { reference: 'self' }).reference === 'self'
     ? { status: 'not_linked', reason: 'link_your_own_steam_account_first' } : target;
   const own = target.links;
+  const accountIds = own.map((link) => link.steamId);
   const cap = caller.groupId ? FRIENDS_LIMIT_GROUP : FRIENDS_LIMIT_DIRECT;
   return guarded(deps, async () => {
     const now = (deps.now ?? Date.now)();
@@ -582,8 +583,16 @@ export async function steamFriendsStatus(deps: SteamToolDependencies, caller: St
       entry = { at: now, friends: ids.flatMap((id) => { const summary = summaries.get(id); return summary ? [summary] : []; }), truncated: all.length > FRIENDS_MAX, accountCount: own.length, accountsHidden: hidden };
       cache.set(cacheKey, entry);
     }
-    const filter = params.filter ?? 'playing';
-    const wanted = params.name?.trim().toLowerCase();
+    let wanted = params.name?.trim().toLowerCase() || undefined;
+    let nameIgnored: 'too_short' | 'own_nickname' | 'no_match' | undefined;
+    // A one-character name is a probe, not a nickname; a name equal to the asked account's own nickname is that person, not a friend.
+    if (wanted && [...wanted].length < 2) { nameIgnored = 'too_short'; wanted = undefined; }
+    if (wanted) {
+      const own = await deps.client.playerSummaries(accountIds);
+      if ([...own.values()].some((summary) => summary.name.trim().toLowerCase() === wanted)) { nameIgnored = 'own_nickname'; wanted = undefined; }
+    }
+    if (wanted && !entry.friends.some((friend) => friend.name.toLowerCase().includes(wanted!))) { nameIgnored = 'no_match'; wanted = undefined; }
+    const filter = nameIgnored ? 'all' : params.filter ?? 'playing';
     const rank = (friend: PlayerSummary): number => (friend.gameId ? 0 : friend.personaState && friend.personaState !== 0 ? 1 : 2);
     const matching = entry.friends
       .filter((friend) => friend.profilePublic || friend.personaState !== 0 || friend.gameId)
@@ -609,7 +618,7 @@ export async function steamFriendsStatus(deps: SteamToolDependencies, caller: St
       // Friends with a hidden profile look offline whatever they are doing, so they are counted, never listed as offline.
       hiddenOrOfflineUnknown: hidden,
       matched: matching.length,
-      ...(wanted && !matching.length && entry.friends.length ? { note: 'name 只按好友昵称匹配，没有命中不代表没有好友；要列出全部好友请去掉 name，用 filter=all 重查，不要逐个字母试。' } : {}),
+      ...(nameIgnored ? { note: '这次传的 name 无效（太短、是被查者自己的昵称或没有好友叫这个名字），已忽略，下面是完整结果；不要再用 name 重查。', nameIgnored } : {}),
       friends: matching.slice(0, limit).map((friend) => ({
         name: friend.name,
         steamId: friend.steamId,

@@ -154,10 +154,17 @@ test('friends status: the owner in a direct chat sees who is playing; filters, n
   assert.equal(all.friends[2]!.lastSeenAt, '2026-11-01T00:00:00.000Z');
   const named = await steamFriendsStatus(deps, ownerDm(), { name: 'friend1', filter: 'all' }) as { friends: Array<{ name: string }> };
   assert.deepEqual(named.friends.map((entry) => entry.name), ['Friend1']);
-  const miss = await steamFriendsStatus(deps, ownerDm(), { name: 'zzz', filter: 'all' }) as { matched: number; friendCount: number; note?: string };
-  assert.deepEqual([miss.matched, miss.friendCount], [0, 4]);
-  assert.match(miss.note ?? '', /去掉 name/);
-  assert.equal((all as { note?: string }).note, undefined);
+  const miss = await steamFriendsStatus(deps, ownerDm(), { name: 'zzz', filter: 'playing' }) as { matched: number; friendCount: number; nameIgnored?: string; note?: string; friends: Array<{ name: string }> };
+  assert.deepEqual([miss.matched, miss.friendCount, miss.nameIgnored], [3, 4, 'no_match']);
+  assert.deepEqual(miss.friends.map((entry) => entry.name), ['Friend1', 'Friend2', 'Friend3']);
+  assert.match(miss.note ?? '', /不要再用 name/);
+  const probe = await steamFriendsStatus(deps, ownerDm(), { name: 'a', filter: 'all' }) as { matched: number; nameIgnored?: string };
+  assert.deepEqual([probe.matched, probe.nameIgnored], [3, 'too_short']);
+  assert.equal((all as { nameIgnored?: string }).nameIgnored, undefined);
+  const real = deps.client.playerSummaries;
+  (deps.client as unknown as Record<string, unknown>).playerSummaries = async (ids: string[]) => ids.includes(ID) ? new Map([[ID, summary(ID, { name: 'Owner Nick' })]]) : real.call(deps.client, ids);
+  const own = await steamFriendsStatus(deps, ownerDm(), { name: 'Owner Nick', filter: 'playing' }) as { matched: number; nameIgnored?: string };
+  assert.deepEqual([own.matched, own.nameIgnored], [3, 'own_nickname']);
 });
 
 test('friends in a group: the asker by default, capped shorter than in a direct chat, nobody without a trusted sender', async () => {
