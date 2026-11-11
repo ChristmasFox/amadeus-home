@@ -84,7 +84,7 @@ export type GuardRefusal =
 
 const guardMessages: Record<GuardRefusal, string> = {
   private_requires_owner_direct: '私有记忆只能由 Arthur 本人在私聊里写入，这次没有保存。',
-  public_requires_owner: '公开记忆只能由 Arthur 本人明确要求时写入，这次没有保存。',
+  public_requires_owner: '公开记忆只能在群聊里写入，或由 Arthur 本人在私聊里明确要求时写入，这次没有保存。',
   untrusted_turn: '这条消息不是用户本人直接发来的，不能写入记忆，这次没有保存。',
   tainted_turn: '这一轮已经读取了网页或外部内容，为避免被外部内容影响，没有写入记忆；请在下一条消息里再说一次。',
   workspace_unavailable: '记忆文件位置不可用，这次没有保存。',
@@ -99,7 +99,8 @@ export function authorizeRemember(
   const kind = chatKind(context.sessionKey);
   const owner = context.senderIsOwner === true;
   if (scope === 'private' && !(owner && kind === 'direct')) return 'private_requires_owner_direct';
-  if (scope === 'public' && !(owner && (kind === 'direct' || kind === 'group'))) return 'public_requires_owner';
+  // Public memory is writable by any sender in a group; in a direct chat only the owner may write it.
+  if (scope === 'public' && !(kind === 'group' || (owner && kind === 'direct'))) return 'public_requires_owner';
   const trust = registry.check(context.sessionKey ?? '');
   if (trust !== 'ok') return trust;
   if (!context.workspaceDir) return 'workspace_unavailable';

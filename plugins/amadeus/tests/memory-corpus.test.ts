@@ -53,5 +53,6 @@ test('chat sessions, groups included, are told memory recall works there and emp
   assert.match(MEMORY_RECALL_RULE, /群聊和私聊一样/u);
   assert.match(MEMORY_RECALL_RULE, /换关键词/u);
   assert.match(MEMORY_RECALL_RULE, /corpus=memory/u);
+  assert.doesNotMatch(MEMORY_RECALL_RULE, /owner/iu, 'no owner-only wording');
   assert.doesNotMatch(MEMORY_RECALL_RULE, /Arthur|Kurisu|MEMORY\.md|SOUL/u, 'neutral tool-behaviour wording only');
 });

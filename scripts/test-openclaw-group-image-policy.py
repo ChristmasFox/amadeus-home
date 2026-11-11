@@ -40,7 +40,7 @@ class GroupImagePolicyTest(unittest.TestCase):
             self.assertEqual(len(allow), 37)
             self.assertEqual(len(allow), len(set(allow)), "no duplicates")
             self.assertTrue(set(prepare.GROUP_BASE_TOOL_ALLOWLIST) <= set(allow))
-            self.assertTrue(set(prepare.GROUP_OWNER_EXTRA_TOOL_ALLOWLIST) <= set(allow))
+            self.assertTrue(set(prepare.GROUP_EXTRA_TOOL_ALLOWLIST) <= set(allow))
             for forbidden in ("exec", "read", "write", "edit", "apply_patch", "gateway") + tuple(
                     name for name in allow if name.startswith("amadeus_vps_")):
                 self.assertNotIn(forbidden, allow)
@@ -82,12 +82,12 @@ class GroupImagePolicyTest(unittest.TestCase):
             self.assertEqual(template["channels"][channel]["groups"]["*"]["tools"]["allow"], list(prepare.GROUP_IMAGE_TOOL_ALLOWLIST))
             self.assertNotIn("toolsBySender", template["channels"][channel]["groups"]["*"])
 
-    def test_group_owner_gate_refuses_exactly_the_owner_extras(self):
-        """The plugin must refuse, at run time, every tool that became visible to all senders."""
-        import re
-        source = (Path(__file__).resolve().parents[1] / "plugins/amadeus/src/group-owner-gate.ts").read_text()
-        listed = re.search(r"GROUP_OWNER_ONLY_TOOLS: readonly string\[\] = \[(.*?)\];", source, re.S).group(1)
-        self.assertEqual(re.findall(r"'([a-z_]+)'", listed), list(prepare.GROUP_OWNER_EXTRA_TOOL_ALLOWLIST))
+    def test_formerly_owner_only_tools_stay_in_the_one_group_tool_set(self):
+        """Opening these tools to every sender must not drop them from the shared allowlist (cache-stable set)."""
+        expected = ["identity_resolve", "identity_add_alias", "amadeus_remember", "view_image",
+                    "amadeus_image_upscale", "amadeus_web_image", "memory_search", "memory_get"]
+        self.assertEqual(list(prepare.GROUP_EXTRA_TOOL_ALLOWLIST), expected)
+        self.assertTrue(set(expected) <= set(prepare.GROUP_IMAGE_TOOL_ALLOWLIST))
 
     def test_telegram_group_has_no_owner_wildcard_or_direct_change(self):
         channel = {"direct": {"*": {"tools": {"deny": ["exec"]}}},

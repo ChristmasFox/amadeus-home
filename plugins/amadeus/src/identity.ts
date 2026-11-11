@@ -7,6 +7,7 @@ import {
   type TrustedChannelIdentity,
 } from '@agent/identity';
 import type { AmadeusConfig } from './config.js';
+import { chatKind } from './remember.js';
 
 export type IdentityResolveReference = 'self' | 'alias' | 'person' | 'mention' | 'reply_sender';
 export type IdentityMutationTarget = 'current_sender' | 'mention' | 'reply_sender';
@@ -313,7 +314,8 @@ export async function identityBindChannel(config: AmadeusConfig, input: Identity
 }
 
 export async function identityAddAlias(config: AmadeusConfig, input: IdentityAddAliasInput, context: OpenClawPluginToolContext): Promise<unknown> {
-  if (input.source === 'confirmed') requireOwner(context);
+  // Aliases are a group-visible convenience: anyone in a group may add one; outside groups a confirmed alias stays owner-only.
+  if (input.source === 'confirmed' && chatKind(context.sessionKey) !== 'group') requireOwner(context);
   if (input.source === 'observed' && input.scope !== 'group') throw new Error('observed_alias_requires_group_scope');
   const current = baseContext(context);
   const alias = identityStore(config).addAlias({

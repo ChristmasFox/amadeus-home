@@ -21,8 +21,9 @@ function config(databasePath: string, presetsFile: string): AmadeusConfig {
   return { identityDatabasePath: databasePath, identityPresetsFile: presetsFile } as AmadeusConfig;
 }
 
-function context(senderIsOwner = true): OpenClawPluginToolContext {
+function context(senderIsOwner = true, sessionKey?: string): OpenClawPluginToolContext {
   return {
+    ...(sessionKey ? { sessionKey } : {}),
     messageChannel: 'whatsapp',
     agentAccountId: 'secondary',
     nativeChannelId: 'group-1@g.us',
@@ -84,6 +85,24 @@ test('identity mutations require owner confirmation', async () => {
   await writeFile(presetsFile, JSON.stringify({ persons: [{ personId: 'wang', displayName: '小王' }] }));
   try {
     await assert.rejects(identityBindChannel(config(databasePath, presetsFile), { personId: 'wang' }, context(false)), /owner_confirmation/u);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test('any group sender may add an alias; outside groups a confirmed alias stays owner-only', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'amadeus-identity-alias-'));
+  const databasePath = join(directory, 'identity.sqlite');
+  const presetsFile = join(directory, 'presets.json');
+  await writeFile(presetsFile, JSON.stringify({ persons: [{ personId: 'wang', displayName: '小王' }] }));
+  const group = 'agent:main:whatsapp:secondary:group:group-1@g.us';
+  const direct = 'agent:main:whatsapp:secondary:direct:friend-1';
+  const input = { personId: 'wang', alias: '狗王', scope: 'group' as const, source: 'confirmed' as const };
+  try {
+    const added = await identityAddAlias(config(databasePath, presetsFile), input, context(false, group)) as { status: string };
+    assert.equal(added.status, 'confirmed');
+    await assert.rejects(identityAddAlias(config(databasePath, presetsFile), input, context(false, direct)), /owner_confirmation/u);
+    await assert.rejects(identityBindChannel(config(databasePath, presetsFile), { personId: 'wang' }, context(false, group)), /owner_confirmation/u);
   } finally {
     await rm(directory, { recursive: true, force: true });
   }

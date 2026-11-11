@@ -79,7 +79,9 @@ test('group refusal matrix', async () => {
     const registryDm = trusted(DM);
     assert.equal(authorizeRemember(ctx(dir, GROUP, true), 'private', registryGroup), 'private_requires_owner_direct');
     assert.equal(authorizeRemember(ctx(dir, GROUP, false), 'private', registryGroup), 'private_requires_owner_direct');
-    assert.equal(authorizeRemember(ctx(dir, GROUP, false), 'public', registryGroup), 'public_requires_owner');
+    assert.equal(authorizeRemember(ctx(dir, GROUP, false), 'public', registryGroup), undefined, 'any group sender may write public memory');
+    assert.equal(authorizeRemember(ctx(dir, DM, false), 'public', registryDm), 'public_requires_owner');
+    assert.equal(authorizeRemember(ctx(dir, DM, true), 'public', registryDm), undefined);
     assert.equal(authorizeRemember(ctx(dir, GROUP, true), 'public', registryGroup), undefined);
     assert.equal(authorizeRemember(ctx(dir, DM, false), 'private', registryDm), 'private_requires_owner_direct');
     assert.equal(authorizeRemember(ctx(dir, DM, true), 'private', registryDm), undefined);

@@ -71,7 +71,7 @@ for channel in ("whatsapp", "telegram"):
         "steam_link_account", "steam_unlink", "steam_set_broadcast",
         "steam_get_profile", "steam_get_playtime", "steam_get_recent_games",
         "steam_get_achievements", "steam_get_owned_games", "steam_get_account_info", "steam_game_info", "steam_get_game_stats", "steam_library_overlap", "steam_friends_status", "steam_group_settings",
-        # Owner-only at run time (amadeus group owner gate); defined for every sender so the group tool set is one list.
+        # Formerly owner-only; now open to every group sender, in the one group tool set.
         "identity_resolve", "identity_add_alias", "amadeus_remember", "view_image",
         "amadeus_image_upscale", "amadeus_web_image", "memory_search", "memory_get",
     ]}

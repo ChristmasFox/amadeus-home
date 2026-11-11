@@ -53,7 +53,6 @@ export const MEMORY_RECALL_RULE = [
   '【记忆查询】',
   '群聊和私聊一样，可以正常使用 memory_search / memory_get 查记忆，不要因为在群里就让用户改到私聊再问。',
   '搜索结果为空，或返回 corpus 警告 / not-registered 时，不代表没有记忆：换关键词，或改用 corpus=memory（或省略 corpus）再查一次，再下结论。',
-  '如果工具明确说明仅限 owner 使用，就不要重试，直接说明这一点并继续用已有信息回答。',
 ].join('\n');
 
 export function registerMemoryRecallRule(api: OpenClawPluginApi): void {

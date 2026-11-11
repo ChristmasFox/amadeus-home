@@ -4,7 +4,7 @@
  *
  * Group tools and global toolsBySender are intersecting filters in 2026.9.4.
  * The non-owner global sender allowlist must remain web-only for WhatsApp DMs.
- * Add only the explicit group capabilities (web/image/PUBG/host status, the group Steam tools and the owner-only tools the amadeus group owner gate refuses to non-owners) to that sender layer when
+ * Add only the explicit group capabilities (web/image/PUBG/host status, the group Steam tools and the memory/identity/image tools every group sender may use) to that sender layer when
  * a trusted WhatsApp or Telegram group turn has the matching allowlist. The group layer,
  * global deny, and all unrelated sender restrictions still apply. Patch both
  * the normal ESM module and its independently bundled worker copy.

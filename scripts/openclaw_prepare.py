@@ -57,10 +57,9 @@ GROUP_BASE_TOOL_ALLOWLIST = [
     *GROUP_MAC_HOST_TOOL_ALLOWLIST,
     *GROUP_STEAM_TOOL_ALLOWLIST,
 ]
-# Tools the owner used in groups on top of the base set. They are owner-only at execution time (the amadeus plugin's
-# group owner gate refuses any other sender), but their definitions are now part of the group tool set for everyone,
-# so the tool list, its order and its schemas no longer depend on who sent the message.
-GROUP_OWNER_EXTRA_TOOL_ALLOWLIST = [
+# Tools the owner alone used in groups on top of the base set. They are now open to every sender and part of the one
+# group tool set, so the tool list, its order and its schemas never depend on who sent the message.
+GROUP_EXTRA_TOOL_ALLOWLIST = [
     "identity_resolve",
     "identity_add_alias",
     "amadeus_remember",
@@ -71,7 +70,7 @@ GROUP_OWNER_EXTRA_TOOL_ALLOWLIST = [
     "memory_get",
 ]
 # The one group tool set: the same for every sender (group.tools.allow); group.toolsBySender is no longer used.
-GROUP_IMAGE_TOOL_ALLOWLIST = [*GROUP_BASE_TOOL_ALLOWLIST, *GROUP_OWNER_EXTRA_TOOL_ALLOWLIST]
+GROUP_IMAGE_TOOL_ALLOWLIST = [*GROUP_BASE_TOOL_ALLOWLIST, *GROUP_EXTRA_TOOL_ALLOWLIST]
 # What the per-sender owner rule used to hold; only recognised so prepare can remove it.
 GROUP_OWNER_TOOL_ALLOWLIST = list(GROUP_IMAGE_TOOL_ALLOWLIST)
 LEGACY_GROUP_IMAGE_TOOL_ALLOWLIST = [*NON_OWNER_TOOL_ALLOWLIST, "image_generate"]
@@ -323,8 +322,7 @@ def ensure_heartbeat_disabled(config: dict) -> None:
 def ensure_group_image_policies(channel: dict, owner_keys: list[str] | None = None) -> None:
     """Only the admitted groups get the scoped capability set; preserve their admission rules.
 
-    Every sender in a group sees the same tool definitions (group.tools.allow). Owner-only tools in that set are
-    refused for other senders when they run (plugins/amadeus group-owner-gate), never by a different tool list.
+    Every sender in a group sees and may run the same tools (group.tools.allow); there is no per-sender tool list.
 
     The pinned OpenClaw sender allowlist remains read-only web for non-owner
     direct messages. A version-pinned core patch grants only the capabilities
