@@ -1302,8 +1302,8 @@ for account in whatsapp.get('accounts', {}).values():
         raise SystemExit('WhatsApp account DM policy is not open for all senders')
 if config.get('agents', {}).get('defaults', {}).get('mediaModels', {}).get('image', {}).get('primary') != 'openai/amadeus-image':
     raise SystemExit('OpenClaw must use the logical amadeus-image capability')
-expected_group_tools = ['web_search', 'web_fetch', 'image_generate', 'pubg_resolve_players', 'pubg_search_matches', 'pubg_query_stats', 'pubg_compare_stats', 'pubg_get_match', 'pubg_get_review_facts', 'pubg_get_period_review', 'pubg_query_team_damage', 'pubg_prefetch_telemetry', 'pubg_telemetry_sync_report', 'amadeus_macos_host_status', 'amadeus_macos_host_processes', 'steam_link_account', 'steam_unlink', 'steam_set_broadcast', 'steam_get_profile', 'steam_get_playtime', 'steam_get_recent_games', 'steam_get_achievements', 'steam_get_owned_games', 'steam_get_account_info', 'steam_game_info', 'steam_get_game_stats', 'steam_library_overlap', 'steam_friends_status', 'steam_group_settings']
-expected_owner_group_tools = ['web_search', 'web_fetch', 'image_generate', 'pubg_resolve_players', 'pubg_search_matches', 'pubg_query_stats', 'pubg_compare_stats', 'pubg_get_match', 'pubg_get_review_facts', 'pubg_get_period_review', 'pubg_query_team_damage', 'pubg_prefetch_telemetry', 'pubg_telemetry_sync_report', 'amadeus_macos_host_status', 'amadeus_macos_host_processes', 'steam_link_account', 'steam_unlink', 'steam_set_broadcast', 'steam_get_profile', 'steam_get_playtime', 'steam_get_recent_games', 'steam_get_achievements', 'steam_get_owned_games', 'steam_get_account_info', 'steam_game_info', 'steam_get_game_stats', 'steam_library_overlap', 'steam_friends_status', 'steam_group_settings', 'identity_resolve', 'identity_add_alias', 'amadeus_remember', 'view_image', 'amadeus_image_upscale', 'amadeus_web_image', 'memory_search', 'memory_get']
+expected_group_tools = ['web_search', 'web_fetch', 'image_generate', 'pubg_resolve_players', 'pubg_search_matches', 'pubg_query_stats', 'pubg_compare_stats', 'pubg_get_match', 'pubg_get_review_facts', 'pubg_get_period_review', 'pubg_query_team_damage', 'pubg_prefetch_telemetry', 'pubg_telemetry_sync_report', 'amadeus_macos_host_status', 'amadeus_macos_host_processes', 'steam_link_account', 'steam_unlink', 'steam_set_broadcast', 'steam_get_profile', 'steam_get_playtime', 'steam_get_recent_games', 'steam_get_achievements', 'steam_get_owned_games', 'steam_get_account_info', 'steam_game_info', 'steam_get_game_stats', 'steam_library_overlap', 'steam_friends_status', 'steam_group_settings', 'identity_resolve', 'identity_add_alias', 'amadeus_remember', 'view_image', 'amadeus_image_upscale', 'amadeus_web_image', 'memory_search', 'memory_get']
+# One group tool set for every sender: no per-sender group rule may exist (owner-only tools are refused at run time).
 for channel in ('whatsapp', 'telegram'):
     channel_config = config.get('channels', {}).get(channel, {})
     scopes = [channel_config.get('groups', {})]
@@ -1313,11 +1313,11 @@ for channel in ('whatsapp', 'telegram'):
             raise SystemExit('channel group map must be an object')
         for group in groups.values():
             if not isinstance(group, dict) or group.get('tools') != {'allow': expected_group_tools}:
-                raise SystemExit('group capability policy must expose web/image plus the full read-only PUBG tool family')
-            if channel == 'whatsapp' and group.get('toolsBySender', {}).get('e164:' + owner_phone, {}).get('allow') != expected_owner_group_tools:
-                raise SystemExit('WhatsApp owner group tool profile must stay the scoped 30-tool set')
-            if channel == 'telegram' and group.get('toolsBySender'):
-                raise SystemExit('Telegram group sender policy unexpectedly widened')
+                raise SystemExit('group capability policy must be the single sender-independent group tool set')
+            if group.get('toolsBySender'):
+                raise SystemExit('group tool set must not depend on the sender (group toolsBySender must be absent)')
+if config.get('agents', {}).get('defaults', {}).get('heartbeat', {}).get('every') != '0m':
+    raise SystemExit('Lab heartbeat must stay disabled (agents.defaults.heartbeat.every=0m)')
 print('OWNER_TOOL_POLICY=group_scoped')
 print('GROUP_CAPABILITY_TOOL_POLICY=scoped')
 print('DM_SESSION_SCOPE=per-account-channel-peer')
