@@ -6,11 +6,14 @@ import { getSessionEntry, patchSessionEntry } from 'openclaw/plugin-sdk/session-
  * the main session), old and new alike. To change it, change this constant and release; nothing else sets a level.
  *
  * OpenClaw keeps the level per session, and it only reaches the model because arthur-combo declares
- * compat.supportsReasoningEffort (integrations/openclaw/openclaw.json.example). The hook below writes this level into
+ * compat.supportsReasoningEffort. OpenClaw rejects xhigh/max for a model that does not list them, so arthur-combo also
+ * declares supportedReasoningEfforts and thinkingLevelMap (integrations/openclaw/openclaw.json.example; scripts/
+ * openclaw_prepare.py ensure_arthur_combo_thinking_levels keeps the live config in step). 9Router then clamps max to the
+ * highest level each route accepts (Gemini: high), so the wire value is never invalid. The hook below writes this level into
  * a session at its start and again before each turn whenever it differs, so existing sessions follow a change too
  * (a /think chosen in chat lasts until the next turn). Cron, release-check and other internal sessions keep their own.
  */
-export const CHAT_THINKING_LEVEL = 'low';
+export const CHAT_THINKING_LEVEL = 'max';
 
 const CHAT_SESSION = /^agent:[^:]+:(?:whatsapp|telegram|kook):|^agent:[^:]+:main$/u;
 

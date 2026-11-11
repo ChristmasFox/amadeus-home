@@ -1226,7 +1226,7 @@ for name in ['pubg','amadeus','voice-reply','market','macos-host','image-upscale
 print('OPENCLAW_PREFLIGHT=passed')
 PY
 
-# --openclaw-only skips openclaw_prepare.py; still migrate the group tool policy and keep heartbeat off.
+# --openclaw-only skips openclaw_prepare.py; still migrate the group tool policy, keep heartbeat off and arthur-combo's thinking levels declared.
 orb -m "$MACHINE" -u root python3 - "$ROOT_DIR/scripts/openclaw_prepare.py" "$OPENCLAW_DATA_DIR/config/openclaw.json" <<'PY'
 import importlib.util, json, os, sys, time
 from pathlib import Path
@@ -1242,11 +1242,12 @@ if len(owners) != 1 or not str(owners[0]).startswith("whatsapp:+"):
 phone = str(owners[0]).split(":", 1)[1]
 keys = prepare.owner_tool_policy_keys(phone)
 whatsapp = config.setdefault("channels", {}).setdefault("whatsapp", {})
-before = json.dumps([whatsapp.get("groups", {}), config.get("channels", {}).get("telegram", {}).get("groups", {}), config.get("agents", {}).get("defaults", {}).get("heartbeat")], sort_keys=True)
+before = json.dumps([whatsapp.get("groups", {}), config.get("channels", {}).get("telegram", {}).get("groups", {}), config.get("agents", {}).get("defaults", {}).get("heartbeat"), config.get("models", {}).get("providers", {}).get("nine_router")], sort_keys=True)
 prepare.ensure_group_image_policies(whatsapp, keys)
 prepare.ensure_group_image_policies(config.setdefault("channels", {}).setdefault("telegram", {}))
 prepare.ensure_heartbeat_disabled(config)
-after = json.dumps([whatsapp.get("groups", {}), config.get("channels", {}).get("telegram", {}).get("groups", {}), config.get("agents", {}).get("defaults", {}).get("heartbeat")], sort_keys=True)
+prepare.ensure_arthur_combo_thinking_levels(config)
+after = json.dumps([whatsapp.get("groups", {}), config.get("channels", {}).get("telegram", {}).get("groups", {}), config.get("agents", {}).get("defaults", {}).get("heartbeat"), config.get("models", {}).get("providers", {}).get("nine_router")], sort_keys=True)
 if before != after:
     backup = path.with_name(path.name + f".bak-owner-group-tools-{time.strftime('%Y%m%d%H%M%S')}")
     backup.write_bytes(path.read_bytes())
@@ -1321,6 +1322,9 @@ for channel in ('whatsapp', 'telegram'):
                 raise SystemExit('group tool set must not depend on the sender (group toolsBySender must be absent)')
 if config.get('agents', {}).get('defaults', {}).get('heartbeat', {}).get('every') != '0m':
     raise SystemExit('Lab heartbeat must stay disabled (agents.defaults.heartbeat.every=0m)')
+combo = next((m for m in config.get('models', {}).get('providers', {}).get('nine_router', {}).get('models', []) if isinstance(m, dict) and m.get('id') == 'arthur-combo'), None)
+if combo is not None and (combo.get('thinkingLevelMap', {}).get('max') != 'max' or 'max' not in combo.get('compat', {}).get('supportedReasoningEfforts', [])):
+    raise SystemExit('arthur-combo must declare xhigh/max (thinkingLevelMap + compat.supportedReasoningEfforts) so the chat thinking level max is accepted')
 print('OWNER_TOOL_POLICY=group_scoped')
 print('GROUP_CAPABILITY_TOOL_POLICY=scoped')
 print('DM_SESSION_SCOPE=per-account-channel-peer')

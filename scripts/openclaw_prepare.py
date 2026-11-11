@@ -308,6 +308,33 @@ def owner_tool_policy_keys(phone: str) -> list[str]:
     ]
 
 
+ARTHUR_COMBO_REASONING_EFFORTS = ["low", "medium", "high", "xhigh", "max"]
+ARTHUR_COMBO_THINKING_LEVEL_MAP = {"xhigh": "xhigh", "max": "max"}
+
+
+def ensure_arthur_combo_thinking_levels(config: dict) -> None:
+    """The chat thinking level is max (plugins/amadeus thinking-level.ts). OpenClaw refuses a session level the model does
+    not list ("Thinking level max is not supported for nine_router/arthur-combo"), so arthur-combo must declare
+    xhigh/max. 9Router accepts the wire value on every live route: cx/luna takes max, Gemini clamps it to high, grok
+    ignores it; the level is a request field, never a suffix on the model name."""
+    providers = config.get("models", {}).get("providers", {})
+    provider = providers.get("nine_router") if isinstance(providers, dict) else None
+    models = provider.get("models") if isinstance(provider, dict) else None
+    if not isinstance(models, list):
+        return
+    for model in models:
+        if isinstance(model, dict) and model.get("id") == "arthur-combo":
+            compat = model.setdefault("compat", {})
+            if not isinstance(compat, dict):
+                raise SystemExit("arthur-combo compat must be an object")
+            compat["supportsReasoningEffort"] = True
+            compat["supportedReasoningEfforts"] = list(ARTHUR_COMBO_REASONING_EFFORTS)
+            level_map = model.setdefault("thinkingLevelMap", {})
+            if not isinstance(level_map, dict):
+                raise SystemExit("arthur-combo thinkingLevelMap must be an object")
+            level_map.update(ARTHUR_COMBO_THINKING_LEVEL_MAP)
+
+
 def ensure_heartbeat_disabled(config: dict) -> None:
     """Lab runs no heartbeat: it polled the shared main session every 30 minutes with nothing to check (no HEARTBEAT.md),
     about 14% of all input tokens at a ~1% cache hit. A zero interval is the documented way to turn it off; the
@@ -509,6 +536,7 @@ def main() -> None:
                 account["configWrites"] = False
     ensure_group_image_policies(whatsapp, owner_tool_policy_keys(phone))
     ensure_heartbeat_disabled(config)
+    ensure_arthur_combo_thinking_levels(config)
     ensure_group_image_policies(config.setdefault("channels", {}).setdefault("telegram", {}))
 
     temporary = config_dir / "openclaw.json.codex-tmp"

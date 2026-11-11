@@ -126,7 +126,8 @@
             "contextWindow": 1000000,
             "contextTokens": 100000,
             "maxTokens": 32768,
-            "compat": { "supportsPromptCacheKey": true, "supportsReasoningEffort": true }
+            "thinkingLevelMap": { "xhigh": "xhigh", "max": "max" },
+            "compat": { "supportsPromptCacheKey": true, "supportsReasoningEffort": true, "supportedReasoningEfforts": ["low", "medium", "high", "xhigh", "max"] }
           }
         ]
       },

@@ -20,8 +20,8 @@ function setup(levels: Record<string, string | undefined>) {
   return { patched, levels, fire: (name: string, context: object) => hooks.get(name)!({}, context) };
 }
 
-test('the single level is low and covers groups, direct chats and the main session but not internal sessions', () => {
-  assert.equal(CHAT_THINKING_LEVEL, 'low');
+test('the single level is max and covers groups, direct chats and the main session but not internal sessions', () => {
+  assert.equal(CHAT_THINKING_LEVEL, 'max');
   for (const key of [GROUP, DIRECT, MAIN, 'agent:main:telegram:direct:1', 'agent:main:kook:group:2']) assert.equal(isChatSessionKey(key), true, key);
   for (const key of [CRON, RELEASE, 'agent:main:explicit:1', undefined, 42]) assert.equal(isChatSessionKey(key), false, String(key));
 });
