@@ -127,13 +127,13 @@ const runtime = await import(pathToFileURL(temporaryEsm).href);
   assert.deepEqual(effective(profileFor({ channel: 'telegram', scope: 'group', sender: 'fixture-nonowner' })),
     expectedGroupTools, 'admitted Telegram group sender gets group capabilities');
   assert.deepEqual(effective(profileFor({ channel: 'whatsapp', scope: 'direct', sender: 'fixture-nonowner' })),
-    ['web_search', 'web_fetch'], 'WhatsApp non-owner DM does not gain image');
+    ['web_search', 'web_fetch', ...GROUP_READONLY_CAPABILITY_TOOLS.filter((name) => name.startsWith('luckin_'))], 'WhatsApp non-owner DM gains only the Luckin tools, not image');
   assert.deepEqual(effective(profileFor({ channel: 'whatsapp', scope: 'direct', sender: 'fixture-owner' })),
     [...expectedGroupTools, 'amadeus_nas', 'exec'], 'owner DM unchanged');
   assert.deepEqual(effective(profileFor({ channel: 'whatsapp', scope: 'group', sender: 'fixture-owner' })),
     ['image_generate', 'web_search', 'web_fetch', ...GROUP_READONLY_CAPABILITY_TOOLS.filter((name) => name !== 'image_generate'), 'amadeus_nas', 'exec'], 'owner group unchanged');
   assert.deepEqual(effective(profileFor({ channel: 'whatsapp', scope: 'direct', sender: 'fixture-nonowner',
-    suppliedGroupId: 'fixture-group' })), ['web_search', 'web_fetch'], 'forged direct groupId cannot grant image');
+    suppliedGroupId: 'fixture-group' })), ['web_search', 'web_fetch', ...GROUP_READONLY_CAPABILITY_TOOLS.filter((name) => name.startsWith('luckin_'))], 'forged direct groupId cannot grant image or any group tool beyond the sender-level Luckin set');
 } finally {
   fs.rmSync(temporaryEsm, { force: true });
   fs.rmSync(temporaryWorker, { force: true });
