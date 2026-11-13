@@ -84,7 +84,10 @@ test('Amadeus registers typed inbound identity context hooks', () => {
   } as unknown as OpenClawPluginApi;
 
   entry.register(api);
-  assert.equal(registered.some((name) => /trade|order|balance|position|portfolio/iu.test(name)), false);
+  // No trading, balance or portfolio tool exists; the Luckin coffee tools (confirmed, self-paid pickup orders) are the one named exception.
+  assert.equal(registered.some((name) => !name.startsWith('luckin_') && /trade|order|balance|position|portfolio/iu.test(name)), false);
+  assert.equal(registered.includes('luckin_confirm_order'), true);
+  assert.equal(registered.some((name) => /pay/iu.test(name)), false);
   assert.equal(registered.includes('amadeus_market_quote'), true);
   assert.equal(registered.includes('amadeus_macos_host_status'), true);
   const hostFactory = registeredFactories.get('amadeus_macos_host_status');

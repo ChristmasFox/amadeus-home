@@ -45,6 +45,8 @@ function config(directory: string): AmadeusConfig {
     steamApiBaseUrl: 'https://steam.example',
     steamDatabasePath: ':memory:',
     steamBroadcastMode: 'off',
+    luckinAuthDir: '/tmp/luckin-auth',
+    luckinMcpUrl: 'https://gwmcp.lkcoffee.com/order/user/mcp',
     steamWhatsappAccountId: 'secondary',
     replyLinkOrigins: [],
   };

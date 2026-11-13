@@ -50,6 +50,15 @@ export const GROUP_READONLY_CAPABILITY_TOOLS = [
   'amadeus_web_image',
   'memory_search',
   'memory_get',
+  'luckin_auth_status',
+  'luckin_search_shops',
+  'luckin_search_products',
+  'luckin_product_detail',
+  'luckin_switch_product',
+  'luckin_draft_order',
+  'luckin_confirm_order',
+  'luckin_order_status',
+  'luckin_cancel_order',
 ];
 
 export function extendSenderPolicyForGroupImage(capabilityProfile) {
@@ -70,7 +79,7 @@ export function extendSenderPolicyForGroupImage(capabilityProfile) {
   const offset = sessionParts[0] === 'agent' ? 2 : 0;
   if (sessionParts[offset] !== channel || sessionParts[offset + 1] !== 'group' ||
       !sessionParts[offset + 2]) return senderPolicy;
-  const groupCapabilityTools = ['image_generate', 'pubg_resolve_players', 'pubg_search_matches', 'pubg_query_stats', 'pubg_compare_stats', 'pubg_get_match', 'pubg_get_review_facts', 'pubg_get_period_review', 'pubg_query_team_damage', 'pubg_prefetch_telemetry', 'pubg_telemetry_sync_report', 'amadeus_macos_host_status', 'amadeus_macos_host_processes', 'steam_link_account', 'steam_unlink', 'steam_set_broadcast', 'steam_get_profile', 'steam_get_playtime', 'steam_get_recent_games', 'steam_get_achievements', 'steam_get_owned_games', 'steam_get_account_info', 'steam_game_info', 'steam_get_game_stats', 'steam_library_overlap', 'steam_friends_status', 'steam_group_settings', 'identity_resolve', 'identity_add_alias', 'amadeus_remember', 'view_image', 'amadeus_image_upscale', 'amadeus_web_image', 'memory_search', 'memory_get'];
+  const groupCapabilityTools = ['image_generate', 'pubg_resolve_players', 'pubg_search_matches', 'pubg_query_stats', 'pubg_compare_stats', 'pubg_get_match', 'pubg_get_review_facts', 'pubg_get_period_review', 'pubg_query_team_damage', 'pubg_prefetch_telemetry', 'pubg_telemetry_sync_report', 'amadeus_macos_host_status', 'amadeus_macos_host_processes', 'steam_link_account', 'steam_unlink', 'steam_set_broadcast', 'steam_get_profile', 'steam_get_playtime', 'steam_get_recent_games', 'steam_get_achievements', 'steam_get_owned_games', 'steam_get_account_info', 'steam_game_info', 'steam_get_game_stats', 'steam_library_overlap', 'steam_friends_status', 'steam_group_settings', 'identity_resolve', 'identity_add_alias', 'amadeus_remember', 'view_image', 'amadeus_image_upscale', 'amadeus_web_image', 'memory_search', 'memory_get', 'luckin_auth_status', 'luckin_search_shops', 'luckin_search_products', 'luckin_product_detail', 'luckin_switch_product', 'luckin_draft_order', 'luckin_confirm_order', 'luckin_order_status', 'luckin_cancel_order'];
   if (!Array.isArray(groupPolicy?.allow) || !groupPolicy.allow.some((tool) => groupCapabilityTools.includes(tool))) return senderPolicy;
   // Do not remove any deny: the native matcher still gives deny precedence.
   const groupCapabilities = groupPolicy.allow.filter((tool) => groupCapabilityTools.includes(tool));

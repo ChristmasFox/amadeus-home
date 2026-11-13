@@ -49,6 +49,8 @@
       "steamApiBaseUrl": { "type": "string", "maxLength": 512 },
       "steamDatabasePath": { "type": "string", "maxLength": 1024 },
       "steamBroadcastMode": { "type": "string", "enum": ["off", "deliver"] },
+      "luckinAuthDir": { "type": "string", "maxLength": 1024 },
+      "luckinMcpUrl": { "type": "string", "maxLength": 512 },
       "steamWhatsappAccountId": { "type": "string", "maxLength": 128 },
       "replyLinkOrigins": { "type": "array", "maxItems": 8, "items": { "type": "string", "maxLength": 256 } }
     },
@@ -70,7 +72,9 @@
     "skills/macos-host",
     "skills/owner-notification",
     "skills/vps",
-    "skills/steam"
+    "skills/steam",
+    "skills/luckin",
+    "skills/my-coffee"
   ],
   "contracts": {
     "tools": [
@@ -120,7 +124,16 @@
       "steam_get_game_stats",
       "steam_library_overlap",
       "steam_friends_status",
-      "steam_group_settings"
+      "steam_group_settings",
+      "luckin_auth_status",
+      "luckin_search_shops",
+      "luckin_search_products",
+      "luckin_product_detail",
+      "luckin_switch_product",
+      "luckin_draft_order",
+      "luckin_order_status",
+      "luckin_cancel_order",
+      "luckin_confirm_order"
     ],
     "services": ["amadeus-owner-notification-worker", "amadeus-steam-presence"]
   }

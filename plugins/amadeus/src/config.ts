@@ -51,6 +51,8 @@ export interface AmadeusConfig {
   steamDatabasePath: string;
   /** 'off' keeps the presence service idle; 'deliver' lets it post to enabled groups. */
   steamBroadcastMode: 'off' | 'deliver';
+  luckinAuthDir: string;
+  luckinMcpUrl: string;
   steamWhatsappAccountId: string;
   /** Origins whose share links a tool may declare as the reply's last line (see reply-links.ts). */
   replyLinkOrigins: string[];
@@ -143,6 +145,8 @@ export function configFor(api: OpenClawPluginApi): AmadeusConfig {
     steamApiBaseUrl: file('steamApiBaseUrl', 'STEAM_API_BASE_URL', 'https://api.steampowered.com').replace(/\/$/u, ''),
     steamDatabasePath: file('steamDatabasePath', 'STEAM_DATABASE_PATH', '/data/steam.sqlite'),
     steamBroadcastMode: steamMode,
+    luckinAuthDir: file('luckinAuthDir', 'LUCKIN_AUTH_DIR', '/data/luckin-auth').replace(/\/$/u, ''),
+    luckinMcpUrl: file('luckinMcpUrl', 'LUCKIN_MCP_URL', 'https://gwmcp.lkcoffee.com/order/user/mcp'),
     steamWhatsappAccountId: file('steamWhatsappAccountId', 'STEAM_WHATSAPP_ACCOUNT_ID', file('ownerWhatsappAccountId', 'OWNER_WHATSAPP_ACCOUNT_ID', 'secondary')),
     replyLinkOrigins: originList(value.replyLinkOrigins ?? env('AMADEUS_REPLY_LINK_ORIGINS')),
   };

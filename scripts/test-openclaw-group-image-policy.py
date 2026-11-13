@@ -37,7 +37,7 @@ class GroupImagePolicyTest(unittest.TestCase):
             self.assertNotIn("toolsBySender", group, "the group tool set is the same for every sender")
             allow = group["tools"]["allow"]
             self.assertNotIn("*", allow)
-            self.assertEqual(len(allow), 37)
+            self.assertEqual(len(allow), 46)
             self.assertEqual(len(allow), len(set(allow)), "no duplicates")
             self.assertTrue(set(prepare.GROUP_BASE_TOOL_ALLOWLIST) <= set(allow))
             self.assertTrue(set(prepare.GROUP_EXTRA_TOOL_ALLOWLIST) <= set(allow))

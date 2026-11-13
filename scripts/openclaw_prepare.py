@@ -15,6 +15,18 @@ from pathlib import Path
 
 
 NON_OWNER_TOOL_ALLOWLIST = ["web_search", "web_fetch"]
+# Luckin ordering: open to every sender in private chats and groups; each call runs with the sender's own authorization.
+LUCKIN_TOOL_ALLOWLIST = [
+    "luckin_auth_status",
+    "luckin_search_shops",
+    "luckin_search_products",
+    "luckin_product_detail",
+    "luckin_switch_product",
+    "luckin_draft_order",
+    "luckin_confirm_order",
+    "luckin_order_status",
+    "luckin_cancel_order",
+]
 SEARXNG_BASE_URL = "http://searxng:8080"
 GROUP_PUBG_TOOL_ALLOWLIST = [
     "pubg_resolve_players",
@@ -70,9 +82,11 @@ GROUP_EXTRA_TOOL_ALLOWLIST = [
     "memory_get",
 ]
 # The one group tool set: the same for every sender (group.tools.allow); group.toolsBySender is no longer used.
-GROUP_IMAGE_TOOL_ALLOWLIST = [*GROUP_BASE_TOOL_ALLOWLIST, *GROUP_EXTRA_TOOL_ALLOWLIST]
+# The group tool set before the Luckin tools were added (still accepted as a legacy value).
+LEGACY_GROUP_PRE_LUCKIN_TOOL_ALLOWLIST = [*GROUP_BASE_TOOL_ALLOWLIST, *GROUP_EXTRA_TOOL_ALLOWLIST]
+GROUP_IMAGE_TOOL_ALLOWLIST = [*LEGACY_GROUP_PRE_LUCKIN_TOOL_ALLOWLIST, *LUCKIN_TOOL_ALLOWLIST]
 # What the per-sender owner rule used to hold; only recognised so prepare can remove it.
-GROUP_OWNER_TOOL_ALLOWLIST = list(GROUP_IMAGE_TOOL_ALLOWLIST)
+GROUP_OWNER_TOOL_ALLOWLIST = list(LEGACY_GROUP_PRE_LUCKIN_TOOL_ALLOWLIST)
 LEGACY_GROUP_IMAGE_TOOL_ALLOWLIST = [*NON_OWNER_TOOL_ALLOWLIST, "image_generate"]
 LEGACY_GROUP_PUBG_TOOL_ALLOWLIST = [
     *NON_OWNER_TOOL_ALLOWLIST,
@@ -381,6 +395,7 @@ def ensure_group_image_policies(channel: dict, owner_keys: list[str] | None = No
                 raise SystemExit("group config must be an object")
             old_tools = group.get("tools")
             legacy_tools = ({"allow": GROUP_BASE_TOOL_ALLOWLIST},
+                            {"allow": LEGACY_GROUP_PRE_LUCKIN_TOOL_ALLOWLIST},
                             {"allow": LEGACY_GROUP_IMAGE_TOOL_ALLOWLIST},
                             {"allow": LEGACY_GROUP_PUBG_TOOL_ALLOWLIST},
                             {"allow": LEGACY_GROUP_IMAGE_PUBG_MAC_TOOL_ALLOWLIST},
@@ -518,7 +533,7 @@ def main() -> None:
     searx.setdefault("config", {}).setdefault("webSearch", {})["baseUrl"] = SEARXNG_BASE_URL
     entries.setdefault("openai", {}).setdefault("enabled", True)
     entries.setdefault("browser", {}).setdefault("enabled", True)
-    tools["toolsBySender"] = {"*": {"allow": NON_OWNER_TOOL_ALLOWLIST}}
+    tools["toolsBySender"] = {"*": {"allow": [*NON_OWNER_TOOL_ALLOWLIST, *LUCKIN_TOOL_ALLOWLIST]}}
     for key in owner_tool_policy_keys(owner_phone(owner_target_value)):
         tools["toolsBySender"][key] = {"allow": ["*"]}
 

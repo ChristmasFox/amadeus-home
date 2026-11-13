@@ -42,7 +42,7 @@ assert media["audio"]["maxBytes"] <= 6 * 1024 * 1024
 # Typed delivery owns TTS; generic auto mode and Agent-facing TTS/message tools are disabled.
 assert c["tools"]["profile"] == "full"
 assert c["tools"].get("deny") == ["tts", "message"]
-assert c["tools"]["toolsBySender"]["*"].get("allow") == ["web_search", "web_fetch"]
+assert c["tools"]["toolsBySender"]["*"].get("allow") == ["web_search", "web_fetch", "luckin_auth_status", "luckin_search_shops", "luckin_search_products", "luckin_product_detail", "luckin_switch_product", "luckin_draft_order", "luckin_confirm_order", "luckin_order_status", "luckin_cancel_order"]
 assert c["agents"]["defaults"]["typingMode"] == "instant"
 # Group chats never get the NO_REPLY prompt guidance; only internal runs (cron/heartbeat) may stay silent.
 assert c["agents"]["defaults"]["silentReply"] == {"group": "disallow", "internal": "allow"}
@@ -74,10 +74,11 @@ for channel in ("whatsapp", "telegram"):
         # Formerly owner-only; now open to every group sender, in the one group tool set.
         "identity_resolve", "identity_add_alias", "amadeus_remember", "view_image",
         "amadeus_image_upscale", "amadeus_web_image", "memory_search", "memory_get",
+        "luckin_auth_status", "luckin_search_shops", "luckin_search_products", "luckin_product_detail", "luckin_switch_product", "luckin_draft_order", "luckin_confirm_order", "luckin_order_status", "luckin_cancel_order",
     ]}
     assert "toolsBySender" not in group
 assert c["agents"]["defaults"]["heartbeat"] == {"every": "0m"}
-assert c["tools"]["toolsBySender"]["*"]["allow"] == ["web_search", "web_fetch"]
+assert c["tools"]["toolsBySender"]["*"]["allow"] == ["web_search", "web_fetch", "luckin_auth_status", "luckin_search_shops", "luckin_search_products", "luckin_product_detail", "luckin_switch_product", "luckin_draft_order", "luckin_confirm_order", "luckin_order_status", "luckin_cancel_order"]
 voice_skill = (ROOT / "plugins/amadeus/skills/voice-reply/SKILL.md").read_text()
 assert "DeliveryEnvelope v2" in voice_skill and '"kind": "voice"' in voice_skill
 assert '"speechText"' in voice_skill and '"emotion"' in voice_skill

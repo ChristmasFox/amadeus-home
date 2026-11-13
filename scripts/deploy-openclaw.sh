@@ -1290,7 +1290,7 @@ if 'searxng' not in config.get('plugins', {}).get('allow', []):
 if (config.get('tools', {}).get('web') or {}).get('search', {}).get('provider') != 'searxng':
     raise SystemExit('tools.web.search.provider must be searxng for Lab realtime web_search')
 sender_policies = config.get('tools', {}).get('toolsBySender', {})
-if sender_policies.get('*', {}).get('allow') != ['web_search', 'web_fetch']:
+if sender_policies.get('*', {}).get('allow') != ['web_search', 'web_fetch', 'luckin_auth_status', 'luckin_search_shops', 'luckin_search_products', 'luckin_product_detail', 'luckin_switch_product', 'luckin_draft_order', 'luckin_confirm_order', 'luckin_order_status', 'luckin_cancel_order']:
     raise SystemExit('non-owner sender tool policy is not read-only web access')
 owner_targets = config.get('commands', {}).get('ownerAllowFrom', [])
 if len(owner_targets) != 1 or not str(owner_targets[0]).startswith('whatsapp:+'):
@@ -1306,7 +1306,7 @@ for account in whatsapp.get('accounts', {}).values():
         raise SystemExit('WhatsApp account DM policy is not open for all senders')
 if config.get('agents', {}).get('defaults', {}).get('mediaModels', {}).get('image', {}).get('primary') != 'openai/amadeus-image':
     raise SystemExit('OpenClaw must use the logical amadeus-image capability')
-expected_group_tools = ['web_search', 'web_fetch', 'image_generate', 'pubg_resolve_players', 'pubg_search_matches', 'pubg_query_stats', 'pubg_compare_stats', 'pubg_get_match', 'pubg_get_review_facts', 'pubg_get_period_review', 'pubg_query_team_damage', 'pubg_prefetch_telemetry', 'pubg_telemetry_sync_report', 'amadeus_macos_host_status', 'amadeus_macos_host_processes', 'steam_link_account', 'steam_unlink', 'steam_set_broadcast', 'steam_get_profile', 'steam_get_playtime', 'steam_get_recent_games', 'steam_get_achievements', 'steam_get_owned_games', 'steam_get_account_info', 'steam_game_info', 'steam_get_game_stats', 'steam_library_overlap', 'steam_friends_status', 'steam_group_settings', 'identity_resolve', 'identity_add_alias', 'amadeus_remember', 'view_image', 'amadeus_image_upscale', 'amadeus_web_image', 'memory_search', 'memory_get']
+expected_group_tools = ['web_search', 'web_fetch', 'image_generate', 'pubg_resolve_players', 'pubg_search_matches', 'pubg_query_stats', 'pubg_compare_stats', 'pubg_get_match', 'pubg_get_review_facts', 'pubg_get_period_review', 'pubg_query_team_damage', 'pubg_prefetch_telemetry', 'pubg_telemetry_sync_report', 'amadeus_macos_host_status', 'amadeus_macos_host_processes', 'steam_link_account', 'steam_unlink', 'steam_set_broadcast', 'steam_get_profile', 'steam_get_playtime', 'steam_get_recent_games', 'steam_get_achievements', 'steam_get_owned_games', 'steam_get_account_info', 'steam_game_info', 'steam_get_game_stats', 'steam_library_overlap', 'steam_friends_status', 'steam_group_settings', 'identity_resolve', 'identity_add_alias', 'amadeus_remember', 'view_image', 'amadeus_image_upscale', 'amadeus_web_image', 'memory_search', 'memory_get', 'luckin_auth_status', 'luckin_search_shops', 'luckin_search_products', 'luckin_product_detail', 'luckin_switch_product', 'luckin_draft_order', 'luckin_confirm_order', 'luckin_order_status', 'luckin_cancel_order']
 # One group tool set for every sender: no per-sender group rule may exist (owner-only tools are refused at run time).
 for channel in ('whatsapp', 'telegram'):
     channel_config = config.get('channels', {}).get(channel, {})

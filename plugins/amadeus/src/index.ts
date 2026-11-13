@@ -19,6 +19,7 @@ import { registerRemember } from './remember.js';
 import { registerDmDigest } from './dm-digest.js';
 import { registerTruncatedOutputGuard } from './truncated-output.js';
 import { registerSteamPresenceService, registerSteamTools } from './steam/register.js';
+import { registerLuckinTools } from './luckin/register.js';
 import { registerMemoryOwnerOnly } from './memory-owner-only.js';
 import { registerOwnerDmPreferences } from './owner-dm-preferences.js';
 
@@ -52,6 +53,7 @@ const entry = definePluginEntry({
     registerVps(api);
     registerSteamTools(api);
     registerSteamPresenceService(api);
+    registerLuckinTools(api);
     api.logger.info('amadeus native capability plugin registered');
   },
 });

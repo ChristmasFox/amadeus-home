@@ -425,6 +425,12 @@ export async function importGeneratedCompletionAssets(
   }));
 }
 
+/** Registers a payment QR image from the official platform so the confirming tool can attach it to the sender's reply. */
+export async function importPaymentQrImage(config: AmadeusConfig, bytes: Buffer, mimeType: string, context: OpenClawPluginToolContext, signal?: AbortSignal): Promise<AttachmentPart> {
+  const origin = originForContext(context, currentContextFor(context.sessionKey));
+  return imageAssetAttachment(await importImageBytes(config, bytes, mimeType, 'luckin_payment_qr', origin, signal), 'inline');
+}
+
 export function registerImageAssets(api: OpenClawPluginApi): void {
   const importedInboundMedia = new Map<string, number>();
   api.on('message_received', async (event, hookContext) => {
@@ -494,7 +500,7 @@ export function registerImageAssets(api: OpenClawPluginApi): void {
     return { params: repaired };
   }, { matcher: ['image_generate'] });
   api.on('after_tool_call', (event, hookContext) => {
-    if (event.error || (event.toolName !== 'image_generate' && event.toolName !== 'amadeus_image_upscale' && event.toolName !== 'amadeus_web_image')) return;
+    if (event.error || (event.toolName !== 'image_generate' && event.toolName !== 'amadeus_image_upscale' && event.toolName !== 'amadeus_web_image' && event.toolName !== 'luckin_confirm_order')) return;
     const runId = event.runId ?? hookContext.runId ?? (hookContext.sessionKey ? deliveryRuns.runIdFor(hookContext.sessionKey) : undefined);
     if (!runId) throw new Error('image_delivery_run_missing');
     const config = configFor(api);
@@ -503,7 +509,7 @@ export function registerImageAssets(api: OpenClawPluginApi): void {
     // Enqueue the promise synchronously: the pinned after-tool hook is observed,
     // not awaited by core. Final settlement must await registration itself.
     const job = (async (): Promise<readonly AttachmentPart[]> => {
-      if (event.toolName === 'amadeus_web_image') {
+      if (event.toolName === 'amadeus_web_image' || event.toolName === 'luckin_confirm_order') {
         const parts = resultObject(event.result)?.deliveryAttachments;
         return Array.isArray(parts) ? parts.slice(0, 4).filter((part) => part && typeof part === 'object').map((part) => createAttachmentPart(part as Omit<AttachmentPart, 'kind'>)) : [];
       }
@@ -519,7 +525,7 @@ export function registerImageAssets(api: OpenClawPluginApi): void {
     })();
     deliveryRuns.addAssets(runId, job);
     return job.then(() => undefined);
-  }, { matcher: ['image_generate', 'amadeus_image_upscale', 'amadeus_web_image'], timeoutMs: 60_000 });
+  }, { matcher: ['image_generate', 'amadeus_image_upscale', 'amadeus_web_image', 'luckin_confirm_order'], timeoutMs: 60_000 });
 
   registerTool(api, 'amadeus_web_image', 'Find real photos on the internet (SearXNG image search), download them safely, and attach them to the reply with their source page link as the caption. Use this, not image_generate, whenever the person asks to find, search for, look up or be sent an existing picture or photo of something ("找一张…的图发我", "搜张…的照片", "find me a picture of…"). image_generate is only for newly drawn or made-up images.', WebImageParameters, async (params, context, _notifier, signal) => findAndImportWebImages(configFor(api), params, context, signal));
   registerTool(api, 'amadeus_image_upscale', 'Upscale one existing image on the configured host service. Default to scale:2; an explicit user 4x/4倍 request uses scale:4. 4K/2K are resolution profiles, not multipliers. The current inbound turn also constrains an unambiguous explicit multiplier. Reply context wins over the current conversation’s recent image.', ImageUpscaleParameters, async (params, context, _notifier, signal) => upscaleImage(configFor(api), params, context, signal));
