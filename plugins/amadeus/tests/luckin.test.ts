@@ -7,7 +7,7 @@ import { LuckinClient, LuckinError } from '../src/luckin/client.js';
 import { LuckinAuthStore, senderFileId } from '../src/luckin/store.js';
 import {
   DRAFT_TTL_MS, DraftBook, InboundSequence, luckinAuthStatus, luckinCancelOrder, luckinConfirmOrder, luckinDraftOrder, luckinOrderStatus, luckinSearchShops,
-  type LuckinDeps,
+  isLuckinOutOfBandCall, type LuckinDeps,
 } from '../src/luckin/tools.js';
 
 const A = 'whatsapp:111000111';
@@ -216,4 +216,13 @@ test('the MCP client speaks the official protocol, sends the Bearer header, and 
   assert.throws(() => new LuckinClient({ url: 'http://gwmcp.lkcoffee.com/mcp' }));
   const denied = new LuckinClient({ fetch: async () => new Response('no', { status: 401 }) });
   await assert.rejects(denied.callTool('bad', 'queryShopList', {}), (error: unknown) => error instanceof LuckinError && error.reason === 'unauthorized');
+});
+
+test('raw shell, fetch or file access to Luckin, its token files or an IP lookup is blocked; native tools and ordinary calls are not', () => {
+  assert.equal(isLuckinOutOfBandCall('exec', { command: 'curl -H "Authorization: Bearer x" https://gwmcp.lkcoffee.com/order/user/mcp' }), true);
+  assert.equal(isLuckinOutOfBandCall('exec', { command: 'cat ~/.my-coffee/LUCKIN_MCP_TOKEN' }), true);
+  assert.equal(isLuckinOutOfBandCall('web_fetch', { url: 'https://ipinfo.io/json' }), true);
+  assert.equal(isLuckinOutOfBandCall('read', { path: '/data/luckin-auth/x.auth.json' }), true);
+  assert.equal(isLuckinOutOfBandCall('exec', { command: 'ls /tmp' }), false);
+  assert.equal(isLuckinOutOfBandCall('luckin_draft_order', { deptId: 1 }), false);
 });

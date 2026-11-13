@@ -7,7 +7,7 @@ import { callerFrom } from '../steam/register.js';
 import { LuckinClient, LUCKIN_MCP_HOST_SUFFIX } from './client.js';
 import { LuckinAuthStore } from './store.js';
 import {
-  DraftBook, InboundSequence, luckinAuthStatus, luckinCancelOrder, luckinConfirmOrder, luckinDraftOrder, luckinOrderStatus, luckinProductDetail,
+  DraftBook, InboundSequence, isLuckinOutOfBandCall, LUCKIN_BLOCK_REASON, luckinAuthStatus, luckinCancelOrder, luckinConfirmOrder, luckinDraftOrder, luckinOrderStatus, luckinProductDetail,
   luckinSearchProducts, luckinSearchShops, luckinSwitchProduct, MAX_AMOUNT, MAX_LINES, type LuckinCaller, type LuckinDeps,
 } from './tools.js';
 
@@ -65,6 +65,13 @@ export function registerLuckinTools(api: OpenClawPluginApi): void {
   api.on('before_dispatch', (event, hookContext) => {
     const sessionKey = hookContext.sessionKey ?? event.sessionKey;
     if (sessionKey) inbound.note(sessionKey);
+  });
+
+  // The official skill suggests curl, token files and an IP lookup; Lab never lets the model do any of that.
+  api.on('before_tool_call', (event) => {
+    if (!isLuckinOutOfBandCall(event.toolName, event.params)) return undefined;
+    api.logger.warn(`blocked out-of-band Luckin access via ${event.toolName}`);
+    return { block: true, blockReason: LUCKIN_BLOCK_REASON };
   });
 
   const both = '只能用发消息的人自己授权的瑞幸账号，只能给他自己点；不要用 person、@、别名去替别人点。';

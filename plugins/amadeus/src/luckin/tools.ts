@@ -232,3 +232,12 @@ export async function luckinCancelOrder(deps: LuckinDeps, caller: LuckinCaller, 
     return { status: done === true ? 'ok' : 'error', orderRef: params.orderRef, cancelled: done === true };
   });
 }
+
+const LUCKIN_SHELL_PROBE = /lkcoffee\.com|LUCKIN_[A-Z_]*TOKEN|\.my-coffee|luckin-auth|ipinfo\.io/iu;
+export const LUCKIN_BLOCK_REASON = '瑞幸点单只能用原生 luckin_* 工具：不要用命令行、网页抓取或浏览器直接调用瑞幸接口、读取或保存 Token，也不要用 IP 定位。';
+
+/** True when a raw shell, fetch or browser call tries to reach Luckin, its token files or an IP lookup outside the native tools. */
+export function isLuckinOutOfBandCall(toolName: string, params: unknown): boolean {
+  if (!['exec', 'bash', 'process', 'web_fetch', 'browser', 'read', 'write', 'edit'].includes(toolName)) return false;
+  try { return LUCKIN_SHELL_PROBE.test(JSON.stringify(params ?? {})); } catch { return false; }
+}
