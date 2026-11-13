@@ -1242,12 +1242,13 @@ if len(owners) != 1 or not str(owners[0]).startswith("whatsapp:+"):
 phone = str(owners[0]).split(":", 1)[1]
 keys = prepare.owner_tool_policy_keys(phone)
 whatsapp = config.setdefault("channels", {}).setdefault("whatsapp", {})
-before = json.dumps([whatsapp.get("groups", {}), config.get("channels", {}).get("telegram", {}).get("groups", {}), config.get("agents", {}).get("defaults", {}).get("heartbeat"), config.get("models", {}).get("providers", {}).get("nine_router")], sort_keys=True)
+before = json.dumps([whatsapp.get("groups", {}), config.get("channels", {}).get("telegram", {}).get("groups", {}), config.get("agents", {}).get("defaults", {}).get("heartbeat"), config.get("models", {}).get("providers", {}).get("nine_router"), config.get("tools", {}).get("toolsBySender")], sort_keys=True)
 prepare.ensure_group_image_policies(whatsapp, keys)
 prepare.ensure_group_image_policies(config.setdefault("channels", {}).setdefault("telegram", {}))
 prepare.ensure_heartbeat_disabled(config)
 prepare.ensure_arthur_combo_thinking_levels(config)
-after = json.dumps([whatsapp.get("groups", {}), config.get("channels", {}).get("telegram", {}).get("groups", {}), config.get("agents", {}).get("defaults", {}).get("heartbeat"), config.get("models", {}).get("providers", {}).get("nine_router")], sort_keys=True)
+prepare.ensure_non_owner_luckin_tools(config)
+after = json.dumps([whatsapp.get("groups", {}), config.get("channels", {}).get("telegram", {}).get("groups", {}), config.get("agents", {}).get("defaults", {}).get("heartbeat"), config.get("models", {}).get("providers", {}).get("nine_router"), config.get("tools", {}).get("toolsBySender")], sort_keys=True)
 if before != after:
     backup = path.with_name(path.name + f".bak-owner-group-tools-{time.strftime('%Y%m%d%H%M%S')}")
     backup.write_bytes(path.read_bytes())

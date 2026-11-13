@@ -26,3 +26,18 @@ prepare.ensure_arthur_combo_thinking_levels(live)
 assert live["models"]["providers"]["nine_router"]["models"][0] == combo, "idempotent"
 prepare.ensure_arthur_combo_thinking_levels({})  # no provider configured: nothing to do
 print("OPENCLAW_PROMPT_CACHE_KEY=passed")
+
+# Private chats: the non-owner sender policy gains the Luckin tools once, owner rules stay untouched, unrelated policies are refused.
+senders_config = {"tools": {"toolsBySender": {"*": {"allow": list(prepare.NON_OWNER_TOOL_ALLOWLIST)}, "id:owner": {"allow": ["*"]}}}}
+prepare.ensure_non_owner_luckin_tools(senders_config)
+once = json.dumps(senders_config, sort_keys=True)
+prepare.ensure_non_owner_luckin_tools(senders_config)
+assert json.dumps(senders_config, sort_keys=True) == once
+assert senders_config["tools"]["toolsBySender"]["*"]["allow"] == [*prepare.NON_OWNER_TOOL_ALLOWLIST, *prepare.LUCKIN_TOOL_ALLOWLIST]
+assert senders_config["tools"]["toolsBySender"]["id:owner"] == {"allow": ["*"]}
+try:
+    prepare.ensure_non_owner_luckin_tools({"tools": {"toolsBySender": {"*": {"allow": ["exec"]}}}})
+    raise AssertionError("an unrelated non-owner policy must be refused")
+except SystemExit:
+    pass
+

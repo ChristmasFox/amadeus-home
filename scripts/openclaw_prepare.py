@@ -349,6 +349,16 @@ def ensure_arthur_combo_thinking_levels(config: dict) -> None:
             level_map.update(ARTHUR_COMBO_THINKING_LEVEL_MAP)
 
 
+def ensure_non_owner_luckin_tools(config: dict) -> None:
+    """Private chats: every non-owner sender gets web access plus the Luckin tools (each call runs with that sender's own authorization)."""
+    senders = config.setdefault("tools", {}).setdefault("toolsBySender", {})
+    wanted = {"allow": [*NON_OWNER_TOOL_ALLOWLIST, *LUCKIN_TOOL_ALLOWLIST]}
+    current = senders.get("*")
+    if current not in (None, {"allow": NON_OWNER_TOOL_ALLOWLIST}, wanted):
+        raise SystemExit("unexpected non-owner sender tool policy; refuse to replace unrelated restrictions")
+    senders["*"] = wanted
+
+
 def ensure_heartbeat_disabled(config: dict) -> None:
     """Lab runs no heartbeat: it polled the shared main session every 30 minutes with nothing to check (no HEARTBEAT.md),
     about 14% of all input tokens at a ~1% cache hit. A zero interval is the documented way to turn it off; the
