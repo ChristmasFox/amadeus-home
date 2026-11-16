@@ -1,7 +1,6 @@
 import { appendFile, mkdir } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import type { OpenClawPluginApi } from 'openclaw/plugin-sdk/core';
-import { chatKind } from './remember.js';
 
 export type RealtimeEvidenceFreshness = 'fresh' | 'stale' | 'unknown';
 export interface RealtimeEvidence { source: string | null; observedAt: string | null; validUntil: string | null; freshness: RealtimeEvidenceFreshness; }
@@ -15,13 +14,10 @@ const SEARCH_TOOLS = new Set(['web_search', 'web_fetch']);
 // Soft guidance only: the model decides whether a turn needs the web. No keyword
 // classifier, tool block or finalize revision (those misfired on changelogs and
 // the revise hook fails with a transcript-projection error → ❌ and no reply).
-const SEARCH_HINT = '当问题依赖当前事实（最新版本、新闻、价格、服务状态等）且你无法确定时，可调用 web_search，必要时再调用 web_fetch，并在回答里给出来源和查询或页面时间。搜索失败、超时或无结果时，明确说明当前事实无法确认，不要用旧知识或猜测冒充当前事实。不依赖当前事实的问题不必搜索。';
+const SEARCH_HINT = '当问题依赖当前事实（最新版本、新闻、价格、服务状态等）且你无法确定时，可调用 web_search，必要时再调用 web_fetch，并在回答里给出来源和查询或页面时间。优先使用少量有区分度的查询；如果多次搜索没有找到相关证据，不要反复微调关键词，应及时说明无法确认及已有线索。复杂问题需要交叉验证时可继续查证。搜索失败、超时或无结果时，明确说明当前事实无法确认，不要用旧知识或猜测冒充当前事实。不依赖当前事实的问题不必搜索。';
 
 // Same soft-guidance rule: the model picks between finding an existing picture and creating a new one.
 const IMAGE_HINT = '用户要网上已有的真实图片（"找一张…的图/照片发我""搜图"）时调用 amadeus_web_image，不要用 image_generate 生成；只有用户明确要"画""生成""做一张"新图时才用 image_generate。';
-export const GROUP_SEARCH_LIMIT = 3;
-export const GROUP_SEARCH_HINT = '群聊优先及时回应：一般最多搜索 2–3 次；结果不足时不要反复换关键词，说明无法确认并给出已有线索。用户要求深入研究时也先给出当前结论和局限。';
-export const GROUP_SEARCH_BLOCK_REASON = '本轮群聊搜索次数已达上限。不要继续换关键词搜索；请依据已有证据及时回答，并明确说明无法确认的部分。';
 
 export function classifyRealtimeEvidence(evidence: Pick<RealtimeEvidence, 'source' | 'observedAt' | 'validUntil'>, now = new Date()): RealtimeEvidence {
   const source = typeof evidence.source === 'string' && evidence.source.trim() ? evidence.source.trim() : null;
@@ -93,27 +89,11 @@ function webResultFailed(result: unknown, error?: string): boolean {
 export function registerRealtimeFacts(api: OpenClawPluginApi): void {
   const audit = new RealtimeToolAudit();
   const webGuard = new WebFailureGuard();
-  const groupSearches = new Map<string, Set<string>>();
-  api.on('before_prompt_build', (_event, context) => ({ appendSystemContext: `${SEARCH_HINT}\n\n${IMAGE_HINT}${chatKind(context.sessionKey) === 'group' ? `\n\n${GROUP_SEARCH_HINT}` : ''}` }));
+  api.on('before_prompt_build', () => ({ appendSystemContext: `${SEARCH_HINT}\n\n${IMAGE_HINT}` }));
   api.on('before_tool_call', (event, context) => {
     if (SEARCH_TOOLS.has(event.toolName) && webGuard.blocked(event.runId ?? context.runId ?? context.sessionKey ?? 'unknown')) {
       api.logger.warn('web tools failed twice in this turn; blocking further web calls');
       return { block: true, blockReason: WEB_FAILURE_BLOCK_REASON };
-    }
-    const run = event.runId ?? context.runId;
-    if (event.toolName === 'web_search' && run && chatKind(context.sessionKey) === 'group') {
-      let calls = groupSearches.get(run);
-      if (!calls) {
-        calls = new Set();
-        groupSearches.set(run, calls);
-        if (groupSearches.size > 500) groupSearches.delete(groupSearches.keys().next().value!);
-      }
-      const id = event.toolCallId ?? `call:${calls.size}`;
-      if (!calls.has(id) && calls.size >= GROUP_SEARCH_LIMIT) {
-        api.logger.warn('group search budget exhausted for this turn');
-        return { block: true, blockReason: GROUP_SEARCH_BLOCK_REASON };
-      }
-      calls.add(id);
     }
     if (SEARCH_TOOLS.has(event.toolName)) audit.start({ session: context.sessionKey ?? 'unknown', ...((event.runId ?? context.runId) ? { runId: (event.runId ?? context.runId)! } : {}), tool: event.toolName, ...(event.toolCallId ? { toolCallId: event.toolCallId } : {}) });
     return undefined;
