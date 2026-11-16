@@ -3,7 +3,23 @@ import { mkdtemp, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
-import { RealtimeToolAudit, classifyRealtimeEvidence, registerRealtimeFacts } from '../src/realtime-facts.js';
+import { GROUP_SEARCH_BLOCK_REASON, RealtimeToolAudit, classifyRealtimeEvidence, registerRealtimeFacts } from '../src/realtime-facts.js';
+
+test('group searches are bounded per run without restricting direct chats or fetch', () => {
+  const hooks = new Map<string, (...args: any[]) => any>();
+  registerRealtimeFacts({ on(name: string, handler: (...args: any[]) => any) { hooks.set(name, handler); }, logger: { info() {}, warn() {}, error() {} } } as any);
+  const group = { sessionKey: 'agent:main:whatsapp:group:123@g.us:thread:secondary' };
+  const direct = { sessionKey: 'agent:main:whatsapp:direct:123' };
+  const call = (runId: string, toolName: string, id: string, context = group) => hooks.get('before_tool_call')!({ runId, toolName, toolCallId: id }, context);
+  assert.match(hooks.get('before_prompt_build')!({}, group).appendSystemContext, /群聊优先及时回应/u);
+  assert.doesNotMatch(hooks.get('before_prompt_build')!({}, direct).appendSystemContext, /群聊优先及时回应/u);
+  for (let i = 0; i < 3; i++) assert.equal(call('group-run', 'web_search', `s${i}`), undefined);
+  assert.equal(call('group-run', 'web_search', 's0'), undefined, 'repeated call id is not counted twice');
+  assert.deepEqual(call('group-run', 'web_search', 's3'), { block: true, blockReason: GROUP_SEARCH_BLOCK_REASON });
+  assert.equal(call('group-run', 'web_fetch', 'fetch'), undefined);
+  assert.equal(call('next-run', 'web_search', 'next'), undefined);
+  for (let i = 0; i < 5; i++) assert.equal(call('direct-run', 'web_search', `d${i}`, direct), undefined);
+});
 
 test('evidence without provenance is unknown and expired evidence is stale', () => {
   const now = new Date('2026-10-22T00:00:00.000Z');
