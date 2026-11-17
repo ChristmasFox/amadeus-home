@@ -895,6 +895,19 @@ class SubscriptionRenderingTests(unittest.TestCase):
             self.assertIn(str(record["hy2_secret"]), files["shadowrocket.txt"])
             self.assertIn(str(record["vless_uuid"]), files["shadowrocket.txt"])
 
+    def test_dedicated_hy2_node_name_matches_other_dedicated_nodes(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            store = AccountingStore(Path(directory) / "accounts.sqlite")
+            store.initialize_accounts(LEGACY, created_at=NOW)
+            store.provision_m204(created_at=NOW)
+            record = next(row for row in store.account_records_for_runtime() if row["account_id"] == M204_ID)
+            files = render_subscription_files(record, {
+                "vless_server": "example.com", "hy2_server": "sub.example.com", "hy2_sni": "sub.example.com",
+                "reality_server_name": "example.com", "reality_public_key": "public-key-placeholder", "reality_short_id": "0011223344556677",
+            })
+            self.assertIn(f'Amadeus-{M204_ID}-HY2', files['clash.yaml'])
+            self.assertNotIn(f'Amadeus-HY2-{M204_ID}', files['clash.yaml'])
+
     def test_hysteria_candidate_preserves_listener_and_replaces_only_auth_and_stats(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

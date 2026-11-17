@@ -454,9 +454,11 @@ def render_qx_line(account: dict[str, object], config: dict[str, object]) -> str
 
 def render_clash(account: dict[str, object], config: dict[str, object]) -> str:
     # The existing Clash policy is HY2-only. JSON strings are valid YAML scalars.
+    account_id = str(account['account_id'])
+    node_name = f'Amadeus-{account_id}-HY2' if account_id == M204_ID else f'Amadeus-HY2-{account_id}'
     return "\n".join([
         "proxies:",
-        f"  - name: {json.dumps('Amadeus-HY2-' + str(account['account_id']), ensure_ascii=False)}",
+        f"  - name: {json.dumps(node_name, ensure_ascii=False)}",
         "    type: hysteria2",
         f"    server: {json.dumps(str(config['hy2_server']), ensure_ascii=False)}",
         "    port: 2053",
