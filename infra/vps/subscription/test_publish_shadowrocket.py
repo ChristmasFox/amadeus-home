@@ -11,7 +11,8 @@ class PublishShadowrocketTest(unittest.TestCase):
         self.assertEqual(result.count('/test-token/shadowrocket-rules.conf'), 2)
         self.assertIn('handle /derp*', result)
         self.assertIn('respond 404', result)
-        with self.assertRaises(ValueError): caddy_candidate(result, 'test-token')
+        self.assertEqual(caddy_candidate(result, 'test-token'), (host, result))
+        with self.assertRaises(ValueError): caddy_candidate(result, 'different-token')
         with self.assertRaises(ValueError): caddy_candidate(content, '../wrong')
 
     def test_preserves_user_rules_and_adds_only_own_node_filter(self):

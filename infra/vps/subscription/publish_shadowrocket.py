@@ -19,7 +19,6 @@ MARKER = '@amadeus_shadowrocket_rules'
 
 def caddy_candidate(text, token):
     if not re.fullmatch(r'[A-Za-z0-9_-]+', token): raise ValueError('invalid token')
-    if MARKER in text: raise ValueError('existing Shadowrocket rule route requires review')
     matches = []
     for match in re.finditer(r'(?m)^([^\s{}]+) \{\n', text):
         depth, end = 1, match.end()
@@ -37,6 +36,10 @@ def caddy_candidate(text, token):
     if not re.fullmatch(r'[A-Za-z0-9.-]+', host): raise ValueError('invalid subscription host')
     route = (f'\t{MARKER} path /{token}/{FILENAME}\n'
              f'\thandle {MARKER} {{\n\t\troot * {ROOT}\n\t\tfile_server\n\t}}\n')
+    if MARKER in text:
+        if text.count(route) != 2 or text.count(MARKER) != 4:
+            raise ValueError('existing Shadowrocket rule route conflicts')
+        return host, text
     for match in reversed(matches): text = text[:match.end()] + route + text[match.end():]
     return host, text
 
