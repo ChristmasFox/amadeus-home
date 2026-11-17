@@ -19,7 +19,7 @@ proxy-groups:
   type: select
   proxies:
   - US美国
-  - 直连
+  - DIRECT
   icon: https://raw.githubusercontent.com/Koolson/Qure/master/IconSet/Color/Proxy.png
 - interval: 300
   timeout: 3000
@@ -32,7 +32,7 @@ proxy-groups:
   proxies:
   - 默认节点
   - US美国
-  - 直连
+  - DIRECT
   icon: https://raw.githubusercontent.com/Koolson/Qure/master/IconSet/Color/ChatGPT.png
 - interval: 300
   timeout: 3000
@@ -45,7 +45,7 @@ proxy-groups:
   proxies:
   - 默认节点
   - US美国
-  - 直连
+  - DIRECT
   icon: https://raw.githubusercontent.com/Koolson/Qure/master/IconSet/Color/YouTube.png
 - interval: 300
   timeout: 3000
@@ -58,7 +58,7 @@ proxy-groups:
   proxies:
   - 默认节点
   - US美国
-  - 直连
+  - DIRECT
   icon: https://raw.githubusercontent.com/Koolson/Qure/master/IconSet/Color/TVB.png
 - interval: 300
   timeout: 3000
@@ -70,7 +70,7 @@ proxy-groups:
   type: select
   proxies:
   - 默认节点
-  - 直连
+  - DIRECT
   - US美国
   icon: https://raw.githubusercontent.com/Koolson/Qure/master/IconSet/Color/bilibili_3.png
 - interval: 300
@@ -83,7 +83,7 @@ proxy-groups:
   type: select
   proxies:
   - 默认节点
-  - 直连
+  - DIRECT
   - US美国
   icon: https://raw.githubusercontent.com/Koolson/Qure/master/IconSet/Color/Bahamut.png
 - interval: 300
@@ -97,7 +97,7 @@ proxy-groups:
   proxies:
   - 默认节点
   - US美国
-  - 直连
+  - DIRECT
   icon: https://raw.githubusercontent.com/Koolson/Qure/master/IconSet/Color/Disney+.png
 - interval: 300
   timeout: 3000
@@ -110,7 +110,7 @@ proxy-groups:
   proxies:
   - 默认节点
   - US美国
-  - 直连
+  - DIRECT
   icon: https://raw.githubusercontent.com/Koolson/Qure/master/IconSet/Color/Netflix.png
 - interval: 300
   timeout: 3000
@@ -123,7 +123,7 @@ proxy-groups:
   proxies:
   - 默认节点
   - US美国
-  - 直连
+  - DIRECT
   icon: https://raw.githubusercontent.com/Koolson/Qure/master/IconSet/Color/TikTok.png
 - interval: 300
   timeout: 3000
@@ -136,7 +136,7 @@ proxy-groups:
   proxies:
   - 默认节点
   - US美国
-  - 直连
+  - DIRECT
   icon: https://raw.githubusercontent.com/Koolson/Qure/master/IconSet/Color/Spotify.png
 - interval: 300
   timeout: 3000
@@ -149,7 +149,7 @@ proxy-groups:
   proxies:
   - 默认节点
   - US美国
-  - 直连
+  - DIRECT
   icon: https://play-lh.googleusercontent.com/8pFuLOHF62ADcN0ISUAyEueA5G8IF49mX_6Az6pQNtokNVHxIVbS1L2NM62H-k02rLM=w240-h480-rw
 - interval: 300
   timeout: 3000
@@ -162,7 +162,7 @@ proxy-groups:
   proxies:
   - 默认节点
   - US美国
-  - 直连
+  - DIRECT
   icon: https://raw.githubusercontent.com/Koolson/Qure/master/IconSet/Color/HBO.png
 - interval: 300
   timeout: 3000
@@ -175,7 +175,7 @@ proxy-groups:
   proxies:
   - 默认节点
   - US美国
-  - 直连
+  - DIRECT
   icon: https://raw.githubusercontent.com/Koolson/Qure/master/IconSet/Color/Prime_Video.png
 - interval: 300
   timeout: 3000
@@ -188,7 +188,7 @@ proxy-groups:
   proxies:
   - 默认节点
   - US美国
-  - 直连
+  - DIRECT
   icon: https://raw.githubusercontent.com/Koolson/Qure/master/IconSet/Color/Hulu.png
 - interval: 300
   timeout: 3000
@@ -201,7 +201,7 @@ proxy-groups:
   proxies:
   - 默认节点
   - US美国
-  - 直连
+  - DIRECT
   icon: https://raw.githubusercontent.com/Koolson/Qure/master/IconSet/Color/Telegram.png
 - interval: 300
   timeout: 3000
@@ -214,7 +214,7 @@ proxy-groups:
   proxies:
   - 默认节点
   - US美国
-  - 直连
+  - DIRECT
   icon: https://static.whatsapp.net/rsrc.php/v3/yP/r/rYZqPCBaG70.png
 - interval: 300
   timeout: 3000
@@ -227,7 +227,7 @@ proxy-groups:
   proxies:
   - 默认节点
   - US美国
-  - 直连
+  - DIRECT
   icon: https://raw.githubusercontent.com/Koolson/Qure/master/IconSet/Color/Line.png
 - interval: 300
   timeout: 3000
@@ -239,7 +239,7 @@ proxy-groups:
   proxies:
   - 默认节点
   - US美国
-  - 直连
+  - DIRECT
   icon: https://raw.githubusercontent.com/Koolson/Qure/master/IconSet/Color/Game.png
 - interval: 300
   timeout: 3000
@@ -249,8 +249,8 @@ proxy-groups:
   name: 广告过滤
   type: select
   proxies:
-  - 拒绝
-  - 直连
+  - REJECT
+  - DIRECT
   - 默认节点
   icon: https://raw.githubusercontent.com/Koolson/Qure/master/IconSet/Color/Advertising.png
 - interval: 300
@@ -264,7 +264,7 @@ proxy-groups:
   proxies:
   - 默认节点
   - US美国
-  - 直连
+  - DIRECT
   icon: https://raw.githubusercontent.com/Koolson/Qure/master/IconSet/Color/Apple_2.png
 - interval: 300
   timeout: 3000
@@ -277,7 +277,7 @@ proxy-groups:
   proxies:
   - 默认节点
   - US美国
-  - 直连
+  - DIRECT
   icon: https://raw.githubusercontent.com/Koolson/Qure/master/IconSet/Color/Google_Search.png
 - interval: 300
   timeout: 3000
@@ -290,7 +290,7 @@ proxy-groups:
   proxies:
   - 默认节点
   - US美国
-  - 直连
+  - DIRECT
   icon: https://raw.githubusercontent.com/Koolson/Qure/master/IconSet/Color/GitHub.png
 - interval: 300
   timeout: 3000
@@ -303,7 +303,7 @@ proxy-groups:
   proxies:
   - 默认节点
   - US美国
-  - 直连
+  - DIRECT
   icon: https://raw.githubusercontent.com/Koolson/Qure/master/IconSet/Color/Microsoft.png
 - interval: 300
   timeout: 3000
@@ -316,7 +316,7 @@ proxy-groups:
   proxies:
   - 默认节点
   - US美国
-  - 直连
+  - DIRECT
   icon: https://raw.githubusercontent.com/Koolson/Qure/master/IconSet/Color/JP.png
 - interval: 300
   timeout: 3000
@@ -327,8 +327,8 @@ proxy-groups:
   name: 下载软件
   type: select
   proxies:
-  - 直连
-  - 拒绝
+  - DIRECT
+  - REJECT
   - 默认节点
   - 国内网站
   - US美国
@@ -357,7 +357,7 @@ proxy-groups:
   name: 国内网站
   type: select
   proxies:
-  - 直连
+  - DIRECT
   - 默认节点
   - US美国
   icon: https://raw.githubusercontent.com/Koolson/Qure/master/IconSet/Color/StreamingCN.png
@@ -412,19 +412,19 @@ rule-providers:
     url: https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/category-bank-jp.mrs
     path: "./ruleset/MetaCubeX/category-bank-jp.mrs"
 rules:
-- DST-PORT,22,直连
-- DST-PORT,3389,直连
-- DST-PORT,5938,直连
-- DST-PORT,7070,直连
-- DST-PORT,19966,直连
-- DST-PORT,21114-21119,直连
-- DST-PORT,4118,直连
-- DST-PORT,7654,直连
-- DST-PORT,9118,直连
-- DST-PORT,50000-50100,直连
-- DST-PORT,5353,直连
-- DST-PORT,9118,直连
-- GEOSITE,category-collaborate-cn,直连
+- DST-PORT,22,DIRECT
+- DST-PORT,3389,DIRECT
+- DST-PORT,5938,DIRECT
+- DST-PORT,7070,DIRECT
+- DST-PORT,19966,DIRECT
+- DST-PORT,21114-21119,DIRECT
+- DST-PORT,4118,DIRECT
+- DST-PORT,7654,DIRECT
+- DST-PORT,9118,DIRECT
+- DST-PORT,50000-50100,DIRECT
+- DST-PORT,5353,DIRECT
+- DST-PORT,9118,DIRECT
+- GEOSITE,category-collaborate-cn,DIRECT
 - GEOSITE,category-container,默认节点
 - RULE-SET,applications,下载软件
 - GEOSITE,jetbrains-ai,国外AI
@@ -459,11 +459,11 @@ rules:
 - GEOSITE,microsoft,微软服务
 - RULE-SET,category-bank-jp,日本网站
 - GEOIP,jp,日本网站,no-resolve
-- GEOSITE,private,直连
-- GEOSITE,category-public-tracker,直连
-- GEOSITE,category-game-platforms-download@cn,直连
-- GEOSITE,category-remote-control,直连
-- GEOIP,private,直连,no-resolve
-- GEOSITE,cn,直连
-- GEOIP,cn,直连,no-resolve
+- GEOSITE,private,DIRECT
+- GEOSITE,category-public-tracker,DIRECT
+- GEOSITE,category-game-platforms-download@cn,DIRECT
+- GEOSITE,category-remote-control,DIRECT
+- GEOIP,private,DIRECT,no-resolve
+- GEOSITE,cn,DIRECT
+- GEOIP,cn,DIRECT,no-resolve
 - MATCH,其他外网

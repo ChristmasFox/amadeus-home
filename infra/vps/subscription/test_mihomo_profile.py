@@ -18,6 +18,8 @@ class FullProfileTest(unittest.TestCase):
             self.assertEqual(first.count(node), 2)
         self.assertIn('GEOSITE,youtube,YouTube', first)
         self.assertIn('MATCH,其他外网', first)
+        self.assertIn('GEOSITE,cn,DIRECT', first)
+        self.assertNotIn('type: direct', first)
         self.assertNotIn('__HY2__', first)
 
     def test_rejects_missing_or_existing_unmanaged_policy(self):

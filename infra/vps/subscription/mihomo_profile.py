@@ -32,12 +32,10 @@ def render(subscription, template):
         candidates = [n for n in names if n.endswith(suffix)]
         if len(candidates) != 1: raise ValueError(f'expected one {suffix} node')
         node_names[key] = candidates[0]
-    if '直连' in names or '拒绝' in names: raise ValueError('built-in node name collision')
     for key, name in node_names.items():
         if template.count(key) != 1: raise ValueError('invalid policy template')
         template = template.replace(key, json.dumps(name, ensure_ascii=False))
-    extras = '  - {name: "直连", type: direct}\n  - {name: "拒绝", type: reject}\n'
-    return subscription.rstrip() + '\n' + BEGIN + '\n' + extras + template.rstrip() + '\n' + END + '\n'
+    return subscription.rstrip() + '\n' + BEGIN + '\n' + template.rstrip() + '\n' + END + '\n'
 
 
 def main():
