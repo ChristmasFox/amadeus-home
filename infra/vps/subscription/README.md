@@ -5,7 +5,11 @@
 `mihomo_profile.py` appends `mihomo-policy.yaml` to an existing node-only
 subscription without changing credentials or node definitions. The template
 contains the M204-selected routing policy, while node references are resolved
-from the existing account subscription. It refuses unknown layouts and saves a
+from the existing account subscription. `publish_geosite.py` publishes an
+operator-supplied GeoSite snapshot under the same token-specific Caddy route;
+the profile uses that mirror for initial bootstrap. The snapshot is refreshed
+only when the operator republishes a newer database; client auto-update alone
+does not refresh the server's source. It refuses unknown layouts and saves a
 root-only checkpoint before an explicit `--apply`. Validate the rendered profile
 with the target Mihomo version before applying it to a live subscription.
 

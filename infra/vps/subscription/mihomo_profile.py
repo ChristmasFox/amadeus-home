@@ -14,7 +14,7 @@ BEGIN = '# BEGIN AMADEUS MIHOMO POLICY v1'
 END = '# END AMADEUS MIHOMO POLICY v1'
 
 
-def render(subscription, template):
+def render(subscription, template, geosite_url):
     if subscription.count(BEGIN) != subscription.count(END) or subscription.count(BEGIN) > 1:
         raise ValueError('invalid existing policy markers')
     if BEGIN in subscription:
@@ -35,6 +35,9 @@ def render(subscription, template):
     for key, name in node_names.items():
         if template.count(key) != 1: raise ValueError('invalid policy template')
         template = template.replace(key, json.dumps(name, ensure_ascii=False))
+    if template.count('__GEOSITE_URL__') != 1 or not geosite_url.startswith('https://'):
+        raise ValueError('invalid GeoSite mirror')
+    template = template.replace('__GEOSITE_URL__', json.dumps(geosite_url))
     return subscription.rstrip() + '\n' + BEGIN + '\n' + template.rstrip() + '\n' + END + '\n'
 
 
@@ -45,7 +48,12 @@ def main():
     if not r or not re.fullmatch(r'[A-Za-z0-9_-]+', r[0]): raise ValueError('dedicated account unavailable')
     f = Path('/var/lib/caddy/subscription') / r[0] / 'clash.yaml'
     if f.is_symlink() or not f.is_file(): raise ValueError('invalid subscription file')
-    original = f.read_text(); output = render(original, Path(args.template).read_text())
+    caddy = Path('/etc/caddy/Caddyfile').read_text()
+    sites = list(re.finditer(r'(?m)^([^\s{}:]+) \{\n(?=\s*@amadeus_geosite\s)', caddy))
+    if len(sites) != 1 or f'@amadeus_geosite path /{r[0]}/geosite.dat' not in caddy:
+        raise ValueError('dedicated GeoSite mirror unavailable')
+    url = f'https://{sites[0].group(1)}/{r[0]}/geosite.dat'
+    original = f.read_text(); output = render(original, Path(args.template).read_text(), url)
     print('MIHOMO_POLICY_READY=1', flush=True)
     if not args.apply or original == output: return
     backup = Path('/var/backups/amadeus-mihomo-policy') / time.strftime('%Y%m%dT%H%M%S')
