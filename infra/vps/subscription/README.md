@@ -1,5 +1,26 @@
 # Quantumult X HTTPS 订阅入口
 
+## Optional full profiles for the dedicated account
+
+`mihomo_profile.py` appends `mihomo-policy.yaml` to an existing node-only
+subscription without changing credentials or node definitions. The template
+contains the M204-selected routing policy, while node references are resolved
+from the existing account subscription. It refuses unknown layouts and saves a
+root-only checkpoint before an explicit `--apply`. Validate the rendered profile
+with the target Mihomo version before applying it to a live subscription.
+
+`publish_shadowrocket.py` takes an operator-supplied Shadowrocket config from
+outside Git and publishes it as `shadowrocket-rules.conf` under that account's
+existing bearer-token directory. It adds only a token-specific Caddy route,
+validates the candidate, and restores the old route/profile if a public HTTPS
+check fails. The supplied policy is preserved except that the existing US
+node filter additionally matches the managed Amadeus nodes. The Shadowrocket
+rules profile and the existing node subscription are updated separately;
+re-importing a remote profile can overwrite client-local changes. The profile
+may contain third-party rules, DNS and rewrite directives, so the operator
+must review the file before publication. Neither the input file nor tokens
+belong in Git. No new service, port, or database is required.
+
 该目录描述一个独立的 HTTPS 订阅入口。订阅正文仍来自 VPS 上的静态配置文件，但由
 `amadeus-gateway-subscription.service` 动态附加整台 VPS 的套餐流量响应头和统一下载名；它不参与
 Xray/Hysteria 代理流量，也不提供 Web 管理面板。
