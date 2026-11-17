@@ -122,3 +122,24 @@ ssh amadeus-gateway 'ss -lunp | grep ":2053 "'
 
 若需要按设备归因流量，应在后续单独设计每设备凭据及服务端统计；整台 VPS 的 KiwiVM
 套餐计数和共享凭据无法证明哪台设备耗流量。
+# TLS backup node
+
+`tls_node.py` adds a direct VLESS over WebSocket/TLS backup for the six active
+managed identities, reusing the HTTPS subscription hostname and Caddy TCP 443.
+Caddy forwards only the dedicated WebSocket path to Xray on loopback TCP 24432;
+the existing per-account VLESS identities, traffic attribution, Reality and HY2
+nodes remain intact. No CDN or extra long-running process is required. The four
+existing subscription formats retain their previous entries and receive one
+additional node. Clients must refresh their own subscription; client state is
+not remotely changed by updating the server.
+
+The root-only operation defaults to a plan: run `sudo python3 tls_node.py`, then
+use `--apply` for the authorized switch. It validates Xray and Caddy candidates,
+checks the loopback port, saves a root-only checkpoint under
+`/var/backups/amadeus-tls-node/`, verifies every account through a real HTTPS
+request, and rolls back configuration and subscription files on failure. Those
+checkpoints contain credentials and must not be published. The script refuses
+conflicting or already-present routes; future subscription regeneration must
+preserve the added node. The only network change is the new authenticated route
+behind existing Caddy; Xray and Caddy remain managed by their existing systemd
+units and the added inbound uses the existing Xray process.
