@@ -489,6 +489,8 @@ deploy_stage verify
   fi
   node --check scripts/patch-openclaw-channel-identity.mjs
   node --check scripts/patch-openclaw-whatsapp-voice-lifecycle.mjs
+  node --check scripts/patch-whatsapp-reconnect.mjs
+  node scripts/test-whatsapp-reconnect.mjs
   node --check scripts/patch-openclaw-group-image-policy.mjs
   node --check scripts/patch-openclaw-heartbeat-silence.mjs
   node --check scripts/patch-openclaw-memory-core.mjs
@@ -822,6 +824,12 @@ tar -C "$ROOT_DIR/scripts" -cf - \
     tar -C "$tmp" -xf -
     node "$tmp/patch-openclaw-whatsapp-voice-lifecycle.mjs" --whatsapp-root /home/node/.openclaw/npm/projects
   '
+  orb -m "$MACHINE" -u root docker exec -i openclaw sh -ec '
+    tmp=$(mktemp /tmp/amadeus-reconnect.XXXXXX.mjs)
+    trap "rm -f $tmp" EXIT
+    cat > "$tmp"
+    node "$tmp" /home/node/.openclaw/npm/projects
+  ' < "$ROOT_DIR/scripts/patch-whatsapp-reconnect.mjs"
 }
 # Fails (and so rolls back) when the live module lacks any template hook.
 verify_whatsapp_boundary_live() {
@@ -841,6 +849,10 @@ import glob, os, shutil, sys
 matches = glob.glob(os.path.join(sys.argv[1], sys.argv[2]))
 if len(matches) != 1: raise SystemExit('whatsapp monitor module count mismatch')
 shutil.copy2(matches[0], sys.argv[3]); open(sys.argv[3] + '.path', 'w').write(matches[0])
+controllers = [p for p in glob.glob(os.path.join(sys.argv[1], 'config/npm/projects/*/node_modules/@openclaw/whatsapp/dist/connection-controller-*.js')) if b'function resolveReconnectPolicy(' in open(p, 'rb').read()]
+if len(controllers) != 1: raise SystemExit('whatsapp reconnect controller count mismatch')
+target = os.path.join(os.path.dirname(sys.argv[3]), 'whatsapp-controller.before.js')
+shutil.copy2(controllers[0], target); open(target + '.path', 'w').write(controllers[0])
 print('WHATSAPP_MONITOR_CHECKPOINT=saved')
 PY
 }
@@ -884,12 +896,13 @@ PY
       orb -m "$MACHINE" -u root python3 - "$CHECKPOINT_DIR/whatsapp-monitor.before.js" <<'PY'
 import os, shutil, sys
 from pathlib import Path
-source = Path(sys.argv[1]); marker = Path(str(source) + '.path')
-if source.is_file() and marker.is_file():
-    destination = Path(marker.read_text())
-    temporary = destination.with_name(destination.name + '.rollback-tmp')
-    shutil.copy2(source, temporary); os.replace(temporary, destination)
-    print('WHATSAPP_MONITOR_ROLLBACK=restored')
+for source in (Path(sys.argv[1]), Path(sys.argv[1]).with_name('whatsapp-controller.before.js')):
+    marker = Path(str(source) + '.path')
+    if source.is_file() and marker.is_file():
+        destination = Path(marker.read_text())
+        temporary = destination.with_name(destination.name + '.rollback-tmp')
+        shutil.copy2(source, temporary); os.replace(temporary, destination)
+        print('WHATSAPP_MODULE_ROLLBACK=restored')
 PY
       restore_status=$?
     fi
