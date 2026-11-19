@@ -47,12 +47,14 @@ export function registerMemoryCorpus(api: OpenClawPluginApi): void {
 }
 
 /**
- * Group and direct chats recall memory the same way; there is no "ask in private" route. Tool behaviour only.
+ * Shared memory is searchable from group and direct chats. Private memory is omitted outside the owner's direct session
+ * by the retrieval guard; this text only tells the model not to treat that omission as an empty shared memory.
  */
 export const MEMORY_RECALL_RULE = [
   '【记忆查询】',
-  '群聊和私聊一样，可以正常使用 memory_search / memory_get 查记忆，不要因为在群里就让用户改到私聊再问。',
-  '搜索结果为空，或返回 corpus 警告 / not-registered 时，不代表没有记忆：换关键词，或改用 corpus=memory（或省略 corpus）再查一次，再下结论。',
+  '群聊和私聊都可以用 memory_search / memory_get 查共享记忆，不要因为在群里就让用户改到私聊再问共享的事。',
+  '仅私聊保存的记忆不会出现在群聊或他人私聊的结果里。',
+  '搜索结果为空，或返回 corpus 警告 / not-registered 时，不代表没有共享记忆：换关键词，或改用 corpus=memory（或省略 corpus）再查一次，再下结论。',
 ].join('\n');
 
 export function registerMemoryRecallRule(api: OpenClawPluginApi): void {

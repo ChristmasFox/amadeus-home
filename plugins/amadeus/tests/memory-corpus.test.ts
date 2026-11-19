@@ -43,14 +43,15 @@ test('the before_tool_call hook rewrites the params with the deployment config',
   assert.equal(hooks.before_tool_call!({ toolName: 'memory_search', params: { query: 'q', corpus: 'memory' } }, {}), undefined);
 });
 
-test('chat sessions, groups included, are told memory recall works there and empty results mean retry; internal sessions get nothing', () => {
+test('chat sessions are told shared memory is searchable and private memory is omitted outside that private session', () => {
   const { api, hooks } = setup({});
   registerMemoryRecallRule(api);
   const group = hooks.before_prompt_build!({}, { sessionKey: 'agent:main:whatsapp:group:fixture@g.us:thread:whatsapp-account-secondary' });
   assert.equal(group.appendSystemContext, MEMORY_RECALL_RULE);
   assert.ok(hooks.before_prompt_build!({}, { sessionKey: 'agent:main:whatsapp:secondary:direct:+10000000000' }));
   assert.equal(hooks.before_prompt_build!({}, { sessionKey: 'agent:main:cron:job' }), undefined);
-  assert.match(MEMORY_RECALL_RULE, /群聊和私聊一样/u);
+  assert.match(MEMORY_RECALL_RULE, /共享记忆/u);
+  assert.match(MEMORY_RECALL_RULE, /仅私聊保存的记忆不会出现在群聊/u);
   assert.match(MEMORY_RECALL_RULE, /换关键词/u);
   assert.match(MEMORY_RECALL_RULE, /corpus=memory/u);
   assert.doesNotMatch(MEMORY_RECALL_RULE, /owner/iu, 'no owner-only wording');

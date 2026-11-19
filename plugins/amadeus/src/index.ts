@@ -21,6 +21,7 @@ import { registerTruncatedOutputGuard } from './truncated-output.js';
 import { registerSteamPresenceService, registerSteamTools } from './steam/register.js';
 import { registerLuckinTools } from './luckin/register.js';
 import { registerMemoryOwnerOnly } from './memory-owner-only.js';
+import { registerPrivateMemoryGuard } from './private-memory.js';
 import { registerOwnerDmPreferences } from './owner-dm-preferences.js';
 
 const entry = definePluginEntry({
@@ -41,6 +42,7 @@ const entry = definePluginEntry({
     registerDmDigest(api);
     registerOwnerDmPreferences(api);
     registerMemoryOwnerOnly(api);
+    registerPrivateMemoryGuard(api);
     registerIdentity(api);
     registerProductRadar(api);
     registerMedia(api);
