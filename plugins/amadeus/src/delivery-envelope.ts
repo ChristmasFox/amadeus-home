@@ -77,7 +77,7 @@ export type DeliveryEnvelope = Readonly<{
   silent: boolean;
   parts: readonly DeliveryPart[];
   source: DeliverySource;
-  fallbackReason?: 'planner_invalid' | 'speech_missing' | 'tts_failed' | 'invalid_structured_output';
+  fallbackReason?: 'planner_invalid' | 'speech_missing' | 'tts_failed' | 'invalid_structured_output' | 'truncated_output';
 }>;
 
 const EMOTIONS = new Set<DeliveryEmotion>([
@@ -187,7 +187,7 @@ export function validateDeliveryEnvelope(value: unknown): value is DeliveryEnvel
     || !Array.isArray(envelope.parts)
     || !SOURCES.has(envelope.source as DeliverySource)) return false;
   if (envelope.fallbackReason !== undefined
-    && !['planner_invalid', 'speech_missing', 'tts_failed', 'invalid_structured_output'].includes(String(envelope.fallbackReason))) return false;
+    && !['planner_invalid', 'speech_missing', 'tts_failed', 'invalid_structured_output', 'truncated_output'].includes(String(envelope.fallbackReason))) return false;
   for (const part of envelope.parts) {
     if (!part || typeof part !== 'object') return false;
     const candidate = part as Record<string, unknown>;

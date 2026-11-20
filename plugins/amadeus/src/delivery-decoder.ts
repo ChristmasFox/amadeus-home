@@ -4,6 +4,7 @@ export type AgentReplyDecode = Readonly<{ envelope: DeliveryEnvelope; status: 's
 
 /** Bounded user-facing fallback for malformed model protocol output. */
 export const INVALID_STRUCTURED_OUTPUT_MESSAGE = '回复格式异常，已记录，请稍后重试。';
+export const TRUNCATED_OUTPUT_MESSAGE = '回复内容仍不完整，请稍后重试。';
 
 /**
  * Some model responses contain literal control characters inside a JSON string
@@ -66,48 +67,46 @@ function restoreMissingTextKey(raw: string): string | undefined {
   return repaired === raw ? undefined : repaired;
 }
 
+
 /**
- * A v2 envelope whose last text part closed cleanly but whose trailing `]` and/or `}` never arrived (the model stopped
- * right after the part). Only the missing closers are added: the scan respects strings and escapes, every closer that
- * is present must match, at most two are inserted or appended, and a cut inside a string, a mismatch or any other
- * shape is left alone. The repaired text still goes through the normal parse and validation, so fields are never
- * guessed and text is never touched.
+ * A model can emit one complete v2 envelope and then append another part or
+ * leftover closers (JSON.parse fails with Extra data after a closed
+ * object). Only the first complete top-level JSON value is kept; the result
+ * still goes through JSON parsing and the strict envelope validator. Fields
+ * are never guessed, and a single complete value with no trailing tokens is
+ * left to the ordinary parse.
  */
-function closeMissingTrailingBrackets(raw: string): string | undefined {
+function leadingJsonValue(raw: string): string | undefined { // amadeus-leading-json-value-20261120
   const text = raw.trim();
-  if (!text.startsWith('{') || !/"version"\s*:\s*2/u.test(text)) return undefined;
-  const stack: string[] = [];
+  if (!text.startsWith('{') && !text.startsWith('[')) return undefined;
   let inString = false;
   let escaped = false;
-  let out = '';
-  let inserted = 0;
-  for (const character of text) {
+  let depth = 0;
+  for (let i = 0; i < text.length; i += 1) {
+    const character = text[i];
     if (inString) {
-      out += character;
       if (escaped) escaped = false;
       else if (character === '\\') escaped = true;
       else if (character === '"') inString = false;
       continue;
     }
-    if (character === '"') { inString = true; out += character; continue; }
-    if (character === '{' || character === '[') { stack.push(character); out += character; continue; }
+    if (character === '"') { inString = true; continue; }
+    if (character === '{' || character === '[') { depth += 1; continue; }
     if (character === '}' || character === ']') {
-      const top = stack[stack.length - 1];
-      if (top === (character === '}' ? '{' : '[')) { stack.pop(); out += character; continue; }
-      // `]` never arrived and the object closer came first: `}` found `[` on top of the object it belongs to.
-      if (character === '}' && top === '[' && stack[stack.length - 2] === '{') { stack.pop(); inserted += 1; out += ']'; stack.pop(); out += '}'; continue; }
-      return undefined;
+      depth -= 1;
+      if (depth < 0) return undefined;
+      if (depth === 0) {
+        const trailing = text.slice(i + 1);
+        if (!trailing.trim()) return undefined;
+        return text.slice(0, i + 1);
+      }
     }
-    out += character;
   }
-  if (inString || stack.length === 0 && inserted === 0) return undefined;
-  const missing = stack.length + inserted;
-  if (missing === 0 || missing > 2) return undefined;
-  return out + [...stack].reverse().map((open) => (open === '{' ? '}' : ']')).join('');
+  return undefined;
 }
 
 function parseWire(raw: string): unknown {
-  const attempts: Array<(value: string) => string | undefined> = [(value) => value, escapeControlCharactersInStrings, restoreMissingTextKey, closeMissingTrailingBrackets];
+  const attempts: Array<(value: string) => string | undefined> = [(value) => value, escapeControlCharactersInStrings, restoreMissingTextKey, leadingJsonValue];
   for (const attempt of attempts) {
     const candidate = attempt(raw);
     if (candidate === undefined) continue;
@@ -118,10 +117,10 @@ function parseWire(raw: string): unknown {
   if (escaped !== undefined) {
     try { return JSON.parse(escaped) as unknown; } catch { /* fall through */ }
   }
-  const closed = closeMissingTrailingBrackets(raw);
-  const closedEscaped = closed === undefined ? undefined : escapeControlCharactersInStrings(closed);
-  if (closedEscaped !== undefined) {
-    try { return JSON.parse(closedEscaped) as unknown; } catch { /* fall through */ }
+  const leading = leadingJsonValue(raw);
+  const leadingEscaped = leading === undefined ? undefined : escapeControlCharactersInStrings(leading);
+  if (leadingEscaped !== undefined) {
+    try { return JSON.parse(leadingEscaped) as unknown; } catch { /* fall through */ }
   }
   throw new Error('invalid_agent_json');
 }
@@ -158,58 +157,6 @@ function looksLikeProtocolText(text: string): boolean {
 }
 
 /**
- * A model can emit a nearly-complete v2 envelope and then stop before closing the
- * text string / object (observed as raw beginning with `{"version":2` … `"text":"…`
- * and ending mid-value, often with positive provider usage). Guessing closing
- * braces is unsafe; extracting the unterminated text value and re-wrapping it
- * through createTextDelivery is a narrow, fail-closed salvage.
- */
-function salvageTruncatedEnvelopeText(raw: string): string | undefined {
-  const trimmed = raw.trim();
-  if (!trimmed.startsWith('{') || !/"version"\s*:\s*2/u.test(trimmed)) return undefined;
-  if (!/"kind"\s*:\s*"text"/u.test(trimmed)) return undefined;
-  const match = /"kind"\s*:\s*"text"\s*,\s*"text"\s*:\s*"/u.exec(trimmed);
-  if (!match) return undefined;
-  const body = trimmed.slice(match.index + match[0].length);
-  let escaped = false;
-  let complete = false;
-  const chars: string[] = [];
-  for (const character of body) {
-    if (escaped) {
-      chars.push(character);
-      escaped = false;
-      continue;
-    }
-    if (character === '\\') {
-      chars.push(character);
-      escaped = true;
-      continue;
-    }
-    if (character === '"') {
-      complete = true;
-      break;
-    }
-    chars.push(character);
-  }
-  // A trailing lone backslash means the cut landed inside an escape — drop it.
-  if (!complete && escaped) chars.pop();
-  // If the string already closed cleanly, ordinary JSON.parse should have worked;
-  // refuse to salvage a fully-terminated value so we do not bypass the validator.
-  if (complete) return undefined;
-  if (chars.length === 0) return undefined;
-  let text: string;
-  try {
-    text = JSON.parse(`"${chars.join('')}"`) as string;
-  } catch {
-    return undefined;
-  }
-  if (typeof text !== 'string') return undefined;
-  const value = text.trim();
-  if (!value || looksLikeProtocolText(value)) return undefined;
-  return value;
-}
-
-/**
  * A normal external turn can occasionally arrive as plain assistant text when
  * the model ignores the JSON-only instruction. Recover that text as a typed
  * part, but keep protocol-looking output fail-closed so serialized objects,
@@ -226,10 +173,10 @@ function recoverablePlainText(context: DeliveryContext, raw: string): AgentReply
   }
 }
 
-/** The bounded failure notice as a decode result, for runs whose model output is known to be a cut-off fragment. */
-export function malformedReply(context: DeliveryContext): AgentReplyDecode {
+/** A final retry was also truncated; never mislabel that run as invalid JSON. */
+export function truncatedReply(context: DeliveryContext): AgentReplyDecode {
   return {
-    envelope: createTextDelivery(context, INVALID_STRUCTURED_OUTPUT_MESSAGE, { source: 'agent_structured_output', fallbackReason: 'invalid_structured_output' }),
+    envelope: createTextDelivery(context, TRUNCATED_OUTPUT_MESSAGE, { source: 'agent_structured_output', fallbackReason: 'truncated_output' }),
     status: 'malformed',
   };
 }
@@ -260,14 +207,6 @@ export function decodeAgentReply(context: DeliveryContext, raw: unknown): AgentR
   try {
     value = parseWire(wireRaw);
   } catch {
-    if (context.origin === 'external_user') {
-      const salvaged = salvageTruncatedEnvelopeText(wireRaw);
-      if (salvaged) {
-        try {
-          return { envelope: createTextDelivery(context, salvaged), status: 'structured' };
-        } catch { /* fall through to fail */ }
-      }
-    }
     return fail();
   }
   if (!value || typeof value !== 'object' || Array.isArray(value)) return fail();

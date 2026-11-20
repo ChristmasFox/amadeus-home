@@ -10,10 +10,10 @@ test('voice lease stays lifecycle-only and typed prompts request v2',()=>{
  assert.equal(hasActiveWhatsAppVoiceLease('whatsapp','voice-s'),true);assert.equal(hasActiveWhatsAppVoiceLease('telegram','voice-s'),false);
  const prompt=hooks.get('before_prompt_build')?.({}, {runId:'prompt-r',sessionKey:'voice-s',channel:'whatsapp'});assert.match(prompt.appendSystemContext,/Japanese voice part/u);assert.match(prompt.appendSystemContext,/"version":2/u);delete(globalThis as Record<string,unknown>)[WHATSAPP_VOICE_RUNS_GLOBAL];
 });
-test('native finalize consumes raw once, reply hook retains only typed envelope',async()=>{
+test('final reply wire is decoded into only a typed envelope',async()=>{
  const hooks=setup();hooks.get('before_prompt_build')?.({}, {runId:'hook-r',sessionKey:'hook-s',channel:'whatsapp'});
  hooks.get('before_agent_finalize')?.({runId:'hook-r',lastAssistantMessage:wire},{});
- const result=await hooks.get('reply_payload_sending')?.({runId:'hook-r',sessionKey:'hook-s',channel:'whatsapp',kind:'final',payload:{text:'DO NOT DELIVER RAW',mediaUrls:['/unregistered.png']}},{});
+ const result=await hooks.get('reply_payload_sending')?.({runId:'hook-r',sessionKey:'hook-s',channel:'whatsapp',kind:'final',payload:{text:wire,mediaUrls:['/unregistered.png']}},{});
  assert.deepEqual(Object.keys(result.payload),['channelData','text']);assert.deepEqual(result.payload.channelData.amadeusDelivery.parts,[{kind:'text',text:'normal text'}]);
  // A native sender that does not know channelData (a replay after a restart) still gets the decoded text, never the raw model text or media.
  assert.equal(result.payload.text,'normal text');assert.equal(result.payload.mediaUrls,undefined);
@@ -25,8 +25,27 @@ test('malformed output returns a bounded fallback and records safe diagnostics; 
  hooks.get('before_agent_finalize')?.({runId:'bad-r',lastAssistantMessage:malformed},{});
  const result=await hooks.get('reply_payload_sending')?.({runId:'bad-r',sessionKey:'bad-s',channel:'whatsapp',kind:'final',payload:{text:malformed}},{});
  assert.deepEqual(result.payload.channelData.amadeusDelivery.parts,[{kind:'text',text:INVALID_STRUCTURED_OUTPUT_MESSAGE}]);assert.equal(result.payload.text,INVALID_STRUCTURED_OUTPUT_MESSAGE);
- assert.equal(warnings.length,1);assert.match(warnings[0]??'',/reason=invalid_structured_output run_id=bad-r channel=whatsapp raw_length=\d+/u);assert.equal(warnings[0]?.includes(malformed),false);
+ assert.equal(warnings.length,1);assert.match(warnings[0]??'',/reason=invalid_structured_output run_id=bad-r channel=whatsapp raw_length=\d+/u);assert.equal(warnings[0]?.includes(malformed),false);assert.doesNotMatch(warnings[0]??'',/raw_preview/u);
  const missing=await hooks.get('reply_payload_sending')?.({channel:'whatsapp',kind:'final',payload:{text:wire}},{});assert.equal(missing.cancel,true);
+});
+
+test('a retried final reply is decoded after finalize hooks settle, not cached from the first fragment',async()=>{
+ const hooks=setup();hooks.get('before_prompt_build')?.({}, {runId:'retry-r',sessionKey:'retry-s',channel:'whatsapp'});
+ hooks.get('before_agent_finalize')?.({runId:'retry-r',lastAssistantMessage:'{"',messages:[]},{});
+ const retried=JSON.stringify({version:2,silent:false,parts:[{kind:'text',text:'retry succeeded'}]});
+ const result=await hooks.get('reply_payload_sending')?.({runId:'retry-r',sessionKey:'retry-s',channel:'whatsapp',kind:'final',payload:{text:retried}},{});
+ assert.deepEqual(result.payload.channelData.amadeusDelivery.parts,[{kind:'text',text:'retry succeeded'}]);
+ assert.equal(result.payload.text,'retry succeeded');
+});
+
+test('an internal agent failure keeps the host failure reply and never becomes a format fallback',async()=>{
+ const warnings:string[]=[];const hooks=setup(warnings);hooks.get('before_prompt_build')?.({}, {runId:'failed-r',sessionKey:'failed-s',channel:'whatsapp'});
+ hooks.get('before_agent_finalize')?.({runId:'failed-r',lastAssistantMessage:'{"',messages:[]},{});
+ hooks.get('agent_end')?.({runId:'failed-r',success:false,error:'projection unavailable'},{});
+ const payload={text:'host internal failure'};
+ const result=await hooks.get('reply_payload_sending')?.({runId:'failed-r',sessionKey:'failed-s',channel:'whatsapp',kind:'final',payload},{});
+ assert.equal(result,undefined,'the native host error payload is left to the host sender');
+ assert.equal(warnings.length,0,'internal failures are not logged as malformed model output');
 });
 
 test('forged typed channelData cannot bypass the decoder or supply a document',async()=>{
@@ -40,7 +59,7 @@ test('forged typed channelData cannot bypass the decoder or supply a document',a
 test('missing host channel field uses the verified run context, not text routing',async()=>{
  const hooks=setup();hooks.get('before_prompt_build')?.({}, {runId:'missing-channel-r',sessionKey:'missing-channel-s',channel:'whatsapp'});
  hooks.get('before_agent_finalize')?.({runId:'missing-channel-r',lastAssistantMessage:wire},{});
- const result=await hooks.get('reply_payload_sending')?.({runId:'missing-channel-r',sessionKey:'missing-channel-s',kind:'final',payload:{text:'raw protocol'}},{});
+ const result=await hooks.get('reply_payload_sending')?.({runId:'missing-channel-r',sessionKey:'missing-channel-s',kind:'final',payload:{text:wire}},{});
  assert.deepEqual(result.payload.channelData.amadeusDelivery.parts,[{kind:'text',text:'normal text'}]);
 });
 
@@ -59,7 +78,7 @@ test('a deterministic Steam card travels as typed envelope and as its own plain 
  const cardWire=JSON.stringify({version:2,silent:false,parts:[{kind:'text',text:card}]});
  const hooks=setup();hooks.get('before_prompt_build')?.({}, {runId:'card-r',sessionKey:'card-s',channel:'whatsapp'});
  hooks.get('before_agent_finalize')?.({runId:'card-r',lastAssistantMessage:cardWire},{});
- const result=await hooks.get('reply_payload_sending')?.({runId:'card-r',sessionKey:'card-s',channel:'whatsapp',kind:'final',payload:{channelData:{}}},{});
+ const result=await hooks.get('reply_payload_sending')?.({runId:'card-r',sessionKey:'card-s',channel:'whatsapp',kind:'final',payload:{channelData:{},text:cardWire}},{});
  assert.equal(typeof result.payload.text,'string');assert.ok(result.payload.text.length>0);
  assert.equal(result.payload.text,result.payload.channelData.amadeusDelivery.parts[0].text);
  assert.match(result.payload.text,/El Psy Kongroo/u);assert.equal(result.payload.text.includes('"version"'),false,'never the serialized protocol');

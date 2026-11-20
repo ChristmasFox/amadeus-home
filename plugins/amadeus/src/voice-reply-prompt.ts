@@ -50,8 +50,7 @@ export function registerVoiceReplyPrompt(api: OpenClawPluginApi, boundaryOptions
   const warnInvalidStructuredOutput = (runId: string, envelope: { fallbackReason?: string; channel: string }, raw: unknown): void => {
     if (envelope.fallbackReason !== 'invalid_structured_output' || loggedInvalidRuns.has(runId)) return;
     const rawLength = typeof raw === 'string' ? raw.length : 0;
-    const rawPreview = typeof raw === 'string' ? JSON.stringify(raw.slice(0, 200)) : 'null';
-    api.logger.warn(`amadeus structured reply fallback: reason=invalid_structured_output run_id=${runId} channel=${envelope.channel} raw_length=${rawLength} raw_preview=${rawPreview}`);
+    api.logger.warn(`amadeus structured reply fallback: reason=invalid_structured_output run_id=${runId} channel=${envelope.channel} raw_length=${rawLength}`);
     loggedInvalidRuns.add(runId);
     if (loggedInvalidRuns.size > 1024) loggedInvalidRuns.delete(loggedInvalidRuns.values().next().value!);
   };
@@ -84,20 +83,24 @@ export function registerVoiceReplyPrompt(api: OpenClawPluginApi, boundaryOptions
     ].join('\n\n') };
   });
   api.on('before_agent_finalize', (event) => {
-    if (event.runId && deliveryRuns.has(event.runId) && event.lastAssistantMessage !== undefined) {
-      const envelope = deliveryRuns.decode(event.runId, event.lastAssistantMessage);
-      // Persist only bounded correlation metadata. The malformed model
-      // payload can contain user data or secrets and must never enter logs.
-      warnInvalidStructuredOutput(event.runId, envelope, event.lastAssistantMessage);
+    if (event.runId && deliveryRuns.has(event.runId)) {
+      // Do not decode/cache here: a later finalize hook may request another
+      // model pass, and its accepted output must be the only one decoded.
       let origins: string[] = [];
       try { origins = configFor(api).replyLinkOrigins; } catch { /* no link restoration without readable config */ }
       deliveryRuns.setReplyLink(event.runId, turnReplyLink(event.messages, origins));
     }
   });
+  api.on('agent_end', (event) => {
+    if (event.success === false && event.runId) deliveryRuns.markAgentFailure(event.runId);
+  });
   api.on('reply_payload_sending', async (event, context) => {
     const runId = event.runId ?? (event.sessionKey ? deliveryRuns.runIdFor(event.sessionKey) : undefined);
     const channel = event.channel ?? context.channelId ?? (runId ? deliveryRuns.channelFor(runId) : undefined);
     if (channel !== 'whatsapp' && channel !== 'telegram') return;
+    // Preserve OpenClaw's own failure reply for internal/runtime errors. It is
+    // not model protocol output and must never be replaced by a format notice.
+    if (runId && deliveryRuns.agentFailed(runId)) return;
     // Tool/progress/pending media never enters a sender for Amadeus replies.
     if (event.kind !== 'final') return { cancel: true, reason: 'delivery_nonfinal_suppressed' };
     const prepared = event.payload.channelData?.amadeusDelivery;

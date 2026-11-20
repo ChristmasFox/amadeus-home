@@ -96,7 +96,7 @@ for(const [mimeType,source] of [['image/png','upscale'],['image/jpeg','upscale']
   }
   const wire=JSON.stringify({version:2,silent:false,parts:[{kind:'text',text:'完成。'}]});
   for(const hook of hooks.get('before_agent_finalize')??[])hook({runId,lastAssistantMessage:wire},{});
-  const prepared=await plan.delivery.preparePayload({text:'RAW JSON + MEDIA merge must be ineligible',mediaUrls:['/native/tool/result']},{kind:'final'});await Promise.all(jobs);
+  const prepared=await plan.delivery.preparePayload({text:wire,mediaUrls:['/native/tool/result']},{kind:'final'});await Promise.all(jobs);
   assert.deepEqual(Object.keys(prepared),['channelData']);assert.equal(prepared.channelData.amadeusDelivery.parts.at(-1).disposition,source==='upscale'||source==='upscale2'||source==='upscale4'||source==='upscale-invalid-target'?'document':'inline');
   assert.equal(await plan.delivery.preparePayload({mediaUrls:['/native/tool/result']},{kind:'tool'}),null);
   await plan.delivery.deliver(prepared,{kind:'tool'});assert.equal(sends.length,0);

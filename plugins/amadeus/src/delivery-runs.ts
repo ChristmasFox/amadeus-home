@@ -1,7 +1,7 @@
 import { createDeliveryEnvelope, type AttachmentPart, type DeliveryContext, type DeliveryEnvelope } from './delivery-envelope.js';
 import { runReactions, stripReactFromEnvelope } from './whatsapp-react.js';
-import { decodeAgentReply, malformedReply } from './delivery-decoder.js';
-import { isDegenerateRun, isFragmentText } from './truncated-output.js';
+import { decodeAgentReply, truncatedReply } from './delivery-decoder.js';
+import { isDegenerateRun, isFragmentText, isIncompleteJsonText } from './truncated-output.js';
 import { normalizeImageCaption } from './image-caption.js';
 import { applyReplyLink } from './reply-links.js';
 
@@ -15,7 +15,7 @@ export type MediaCompletion = Readonly<{
 
 /** Per-run accumulator is part of settlement, never an automatic media sender. */
 export class DeliveryRuns {
-  private runs = new Map<string, { context: DeliveryContext; envelope?: DeliveryEnvelope; raw?: unknown; decodeStatus?: 'structured' | 'silent' | 'malformed'; prepared?: DeliveryEnvelope; preparedCaptionSource?: 'native_completion' | 'none'; preparing?: Promise<DeliveryEnvelope>; jobs: Promise<readonly AttachmentPart[]>[]; mediaCompletion?: MediaCompletion | undefined; replyLink?: string | undefined }>();
+  private runs = new Map<string, { context: DeliveryContext; envelope?: DeliveryEnvelope; raw?: unknown; decodeStatus?: 'structured' | 'silent' | 'malformed'; agentFailed?: boolean; prepared?: DeliveryEnvelope; preparedCaptionSource?: 'native_completion' | 'none'; preparing?: Promise<DeliveryEnvelope>; jobs: Promise<readonly AttachmentPart[]>[]; mediaCompletion?: MediaCompletion | undefined; replyLink?: string | undefined }>();
   private sessions = new Map<string, string>();
   private mediaCompletions = new Map<string, MediaCompletion>();
   private mediaCompletionClaimants = new Map<string, string>();
@@ -96,6 +96,11 @@ export class DeliveryRuns {
     if (run && !run.prepared && !run.preparing) run.replyLink = link;
   }
   has(runId: string): boolean { return this.runs.has(runId); }
+  markAgentFailure(runId: string): void {
+    const run = this.runs.get(runId);
+    if (run) run.agentFailed = true;
+  }
+  agentFailed(runId: string): boolean { return this.runs.get(runId)?.agentFailed === true; }
   runIdFor(sessionKey: string): string | undefined { return this.sessions.get(sessionKey); }
   channelFor(runId: string): string | undefined { return this.runs.get(runId)?.context.channel; }
   originFor(runId: string): DeliveryContext['origin'] | undefined { return this.runs.get(runId)?.context.origin; }
@@ -113,10 +118,16 @@ export class DeliveryRuns {
   }
   decode(runId: string, raw: unknown): DeliveryEnvelope {
     const run = this.runs.get(runId); if (!run) throw new Error('delivery_run_missing');
-    if (run.envelope) return run.envelope;
-    // A run flagged as a cut-off fragment never posts the fragment itself.
-    const decoded = run.context.origin === 'external_user' && isDegenerateRun(runId) && isFragmentText(raw) ? malformedReply(run.context) : decodeAgentReply(run.context, raw);
-    run.raw = raw;
+    const cachedTruncation = run.context.origin === 'external_user' && isDegenerateRun(runId)
+      && (isFragmentText(run.raw) || isIncompleteJsonText(run.raw));
+    if (run.envelope && !cachedTruncation) return run.envelope;
+    // A run flagged as truncated after its one retry never posts the fragment
+    // or a partial JSON object, and gets a distinct bounded outcome.
+    const candidate = raw ?? run.raw;
+    const persistedTruncation = run.context.origin === 'external_user' && isDegenerateRun(runId)
+      && (isFragmentText(candidate) || isIncompleteJsonText(candidate));
+    const decoded = persistedTruncation ? truncatedReply(run.context) : decodeAgentReply(run.context, candidate);
+    run.raw = candidate;
     run.decodeStatus = decoded.status;
     // Strip Kurisu's trailing [react:<emoji>] before any sender sees text.
     const reacted = stripReactFromEnvelope(decoded.envelope);

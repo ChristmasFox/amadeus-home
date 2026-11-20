@@ -2,13 +2,8 @@ import type { OpenClawPluginApi } from 'openclaw/plugin-sdk/core';
 import { onceLogger } from './dm-digest.js';
 import { chatKind } from './remember.js';
 
-/**
- * Guard against a model answer that the provider path cut off after a character or two (observed as a final
- * assistant message of 1-3 characters with no token usage at all, on turns that carry a very large tool list).
- * Such a fragment is never a real reply: the first time it is seen the run is sent back for one more model pass,
- * and if it still ends that way the fragment is replaced by the bounded failure notice instead of being posted.
- */
-export const RETRY_INSTRUCTION = '你上一次的回复被截断，只输出了几个字。请针对用户最后那条消息重新给出完整的回复。';
+/** Retry incomplete final output once before it reaches the delivery decoder. */
+export const RETRY_INSTRUCTION = '你上一次的结构化回复没有完整输出。请重新回答用户最后那条消息，并完整输出 DeliveryEnvelope v2 JSON。';
 const MAX_FRAGMENT_CHARS = 3;
 const MARKED_MAX = 512;
 
@@ -36,6 +31,36 @@ export function isFragmentText(text: unknown): boolean {
   return true;
 }
 
+/**
+ * Detect an incomplete JSON object without trying to repair it. DeliveryEnvelope
+ * is an object, so an unfinished object/string is a retry candidate even when
+ * the provider reports output usage for reasoning tokens.
+ */
+export function isIncompleteJsonText(text: unknown): boolean {
+  if (typeof text !== 'string') return false;
+  const value = text.trim();
+  if (!value.startsWith('{')) return false;
+
+  const stack: string[] = [];
+  let inString = false;
+  let escaped = false;
+  for (const character of value) {
+    if (inString) {
+      if (escaped) escaped = false;
+      else if (character === '\\') escaped = true;
+      else if (character === '"') inString = false;
+      continue;
+    }
+    if (character === '"') inString = true;
+    else if (character === '{' || character === '[') stack.push(character);
+    else if (character === '}' || character === ']') {
+      const open = stack.pop();
+      if (open !== (character === '}' ? '{' : '[')) return false;
+    }
+  }
+  return inString || escaped || stack.length > 0;
+}
+
 /** The usage the provider reported for the last assistant message in the history, when it is there. */
 function lastAssistantUsageOutput(messages: unknown): number | undefined {
   if (!Array.isArray(messages)) return undefined;
@@ -59,13 +84,15 @@ export interface FinalizeEventLike {
 export type FinalizeDecision = { action: 'revise'; reason: string; retry: { instruction: string; maxAttempts: number } } | { action: 'continue' };
 
 /**
- * Only a whole-conversation turn (direct or group) whose final answer is a fragment AND whose provider usage is
- * zero or absent counts; a deliberate short answer from a model that reports usage is left alone.
+ * Incomplete JSON always retries once, regardless of provider usage. Other
+ * 1-3 character replies retry only when usage is absent or zero, preserving
+ * deliberate short answers that the provider reports as complete.
  */
 export function decideFinalize(event: FinalizeEventLike, attempts: Map<string, number>): FinalizeDecision {
-  if (chatKind(event.sessionKey) === 'other' || !isFragmentText(event.lastAssistantMessage)) return { action: 'continue' };
+  const incompleteJson = isIncompleteJsonText(event.lastAssistantMessage);
+  if (chatKind(event.sessionKey) === 'other' || (!incompleteJson && !isFragmentText(event.lastAssistantMessage))) return { action: 'continue' };
   const output = lastAssistantUsageOutput(event.messages);
-  if (output !== undefined && output > 0) return { action: 'continue' };
+  if (!incompleteJson && output !== undefined && output > 0) return { action: 'continue' };
   const key = event.runId ?? event.sessionKey!;
   const seen = attempts.get(key) ?? 0;
   if (event.runId) markDegenerateRun(event.runId);
