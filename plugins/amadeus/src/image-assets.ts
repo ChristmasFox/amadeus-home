@@ -52,17 +52,17 @@ type ImageAssetResult = {
 };
 type CurrentImageContext = ImageAssetOrigin & {
   sessionKey: string;
-  referenceImagePath?: string;
+  referenceImagePaths?: readonly string[];
   explicitScale?: 2 | 4;
   explicitResolution?: '2k' | '4k';
   expiresAt: number;
 };
 
-type PendingInboundImage = Readonly<{ path: string; expiresAt: number }>;
+type PendingInboundImages = Readonly<{ paths: readonly string[]; expiresAt: number }>;
 
 const IMAGE_CONTEXT_TTL_MS = 10 * 60 * 1000;
 const currentImageContexts = new Map<string, CurrentImageContext>();
-const pendingInboundImages = new Map<string, PendingInboundImage>();
+const pendingInboundImages = new Map<string, PendingInboundImages>();
 
 /** A bounded parameter constraint, not a capability/tool router. A bare 4K/2K is
  * a resolution profile and must never be mistaken for an upscale multiplier. */
@@ -107,15 +107,19 @@ function currentContextFor(sessionKey: string | undefined): CurrentImageContext 
   return current;
 }
 
-function pendingInboundImageFor(sessionKey: string | undefined): PendingInboundImage | undefined {
-  if (!sessionKey) return undefined;
-  const pending = pendingInboundImages.get(sessionKey);
-  if (!pending) return undefined;
-  if (pending.expiresAt <= Date.now()) {
-    pendingInboundImages.delete(sessionKey);
-    return undefined;
+function pendingInboundImageKey(sessionKey: string, messageId: string): string {
+  return `${sessionKey}\u0000${messageId}`;
+}
+
+function prunePendingInboundImages(now = Date.now()): void {
+  for (const [key, pending] of pendingInboundImages) {
+    if (pending.expiresAt <= now) pendingInboundImages.delete(key);
   }
-  return pending;
+  while (pendingInboundImages.size > 128) {
+    const oldestKey = pendingInboundImages.keys().next().value;
+    if (!oldestKey) break;
+    pendingInboundImages.delete(oldestKey);
+  }
 }
 
 function isInboundReferencePath(value: unknown): value is string {
@@ -128,18 +132,46 @@ function isInboundReferencePath(value: unknown): value is string {
  * path for this turn, so repair only inbound-staging references and leave
  * durable/generated paths untouched.
  */
-export function repairInboundReferenceParams(params: Record<string, unknown>, referencePath: string): Record<string, unknown> | undefined {
+export function repairInboundReferenceParams(params: Record<string, unknown>, referencePaths: string | readonly string[]): Record<string, unknown> | undefined {
+  const canonicalPaths = (typeof referencePaths === 'string' ? [referencePaths] : referencePaths).filter(isInboundReferencePath);
+  if (!canonicalPaths.length) return undefined;
+  const primaryPath = canonicalPaths[0];
+  if (!primaryPath) return undefined;
   let changed = false;
   const output = { ...params };
-  if (isInboundReferencePath(params.image) && params.image !== referencePath) {
-    output.image = referencePath;
+  if (isInboundReferencePath(params.image) && !canonicalPaths.includes(params.image)) {
+    output.image = primaryPath;
     changed = true;
   }
   if (Array.isArray(params.images)) {
     const originalImages = params.images as unknown[];
-    const images = originalImages.map((value) => isInboundReferencePath(value) ? referencePath : value);
-    changed = changed || images.some((value, index) => value !== originalImages[index]);
-    if (changed) output.images = [...new Set(images)];
+    const inboundImages = originalImages.filter(isInboundReferencePath);
+    const exactPaths = new Set(inboundImages.filter((value) => canonicalPaths.includes(value)));
+    const positionalRepair = inboundImages.length === canonicalPaths.length && exactPaths.size === 0;
+    const unusedPaths = canonicalPaths.filter((value) => !exactPaths.has(value));
+    const seenInbound = new Set<string>();
+    let inboundIndex = 0;
+    let arrayChanged = false;
+    const images = originalImages.flatMap((value) => {
+      if (!isInboundReferencePath(value)) return [value];
+      const currentIndex = inboundIndex++;
+      const replacement = canonicalPaths.includes(value)
+        ? value
+        : positionalRepair
+          ? canonicalPaths[currentIndex] ?? primaryPath
+          : unusedPaths.shift() ?? primaryPath;
+      if (replacement !== value) arrayChanged = true;
+      if (seenInbound.has(replacement)) {
+        arrayChanged = true;
+        return [];
+      }
+      seenInbound.add(replacement);
+      return [replacement];
+    });
+    if (arrayChanged) {
+      output.images = images;
+      changed = true;
+    }
   }
   return changed ? output : undefined;
 }
@@ -437,9 +469,16 @@ export function registerImageAssets(api: OpenClawPluginApi): void {
     const media = inboundMediaPaths(event);
     if (!media.length) return;
     const sessionKey = text(hookContext.sessionKey ?? event.sessionKey);
-    if (sessionKey) pendingInboundImages.set(sessionKey, { path: media[0]!.path, expiresAt: Date.now() + IMAGE_CONTEXT_TTL_MS });
+    const messageId = text(hookContext.messageId ?? event.messageId);
+    const referenceImagePaths = media.filter((item) => item.mimeType.toLowerCase().startsWith('image/')).slice(0, 5).map((item) => item.path);
+    if (sessionKey && messageId && referenceImagePaths.length) {
+      prunePendingInboundImages();
+      pendingInboundImages.set(pendingInboundImageKey(sessionKey, messageId), {
+        paths: referenceImagePaths,
+        expiresAt: Date.now() + IMAGE_CONTEXT_TTL_MS,
+      });
+    }
     const config = configFor(api);
-    const messageId = text(event.messageId);
     const channel = text(hookContext.channelId);
     const conversationId = text(hookContext.conversationId) ?? hookContext.sessionKey;
     const replyToMessageId = text(event.replyToId);
@@ -451,7 +490,7 @@ export function registerImageAssets(api: OpenClawPluginApi): void {
       ...(replyToMessageId ? { replyToMessageId } : {}),
       ...(runId ? { runId } : {}),
     };
-    for (const item of media.slice(0, 4)) {
+    for (const item of media.filter((candidate) => candidate.mimeType.toLowerCase().startsWith('image/')).slice(0, 5)) {
       const key = `${messageId ?? 'unknown'}\u0000${item.path}`;
       const importedAt = importedInboundMedia.get(key);
       if (importedAt && Date.now() - importedAt < IMAGE_CONTEXT_TTL_MS) continue;
@@ -472,14 +511,17 @@ export function registerImageAssets(api: OpenClawPluginApi): void {
     const replyToMessageId = text(hookContext.replyToId ?? event.replyToId);
     const explicitScale = explicitUpscaleScale(event.body ?? event.content);
     const explicitResolution = explicitUpscaleResolution(event.body ?? event.content);
-    const referenceImagePath = pendingInboundImageFor(sessionKey)?.path;
+    const pendingKey = messageId ? pendingInboundImageKey(sessionKey, messageId) : undefined;
+    const pending = pendingKey ? pendingInboundImages.get(pendingKey) : undefined;
+    const referenceImagePaths = pending && pending.expiresAt > Date.now() ? pending.paths : undefined;
+    if (pendingKey && pending) pendingInboundImages.delete(pendingKey);
     currentImageContexts.set(sessionKey, {
       sessionKey,
       ...(channel ? { channel } : {}),
       ...(conversationId ? { conversationId } : {}),
       ...(messageId ? { messageId } : {}),
       ...(replyToMessageId ? { replyToMessageId } : {}),
-      ...(referenceImagePath ? { referenceImagePath } : {}),
+      ...(referenceImagePaths?.length ? { referenceImagePaths } : {}),
       ...(explicitScale !== undefined ? { explicitScale } : {}),
       ...(explicitResolution !== undefined ? { explicitResolution } : {}),
       expiresAt: Date.now() + IMAGE_CONTEXT_TTL_MS,
@@ -488,14 +530,15 @@ export function registerImageAssets(api: OpenClawPluginApi): void {
   api.on('before_tool_call', (event, hookContext) => {
     if (event.toolName !== 'image_generate') return;
     const current = currentContextFor(hookContext.sessionKey);
-    if (!current?.referenceImagePath) return;
-    const repaired = repairInboundReferenceParams(event.params, current.referenceImagePath);
+    if (!current?.referenceImagePaths?.length) return;
+    const repaired = repairInboundReferenceParams(event.params, current.referenceImagePaths);
     if (!repaired) return;
     api.logger.info(JSON.stringify({
       event: 'image_reference_path_rebound',
       runId: event.runId,
       toolCallId: event.toolCallId,
       source: 'current_inbound_media',
+      referenceCount: current.referenceImagePaths.length,
     }));
     return { params: repaired };
   }, { matcher: ['image_generate'] });
