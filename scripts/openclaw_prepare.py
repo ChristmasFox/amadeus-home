@@ -524,6 +524,9 @@ def main() -> None:
     config = dict(config_template)
     if config.get("tools", {}).get("profile") != "full":
         raise SystemExit('OpenClaw Amadeus deployment requires tools.profile="full" for the owner agent')
+    tool_search = config.get("tools", {}).get("toolSearch", {})
+    if not isinstance(tool_search, dict) or tool_search.get("enabled") is not True or tool_search.get("mode") != "directory":
+        raise SystemExit('OpenClaw Amadeus deployment requires tools.toolSearch={enabled:true,mode:"directory"}')
     merge_preserved(config, existing_config)
     current_allow = existing_config.get("channels", {}).get("telegram", {}).get("allowFrom", [])
     if not isinstance(current_allow, list) or not current_allow:

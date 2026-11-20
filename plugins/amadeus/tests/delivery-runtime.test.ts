@@ -36,7 +36,8 @@ for(const [mimeType,source] of [['image/png','upscale'],['image/jpeg','upscale']
   const inboundBody=source==='upscale2'?'请把刚才的图超分 2x':source==='upscale4'?'请把刚才的图超分 4x':source.startsWith('upscale')?'请把刚才的图超分':'请用中文生成一只戴宇航员头盔的橘猫。';
   const lifecycleInput={taskId,sessionKey,requesterAgentId:'main',channel:'whatsapp',accountId:'secondary',conversationId:'chat',requestContext:'a bounded original image request'};
   const expectedRequestContext=`Original user request: ${inboundBody} | Image prompt: ${lifecycleInput.requestContext}`;
-  const plan=boundary.createWhatsAppPlan({sessionKey,accountId:'secondary',conversationId:'chat',messageId:'inbound',inboundVoice:false,start(){},stop(){},sendText:async text=>{sends.push({kind:'text',text});return{messageId:'text-id'};},sendVoice:async()=>{throw new Error('unexpected voice');},sendImage:async(asset,caption)=>{sends.push({kind:'image',bytes:asset.bytes,...(caption?{caption}:{})});return{messageId:'image-id'};},sendDocument:async asset=>{sends.push({kind:'document',bytes:asset.bytes});return{messageId:'document-id'};}});
+  const imageStatuses:string[]=[];
+  const plan=boundary.createWhatsAppPlan({sessionKey,accountId:'secondary',conversationId:'chat',messageId:'inbound',inboundVoice:false,start(){},stop(){},beginImageStatus:async()=>{imageStatuses.push('🎨');},endImageStatus:async emoji=>{imageStatuses.push(emoji);},sendText:async text=>{sends.push({kind:'text',text});return{messageId:'text-id'};},sendVoice:async()=>{throw new Error('unexpected voice');},sendImage:async(asset,caption)=>{sends.push({kind:'image',bytes:asset.bytes,...(caption?{caption}:{})});return{messageId:'image-id'};},sendDocument:async asset=>{sends.push({kind:'document',bytes:asset.bytes});return{messageId:'document-id'};}});
   assert.equal(plan.delivery.observeMessageSent,true);
   plan.replyOptions.onAgentRunStart(runId);
   for(const hook of hooks.get('before_prompt_build')??[])hook({}, {runId,sessionKey,channel:'whatsapp'});
@@ -60,10 +61,13 @@ for(const [mimeType,source] of [['image/png','upscale'],['image/jpeg','upscale']
     assert.equal((result as any).details.async,true);assert.equal(requests.filter(x=>x.path==='/v1/assets/import').length,0);assert.equal(sends.length,0);
     if(source==='attachment-failure'){
       await boundary.acceptImageGeneration(lifecycleInput);
+      assert.deepEqual(imageStatuses,['🎨'],'accepted tasks show the generation reaction');
       await assert.rejects(boundary.completeImageGeneration({...lifecycleInput,attachments:[{type:'image',path:join(root,'missing-generated.bin'),mimeType}] }));
+      assert.deepEqual(imageStatuses,['🎨','❌'],'asset preparation failure ends the generation reaction');
       assert.deepEqual(sends.map(x=>x.kind),['text']);assert.equal(captionInputs.length,0);assert.equal(requests.filter(x=>x.path==='/v1/assets/bind-delivery').length,0);
     }else if(source!=='failure'){
       await boundary.acceptImageGeneration(lifecycleInput);await boundary.acceptImageGeneration(lifecycleInput);
+      assert.deepEqual(imageStatuses,['🎨'],'accepted notifications are idempotent');
       assert.deepEqual(sends.map(x=>x.kind),['text'],'the started receipt itself is not an accepted acknowledgement');
       assert.equal(lifecycleInputs[0]?.requestContext,expectedRequestContext);assert.equal(lifecycleInputs[0]?.requestLanguage,'chinese');
       const completionClaim=await boundary.completeImageGeneration({...lifecycleInput,...source==='completion'?{modelId:'cx/gpt-image-2.5-flare'}:{},attachments:[{type:'image',path:join(root,'native-generated.bin'),mimeType}]});
@@ -71,7 +75,7 @@ for(const [mimeType,source] of [['image/png','upscale'],['image/jpeg','upscale']
       await boundary.completeImageGeneration({...lifecycleInput,attachments:[{type:'image',path:join(root,'native-generated.bin'),mimeType}]});
       if(source==='completion-fallback') await boundary.finishImageGeneration(lifecycleInput);
       else {
-      const completionRunId=`completion-${sessionKey}`;
+      const completionRunId=`image_generate:${taskId}:ok:agent-loop`;
       plan.replyOptions.onAgentRunStart(completionRunId);
       for(const hook of hooks.get('before_prompt_build')??[])hook({}, {runId:completionRunId,sessionKey,channel:'whatsapp',inputProvenance:{kind:'inter_session',sourceTool:'image_generate',sourceSessionKey:`image_generate:${taskId}`}});
       const completionWire=source==='caption-omitted'?JSON.stringify({version:2,silent:true,parts:[]}):source==='caption-malformed'||source==='caption-error'?'{"version":2,"parts":}':JSON.stringify({version:2,silent:false,parts:[{kind:'text',text:'Completion Agent caption。'}]});
@@ -84,11 +88,13 @@ for(const [mimeType,source] of [['image/png','upscale'],['image/jpeg','upscale']
       }
       }
       await boundary.failImageGeneration(lifecycleInput);
+      assert.deepEqual(imageStatuses,['🎨',source==='completion-fallback'||source==='caption-omitted'||source==='caption-malformed'||source==='caption-error'?'❌':'✅'],'the terminal reaction follows the image and its available review');
       assert.deepEqual(sends.map(x=>x.kind),['text','image']);assert.equal(sends[0]?.text,'生成を始めたわ。');assert.deepEqual(sends[1]?.bytes,bytes);
       assert.equal(sends[1]?.caption,source==='completion-fallback'||source==='caption-omitted'||source==='caption-malformed'||source==='caption-error'?undefined:source==='completion'?'Completion Agent caption。（模型：cx/gpt-image-2.5-flare）':'Completion Agent caption。');assert.equal(captionInputs.length,0);
       assert.equal(requests.filter(x=>x.path==='/v1/assets/import').length,1);assert.equal(requests.filter(x=>x.path==='/v1/assets/bind-delivery').length,1);
     }else{
-      await boundary.acceptImageGeneration(lifecycleInput);await boundary.failImageGeneration(lifecycleInput);await boundary.failImageGeneration(lifecycleInput);
+      await boundary.acceptImageGeneration(lifecycleInput);assert.deepEqual(imageStatuses,['🎨']);await boundary.failImageGeneration(lifecycleInput);await boundary.failImageGeneration(lifecycleInput);
+      assert.deepEqual(imageStatuses,['🎨','❌'],'generation failure is terminal and idempotent');
       assert.deepEqual(sends.map(x=>x.kind),['text','text']);assert.equal(sends[0]?.text,'生成を始めたわ。');assert.equal(sends[1]?.text,'生成に失敗したわ。');assert.deepEqual(lifecycleInputs.map(({kind,taskId,agentId,sessionKey,channel,requestContext,requestLanguage})=>({kind,taskId,agentId,sessionKey,channel,requestContext,requestLanguage})),[{kind:'accepted',taskId,agentId:'main',sessionKey,channel:'whatsapp',requestContext:expectedRequestContext,requestLanguage:'chinese'},{kind:'failed',taskId,agentId:'main',sessionKey,channel:'whatsapp',requestContext:expectedRequestContext,requestLanguage:'chinese'}]);
       assert.equal(captionInputs.length,0,'generation failure never runs caption enrichment');assert.equal(requests.filter(x=>x.path==='/v1/assets/import').length,0);
     }

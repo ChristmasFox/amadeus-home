@@ -148,6 +148,16 @@ await port.sendReaction('😂');assert.deepEqual(reactions.at(-1).slice(0,3),['c
   else assert.deepEqual(seen.slice(-3),['✅','👀','😂'],'late reaction lands strictly after the native restore');
  }
  const plain=await run('none');assert.deepEqual(plain.slice(-2),['✅','👀'],'no contextual emoji keeps native done/restore');
+ for(const terminalEmoji of ['✅','❌']){
+  wire.length=0;const ctl=await createStatus(statusArgs);const plan=scope.globalThis.createPlan({...params,statusReactionController:ctl});const imagePort=port;
+  plan.afterRecord();await sleep(800);await imagePort.beginImageStatus();
+  plan.finalize({});await imagePort.sendReaction('😡');await imagePort.endImageStatus(terminalEmoji);
+  const seen=wire.map(item=>item.emoji),start=seen.lastIndexOf('🎨');
+  assert.ok(start>=0,`image generation reaction appears (${terminalEmoji}): ${seen}`);
+  assert.deepEqual(seen.slice(-2),['🎨',terminalEmoji],`image reaction settles only after its terminal outcome: ${seen}`);
+  assert.equal(seen.includes('😡'),false,'contextual model reactions cannot override image status');
+  if(terminalEmoji==='❌') assert.equal(seen.slice(start+1).includes('✅'),false,'failed image generation never shows success');
+ }
  scope.sendReactionWhatsApp=planReaction;
  console.log('WHATSAPP_STATUS_REACTION_CONTEXTUAL_TERMINAL=passed');
 }

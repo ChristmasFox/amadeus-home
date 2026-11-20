@@ -35,6 +35,9 @@ function createWhatsAppReplyPlan(params) {
   // A user-visible WhatsApp turn never ends in silence: when the run queued no reply, say so in text.
   const SILENT_TURN_TEXT = '……刚才没接上话，你再说一遍？';
   const FAILED_TURN_TEXT = '这次处理出错了，你稍后再试一次？';
+  let imageStatusPending = false;
+  let imageStatusTerminal = false;
+  let imageStatusStart;
   let contextualEmoji;
   let statusFinal;
   let settleContextual;
@@ -52,6 +55,25 @@ function createWhatsAppReplyPlan(params) {
       else if (!statusReactionController) typingStop ??= startAmadeusWhatsAppTypingIndicator(sendComposing);
     },
     stop: () => { typingStop?.(); typingStop = undefined; closeAmadeusVoiceReplyLeaseForTurn(sessionKey, messageId); },
+    beginImageStatus: async () => {
+      imageStatusPending = true;
+      imageStatusTerminal = false;
+      if (imageStatusStart) return imageStatusStart;
+      statusReactionController?.cancelPending();
+      imageStatusStart = statusReactionController?.finishWithContextual
+        ? statusReactionController.finishWithContextual('🎨')
+        : directReaction('🎨');
+      statusFinal = imageStatusStart.catch(() => undefined);
+      await imageStatusStart;
+    },
+    endImageStatus: async (emoji) => {
+      imageStatusPending = false;
+      imageStatusTerminal = true;
+      statusReactionController?.cancelPending();
+      const write = Promise.resolve(imageStatusStart).catch(() => undefined).then(() => directReaction(emoji));
+      statusFinal = write.catch(() => undefined);
+      await write;
+    },
     sendText,
     sendVoice: async ({ audio, mimeType }) => {
       const native = await prepareWhatsAppOutboundMedia({ buffer: audio, contentType: mimeType, fileName: 'kurisu.mp3' });
@@ -64,6 +86,7 @@ function createWhatsAppReplyPlan(params) {
     // controller's terminal state (ordered after every queued stage, no
     // ✅/👀 restore); without them it is one direct native reaction.
     sendReaction: (emoji) => {
+      if (imageStatusPending || imageStatusTerminal) return Promise.resolve();
       if (!statusReactionController?.finishWithContextual) return directReaction(emoji);
       // Finalize already settled the stages: land strictly after it.
       if (statusFinal) return statusFinal.then(() => directReaction(emoji));
@@ -75,7 +98,7 @@ function createWhatsAppReplyPlan(params) {
     cfg: params.cfg, ctx: params.context,
     blockStreamingEnabled: resolveChannelStreamingBlockEnabled(params.cfg.channels?.whatsapp),
   });
-  plan.afterRecord = () => { if (statusReactionController) statusReactionController.setThinking(); };
+  plan.afterRecord = () => { if (statusReactionController && !imageStatusPending && !imageStatusTerminal) statusReactionController.setThinking(); };
   plan.dispatcherOptions = { ...params.replyPipeline, ...plan.dispatcherOptions };
   if (!plan.delivery || plan.delivery.observeMessageSent !== true) throw new Error('delivery_adapter_contract_invalid');
   plan.replyOptions = {
@@ -90,9 +113,9 @@ function createWhatsAppReplyPlan(params) {
       // wraps onToolStart behind shouldEmitToolLifecycle and never calls setTool,
       // so users only see 👀→🧠 (then stall ⏳) and never the tool emoji (🔎/🌐/🛠️).
       allowToolLifecycleWhenProgressHidden: true,
-      onToolStart: async (payload) => { if (payload.name?.trim()) await statusReactionController.setTool(payload.name.trim()); return false; },
-      onCompactionStart: async () => { await statusReactionController.setCompacting(); return false; },
-      onCompactionEnd: async () => { statusReactionController.cancelPending(); await statusReactionController.setThinking(); return false; },
+      onToolStart: async (payload) => { if (!imageStatusPending && !imageStatusTerminal && payload.name?.trim()) await statusReactionController.setTool(payload.name.trim()); return false; },
+      onCompactionStart: async () => { if (!imageStatusPending && !imageStatusTerminal) await statusReactionController.setCompacting(); return false; },
+      onCompactionEnd: async () => { if (!imageStatusPending && !imageStatusTerminal) { statusReactionController.cancelPending(); await statusReactionController.setThinking(); } return false; },
     } : {}),
   };
   const settleNativeStatus = plan.finalize;
@@ -102,7 +125,11 @@ function createWhatsAppReplyPlan(params) {
     // NO_REPLY / an empty completion is not a successful ending for a user turn: answer in text instead.
     const fallback = delivered ? null : sendText(terminal === 'completed' ? SILENT_TURN_TEXT : FAILED_TURN_TEXT).then(() => true, () => false);
     const visible = delivered || fallback !== null;
-    if (statusReactionController) {
+    if (statusReactionController && (imageStatusPending || imageStatusTerminal)) {
+      statusReactionController.cancelPending();
+      statusFinal = imageStatusPending ? Promise.resolve(imageStatusStart).catch(() => undefined) : (statusFinal ?? Promise.resolve());
+      void statusFinal.then(() => settleContextual());
+    } else if (statusReactionController) {
       // ❌ only for a failed run, or when nothing at all reached the user (not even the fallback).
       const settle = (fallbackSent) => {
         const outcome = terminal === 'failed' || (terminal !== 'completed' && !delivered) || (!delivered && !fallbackSent) ? 'error' : 'done';

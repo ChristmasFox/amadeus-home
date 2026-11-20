@@ -36,6 +36,8 @@ export type WhatsAppDeliveryPort = Readonly<{
   sendDocument(asset: ResolvedDeliveryAsset): Promise<DeliveryReceipt>;
   /** Reacts on the inbound message (replaces the ack 👀). */
   sendReaction?(emoji: string): Promise<unknown>;
+  beginImageStatus?(): Promise<unknown>;
+  endImageStatus?(emoji: string): Promise<unknown>;
   start(): void; stop(): void;
 }>;
 export type DeliveryBoundaryOptions = Readonly<{
@@ -93,7 +95,19 @@ function readRequestContext(contexts: Map<string, TimedRequestContext>, key: str
 }
 
 export const COMPLETION_PORTS_GLOBAL = '__amadeusCompletionPorts20261021';
-type CompletionPort = { accountId: string; conversationId: string; send: (envelope: DeliveryEnvelope) => Promise<void>; expiresAt: number };
+type CompletionPort = { accountId: string; conversationId: string; send: (envelope: DeliveryEnvelope) => Promise<void>; expiresAt: number; beginImageStatus?: (() => Promise<unknown>) | undefined; endImageStatus?: ((emoji: string) => Promise<unknown>) | undefined };
+const IMAGE_STATUS_PORTS_GLOBAL = '__amadeusImageStatusPorts20261120';
+const imageStatusRegistry = globalThis as Record<string, unknown>;
+const imageStatusPorts: Map<string, CompletionPort> = imageStatusRegistry[IMAGE_STATUS_PORTS_GLOBAL] instanceof Map
+  ? imageStatusRegistry[IMAGE_STATUS_PORTS_GLOBAL] as Map<string, CompletionPort>
+  : (imageStatusRegistry[IMAGE_STATUS_PORTS_GLOBAL] = new Map<string, CompletionPort>()) as Map<string, CompletionPort>;
+async function endImageStatus(taskId: string, emoji: string): Promise<void> {
+  const port = imageStatusPorts.get(taskId);
+  if (!port) return;
+  imageStatusPorts.delete(taskId);
+  if (port.expiresAt < Date.now()) return;
+  try { await port.endImageStatus?.(emoji); } catch { /* reaction failure does not change delivery */ }
+}
 function sharedCompletionPorts(): Map<string, CompletionPort> {
   const registry = globalThis as Record<string, unknown>;
   const existing = registry[COMPLETION_PORTS_GLOBAL];
@@ -212,6 +226,14 @@ export function registerDeliveryBoundary(api: OpenClawPluginApi, options: Delive
       // already-scheduled OpenClaw background generation.
       try {
         await lifecycle.accepted(input.taskId, async () => {
+          if (input.channel === 'whatsapp') {
+            const port = completionPorts.get(input.sessionKey);
+            if (port && port.conversationId === input.conversationId && (!input.accountId || port.accountId === input.accountId)) {
+              imageStatusPorts.set(input.taskId, port);
+              if (imageStatusPorts.size > 1024) imageStatusPorts.delete(imageStatusPorts.keys().next().value!);
+              try { await port.beginImageStatus?.(); } catch { /* reaction failure does not cancel generation */ }
+            }
+          }
           const message = await lifecycleMessageEnricher(lifecycleSemanticInput(input, 'accepted'));
           await sendLifecycleNotice(input, 'accepted', message);
         });
@@ -222,10 +244,12 @@ export function registerDeliveryBoundary(api: OpenClawPluginApi, options: Delive
     async failImageGeneration(input: ImageGenerationLifecycleInput): Promise<void> {
       if (!validLifecycleInput(input)) throw new Error('image_lifecycle_identity_invalid');
       const failed = await lifecycle.failed(input.taskId, async () => {
-        const message = await rememberLifecycleMessage(input);
-        await sendLifecycleNotice(input, 'failed', message);
+        try {
+          const message = await rememberLifecycleMessage(input);
+          await sendLifecycleNotice(input, 'failed', message);
+        } finally { await endImageStatus(input.taskId, '❌'); }
       });
-      if (failed) taskRequestContexts.delete(input.taskId);
+      if (failed) { await endImageStatus(input.taskId, '❌'); taskRequestContexts.delete(input.taskId); }
     },
     async settleWhatsAppCompletion(envelope: DeliveryEnvelope): Promise<void> {
       if (!deliveryRuns.owns(envelope) || envelope.origin !== 'media_completion' || envelope.channel !== 'whatsapp') throw new Error('image_completion_envelope_invalid');
@@ -236,35 +260,41 @@ export function registerDeliveryBoundary(api: OpenClawPluginApi, options: Delive
     async completeImageGeneration(input: ImageGenerationLifecycleInput & { attachments: readonly GeneratedCompletionAttachment[] }): Promise<{ completionImages?: readonly CompletionImageInput[] }> {
       if (!validLifecycleInput(input)) throw new Error('image_completion_identity_invalid');
       let completionImages: readonly CompletionImageInput[] | undefined;
-      const completed = await lifecycle.succeeded(input.taskId, async () => {
-        await lifecycle.artifacts(input.taskId, async () => {
-          const requestContext = lifecycleRequestContext(input);
-          const parts = await importGeneratedCompletionAssets(api, input.attachments, {
-            taskId: input.taskId, agentId: input.requesterAgentId, sessionKey: input.sessionKey, channel: input.channel,
-            ...requestContext,
+      let completed: boolean;
+      try {
+        completed = await lifecycle.succeeded(input.taskId, async () => {
+          await lifecycle.artifacts(input.taskId, async () => {
+            const requestContext = lifecycleRequestContext(input);
+            const parts = await importGeneratedCompletionAssets(api, input.attachments, {
+              taskId: input.taskId, agentId: input.requesterAgentId, sessionKey: input.sessionKey, channel: input.channel,
+              ...requestContext,
+            });
+            const config = configFor(api);
+            try {
+              completionImages = await Promise.all(parts.map((part) => resolveRegisteredImageModelInput(config, part)));
+            } catch {
+              completionImages = undefined;
+            }
+            deliveryRuns.registerMediaCompletion({
+              taskId: input.taskId,
+              ...(input.modelId ? { modelId: input.modelId } : {}),
+              // OpenClaw's native completion handoff uses the tool-qualified
+              // child session key as provenance. Keep this exact runtime-owned
+              // identity so unrelated inter-session messages cannot claim the
+              // generated asset.
+              sourceSessionKey: `image_generate:${input.taskId}`,
+              parts: Promise.resolve(parts),
+              expiresAt: Date.now() + 5 * 60_000,
+            });
+            api.logger.info(`amadeus image completion ${JSON.stringify({ event: 'image_completion_asset_claimed', task_id: input.taskId, channel: input.channel, asset_count: parts.length, model_image_context: Boolean(completionImages) })}`);
+            return parts;
           });
-          const config = configFor(api);
-          try {
-            completionImages = await Promise.all(parts.map((part) => resolveRegisteredImageModelInput(config, part)));
-          } catch {
-            completionImages = undefined;
-          }
-          deliveryRuns.registerMediaCompletion({
-            taskId: input.taskId,
-            ...(input.modelId ? { modelId: input.modelId } : {}),
-            // OpenClaw's native completion handoff uses the tool-qualified
-            // child session key as provenance. Keep this exact runtime-owned
-            // identity so unrelated inter-session messages cannot claim the
-            // generated asset.
-            sourceSessionKey: `image_generate:${input.taskId}`,
-            parts: Promise.resolve(parts),
-            expiresAt: Date.now() + 5 * 60_000,
-          });
-          api.logger.info(`amadeus image completion ${JSON.stringify({ event: 'image_completion_asset_claimed', task_id: input.taskId, channel: input.channel, asset_count: parts.length, model_image_context: Boolean(completionImages) })}`);
-          return parts;
         });
-      });
-      if (!completed) throw new Error('image_generation_terminal_failed');
+      } catch (error) {
+        await endImageStatus(input.taskId, '❌');
+        throw error;
+      }
+      if (!completed) { await endImageStatus(input.taskId, '❌'); throw new Error('image_generation_terminal_failed'); }
       return completionImages ? { completionImages } : {};
     },
     async finishImageGeneration(input: ImageGenerationLifecycleInput): Promise<void> {
@@ -280,7 +310,10 @@ export function registerDeliveryBoundary(api: OpenClawPluginApi, options: Delive
         return;
       }
       api.logger.info(`amadeus image completion ${JSON.stringify({ event: 'image_completion_caption_fallback', task_id: input.taskId, channel: input.channel, caption_source: 'none', fallback_reason: 'native_completion_unavailable' })}`);
-      if (input.channel === 'whatsapp') await boundary.settleWhatsAppCompletion(envelope);
+      if (input.channel === 'whatsapp') {
+        try { await boundary.settleWhatsAppCompletion(envelope); }
+        finally { await endImageStatus(input.taskId, '❌'); }
+      }
       else await settleTelegramDelivery(api, envelope, { ...(input.accountId ? { accountId: input.accountId } : {}), conversationId: input.conversationId!, ...(input.threadId !== undefined ? { threadId: input.threadId } : {}) });
       taskRequestContexts.delete(input.taskId);
       deliveryRuns.releaseMediaCompletion(runId);
@@ -321,16 +354,22 @@ export function registerDeliveryBoundary(api: OpenClawPluginApi, options: Delive
           },
           record: (event) => api.logger.info(`amadeus delivery ${JSON.stringify(event)}`),
         }, settlement);
-        if (result.final_status === 'failed') throw new Error(`delivery_failed:${result.failure_stage}`);
-        if (result.final_status !== 'duplicate') void reactAfterDelivery(envelope.runId, port.sendReaction, api.logger);
+        if (result.final_status === 'failed') {
+          const taskId = /^image_generate:([a-f0-9-]{36}):/iu.exec(envelope.runId)?.[1];
+          if (taskId && envelope.origin === 'media_completion') await endImageStatus(taskId, '❌');
+          throw new Error(`delivery_failed:${result.failure_stage}`);
+        }
+        if (result.final_status !== 'duplicate' && envelope.origin !== 'media_completion') void reactAfterDelivery(envelope.runId, port.sendReaction, api.logger);
         if (envelope.origin === 'media_completion' && envelope.runId.startsWith('image_generate:')) {
           const captionSource = deliveryRuns.captionSourceFor(envelope.runId) ?? 'none';
+          const taskId = /^image_generate:([a-f0-9-]{36}):/iu.exec(envelope.runId)?.[1];
+          if (taskId && result.final_status !== 'duplicate') await endImageStatus(taskId, captionSource === 'native_completion' ? '✅' : '❌');
           if (result.final_status === 'duplicate') api.logger.info(`amadeus image completion ${JSON.stringify({ event: 'image_completion_duplicate_ignored', run_id: envelope.runId, delivery_id: envelope.deliveryId, channel: envelope.channel })}`);
           api.logger.info(`amadeus image completion ${JSON.stringify({ event: captionSource === 'native_completion' ? 'image_completion_caption_ready' : 'image_completion_caption_fallback', run_id: envelope.runId, delivery_id: envelope.deliveryId, channel: envelope.channel, caption_source: captionSource, elapsed_ms: 0 })}`);
           api.logger.info(`amadeus image completion ${JSON.stringify({ event: 'image_completion_delivery_settled', run_id: envelope.runId, delivery_id: envelope.deliveryId, channel: envelope.channel, caption_source: captionSource })}`);
         }
       };
-      completionPorts.set(port.sessionKey, { accountId: port.accountId, conversationId: port.conversationId, send: settleTyped, expiresAt: Date.now() + 30 * 60_000 });
+      completionPorts.set(port.sessionKey, { accountId: port.accountId, conversationId: port.conversationId, send: settleTyped, beginImageStatus: port.beginImageStatus, endImageStatus: port.endImageStatus, expiresAt: Date.now() + 30 * 60_000 });
       if (completionPorts.size > 1024) completionPorts.delete(completionPorts.keys().next().value!);
       return {
         dispatcherOptions: {

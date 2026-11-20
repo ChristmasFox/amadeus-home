@@ -41,6 +41,7 @@ assert audio[0]["model"] == "amadeus-asr" and audio[0]["baseUrl"] == provider["b
 assert media["audio"]["maxBytes"] <= 6 * 1024 * 1024
 # Typed delivery owns TTS; generic auto mode and Agent-facing TTS/message tools are disabled.
 assert c["tools"]["profile"] == "full"
+assert c["tools"]["toolSearch"] == {"enabled": True, "mode": "directory"}
 assert c["tools"].get("deny") == ["tts", "message"]
 assert c["tools"]["toolsBySender"]["*"].get("allow") == ["web_search", "web_fetch", "luckin_auth_status", "luckin_search_shops", "luckin_search_products", "luckin_product_detail", "luckin_switch_product", "luckin_draft_order", "luckin_confirm_order", "luckin_order_status", "luckin_cancel_order"]
 assert c["agents"]["defaults"]["typingMode"] == "instant"

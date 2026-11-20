@@ -153,6 +153,10 @@
   },
   "tools": {
     "profile": "full",
+    "toolSearch": {
+      "enabled": true,
+      "mode": "directory"
+    },
     "web": {
       "search": {
         "provider": "searxng",

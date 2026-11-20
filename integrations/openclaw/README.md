@@ -7,10 +7,11 @@ context, model routing, scheduling, and the tool loop. `plugins/pubg` and
 deterministic business logic remains in the plugin/domain or external service
 boundaries.
 
-The main agent uses `tools.profile="full"`: the owner session receives the complete
-OpenClaw tool surface plus every loaded native plugin, so adding a new native tool does not
-silently produce a PUBG-only agent. Host-level approval gates and tool-specific owner checks
-still apply to destructive operations.
+The main agent uses `tools.profile="full"` with Tool Search directory mode: the owner keeps
+the complete authorized OpenClaw and plugin capability catalog, while uncommon schemas are
+loaded only when Kurisu searches for and calls them. Adding a native tool does not silently
+produce a PUBG-only agent. This is a presentation change; the existing tool policies,
+host-level approval gates, and tool-specific owner checks still govern execution.
 
 The runtime uses the official `ghcr.io/openclaw/openclaw:2026.9.4` image as a
 pinned base and the current 9Router route `nine_router/arthur-combo`. Secrets

@@ -1293,6 +1293,9 @@ if config.get('tools', {}).get('sessions', {}).get('visibility') != 'self':
     raise SystemExit('session history visibility must be self to prevent cross-conversation memory leaks')
 if config.get('tools', {}).get('profile') != 'full':
     raise SystemExit('owner tool policy is not tools.profile=full')
+tool_search = config.get('tools', {}).get('toolSearch', {})
+if not isinstance(tool_search, dict) or tool_search.get('enabled') is not True or tool_search.get('mode') != 'directory':
+    raise SystemExit('owner tool policy must enable tools.toolSearch directory mode')
 if config.get('tools', {}).get('deny') != ['tts', 'message']:
     raise SystemExit('agent-facing TTS and generic message tools must be denied; typed delivery owns speech')
 tts = config.get('tts', {})
