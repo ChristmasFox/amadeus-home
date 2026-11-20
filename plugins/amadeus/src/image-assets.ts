@@ -534,6 +534,11 @@ export function registerImageAssets(api: OpenClawPluginApi): void {
     let params = event.params;
     let changed = false;
     let rebound = false;
+    const generationAction = params.action === undefined || params.action === 'generate';
+    if (generationAction && params.quality === undefined && !text(params.model)) {
+      params = { ...params, quality: 'max' };
+      changed = true;
+    }
     if (current?.referenceImagePaths?.length) {
       const repaired = repairInboundReferenceParams(params, current.referenceImagePaths);
       if (repaired) {
