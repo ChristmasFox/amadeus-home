@@ -53,7 +53,7 @@ def main() -> None:
     parser.add_argument("--machine", default="example-node")
     args = parser.parse_args()
     desired = json.loads(DESIRED.read_text())["image"]
-    if desired["name"] != "amadeus-image" or desired["models"] != ["cx/gpt-image-2.6-sunburst", "xai/grok-imagine-image-2.0"]:
+    if desired["name"] != "amadeus-image" or desired["models"] != ["cx/gpt-image-2.6-sunburst", "cx/gpt-image-2.6-flare"]:
         raise SystemExit("desired image Combo no longer matches the pinned smoke")
     if not args.apply:
         print("MODE=dry-run; no authenticated image request")
