@@ -53,6 +53,8 @@ assert legacy_config["tools"]["toolSearch"] == {"enabled": True, "mode": "direct
 deploy_script = (ROOT / "scripts/deploy-openclaw.sh").read_text()
 assert "prepare.ensure_tool_search_directory_mode(config)" in deploy_script
 assert "config.get(\"tools\", {}).get(\"toolSearch\")" in deploy_script
+assert "wait_for_image_generation_tasks" in deploy_script
+assert "tasks list --json --status running" in deploy_script
 assert c["tools"].get("deny") == ["tts", "message"]
 assert c["tools"]["toolsBySender"]["*"].get("allow") == ["web_search", "web_fetch", "luckin_auth_status", "luckin_search_shops", "luckin_search_products", "luckin_product_detail", "luckin_switch_product", "luckin_draft_order", "luckin_confirm_order", "luckin_order_status", "luckin_cancel_order"]
 assert c["agents"]["defaults"]["typingMode"] == "instant"

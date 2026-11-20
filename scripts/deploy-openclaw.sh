@@ -1375,6 +1375,23 @@ EOF
 }
 
 ensure_openclaw_searxng_no_proxy
+wait_for_image_generation_tasks() {
+  local attempt running
+  for attempt in $(seq 1 360); do
+    running="$(orb -m "$MACHINE" -u root docker exec openclaw node /app/dist/index.js tasks list --json --status running \
+      | python3 -c 'import json,sys; tasks=json.load(sys.stdin).get("tasks", []); print(sum(1 for task in tasks if task.get("taskKind") == "image_generation"))')" \
+      || fail 'cannot read active image-generation tasks safely before OpenClaw switch'
+    [[ "$running" =~ ^[0-9]+$ ]] || fail 'active image-generation task count is invalid'
+    if ((running == 0)); then
+      printf '%s\n' 'DEPLOY_IMAGE_GENERATION_TASKS=idle'
+      return
+    fi
+    printf 'DEPLOY_WAIT_IMAGE_GENERATION_TASKS=count=%s attempt=%s/360\n' "$running" "$attempt"
+    sleep 5
+  done
+  fail 'image-generation tasks did not drain within 30 minutes; keep the current OpenClaw instance and retry later'
+}
+wait_for_image_generation_tasks
 deploy_stage switch
 if ((OPENCLAW_ONLY)); then
   orb -m "$MACHINE" -u root bash -lc "cd '$OPENCLAW_APP_DIR' && docker compose up -d --no-build --no-deps openclaw >/dev/null"
