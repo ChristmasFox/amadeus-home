@@ -336,6 +336,17 @@ def ensure_arthur_combo_thinking_levels(config: dict) -> None:
     models = provider.get("models") if isinstance(provider, dict) else None
     if not isinstance(models, list):
         return
+    private_model = {"id": "kurisu-private-combo", "name": "kurisu-private-combo", "reasoning": True,
+                     "input": ["text", "image"], "contextWindow": 200000, "contextTokens": 100000,
+                     "maxTokens": 32768, "thinkingLevelMap": {"medium": "low", "high": "low", "xhigh": "low", "max": "low"},
+                     "compat": {"supportsReasoningEffort": True, "supportedReasoningEfforts": ["low", "medium", "high", "xhigh", "max"]}}
+    matches = [m for m in models if isinstance(m, dict) and m.get("id") == "kurisu-private-combo"]
+    if len(matches) > 1:
+        raise SystemExit("duplicate kurisu-private-combo model")
+    if matches:
+        matches[0].update(private_model)
+    else:
+        models.append(private_model)
     for model in models:
         if isinstance(model, dict) and model.get("id") == "arthur-combo":
             compat = model.setdefault("compat", {})
