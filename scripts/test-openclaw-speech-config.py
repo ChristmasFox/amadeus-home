@@ -2,6 +2,7 @@
 """Pinned native speech config contract, without a live provider request."""
 from __future__ import annotations
 
+import importlib.util
 import json
 import os
 from pathlib import Path
@@ -42,6 +43,16 @@ assert media["audio"]["maxBytes"] <= 6 * 1024 * 1024
 # Typed delivery owns TTS; generic auto mode and Agent-facing TTS/message tools are disabled.
 assert c["tools"]["profile"] == "full"
 assert c["tools"]["toolSearch"] == {"enabled": True, "mode": "directory"}
+prepare_spec = importlib.util.spec_from_file_location("openclaw_prepare", ROOT / "scripts/openclaw_prepare.py")
+assert prepare_spec and prepare_spec.loader
+prepare = importlib.util.module_from_spec(prepare_spec)
+prepare_spec.loader.exec_module(prepare)
+legacy_config = {"tools": {"profile": "full"}}
+prepare.ensure_tool_search_directory_mode(legacy_config)
+assert legacy_config["tools"]["toolSearch"] == {"enabled": True, "mode": "directory"}
+deploy_script = (ROOT / "scripts/deploy-openclaw.sh").read_text()
+assert "prepare.ensure_tool_search_directory_mode(config)" in deploy_script
+assert "config.get(\"tools\", {}).get(\"toolSearch\")" in deploy_script
 assert c["tools"].get("deny") == ["tts", "message"]
 assert c["tools"]["toolsBySender"]["*"].get("allow") == ["web_search", "web_fetch", "luckin_auth_status", "luckin_search_shops", "luckin_search_products", "luckin_product_detail", "luckin_switch_product", "luckin_draft_order", "luckin_confirm_order", "luckin_order_status", "luckin_cancel_order"]
 assert c["agents"]["defaults"]["typingMode"] == "instant"

@@ -324,6 +324,15 @@ def owner_tool_policy_keys(phone: str) -> list[str]:
 
 ARTHUR_COMBO_REASONING_EFFORTS = ["low", "medium", "high", "xhigh", "max"]
 ARTHUR_COMBO_THINKING_LEVEL_MAP = {"xhigh": "xhigh", "max": "max"}
+TOOL_SEARCH_DIRECTORY_CONFIG = {"enabled": True, "mode": "directory"}
+
+
+def ensure_tool_search_directory_mode(config: dict) -> None:
+    """Keep uncommon OpenClaw tool schemas discoverable on demand for the owner agent."""
+    tools = config.setdefault("tools", {})
+    if not isinstance(tools, dict):
+        raise SystemExit("OpenClaw tools config must be an object")
+    tools["toolSearch"] = dict(TOOL_SEARCH_DIRECTORY_CONFIG)
 
 
 def ensure_arthur_combo_thinking_levels(config: dict) -> None:
@@ -524,6 +533,7 @@ def main() -> None:
     config = dict(config_template)
     if config.get("tools", {}).get("profile") != "full":
         raise SystemExit('OpenClaw Amadeus deployment requires tools.profile="full" for the owner agent')
+    ensure_tool_search_directory_mode(config)
     tool_search = config.get("tools", {}).get("toolSearch", {})
     if not isinstance(tool_search, dict) or tool_search.get("enabled") is not True or tool_search.get("mode") != "directory":
         raise SystemExit('OpenClaw Amadeus deployment requires tools.toolSearch={enabled:true,mode:"directory"}')
