@@ -61,6 +61,7 @@ type CurrentImageContext = ImageAssetOrigin & {
 type PendingInboundImages = Readonly<{ paths: readonly string[]; expiresAt: number }>;
 
 const IMAGE_CONTEXT_TTL_MS = 10 * 60 * 1000;
+const IMAGE_EDIT_PRESERVATION_CONSTRAINT = '【编辑范围约束】只改用户明确要求改变的内容。其余均保持参考图原样，尤其是服装及配饰、人物身份与脸部、发型、体型比例、背景、光线、取景和画风。不得自行替换或重设计。若用户明确要求修改上述某项，只修改所指定的部分。';
 const currentImageContexts = new Map<string, CurrentImageContext>();
 const pendingInboundImages = new Map<string, PendingInboundImages>();
 
@@ -530,17 +531,37 @@ export function registerImageAssets(api: OpenClawPluginApi): void {
   api.on('before_tool_call', (event, hookContext) => {
     if (event.toolName !== 'image_generate') return;
     const current = currentContextFor(hookContext.sessionKey);
-    if (!current?.referenceImagePaths?.length) return;
-    const repaired = repairInboundReferenceParams(event.params, current.referenceImagePaths);
-    if (!repaired) return;
-    api.logger.info(JSON.stringify({
-      event: 'image_reference_path_rebound',
-      runId: event.runId,
-      toolCallId: event.toolCallId,
-      source: 'current_inbound_media',
-      referenceCount: current.referenceImagePaths.length,
-    }));
-    return { params: repaired };
+    let params = event.params;
+    let changed = false;
+    let rebound = false;
+    if (current?.referenceImagePaths?.length) {
+      const repaired = repairInboundReferenceParams(params, current.referenceImagePaths);
+      if (repaired) {
+        params = repaired;
+        changed = true;
+        rebound = true;
+      }
+    }
+    const hasReference = Boolean(text(params.image)) || (Array.isArray(params.images) && params.images.length > 0);
+    const prompt = typeof params.prompt === 'string' ? params.prompt : undefined;
+    if (hasReference && prompt?.trim() && !prompt.includes(IMAGE_EDIT_PRESERVATION_CONSTRAINT)) {
+      params = {
+        ...params,
+        prompt: `${prompt.trim()}\n\n${IMAGE_EDIT_PRESERVATION_CONSTRAINT}`,
+      };
+      changed = true;
+    }
+    if (!changed) return;
+    if (rebound && current?.referenceImagePaths) {
+      api.logger.info(JSON.stringify({
+        event: 'image_reference_path_rebound',
+        runId: event.runId,
+        toolCallId: event.toolCallId,
+        source: 'current_inbound_media',
+        referenceCount: current.referenceImagePaths.length,
+      }));
+    }
+    return { params };
   }, { matcher: ['image_generate'] });
   api.on('after_tool_call', (event, hookContext) => {
     if (event.error || (event.toolName !== 'image_generate' && event.toolName !== 'amadeus_image_upscale' && event.toolName !== 'amadeus_web_image' && event.toolName !== 'luckin_confirm_order')) return;
