@@ -2,19 +2,7 @@ import type { OpenClawPluginApi } from 'openclaw/plugin-sdk/core';
 import { getSessionEntry, patchSessionEntry } from 'openclaw/plugin-sdk/session-store-runtime';
 import { isOwnerDirectSession, ownerDigits } from './dm-digest.js';
 
-/**
- * THE one place that sets the thinking level of every chat session (WhatsApp groups and direct chats, Telegram, KOOK,
- * the main session), old and new alike. To change it, change this constant and release; nothing else sets a level.
- *
- * OpenClaw keeps the level per session, and it only reaches the model because arthur-combo declares
- * compat.supportsReasoningEffort. OpenClaw rejects xhigh/max for a model that does not list them, so arthur-combo also
- * declares supportedReasoningEfforts and thinkingLevelMap (integrations/openclaw/openclaw.json.example; scripts/
- * openclaw_prepare.py ensure_arthur_combo_thinking_levels keeps the live config in step). 9Router then clamps max to the
- * highest level each route accepts (Gemini: high), so the wire value is never invalid. The hook below writes this level into
- * a session at its start and again before each turn whenever it differs, so existing sessions follow a change too
- * (a /think chosen in chat lasts until the next turn). Cron, release-check and other internal sessions keep their own.
- */
-export const CHAT_THINKING_LEVEL = 'xhigh';
+/** Only the verified owner's WhatsApp DM pins its thinking level. Other chats inherit OpenClaw's global default. */
 export const OWNER_DM_THINKING_LEVEL = 'low';
 export const OWNER_DM_MODEL = 'kurisu-private-combo';
 
@@ -42,7 +30,7 @@ export const sdkStore: ThinkingStore = {
 };
 
 /** Brings one session to CHAT_THINKING_LEVEL; resolves true when it had to change it. */
-export async function ensureThinkingLevel(store: ThinkingStore, sessionKey: unknown, agentId?: string, level = CHAT_THINKING_LEVEL): Promise<boolean> {
+export async function ensureThinkingLevel(store: ThinkingStore, sessionKey: unknown, agentId?: string, level = OWNER_DM_THINKING_LEVEL): Promise<boolean> {
   if (!isChatSessionKey(sessionKey)) return false;
   if (store.read(sessionKey, agentId)?.thinkingLevel === level) return false;
   await store.patch(sessionKey, agentId, level);
@@ -52,8 +40,8 @@ export async function ensureThinkingLevel(store: ThinkingStore, sessionKey: unkn
 export function registerThinkingLevel(api: OpenClawPluginApi, store: ThinkingStore = sdkStore, resolveOwner: () => Promise<string | undefined> = () => ownerDigits(api)): void {
   const ensure = async (sessionKey: unknown, agentId?: string): Promise<void> => {
     try {
-      const level = isOwnerWhatsAppDm(sessionKey, await resolveOwner()) ? OWNER_DM_THINKING_LEVEL : CHAT_THINKING_LEVEL;
-      if (await ensureThinkingLevel(store, sessionKey, agentId, level)) api.logger.info(`amadeus chat thinking set to ${level}`);
+      if (!isOwnerWhatsAppDm(sessionKey, await resolveOwner())) return;
+      if (await ensureThinkingLevel(store, sessionKey, agentId, OWNER_DM_THINKING_LEVEL)) api.logger.info('amadeus owner dm thinking set to low');
     } catch {
       // Never block a turn on this; the next turn tries again.
       api.logger.warn('amadeus chat thinking not set');
