@@ -80,23 +80,25 @@ export function assertAmadeusImageTransportRouteModel(input) {
   return actual;
 }
 
-/** 9Router 0.5.91 JSON reference contract; its fallback supports one image. */
+/** 9Router accepts one image or an ordered array of references. */
 export function buildAmadeusReferenceImagePayload(req) {
   if (req.imageRouteContext?.configuredLogicalModel !== 'openai/amadeus-image' ||
       req.provider !== 'openai' || req.model !== 'amadeus-image') return undefined;
   const images = req.inputImages ?? [];
   if (images.length === 0) return undefined;
-  if (images.length !== 1) throw new Error('amadeus_image_reference_count_unsupported');
-  const image = images[0];
-  if (!(image.buffer instanceof Uint8Array)) throw new Error('amadeus_image_reference_invalid');
-  const bytes = Buffer.from(image.buffer);
-  if (!bytes.length || bytes.length > 10 * 1024 * 1024) throw new Error('amadeus_image_reference_size_unsupported');
-  const mime = image.mimeType?.trim().toLowerCase();
-  const detected = bytes.length >= 8 && bytes.subarray(0, 8).equals(Buffer.from([137,80,78,71,13,10,26,10])) ? 'image/png'
-    : bytes.length >= 3 && bytes[0] === 255 && bytes[1] === 216 && bytes[2] === 255 ? 'image/jpeg'
-    : bytes.length >= 12 && bytes.toString('ascii', 0, 4) === 'RIFF' && bytes.toString('ascii', 8, 12) === 'WEBP' ? 'image/webp' : undefined;
-  if (!detected || mime !== detected) throw new Error('amadeus_image_reference_mime_unsupported');
-  return { image: 'data:' + mime + ';base64,' + bytes.toString('base64') };
+  if (images.length > 5) throw new Error('amadeus_image_reference_count_unsupported');
+  const references = images.map((image) => {
+    if (!(image.buffer instanceof Uint8Array)) throw new Error('amadeus_image_reference_invalid');
+    const bytes = Buffer.from(image.buffer);
+    if (!bytes.length || bytes.length > 10 * 1024 * 1024) throw new Error('amadeus_image_reference_size_unsupported');
+    const mime = image.mimeType?.trim().toLowerCase();
+    const detected = bytes.length >= 8 && bytes.subarray(0, 8).equals(Buffer.from([137,80,78,71,13,10,26,10])) ? 'image/png'
+      : bytes.length >= 3 && bytes[0] === 255 && bytes[1] === 216 && bytes[2] === 255 ? 'image/jpeg'
+      : bytes.length >= 12 && bytes.toString('ascii', 0, 4) === 'RIFF' && bytes.toString('ascii', 8, 12) === 'WEBP' ? 'image/webp' : undefined;
+    if (!detected || mime !== detected) throw new Error('amadeus_image_reference_mime_unsupported');
+    return 'data:' + mime + ';base64,' + bytes.toString('base64');
+  });
+  return references.length === 1 ? { image: references[0] } : { images: references };
 }
 
 function replaceOnce(source, find, replacement, label) {
@@ -120,7 +122,7 @@ export function patchImageGenerationToolSource(original) {
         !original.includes('modelOverride: undefined') ||
         !original.includes('image_route_operator_model_selected') ||
         !original.includes('image_route_task_enqueued') ||
-        !original.includes('image_route_worker_model_resolved') || !original.includes('amadeus_image_reference_count_unsupported') || !original.includes('amadeus-image accepts exactly one') || !original.includes('up to 10 MiB') || !original.includes('Ignored for image generation') || !original.includes('Action=list shows provider/model availability')) {
+        !original.includes('image_route_worker_model_resolved') || !original.includes('amadeus_image_reference_count_unsupported') || !original.includes('amadeus-image accepts up to five') || !original.includes('up to 10 MiB') || !original.includes('Ignored for image generation') || !original.includes('Action=list shows provider/model availability')) {
       throw new Error('incomplete image route authority patch');
     }
     return original;
@@ -139,11 +141,11 @@ export function patchImageGenerationToolSource(original) {
     'agent-visible image model hint');
   output = replaceOnce(output,
 `image: Type.Optional(Type.String({ description: "Reference image path/URL for edit." })),`,
-`image: Type.Optional(Type.String({ description: "Reference image path/URL for edit; the amadeus-image route accepts one PNG/JPEG/WebP reference up to 10 MiB." })),`,
+`image: Type.Optional(Type.String({ description: "Reference image path/URL for edit; the amadeus-image route accepts a PNG/JPEG/WebP reference up to 10 MiB." })),`,
     'agent-visible reference limit');
   output = replaceOnce(output,
 `images: Type.Optional(Type.Array(Type.String(), { description: ` + "`Reference images for edit or style reference; max ${MAX_REFERENCE_IMAGE_INPUTS}.`" + ` })),`,
-`images: Type.Optional(Type.Array(Type.String(), { description: ` + "`Reference images for edit; amadeus-image accepts exactly one, maximum ${MAX_REFERENCE_IMAGE_INPUTS} applies to other configured routes.`" + ` })),`,
+`images: Type.Optional(Type.Array(Type.String(), { description: ` + "`Reference images for edit; amadeus-image accepts up to five PNG/JPEG/WebP references, each up to 10 MiB. The maximum ${MAX_REFERENCE_IMAGE_INPUTS} applies to other configured routes.`" + ` })),`,
     'agent-visible reference count');
   output = replaceOnce(output,
 `resolution: Type.Optional(Type.String({ description: "Resolution: 1K, 2K, 4K; useful for Google." })),`,
@@ -202,8 +204,8 @@ export function patchImageGenerationToolSource(original) {
 
   output = replaceOnce(output,
 'const imageInputs = normalizeReferenceImages(params);',
-'const imageInputs = normalizeReferenceImages(params);\n\t\t\t\tif (routeAuthority.configuredLogicalModel === "openai/amadeus-image" && imageInputs.length > 1) throw new ToolInputError("amadeus_image_reference_count_unsupported");',
-    'single-reference admission boundary');
+'const imageInputs = normalizeReferenceImages(params);\n\t\t\t\tif (routeAuthority.configuredLogicalModel === "openai/amadeus-image" && imageInputs.length > 5) throw new ToolInputError("amadeus_image_reference_count_unsupported");',
+    'reference count admission boundary');
 
   const tabs = (count) => '\t'.repeat(count);
   output = replaceOnce(output,
@@ -312,7 +314,7 @@ export function patchOpenAIImageProviderSource(original) {
   if (original.includes(marker)) {
     if (!original.includes('image_route_invariant_violation') || !original.includes('image_route_transport_model_resolved') ||
         !original.includes('image_route_transport_failed') || !original.includes('buildAmadeusReferenceImagePayload') ||
-        !original.includes('amadeusReferencePayload') || !original.includes('requestAmadeusQwenFallback') ||
+        !original.includes('amadeusReferencePayload') || !original.includes('amadeus_qwen_reference_count_unsupported') || !original.includes('requestAmadeusQwenFallback') ||
         !original.includes('AMADEUS_QWEN_IMAGE_TOKEN_FILE') || !original.includes('AMADEUS_QWEN_IMAGE_LOCAL_ONLY') ||
         !original.includes('AMADEUS_QWEN_IMAGE_FALLBACK_ENABLED')) {
       throw new Error('incomplete OpenAI image route patch');
@@ -361,6 +363,7 @@ async function readAmadeusQwenImageToken() {
 }
 function buildAmadeusQwenFallbackRequest(req, token, timeoutMs, FormDataConstructor = FormData) {
 	const references = req.inputImages ?? [];
+	if (references.length > 1) throw new Error("amadeus_qwen_reference_count_unsupported");
 	const options = { method: "POST", headers: { Authorization: "Bearer " + token }, signal: AbortSignal.timeout(timeoutMs) };
 	if (references.length === 0) {
 		options.headers["Content-Type"] = "application/json";

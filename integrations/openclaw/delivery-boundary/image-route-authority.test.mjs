@@ -491,14 +491,14 @@ const referenceReq = () => ({ provider: 'openai', model: 'amadeus-image',
   prompt: 'synthetic fixture', inputImages: [{ buffer: referencePng, mimeType: 'image/png' }],
   quality: 'high', background: 'opaque', outputFormat: 'png' });
 
-test('single-reference payload preserves bytes/MIME and rejects silent loss', () => {
+test('reference payload preserves bytes/MIME and rejects invalid references', () => {
   const req = referenceReq();
   const payload = buildAmadeusReferenceImagePayload(req);
   assert.deepEqual(Buffer.from(payload.image.split(',')[1], 'base64'), referencePng);
   assert.ok(payload.image.startsWith('data:image/png;base64,'));
   assert.equal(buildAmadeusReferenceImagePayload({ ...req, inputImages: [] }), undefined);
   assert.equal(buildAmadeusReferenceImagePayload({ ...req, model: 'other' }), undefined);
-  assert.throws(() => buildAmadeusReferenceImagePayload({ ...req, inputImages: [req.inputImages[0], req.inputImages[0]] }), /reference_count_unsupported/);
+  assert.throws(() => buildAmadeusReferenceImagePayload({ ...req, inputImages: Array(6).fill(req.inputImages[0]) }), /reference_count_unsupported/);
   assert.throws(() => buildAmadeusReferenceImagePayload({ ...req, inputImages: [{ buffer: referencePng, mimeType: 'image/jpeg' }] }), /reference_mime_unsupported/);
   assert.throws(() => buildAmadeusReferenceImagePayload({ ...req, inputImages: [{ buffer: Buffer.alloc(10*1024*1024+1), mimeType: 'image/png' }] }), /reference_size_unsupported/);
 });
@@ -532,8 +532,19 @@ ${snippet}`);
   assert.equal(ref.body.output_format, 'png');
   assert.equal(ref.body.quality, 'high');
   assert.equal(ref.body.background, 'opaque');
-  assert.equal(ref.body.response_format, 'b64_json', 'Grok fallback must return inline image data; imgen.x.ai URLs are unreachable');
+  assert.equal(ref.body.response_format, 'b64_json', 'the image route must return inline image data');
   assert.deepEqual(Buffer.from(ref.body.image.split(',')[1], 'base64'), referencePng);
+  const jpeg = Buffer.from([255, 216, 255, 217]);
+  const multi = await capture({
+    ...referenceReq(),
+    quality: 'max',
+    inputImages: [...referenceReq().inputImages, { buffer: jpeg, mimeType: 'image/jpeg' }],
+  });
+  assert.equal(multi.url, ref.url);
+  assert.equal(multi.body.prompt, referenceReq().prompt);
+  assert.equal(multi.body.quality, 'max');
+  assert.equal(multi.body.image, undefined);
+  assert.deepEqual(multi.body.images, [ref.body.image, 'data:image/jpeg;base64,' + jpeg.toString('base64')]);
   const plain = await capture({ ...referenceReq(),inputImages:[] });
   assert.equal(plain.url, ref.url); assert.equal(plain.body.image, undefined);
   const other = await capture({ ...referenceReq(),model:'other',imageRouteContext:undefined });
