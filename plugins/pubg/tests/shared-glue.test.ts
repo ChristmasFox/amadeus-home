@@ -1,8 +1,9 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
+import { Value } from 'typebox/value';
 import { PUBG_SKILL_RULES } from '@rine-kit/pubg-reply';
-import { jsonToolResult } from '../src/index.js';
+import { jsonToolResult, ToolOutputSchema } from '../src/index.js';
 import { FIXTURES } from './shared-glue-fixtures.js';
 
 /*
@@ -32,6 +33,7 @@ for (const [name, fixture] of Object.entries(FIXTURES)) {
         'Asia/Shanghai',
         withShare ? (share as never) : undefined,
       );
+      assert.deepEqual([...Value.Errors(ToolOutputSchema, payload(result))].map((error) => ({ path: error.instancePath, message: error.message })), []);
       assert.equal(
         `${JSON.stringify(payload(result), null, 2)}\n`,
         golden(`${name}${withShare ? '.share' : ''}`),

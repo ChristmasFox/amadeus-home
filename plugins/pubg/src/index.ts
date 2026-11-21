@@ -154,7 +154,7 @@ const DataSourceRangeSchema = Type.Object({
   businessDayStart: Type.Union([Type.String(), Type.Null()]),
   segments: Type.Array(DataSourceRangeSegment, { maxItems: 2 }),
 }, { additionalProperties: false });
-const ToolOutputSchema = Type.Object({
+export const ToolOutputSchema = Type.Object({
   status: ToolOutputStatus,
   data: Type.Unknown(),
   coverage: Type.Object({
@@ -175,6 +175,7 @@ const ToolOutputSchema = Type.Object({
   dataSourceRange: DataSourceRangeSchema,
   presentation: Type.Unknown(),
   displayText: Type.String({ minLength: 1 }),
+  replyGuide: Type.Optional(Type.String()),
   metricVersion: Type.String(),
   queryResolved: Type.Record(Type.String(), Type.Unknown()),
   evidenceRefs: Type.Object({
