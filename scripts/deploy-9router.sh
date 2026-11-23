@@ -120,6 +120,9 @@ rollback() {
   fi
 }
 trap rollback ERR
+# 9Router serves image generation too. Never interrupt a running generation
+# while switching the router candidate; fail closed if task state is unknown.
+bash "$ROOT/scripts/wait-openclaw-image-tasks.sh" "$MACHINE"
 orb -m "$MACHINE" -u root python3 - "$APP/docker-compose.yml" "$IMAGE" <<'PY'
 import re,sys
 from pathlib import Path

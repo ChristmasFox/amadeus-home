@@ -23,6 +23,7 @@ import { registerLuckinTools } from './luckin/register.js';
 import { registerMemoryOwnerOnly } from './memory-owner-only.js';
 import { registerPrivateMemoryGuard } from './private-memory.js';
 import { registerOwnerDmPreferences } from './owner-dm-preferences.js';
+import { registerRepairObservation } from './repair-observation.js';
 
 const entry = definePluginEntry({
   id: 'amadeus',
@@ -37,6 +38,7 @@ const entry = definePluginEntry({
     registerImageAssets(api);
     registerOwnerNotificationWorker(api, config);
     registerRealtimeFacts(api);
+    registerRepairObservation(api);
     registerRemember(api);
     registerTruncatedOutputGuard(api);
     registerDmDigest(api);
