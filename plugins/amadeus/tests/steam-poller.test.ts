@@ -65,22 +65,22 @@ test('a restart never replays: the ledger already knows the person is online', a
   assert.equal(env.sent.length, 0);
 });
 
-test('two people arriving together share one message; coming back later is announced again', async () => {
+test('two game starts share one message and later starts are announced again', async () => {
   const env = setup();
   const poller = env.poller();
   env.states.set(A.steam, { personaState: 0 });
   env.states.set(B.steam, { personaState: 0 });
   await cycle(env, poller);
-  env.states.set(A.steam, { personaState: 1 });
-  env.states.set(B.steam, { personaState: 1 });
+  env.states.set(A.steam, { personaState: 1, gameId: '1' });
+  env.states.set(B.steam, { personaState: 1, gameId: '2' });
   await cycle(env, poller, 7);
   assert.equal(env.sent.length, 1);
   assert.equal(env.sent[0]!.text, 'FAKE: Alpha+Bravo');
   env.states.set(A.steam, { personaState: 0 });
   await cycle(env, poller, 3);
-  env.states.set(A.steam, { personaState: 1 });
+  env.states.set(A.steam, { personaState: 1, gameId: '1' });
   await cycle(env, poller, 8);
-  assert.equal(env.sent.length, 2); // no cooldown: a new arrival is a new announcement
+  assert.equal(env.sent.length, 2); // no cooldown after the initial restart window
 });
 
 test('an arrival that goes away again inside the merge window is not announced', async () => {
@@ -95,13 +95,13 @@ test('an arrival that goes away again inside the merge window is not announced',
   assert.equal(env.sent.length, 0);
 });
 
-test('there are no quiet hours: a night-time arrival is announced like any other', async () => {
+test('there are no quiet hours: a night-time game start is announced', async () => {
   const env = setup();
   env.setNow(NIGHT);
   const poller = env.poller();
   env.states.set(A.steam, { personaState: 0 });
   await cycle(env, poller);
-  env.states.set(A.steam, { personaState: 1 });
+  env.states.set(A.steam, { personaState: 1, gameId: '1' });
   await cycle(env, poller, 6);
   assert.equal(env.sent.length, 1);
 });
@@ -206,7 +206,7 @@ test('every account of a person is announced; the person name leads and the Stea
   let now = DAY;
   const poller = new PresencePoller({
     store,
-    client: { playerSummaries: async (ids) => new Map(ids.map((id): [string, PlayerSummary] => [id, { steamId: id, name: id, profilePublic: true, personaState: states.get(id) ?? 0 }])) },
+    client: { playerSummaries: async (ids) => new Map(ids.map((id): [string, PlayerSummary] => [id, { steamId: id, name: id, profilePublic: true, personaState: states.get(id) ?? 0, ...(states.get(id) ? { gameId: '1', gameName: 'Game' } : {}) }])) },
     compose: async (value) => { facts.push(value); return 'x'; },
     send: async () => undefined,
     now: () => now,
@@ -215,7 +215,7 @@ test('every account of a person is announced; the person name leads and the Stea
   await poller.tick();
   now += 60_000; states.set(A.steam, 1); states.set(B.steam, 1);
   await poller.tick();
-  now += 4 * 60_000;
+  now += 5 * 60_000;
   await poller.tick();
   assert.equal(facts.length, 1);
   assert.deepEqual(facts[0]!.people.map((person) => [person.name, person.steamName]), [['Kurisu Fan', 'MainNick'], ['Kurisu Fan', 'AltNick']]);

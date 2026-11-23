@@ -262,7 +262,7 @@ test('stopped_playing: a real stop of a long session is announced once with the 
   const { sent, run } = stopEnv();
   await run(1, undefined);                                   // baseline: offline-ish (online, no game)
   await run(90, { id: '578080', name: 'PUBG: BATTLEGROUNDS' });
-  await run(5, undefined);                                   // stops; merge window then flush
+  await run(6, undefined);                                   // stops; merge window then flush
   const stops = sent.filter((text) => text.includes('🏁'));
   assert.equal(stops.length, 1);
   assert.match(stops[0]!, /^Amadeus · kim 收束 · PUBG: BATTLEGROUNDS（吃鸡） 1小时3\d分 🏁\n/u);

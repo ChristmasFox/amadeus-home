@@ -33,46 +33,46 @@ function env() {
 /** The kind of each notice, by the emoji that ends its title. */
 const titles = (sent: string[]) => sent.map((text) => text.split('\n')[0]!.split(' ').at(-1));
 
-test('offline -> online announces the arrival', async () => {
+test('offline -> online stays silent', async () => {
   const { sent, run } = env();
   await run(1, { state: 0 });
   await run(5, { state: 1 });
-  assert.deepEqual(titles(sent), ['🟢']);
+  assert.deepEqual(titles(sent), []);
 });
 
-test('offline -> straight into a game announces the arrival with the game', async () => {
+test('offline -> game announces the game start', async () => {
   const { sent, run } = env();
   await run(1, { state: 0 });
-  await run(5, { state: 1, game: { id: '10', name: 'Game A' } });
-  assert.deepEqual(titles(sent), ['🟢']);
-  assert.match(sent[0]!, /^Amadeus · kim 上线 · 正在玩 Game A 🟢\n/u);
+  await run(6, { state: 1, game: { id: '10', name: 'Game A' } });
+  assert.deepEqual(titles(sent), ['🎮']);
+  assert.match(sent[0]!, /^Amadeus · kim 开始玩 Game A 🎮\n/u);
 });
 
-test('coming online and then starting a game inside the merge window still announces the arrival, with the game', async () => {
+test('coming online and then starting a game announces the start', async () => {
   const { sent, run } = env();
   await run(1, { state: 0 });
   await run(1, { state: 1 });
-  await run(5, { state: 1, game: { id: '10', name: 'Game A' } });
-  assert.deepEqual(titles(sent), ['🟢']);
-  assert.match(sent[0]!, /^Amadeus · kim 上线 · 正在玩 Game A 🟢\n/u);
+  await run(6, { state: 1, game: { id: '10', name: 'Game A' } });
+  assert.deepEqual(titles(sent), ['🎮']);
+  assert.match(sent[0]!, /^Amadeus · kim 开始玩 Game A 🎮\n/u);
 });
 
-test('coming online into a launcher and then switching to the real game inside the window is one arrival, not a switch', async () => {
+test('switching from a launcher during the window announces the switch', async () => {
   const { sent, run } = env();
   await run(1, { state: 0 });
   await run(1, { state: 1, game: { id: '1', name: 'Launcher' } });
-  await run(5, { state: 1, game: { id: '2', name: 'Game B' } });
-  assert.deepEqual(titles(sent), ['🟢']);
-  assert.match(sent[0]!, /^Amadeus · kim 上线 · 正在玩 Game B 🟢\n/u);
+  await run(6, { state: 1, game: { id: '2', name: 'Game B' } });
+  assert.deepEqual(titles(sent), ['🔀']);
+  assert.match(sent[0]!, /^Amadeus · kim 世界线变动 · Launcher → Game B 🔀\n/u);
 });
 
 test('a switch after the arrival was announced is a 世界线变动 naming both games, even for a short session', async () => {
   const { sent, run } = env();
   await run(1, { state: 0 });
-  await run(5, { state: 1, game: { id: '10', name: 'Game A' } });
+  await run(6, { state: 1, game: { id: '10', name: 'Game A' } });
   await run(1, { state: 1, game: { id: '20', name: 'Game B' } });
-  await run(5, { state: 1, game: { id: '20', name: 'Game B' } });
-  assert.deepEqual(titles(sent), ['🟢', '🔀']);
+  await run(6, { state: 1, game: { id: '20', name: 'Game B' } });
+  assert.deepEqual(titles(sent), ['🎮', '🔀']);
   assert.match(sent[1]!, /^Amadeus · kim 世界线变动 · Game A → Game B 🔀\n/u);
   assert.match(sent[1]!, /El Psy Kongroo\.$/u);
 });
@@ -88,10 +88,10 @@ test('games with a community alias are shown as name（alias） in every notice;
   assert.equal(gameLabel('578080', undefined), undefined);
   const { sent, run } = env();
   await run(1, { state: 0 });
-  await run(5, { state: 1, game: { id: '578080', name: 'PUBG: BATTLEGROUNDS' } });
+  await run(6, { state: 1, game: { id: '578080', name: 'PUBG: BATTLEGROUNDS' } });
   await run(1, { state: 1, game: { id: '271590', name: 'Grand Theft Auto V' } });
-  await run(5, { state: 1, game: { id: '271590', name: 'Grand Theft Auto V' } });
-  assert.match(sent[0]!, /^Amadeus · kim 上线 · 正在玩 PUBG: BATTLEGROUNDS（吃鸡） 🟢\n/u);
+  await run(6, { state: 1, game: { id: '271590', name: 'Grand Theft Auto V' } });
+  assert.match(sent[0]!, /^Amadeus · kim 开始玩 PUBG: BATTLEGROUNDS（吃鸡） 🎮\n/u);
   assert.match(sent[0]!, /- 游戏：PUBG: BATTLEGROUNDS（吃鸡）/u);
   assert.match(sent[1]!, /^Amadeus · kim 世界线变动 · PUBG: BATTLEGROUNDS（吃鸡） → Grand Theft Auto V（GTA5） 🔀\n/u);
 });

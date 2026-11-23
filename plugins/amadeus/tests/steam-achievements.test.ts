@@ -124,13 +124,13 @@ test('unlocks: the first sight is only a baseline; a later unlock is announced o
   await poller.tick();                       // baseline (also the presence baseline)
   advance(2 * 60_000);
   await poller.tick();
-  advance(4 * 60_000);
+  advance(5 * 60_000);
   await poller.tick();
   assert.equal(facts.length, 0, 'nothing historic or unchanged is announced');
   unlocked.value = ['A1', 'A2'];
   advance(2 * 60_000);
   await poller.tick();
-  advance(4 * 60_000);
+  advance(5 * 60_000);
   await poller.tick();
   assert.equal(facts.length, 1);
   const person = facts[0]!.people[0]!;
@@ -138,7 +138,7 @@ test('unlocks: the first sight is only a baseline; a later unlock is announced o
   assert.deepEqual(person.achievements, [{ apiName: 'A2', name: 'Rare One', globalPercent: 2.5 }]);
   advance(2 * 60_000);
   await poller.tick();
-  advance(4 * 60_000);
+  advance(5 * 60_000);
   await poller.tick();
   assert.equal(facts.length, 1, 'the same unlock is not announced again');
 });
@@ -153,7 +153,7 @@ test('several unlocks in one window are merged into one message; stale unlocks a
   unlocked.value = ['A1', 'A2'];
   merged.advance(60_000);
   await merged.poller.tick();
-  merged.advance(4 * 60_000);
+  merged.advance(5 * 60_000);
   await merged.poller.tick();
   assert.equal(merged.facts.length, 1);
   assert.deepEqual(merged.facts[0]!.people[0]!.achievements!.map((item) => item.apiName), ['A1', 'A2']);
@@ -164,7 +164,7 @@ test('several unlocks in one window are merged into one message; stale unlocks a
   stale.value = ['A1'];
   old.advance(60_000);
   await old.poller.tick();
-  old.advance(4 * 60_000);
+  old.advance(5 * 60_000);
   await old.poller.tick();
   assert.equal(old.facts.length, 0, 'an unlock from hours ago is not announced');
 });
@@ -200,7 +200,7 @@ test('achievements are read on their own clock: presence every 30 s, at most one
   const before = reads;
   for (let index = 0; index < 4; index += 1) { await poller.tick(); now += 30_000; }
   assert.equal(reads - before, 1);
-  for (let index = 0; index < 6; index += 1) { await poller.tick(); now += 30_000; } // the merge window closes, then it goes out
+  for (let index = 0; index < 10; index += 1) { await poller.tick(); now += 30_000; } // the merge window closes, then it goes out
   assert.ok(facts.some((fact) => fact.people[0]!.kind === 'achievement_unlocked'));
   // the one last read after the game ends still happens, once it is allowed
   playing = false;

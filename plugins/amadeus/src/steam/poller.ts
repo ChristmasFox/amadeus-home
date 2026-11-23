@@ -102,7 +102,6 @@ export class PresencePoller {
         const before = store.presence(steamId);
         const { next, event } = applyObservation(before, observation, now);
         store.savePresence(steamId, next);
-        if (next.state === 'offline') this.dropFromQueues(steamId);
         const { closed } = store.recordPlay(steamId, next.state === 'in_game' && next.gameId ? { appId: next.gameId, ...(next.gameName ? { name: next.gameName } : {}) } : undefined, now,
           { ...(before?.state === 'in_game' && before.gameId === next.gameId ? { startHint: before.since } : {}) });
         const minutes = closed ? Math.round((closed.endedAt - closed.startedAt) / 60_000) : 0;
@@ -181,10 +180,6 @@ export class PresencePoller {
     return queued;
   }
 
-  private dropFromQueues(steamId: string): void {
-    for (const group of this.queue.values()) group.delete(steamId);
-  }
-
   private enqueue(event: PresenceChange): void {
     const link = this.deps.store.linkBySteamId(event.steamId);
     if (!link || !link.broadcast) return;
@@ -194,14 +189,9 @@ export class PresencePoller {
       const slot = slotOf(event);
       const earlier = group.get(slot);
       // Unlocks arriving before the merge window closes join the earlier ones instead of replacing them.
-      // A person who just came online (or back) and starts or changes a game before the window closes is still announced as
-      // coming online, now with the game: the newest event must not replace the arrival.
-      const arrival = earlier && (earlier.kind === 'came_online' || earlier.kind === 'back_from_away') && (event.kind === 'started_playing' || event.kind === 'switched_game');
       const merged = event.kind === 'achievement_unlocked' && earlier?.achievements
         ? { ...event, at: earlier.at, achievements: [...earlier.achievements, ...(event.achievements ?? []).filter((item) => !earlier.achievements!.some((known) => known.apiName === item.apiName))] }
-        : arrival
-          ? { steamId: event.steamId, kind: earlier.kind, at: earlier.at, ...(event.gameId ? { gameId: event.gameId } : {}), ...(event.gameName ? { gameName: event.gameName } : {}) }
-          : { ...event };
+        : { ...event };
       group.set(slot, merged);
       this.queue.set(groupId, group);
     }

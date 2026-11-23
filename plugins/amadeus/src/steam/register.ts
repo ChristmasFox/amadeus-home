@@ -33,7 +33,7 @@ const UnlinkParameters = Type.Object({
   account: Type.Optional(Type.String({ minLength: 1, maxLength: 256, description: '要解除哪一个账号：SteamID、个人资料链接或 Steam 昵称。只有一个账号时可不填。' })),
   all: Type.Optional(Type.Boolean({ description: 'true=解除自己所有 Steam 账号。' })),
 }, { additionalProperties: false });
-const BroadcastParameters = Type.Object({ enabled: Type.Boolean({ description: 'true=打开我的自动播报（上线、开始玩、换游戏、回来、成就解锁）；false=关掉。' }) }, { additionalProperties: false });
+const BroadcastParameters = Type.Object({ enabled: Type.Boolean({ description: 'true=打开我的自动播报（开始玩、换游戏、结束游戏、成就解锁）；false=关掉。' }) }, { additionalProperties: false });
 const EmptyParameters = Type.Object({}, { additionalProperties: false });
 const ProfileParameters = Type.Object({ person: PersonParameters }, { additionalProperties: false });
 const PlaytimeParameters = Type.Object({
@@ -132,11 +132,11 @@ export function registerSteamTools(api: OpenClawPluginApi): void {
   const caller = (context: OpenClawPluginToolContext): SteamCaller => callerFrom(configFor(api), context);
   const person = (params: { person: unknown }): Person => params.person as Person;
 
-  registerTool(api, 'steam_link_account', '给发消息的人自己绑定一个 Steam 账号；一个人可以绑多个账号，新的不会覆盖旧的（用于查询自己的 Steam 信息，并默认在开启了播报的群里被播报上线）。先不带 confirm 调用得到昵称，让用户确认后再 confirm=true。不填 person 就绑发消息的人自己；只有 owner 在群里可以用 person（mention=@的人 / reply_sender=被回复的人 / alias=群里的称呼）替其他成员绑定，非 owner 只能绑自己。', LinkParameters,
+  registerTool(api, 'steam_link_account', '给发消息的人自己绑定一个 Steam 账号；一个人可以绑多个账号，新的不会覆盖旧的（用于查询自己的 Steam 信息，并默认在开启了播报的群里播报游戏活动）。先不带 confirm 调用得到昵称，让用户确认后再 confirm=true。不填 person 就绑发消息的人自己；只有 owner 在群里可以用 person（mention=@的人 / reply_sender=被回复的人 / alias=群里的称呼）替其他成员绑定，非 owner 只能绑自己。', LinkParameters,
     async (params, context) => steamLinkAccount(deps(), caller(context), params as Static<typeof LinkParameters>));
   registerTool(api, 'steam_unlink', '解除发消息的人自己的一个 Steam 账号（有多个账号时用 account 指定哪一个，或 all=true 全部解除），并删除相关记录。', UnlinkParameters,
     async (params, context) => steamUnlink(deps(), caller(context), params as Static<typeof UnlinkParameters>));
-  registerTool(api, 'steam_set_broadcast', '打开或关闭发消息的人自己的 Steam 自动播报（上线、开始玩、换游戏、离开后回来、成就解锁都会自动播到已开启播报的群；在群里打开会把这个人加入本群的播报名单）。用户说“关掉/打开我的播报”时调用。', BroadcastParameters,
+  registerTool(api, 'steam_set_broadcast', '打开或关闭发消息的人自己的 Steam 自动播报（开始玩、换游戏、结束游戏、成就解锁都会自动播到已开启播报的群；在群里打开会把这个人加入本群的播报名单）。用户说“关掉/打开我的播报”时调用。', BroadcastParameters,
     async (params, context) => steamSetBroadcast(deps(), caller(context), params as Static<typeof BroadcastParameters>));
   registerTool(api, 'steam_get_profile', '查某个已绑定 Steam 的人的资料：昵称、当前在线状态与正在玩的游戏、账号创建时间。资料不公开的字段会返回 known:false，不要编造。', ProfileParameters,
     async (params, context) => steamGetProfile(deps(), caller(context), { person: person(params as { person: unknown }) }));
@@ -176,7 +176,7 @@ export function registerSteamTools(api: OpenClawPluginApi): void {
     });
   registerTool(api, 'steam_friends_status', '查某个已绑定 Steam 的人的好友列表和好友现在的状态（谁在玩什么、谁在线），数据来自 Steam Web API。用户问“我的好友列表/我有哪些好友/好友谁在玩/某某在干嘛”时必须调用本工具，禁止 web_fetch 或搜索 steamcommunity 去爬好友页。每个好友都带 SteamID64（steamId），之后绑定或查询某个好友时直接用它；结果带 displayText 时原样作为回复发出。默认查提问者自己已绑定的账号（person 不填=self）；也可以用 person 查群里其他已绑定、且没关播报的成员；多个账号会合并。好友列表没公开时返回 known:false（“好友列表未公开”），如实说，不要编造；列表有数量上限（群里更短）。要列出全部好友：filter=all 且不要填 name；name 只用于按昵称找某一个好友（不是游戏昵称、不要逐字母试探）。', FriendsParameters,
     async (params, context) => steamFriendsStatus(deps(), caller(context), params as Static<typeof FriendsParameters>));
-  registerTool(api, 'steam_group_settings', '查看或（仅 owner）开启/关闭当前群的 Steam 自动播报（默认开启；播报内容含上线、开始玩、换游戏、离开后回来、成就解锁）。返回的是开关和名单人数，不列出播报事件；事件范围见技能说明。', GroupParameters,
+  registerTool(api, 'steam_group_settings', '查看或（仅 owner）开启/关闭当前群的 Steam 自动播报（默认开启；播报内容含开始玩、换游戏、结束游戏、成就解锁）。返回的是开关和名单人数，不列出播报事件；事件范围见技能说明。', GroupParameters,
     async (params, context) => steamGroupSettings(deps(), caller(context), params as Static<typeof GroupParameters>));
 }
 

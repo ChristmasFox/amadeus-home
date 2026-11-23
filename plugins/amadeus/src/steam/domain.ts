@@ -60,6 +60,7 @@ export interface PresenceRecord {
   since: number;
   gameId?: string;
   gameName?: string;
+  recentGame?: { gameId: string; gameName?: string; startedAt: number };
 }
 
 export interface PresenceChange {
@@ -81,10 +82,9 @@ export interface PresenceChange {
 export type StoredPresence = PresenceRecord;
 
 function eventFor(previous: StoredPresence, observed: { state: PresenceState; gameId?: string }): EventKind | undefined {
-  if (!isOnlineState(observed.state)) return undefined;
-  if (previous.state === 'offline') return 'came_online';
-  if (previous.state === 'away') return 'back_from_away';
-  if (observed.state === 'in_game') return previous.state === 'online' ? 'started_playing' : previous.gameId !== observed.gameId ? 'switched_game' : undefined;
+  if (observed.state !== 'in_game') return undefined;
+  if (previous.state !== 'in_game') return 'started_playing';
+  if (previous.gameId !== observed.gameId) return 'switched_game';
   return undefined;
 }
 
@@ -96,14 +96,20 @@ export function applyObservation(previous: StoredPresence | undefined, observati
   const observed = { state: observation.state, ...(observation.gameId ? { gameId: observation.gameId } : {}), ...(observation.gameName ? { gameName: observation.gameName } : {}) };
   if (!previous) return { next: { ...observed, since: now } };
   if (observation.state === previous.state && observation.gameId === previous.gameId) {
-    return { next: { ...observed, since: previous.since } };
+    return { next: { ...observed, since: previous.since, ...(previous.recentGame ? { recentGame: previous.recentGame } : {}) } };
   }
-  const next: StoredPresence = { ...observed, since: now };
-  const kind = eventFor(previous, observed);
+  const recentGame = previous.state === 'in_game' && previous.gameId && observed.state !== 'in_game'
+    ? { gameId: previous.gameId, ...(previous.gameName ? { gameName: previous.gameName } : {}), startedAt: previous.since }
+    : previous.recentGame;
+  const withinRestartWindow = recentGame && now - recentGame.startedAt < 5 * 60_000;
+  const restarting = observed.state === 'in_game' && withinRestartWindow && recentGame.gameId === observed.gameId;
+  const switching = observed.state === 'in_game' && withinRestartWindow && recentGame.gameId !== observed.gameId && previous.state !== 'in_game';
+  const next: StoredPresence = { ...observed, since: restarting ? recentGame.startedAt : now, ...(observed.state !== 'in_game' && recentGame ? { recentGame } : {}) };
+  const kind = restarting ? undefined : switching ? 'switched_game' : eventFor(previous, observed);
   if (!kind) return { next };
   return {
     next,
-    event: { steamId: observation.steamId, kind, at: now, ...(observed.gameId ? { gameId: observed.gameId } : {}), ...(observed.gameName ? { gameName: observed.gameName } : {}) },
+    event: { steamId: observation.steamId, kind, at: now, ...(observed.gameId ? { gameId: observed.gameId } : {}), ...(observed.gameName ? { gameName: observed.gameName } : {}), ...(switching ? { previous: { gameId: recentGame.gameId, ...(recentGame.gameName ? { gameName: recentGame.gameName } : {}) } } : {}) },
   };
 }
 
@@ -115,8 +121,8 @@ export interface BroadcastPolicy {
   mergeWindowMs: number;
 }
 
-/** By decision there is no cooldown, no debounce, no quiet hours and no per-group cap: only the merge window remains. */
-export const DEFAULT_POLICY: BroadcastPolicy = { mergeWindowMs: 3 * 60_000 };
+/** Announcements are merged for five minutes, with no cooldown or quiet hours. */
+export const DEFAULT_POLICY: BroadcastPolicy = { mergeWindowMs: 5 * 60_000 };
 
 export type Candidate = PresenceChange;
 

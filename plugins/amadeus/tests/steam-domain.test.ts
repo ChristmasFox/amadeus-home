@@ -49,18 +49,31 @@ function run(start: StoredPresence | undefined, steps: PresenceObservation[], fr
 test('there is no debounce: one observation of a change is an event', () => {
   const base = applyObservation(undefined, obs('offline'), DAY).next;
   const result = applyObservation(base, obs('in_game', { gameId: '730', gameName: 'Some Game' }), DAY + 60_000);
-  assert.deepEqual(result.event, { steamId: ID, kind: 'came_online', gameId: '730', gameName: 'Some Game', at: DAY + 60_000 });
+  assert.deepEqual(result.event, { steamId: ID, kind: 'started_playing', gameId: '730', gameName: 'Some Game', at: DAY + 60_000 });
   assert.equal(result.next.state, 'in_game');
   assert.equal(applyObservation(result.next, obs('in_game', { gameId: '730' }), DAY + 120_000).event, undefined);
 });
 
-test('the four event types: came online, started playing, switched game, back from away', () => {
+test('only game starts and switches generate presence events', () => {
   const kinds = (steps: PresenceObservation[], start?: StoredPresence) => run(start, steps).events.map((event) => event.kind);
-  assert.deepEqual(kinds([obs('offline'), obs('online')]), ['came_online']);
+  assert.deepEqual(kinds([obs('offline'), obs('online')]), []);
   assert.deepEqual(kinds([obs('online'), obs('in_game', { gameId: '1', gameName: 'G1' })]), ['started_playing']);
   assert.deepEqual(kinds([obs('in_game', { gameId: '1' }), obs('in_game', { gameId: '2' }), obs('in_game', { gameId: '1' })]), ['switched_game', 'switched_game']);
-  assert.deepEqual(kinds([obs('away'), obs('online')]), ['back_from_away']);
-  assert.deepEqual(kinds([obs('away'), obs('in_game', { gameId: '3' })]), ['back_from_away']);
+  assert.deepEqual(kinds([obs('away'), obs('online')]), []);
+  assert.deepEqual(kinds([obs('away'), obs('in_game', { gameId: '3' })]), ['started_playing']);
+});
+
+test('a same-game restart within five minutes of starting is silent, while a switch is announced', () => {
+  const start = applyObservation({ state: 'online', since: DAY }, obs('in_game', { gameId: '1', gameName: 'G1' }), DAY);
+  const exited = applyObservation(start.next, obs('offline'), DAY + 60_000);
+  const restarted = applyObservation(exited.next, obs('in_game', { gameId: '1' }), DAY + 120_000);
+  assert.equal(restarted.event, undefined);
+  assert.equal(restarted.next.since, DAY);
+  const switched = applyObservation(exited.next, obs('in_game', { gameId: '2' }), DAY + 120_000);
+  assert.equal(switched.event?.kind, 'switched_game');
+  assert.equal(switched.event?.previous?.gameId, '1');
+  const later = applyObservation(exited.next, obs('in_game', { gameId: '1' }), DAY + 300_000);
+  assert.equal(later.event?.kind, 'started_playing');
 });
 
 test('stopping a game, going away or going offline are not announced; the first observation is silent', () => {
@@ -70,18 +83,18 @@ test('stopping a game, going away or going offline are not announced; the first 
 
 test('polling is every 30 seconds around the clock, and nothing else limits announcements', () => {
   assert.equal(POLL_INTERVAL_MS, 30_000);
-  assert.deepEqual(DEFAULT_POLICY, { mergeWindowMs: 3 * 60_000 });
+  assert.deepEqual(DEFAULT_POLICY, { mergeWindowMs: 5 * 60_000 });
 });
 
 test('planning: events inside the merge window wait, then everything queued goes out in one batch, at any hour', () => {
   const a = { steamId: 'a', kind: 'came_online' as const, at: DAY };
   const b = { steamId: 'b', kind: 'switched_game' as const, at: DAY + 60_000 };
   assert.deepEqual(planBroadcast([a, b], DAY + 60_000).waiting, ['a', 'b']);
-  assert.deepEqual(planBroadcast([a, b], DAY + 200_000).send?.map((entry) => entry.steamId), ['a', 'b']);
+  assert.deepEqual(planBroadcast([a, b], DAY + 300_000).send?.map((entry) => entry.steamId), ['a', 'b']);
   const night = { steamId: 'n', kind: 'came_online' as const, at: NIGHT };
   assert.equal(planBroadcast([night], NIGHT + 600_000).send?.length, 1);
   const many = Array.from({ length: 20 }, (_, index) => ({ steamId: `p${index}`, kind: 'came_online' as const, at: DAY }));
-  assert.equal(planBroadcast(many, DAY + 200_000).send?.length, 20);
+  assert.equal(planBroadcast(many, DAY + 300_000).send?.length, 20);
 });
 
 test('announcement keys are stable regardless of order', () => {
