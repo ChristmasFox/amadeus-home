@@ -382,8 +382,55 @@ def release_commits(root: Path, sha: str) -> list[tuple[str, str]]:
     return list(reversed(commits))
 
 
-def release_note_body(commits: list[tuple[str, str]], fallback: str, summarize=None) -> str:
+_PRIVATE_NOTE = __import__("re").compile(
+    r"私聊|隐私|私人|个人信息|人设|人格|设定|记忆|会话内容|凭据|密钥|密码|token|secret|private|soul|persona|memory",
+    __import__("re").IGNORECASE,
+)
+
+
+def consolidate_notes(entries: list[dict[str, Any]], *, run=subprocess.run) -> str | None:
+    """Combine chronological user-facing entries; fail closed if the model is unavailable."""
+    import base64
+    try:
+        request = {"model": SUMMARY_MODEL, "timeoutMs": (SUMMARY_TIMEOUT_SECONDS - 5) * 1000, "messages": [
+            {"role": "system", "content": "将按时间从旧到新排列的更新条目整合成简短中文发布日志。"
+             "同一功能合并为一条，只保留最终状态，删除已被后续变更替代的旧方案；"
+             "省略私聊隐私、个人信息、角色设定、记忆和凭据，不推测未提供的事实。"
+             "仅输出最多六条以 - 开头的条目，不加标题。"},
+            {"role": "user", "content": "\n".join(entry["text"] for entry in entries)},
+        ]}
+        encoded = base64.b64encode(json.dumps(request, ensure_ascii=False).encode()).decode()
+        script = _SUMMARY_NODE.replace("REQUEST", json.dumps(encoded)).replace("max_tokens: 160", "max_tokens: 700")
+        result = run(["orb", "-m", os.environ.get("ORBSTACK_MACHINE", "nyannyan"), "-u", "root",
+                      "docker", "exec", "-i", "openclaw", "node", "-"], input=script, text=True,
+                     stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=SUMMARY_TIMEOUT_SECONDS)
+        if result.returncode:
+            return None
+        output = __import__("re").sub(r"<think>.*?</think>", "", result.stdout, flags=__import__("re").S).strip()
+        lines = output.splitlines()
+        if not 1 <= len(lines) <= 6 or len(output) > 1200 or any(
+            not line.startswith("- ") or _PRIVATE_NOTE.search(line) for line in lines
+        ):
+            return None
+        return _neutral(output)
+    except Exception:
+        return None
+
+
+def release_note_body(commits: list[tuple[str, str]], fallback: str, summarize=None, consolidate=None) -> str:
+    if consolidate is not None:
+        commits = [(subject, body) for subject, body in commits if not _PRIVATE_NOTE.search(subject + "\n" + body)]
     entries = [entry for entry in (classify_commit(s, b, summarize) for s, b in commits) if entry]
+    if consolidate is not None:
+        entries = [entry for entry in entries if not _PRIVATE_NOTE.search(entry["text"])]
+        if entries:
+            try:
+                result = consolidate(entries)
+                if result and not _PRIVATE_NOTE.search(result):
+                    return result
+            except Exception:
+                pass
+        return f"- {fallback}"
     blocks = []
     for kind, heading in NOTE_SECTIONS:
         items = [f"- {entry['text']}" for entry in entries if entry["kind"] == kind]
@@ -461,7 +508,7 @@ def prepare_formal(root: Path, source_sha: str, state: dict[str, Any], *, bump: 
         write_release_notes(
             tree / "RELEASE_NOTES.md",
             version,
-            release_note_body(commits, release_note_summary(source_paths), budgeted(summarize_commit_zh)),
+            release_note_body(commits, release_note_summary(source_paths), budgeted(summarize_commit_zh), consolidate_notes),
         )
         command(["bash", "scripts/amadeus-version.sh", "check"], cwd=tree)
         git(tree, "add", "VERSION", "RELEASE_NOTES.md")

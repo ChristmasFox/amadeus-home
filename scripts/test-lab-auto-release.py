@@ -143,6 +143,20 @@ body = auto.release_note_body([("feat(lab): a", ""), ("fix(lab): b", "")], "x", 
 assert body == "✨ **新功能**\n- a\n\n🛠️ **修复**\n- b", body
 assert auto.release_note_body([("chore(lab): release v1.0.0", "")], "Lab 发布流程与运行可靠性更新。") == \
     "- Lab 发布流程与运行可靠性更新。"
+seen_entries = []
+def combine(entries):
+    seen_entries.extend(entries)
+    return "- 生图升级到 2.6。"
+combined = auto.release_note_body([
+    ("feat(lab): image", "Release-Note: 生图升级到 2.5。"),
+    ("fix(lab): image", "Release-Note: 生图升级到 2.6。"),
+    ("fix(lab): private soul", "Release-Note: 私聊设定更新。"),
+], "通用更新。", consolidate=combine)
+assert combined == "- 生图升级到 2.6。" and len(seen_entries) == 2
+assert auto.release_note_body([("feat(lab): image", "")], "通用更新。", consolidate=lambda _: None) == "- 通用更新。"
+assert auto.release_note_body([("feat(lab): image", "")], "通用更新。", consolidate=lambda _: "- 私聊设定。") == "- 通用更新。"
+assert auto.consolidate_notes([{"text": "生图更新。"}], run=lambda *a, **k: Result(0, "- 生图更新。")) == "- 生图更新。"
+assert auto.consolidate_notes([{"text": "生图更新。"}], run=lambda *a, **k: Result(0, "- 私聊设定。")) is None
 with tempfile.TemporaryDirectory(prefix="lab-auto-release-range-") as temporary:
     repo = Path(temporary)
     run = lambda *a: subprocess.run(["git", "-C", str(repo), *a], check=True, capture_output=True, text=True).stdout
