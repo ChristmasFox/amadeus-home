@@ -18,6 +18,17 @@ export const PIN = Object.freeze({
 export const PROJECTION_RETRY_TIMEOUT_MS = 2_000;
 export const PROJECTION_RETRY_MAX_ATTEMPTS = 8;
 
+export function patchAttemptProjectionSource(original) {
+  const marker = 'amadeus-attempt-projection-retry-v1';
+  if (original.includes(marker)) return original;
+  const start = 'async function prepareEmbeddedAttemptSessionManager(input) {\n\tconst { attempt } = input;';
+  const state = 'const transcriptState = await resolveExistingAttemptTranscriptState({\n\t\tsessionManager: attempt.sessionManager,\n\t\tagentId: input.sessionAgentId,\n\t\tconfig: attempt.config,\n\t\tsessionFile: attempt.sessionFile,\n\t\tsessionId: attempt.sessionId,\n\t\tsessionKey: attempt.sessionKey,\n\t\tsessionTarget: attempt.sessionTarget\n\t});';
+  const open = 'const unguardedSessionManager = attempt.sessionManager ?? (attempt.sessionTarget ? SessionManager.open(attempt.sessionTarget, input.effectiveCwd, {\n\t\tmaxBytes: Math.min(67108864, Math.max(1024, (attempt.contextTokenBudget ?? 128e3) * 8)),\n\t\tmaxEvents: 1e4\n\t}) : SessionManager.inMemory(input.effectiveCwd));';
+  if (original.split(start).length !== 2 || original.split(open).length !== 2 || original.split(state).length !== 2) throw new Error('attempt session manager anchor mismatch');
+  const helper = `// ${marker}\nasync function amadeusRetrySessionOpen(read, target) {\n  try { return await read(); } catch (error) {\n    if (error?.name !== "SessionTranscriptProjectionUnavailableError" || !target) throw error;\n    const { waitForSessionTranscriptProjection } = await import("./session-transcript-reconcile-B_Z-UIX7.mjs");\n    await waitForSessionTranscriptProjection(target, AbortSignal.timeout(30000));\n    return await read();\n  }\n}\n`;
+  return original.replace(start, helper + start).replace(state, state.replace('await resolveExistingAttemptTranscriptState({', 'await amadeusRetrySessionOpen(() => resolveExistingAttemptTranscriptState({').replace('\n\t});', '\n\t}), attempt.sessionTarget);')).replace(open, 'const unguardedSessionManager = await amadeusRetrySessionOpen(() => attempt.sessionManager ?? (attempt.sessionTarget ? SessionManager.open(attempt.sessionTarget, input.effectiveCwd, {\n\t\tmaxBytes: Math.min(67108864, Math.max(1024, (attempt.contextTokenBudget ?? 128e3) * 8)),\n\t\tmaxEvents: 1e4\n\t}) : SessionManager.inMemory(input.effectiveCwd)), attempt.sessionTarget);');
+}
+
 const ORIGINAL_READER = `async function readSessionMessagesWithSourceAsync(scope, opts) {
 \tconst target = resolveTranscriptReadTarget(scope);
 \tconst messages = opts.mode === "recent" ? (await readRecentSqliteMessageRecords(target, opts)).messages : projectSqliteHistoryEvents(readSessionTranscriptHistoryEvents(toTranscriptReadScope(target)));
@@ -109,6 +120,12 @@ function main(argv = process.argv.slice(2)) {
   if (digest !== PIN.moduleSha256 && !original.includes(MARKER)) throw new Error(`pinned module digest mismatch: ${PIN.module}`);
   const patched = patchSessionHistoryProjectionSource(original);
   if (apply && patched !== original) atomicWrite(file, patched);
+  const attemptFile = path.join(coreRoot, 'builtin-openclaw-B-H-7lKk.mjs');
+  const attemptOriginal = fs.readFileSync(attemptFile, 'utf8');
+  const attemptDigest = createHash('sha256').update(attemptOriginal).digest('hex');
+  if (attemptDigest !== '0a8c813e535c92d03f69bc58381518ba0e6ac6e46f3adda54138c5f668340ea8' && !attemptOriginal.includes('amadeus-attempt-projection-retry-v1')) throw new Error('pinned attempt module digest mismatch');
+  const attemptPatched = patchAttemptProjectionSource(attemptOriginal);
+  if (apply && attemptPatched !== attemptOriginal) atomicWrite(attemptFile, attemptPatched);
   console.log(`OPENCLAW_SESSION_HISTORY_PROJECTION=${apply ? 'applied' : 'patchable'} module=${PIN.module}`);
 }
 

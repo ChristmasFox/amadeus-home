@@ -11,6 +11,7 @@ import {
   PROJECTION_RETRY_MAX_ATTEMPTS,
   PROJECTION_RETRY_TIMEOUT_MS,
   patchSessionHistoryProjectionSource,
+  patchAttemptProjectionSource,
   withBoundedSessionTranscriptProjectionRetry,
 } from './patch-openclaw-session-history-projection.mjs';
 
@@ -19,6 +20,11 @@ const original = fs.readFileSync(path.join(runtimeRoot, PIN.module), 'utf8');
 assert.equal(createHash('sha256').update(original).digest('hex'), PIN.moduleSha256);
 
 const patched = patchSessionHistoryProjectionSource(original);
+const attemptOriginal = fs.readFileSync(path.join(runtimeRoot, 'builtin-openclaw-B-H-7lKk.mjs'), 'utf8');
+const attemptPatched = patchAttemptProjectionSource(attemptOriginal);
+assert.equal(patchAttemptProjectionSource(attemptPatched), attemptPatched);
+assert.match(attemptPatched, /amadeusRetrySessionOpen\(\(\) => attempt\.sessionManager/u);
+assert.throws(() => patchAttemptProjectionSource(attemptOriginal.replace('async function prepareEmbeddedAttemptSessionManager', 'async function renamed')), /anchor mismatch/u);
 assert.equal(patched.split(MARKER).length - 1, 1);
 assert.equal(patchSessionHistoryProjectionSource(patched), patched, 'idempotent');
 assert.match(patched, /waitForSessionTranscriptProjection\(transcriptScope, AbortSignal\.timeout\(remainingMs\)\)/u);

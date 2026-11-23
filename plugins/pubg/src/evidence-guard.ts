@@ -26,6 +26,24 @@ const bareRecordTurns = new Map<string, number>();
 // Session key -> the N of the latest inbound "last N matches" request (same lifetime rules as bare record turns).
 const recentMatchTurns = new Map<string, { count: number; at: number }>();
 
+function currentStatsDisplayText(messages: unknown): string | undefined {
+  if (!Array.isArray(messages)) return undefined;
+  for (let index = messages.length - 1; index >= 0; index--) {
+    const message = messages[index] as { role?: string; toolName?: string; content?: unknown } | undefined;
+    if (!message || typeof message !== 'object') continue;
+    if (message.role === 'user') return undefined;
+    if (message.role !== 'toolResult' || message.toolName !== 'pubg_query_stats') continue;
+    const content = typeof message.content === 'string' ? message.content : Array.isArray(message.content)
+      ? message.content.filter((part) => part && part.type === 'text').map((part) => part.text ?? '').join('\n') : '';
+    try {
+      const result = JSON.parse(content);
+      return ['ok', 'partial', 'no_matches'].includes(result.status) && typeof result.displayText === 'string' && result.displayText.trim()
+        ? result.displayText : undefined;
+    } catch { return undefined; }
+  }
+  return undefined;
+}
+
 export function registerPubgEvidenceGuard(api: OpenClawPluginApi): void {
   api.on('before_dispatch', (event, context) => {
     const sessionKey = context.sessionKey ?? event.sessionKey;
@@ -72,12 +90,20 @@ export function registerPubgEvidenceGuard(api: OpenClawPluginApi): void {
   }, { matcher: ['pubg_query_stats'] });
   const shapeRevised = new Set<string>();
   const pending = new Map<string, { at: number; delivered: boolean }>();
+  const canonical = new Map<string, { at: number; text: string; delivered: boolean }>();
   api.on('before_agent_finalize', (event, context) => {
     if (context.trigger && context.trigger !== 'user') return; // scheduled prefetch/report has its own contract
     // The outbound hook may see a different session-key spelling (or none), so the verdict is also filed under the run id.
     const keys = [context.sessionKey ?? event.sessionKey, event.runId].filter((value): value is string => Boolean(value));
     const reply = event.lastAssistantMessage ?? '';
     const verdict = assessPubgEvidence(event.messages, reply);
+    const displayText = verdict === 'verified' ? currentStatsDisplayText(event.messages) : undefined;
+    if (displayText && droppedReplyFacts(event.messages, reply).length) {
+      const entry = { at: Date.now(), text: displayText, delivered: false };
+      for (const key of keys) canonical.set(key, entry);
+    } else {
+      for (const key of keys) canonical.delete(key);
+    }
     if (verdict === 'missing_data' || verdict === 'wrong_scope') {
       const entry = { at: Date.now(), delivered: false };
       for (const key of keys) pending.set(key, entry);
@@ -124,6 +150,12 @@ export function registerPubgEvidenceGuard(api: OpenClawPluginApi): void {
     // the current-turn verdict and must not be used for this safety boundary.
     const keys = [event.sessionKey, context.sessionKey, event.runId, context.runId]
       .filter((value): value is string => typeof value === 'string' && value.length > 0);
+    const card = keys.map((key) => canonical.get(key)).find((entry) => entry !== undefined);
+    if (card && Date.now() - card.at <= 120_000) {
+      if (card.delivered) return { cancel: true, reason: 'pubg_canonical_followup_chunk' };
+      card.delivered = true;
+      return { payload: { ...event.payload, text: card.text, mediaUrl: undefined, mediaUrls: undefined, audioAsVoice: false, spokenText: undefined } };
+    }
     const guard = keys.map((key) => pending.get(key)).find((entry) => entry !== undefined);
     if (!guard || Date.now() - guard.at > 120_000) {
       for (const key of keys) pending.delete(key);

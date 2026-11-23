@@ -108,6 +108,18 @@ test('a 战绩 reply that dropped a card gets one rewrite request, then goes out
   assert.equal(hooks.get('reply_payload_sending')!({ payload: { text: full }, sessionKey: 'group', runId: 'turn-full' }, {}), undefined);
 });
 
+test('incomplete verified stats reply uses the current tool card at delivery', () => {
+  const hooks = new Map<string, (event: any, context: any) => any>();
+  registerPubgEvidenceGuard({ on: (name: string, handler: any) => hooks.set(name, handler), logger: { warn() {} } } as unknown as OpenClawPluginApi);
+  const presentation = { type: 'pubg_stats', status: 'ok', operation: 'report', groupBy: 'player', rows: [{ label: 'PlayerA', values: { kd: 1.5, damage: 1200 } }, { label: 'PlayerB', values: { kd: 2.0, damage: 2400 } }] };
+  const card = '完整战报\nPlayerA KD 1.5 伤害 1200\nPlayerB KD 2.0 伤害 2400';
+  const result = { role: 'toolResult', toolName: 'pubg_query_stats', content: [{ type: 'text', text: JSON.stringify({ status: 'ok', displayText: card, presentation }) }] };
+  const reply = '今日战绩 PlayerA KD 1.5 伤害 1200';
+  hooks.get('before_agent_finalize')!({ runId: 'r-card', sessionKey: 'group', lastAssistantMessage: reply, messages: [user('今日战绩'), call('pubg_query_stats', { team: true }), result] }, { sessionKey: 'group', trigger: 'user' });
+  const sent = hooks.get('reply_payload_sending')!({ payload: { text: reply }, runId: 'r-card', sessionKey: 'group' }, {});
+  assert.equal(sent?.payload?.text, card);
+});
+
 test('an image completion or an image request that mentions 吃鸡 is not a PUBG record claim', () => {
   const comment = '这 MAPPA 画风的咒术回战吃鸡小队给你端上来了！决赛圈对面怕是直接蒸发了。';
   const completion = user('<<<BEGIN_OPENCLAW_INTERNAL_CONTEXT>>> OpenClaw runtime context (internal): [Internal task completion event] source: image_generation ... 原始请求：生成四人吃鸡图片');
