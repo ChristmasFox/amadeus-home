@@ -1,4 +1,0 @@
-{
-  "name": "kurisu-private-combo",
-  "models": ["openrouter/anthropic/claude-haiku-5.5"]
-}

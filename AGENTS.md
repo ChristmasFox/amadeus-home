@@ -101,6 +101,7 @@ from text. This bootstrap applies to Codex and other repository-aware agents.
 
 ## 全局工程规则
 
+- 9Router 的 combo（如 arthur-combo、kurisu-private-combo）由 Arthur 直接在 9Router 中维护；仓库不得定义、下发或校验 combo 成员列表，代码只按名称原样使用，以当前配置为准。
 - Secrets 永远不入库：Bot Token、API Key、Access Token、APP_SECRET、数据库密码、Tunnel Token、n8n credentials、`.env`、真实证书和业务数据都必须在仓库外恢复。
 - Domain 层保持平台无关，不把 Telegram、KOOK、WhatsApp 或 OpenClaw API 细节写入 PUBG/domain package；平台差异放在 plugin、adapter 或 integration 层。
 - LLM 只位于边界（planner、解释和自然语言入口）；核心 domain、状态转换、协议校验和结果排序必须保持 deterministic、可测试、可回滚。
