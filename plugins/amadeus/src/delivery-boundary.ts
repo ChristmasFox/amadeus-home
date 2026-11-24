@@ -11,6 +11,7 @@ import { deliverySettlementState, settleDelivery, type DeliveryReceipt } from '.
 import { createDeliverySpeech } from './delivery-speech.js';
 import { createWhatsAppAttachmentSender } from './whatsapp-delivery.js';
 import { reactAfterDelivery } from './whatsapp-react.js';
+import { isWhatsAppDirectFallbackNotice } from './fallback-notice.js';
 import type { ResolvedDeliveryAsset } from './delivery-assets.js';
 import { detectImageRequestLanguage, type ImageRequestLanguage } from './image-generation-context.js';
 
@@ -326,6 +327,10 @@ export function registerDeliveryBoundary(api: OpenClawPluginApi, options: Delive
       deliveryRuns.start({ runId, sessionKey: port.sessionKey, channel: 'whatsapp', origin: port.inboundVoice ? 'inbound_voice' : 'external_user' });
       const prepare = async (payload: unknown, info: { kind: string }) => {
         if (info.kind !== 'final') return null;
+        if (isWhatsAppDirectFallbackNotice('whatsapp', port.sessionKey, payload)) {
+          api.logger.info('amadeus whatsapp dm model fallback notice suppressed');
+          return null;
+        }
         const row = payload && typeof payload === 'object' ? payload as Record<string, unknown> : {};
         const channelData = row.channelData as Record<string, unknown> | undefined;
         const prepared = channelData?.amadeusDelivery;
@@ -386,6 +391,7 @@ export function registerDeliveryBoundary(api: OpenClawPluginApi, options: Delive
             // bypass preparePayload. Re-run the exact same typed preparation
             // here rather than letting raw model text reach a native sender.
             const candidate = await prepare(payload, info);
+            if (candidate === null && isWhatsAppDirectFallbackNotice('whatsapp', port.sessionKey, payload)) return { visibleReplySent: false };
             const row = candidate && typeof candidate === 'object' ? candidate as Record<string, unknown> : {};
             const envelope = (row.channelData as Record<string, unknown> | undefined)?.amadeusDelivery;
             if (!validateDeliveryEnvelope(envelope) || !deliveryRuns.owns(envelope) || envelope.sessionKey !== port.sessionKey || envelope.channel !== 'whatsapp') throw new Error('delivery_typed_payload_required');

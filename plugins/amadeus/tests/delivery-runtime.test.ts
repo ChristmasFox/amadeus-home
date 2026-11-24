@@ -212,6 +212,33 @@ test('WhatsApp final deliver bypass re-runs typed preparation and preserves inte
  assert.deepEqual(sent, ['正常回复。'], 'direct final delivery still settles valid typed content');
 });
 
+test('new WhatsApp direct session suppresses fallback notices before delivering reply and reaction', async () => {
+ const hooks = new Map<string, (...args: any[]) => any>();
+ const api = { rootDir: new URL('../', import.meta.url).pathname, config: {}, pluginConfig: {}, logger: { info() {}, warn() {} }, on(name: string, fn: (...args: any[]) => any) { hooks.set(name, fn); } } as unknown as OpenClawPluginApi;
+ registerVoiceReplyPrompt(api);
+ const boundary = (globalThis as Record<string, unknown>)[DELIVERY_BOUNDARY_GLOBAL] as { createWhatsAppPlan(port: WhatsAppDeliveryPort): any };
+ for (const [index, sessionKey] of ['agent:main:whatsapp:secondary:direct:owner', 'agent:main:whatsapp:secondary:direct:other'].entries()) {
+  const sent: string[] = []; const reactions: string[] = []; const runId = `fallback-run-${index}`;
+  const plan = boundary.createWhatsAppPlan({ sessionKey, accountId: 'secondary', conversationId: 'chat', messageId: `inbound-${index}`, inboundVoice: false, start() {}, stop() {}, sendText: async text => { sent.push(text); return { messageId: 'sent' }; }, sendReaction: async emoji => { reactions.push(emoji); }, sendVoice: async () => ({ messageId: 'voice' }), sendImage: async () => ({ messageId: 'image' }), sendDocument: async () => ({ messageId: 'document' }) });
+  plan.replyOptions.onAgentRunStart(runId);
+  hooks.get('before_prompt_build')!({}, { runId, sessionKey, channel: 'whatsapp' });
+  const notice = { text: '↪️ Model Fallback: private (selected default; unavailable)', isFallbackNotice: true };
+  const hookResult = await hooks.get('reply_payload_sending')!({ runId, sessionKey, channel: 'whatsapp', kind: 'final', payload: notice }, {});
+  assert.equal(hookResult.cancel, true);
+  assert.equal(await plan.delivery.preparePayload(notice, { kind: 'final' }), null);
+  assert.deepEqual(await plan.delivery.deliver({ text: '↪️ Model Fallback cleared: default' }, { kind: 'final' }), { visibleReplySent: false });
+  const wire = JSON.stringify({ version: 2, silent: false, parts: [{ kind: 'text', text: '真实回复 [react:🙄]' }] });
+  const reply = await hooks.get('reply_payload_sending')!({ runId, sessionKey, channel: 'whatsapp', kind: 'final', payload: { text: wire } }, {});
+  await plan.delivery.deliver(reply.payload, { kind: 'final' });
+  await new Promise(resolve => setImmediate(resolve));
+  assert.deepEqual(sent, ['真实回复']); assert.deepEqual(reactions, ['🙄']);
+ }
+ const group = 'agent:main:whatsapp:secondary:group:group-id';
+ hooks.get('before_prompt_build')!({}, { runId: 'fallback-group-run', sessionKey: group, channel: 'whatsapp' });
+ const result = await hooks.get('reply_payload_sending')!({ runId: 'fallback-group-run', sessionKey: group, channel: 'whatsapp', kind: 'final', payload: { text: '↪️ Model Fallback: private (selected default; unavailable)', isFallbackNotice: true } }, {});
+ assert.notEqual(result.cancel, true, 'group behavior remains unchanged');
+});
+
 test('image lifecycle recovers original request language from account-scoped conversation when task session differs', async () => {
  const hooks = new Map<string, Array<(...args: any[]) => any>>();
  const captured: any[] = [];

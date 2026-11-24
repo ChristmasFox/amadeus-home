@@ -8,6 +8,7 @@ import { registerDeliveryBoundary, type DeliveryBoundaryOptions } from './delive
 import { settleTelegramDelivery } from './telegram-runtime.js';
 import { configFor } from './config.js';
 import { turnReplyLink } from './reply-links.js';
+import { isWhatsAppDirectFallbackNotice } from './fallback-notice.js';
 
 export const WHATSAPP_VOICE_RUNS_GLOBAL = '__amadeusWhatsAppVoiceRuns20260925';
 /** The typed envelope for the Amadeus boundary, plus its plain text so a native sender that ignores channelData still has something to send. */
@@ -98,6 +99,10 @@ export function registerVoiceReplyPrompt(api: OpenClawPluginApi, boundaryOptions
     const runId = event.runId ?? (event.sessionKey ? deliveryRuns.runIdFor(event.sessionKey) : undefined);
     const channel = event.channel ?? context.channelId ?? (runId ? deliveryRuns.channelFor(runId) : undefined);
     if (channel !== 'whatsapp' && channel !== 'telegram') return;
+    if (isWhatsAppDirectFallbackNotice(channel, event.sessionKey ?? context.sessionKey, event.payload)) {
+      api.logger.info('amadeus whatsapp dm model fallback notice suppressed');
+      return { cancel: true, reason: 'delivery_fallback_notice_suppressed' };
+    }
     // Preserve OpenClaw's own failure reply for internal/runtime errors. It is
     // not model protocol output and must never be replaced by a format notice.
     if (runId && deliveryRuns.agentFailed(runId)) return;
