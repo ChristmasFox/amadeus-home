@@ -3,7 +3,8 @@ import { mkdtemp, readFile, rm, stat, mkdir, writeFile, readdir } from 'node:fs/
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
-import { DIGEST_HEADER, DIGEST_MAX_CHARS, buildTranscript, capDigest, digestPath, isOwnerDirectSession, registerDmDigest, renderDigestContext, updateDigest, validateDigest } from '../src/dm-digest.js';
+import { DIGEST_HEADER, DIGEST_MAX_CHARS, buildDigestPrompt, buildTranscript, capDigest, digestPath, isOwnerDirectSession, nineRouterCompleter, registerDmDigest, renderDigestContext, updateDigest, validateDigest } from '../src/dm-digest.js';
+import { OWNER_DM_MODEL } from '../src/thinking-level.js';
 
 const OWNER = '15550100123';
 const DM = 'agent:main:whatsapp:secondary:direct:+15550100123';
@@ -27,6 +28,37 @@ function setup(dir: string, complete: (prompt: string) => Promise<string>, logs:
   return hooks;
 }
 const settle = () => new Promise((resolve) => setTimeout(resolve, 250));
+
+test('digest prompt excludes model refusals and safety judgments from the notes', () => {
+  const prompt = buildDigestPrompt(undefined, '对话', '2026-11-24');
+  for (const phrase of ['助手的拒绝', '露骨程度', '边界', '红线', '模型行为', '直接略去']) assert.ok(prompt.includes(phrase));
+});
+
+test('digest completion uses the owner model or explicit override and ignores reasoning', async () => {
+  const previousKey = process.env.OPENCLAW_9ROUTER_API_KEY;
+  const previousModel = process.env.OPENCLAW_DIGEST_MODEL;
+  process.env.OPENCLAW_9ROUTER_API_KEY = 'test-key';
+  delete process.env.OPENCLAW_DIGEST_MODEL;
+  const requests: any[] = [];
+  const fakeFetch: typeof fetch = async (_url, init) => {
+    requests.push(JSON.parse(String(init?.body)));
+    return new Response(JSON.stringify({ choices: [{ message: { reasoning_content: 'private reasoning', content: '<think>reasoning</think>\n- note' } }] }), { headers: { 'content-type': 'application/json' } });
+  };
+  try {
+    const config = { agents: { defaults: { model: { primary: 'nine_router/arthur-combo' } } } };
+    assert.equal(await nineRouterCompleter(config, fakeFetch)('prompt', new AbortController().signal), '- note');
+    assert.equal(requests[0].model, OWNER_DM_MODEL);
+    assert.equal(requests[0].stream, false);
+    process.env.OPENCLAW_DIGEST_MODEL = 'custom-model';
+    await nineRouterCompleter(config, fakeFetch)('prompt', new AbortController().signal);
+    assert.equal(requests[1].model, 'custom-model');
+    const sseFetch: typeof fetch = async () => new Response('data: {"choices":[{"delta":{"reasoning_content":"hidden","content":"<think>hidden"}}]}\n\ndata: {"choices":[{"delta":{"content":"</think>- note"}}]}\n\ndata: [DONE]\n\n', { headers: { 'content-type': 'text/event-stream' } });
+    assert.equal(await nineRouterCompleter(config, sseFetch)('prompt', new AbortController().signal), '- note');
+  } finally {
+    if (previousKey === undefined) delete process.env.OPENCLAW_9ROUTER_API_KEY; else process.env.OPENCLAW_9ROUTER_API_KEY = previousKey;
+    if (previousModel === undefined) delete process.env.OPENCLAW_DIGEST_MODEL; else process.env.OPENCLAW_DIGEST_MODEL = previousModel;
+  }
+});
 
 test('transcript keeps only user/assistant text and is bounded', () => {
   const transcript = buildTranscript(messages);

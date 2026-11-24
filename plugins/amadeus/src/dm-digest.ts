@@ -6,6 +6,7 @@ import { configFor } from './config.js';
 import { readRequiredFile } from './config.js';
 import { atomicWriteFile } from './memory-store.js';
 import { chatKind } from './remember.js';
+import { OWNER_DM_MODEL } from './thinking-level.js';
 
 /**
  * Digest of the verified owner's recent direct conversations.
@@ -24,7 +25,7 @@ const TRANSCRIPT_MAX_MESSAGES = 60;
 const MESSAGE_MAX_CHARS = 400;
 const MIN_REGENERATE_MS = 20 * 60 * 1000;
 const STALE_REFRESH_MS = 6 * 60 * 60 * 1000;
-const REQUEST_TIMEOUT_MS = 60_000;
+const REQUEST_TIMEOUT_MS = 180_000;
 
 export const DIGEST_HEADER = '【近期私聊要点：背景笔记，可能已过时，不要复述，仅在与当前话题相关时参考；最新在前】';
 
@@ -100,6 +101,7 @@ export function buildDigestPrompt(previousDigest: string | undefined, transcript
     '要求：',
     `- 只输出以“- ”开头的条目，每条一行，格式“- (YYYY-MM-DD) 要点”，最新的在前，共 15 到 30 条，总长不超过 ${DIGEST_MAX_CHARS - 300} 个汉字。`,
     '- 记录：近期聊过的主题、做出的决定、待办、情绪或状态变化、新出现的偏好。合并重复，丢弃过时或琐碎的内容。',
+    '- 不要把助手的拒绝、内容尺度或露骨程度、边界、红线、需留意是否合适等安全评价记成偏好或备忘；这些是模型行为，不是主人的偏好，直接略去。也不要评价私聊内容的露骨程度。',
     '- 不要写电话号码、账号、密码、密钥、链接；不要引用原话；不要输出标题、解释或代码块。',
     `- 今天是 ${today}。没有日期可考的新内容用今天的日期。`,
     '',
@@ -121,13 +123,11 @@ interface NineRouterSettings {
 function settingsFor(config: unknown): NineRouterSettings {
   const root = (config ?? {}) as {
     models?: { providers?: Record<string, { baseUrl?: unknown }> };
-    agents?: { defaults?: { model?: { primary?: unknown } | string } };
   };
   const baseUrl = root.models?.providers?.nine_router?.baseUrl;
-  const primary = typeof root.agents?.defaults?.model === 'string' ? root.agents.defaults.model : root.agents?.defaults?.model?.primary;
   return {
     baseUrl: (typeof baseUrl === 'string' && baseUrl.trim() ? baseUrl.trim() : 'http://9router:20128/v1').replace(/\/$/u, ''),
-    model: process.env.OPENCLAW_DIGEST_MODEL?.trim() || (typeof primary === 'string' && primary.includes('/') ? primary.split('/').slice(1).join('/') : 'arthur-combo'),
+    model: process.env.OPENCLAW_DIGEST_MODEL?.trim() || OWNER_DM_MODEL,
   };
 }
 
@@ -144,9 +144,22 @@ export function nineRouterCompleter(config: unknown, fetchImpl: typeof fetch = f
       signal,
     });
     if (!response.ok) throw new Error(`digest_http_${response.status}`);
-    const body = await response.json() as { choices?: Array<{ message?: { content?: unknown } }> };
-    const content = body.choices?.[0]?.message?.content;
-    if (typeof content !== 'string') throw new Error('digest_empty');
+    let content: string;
+    if (response.headers.get('content-type')?.includes('text/event-stream')) {
+      const events = (await response.text()).split(/\r?\n\r?\n/u);
+      content = events.flatMap((event) => {
+        const data = event.split(/\r?\n/u).filter((line) => line.startsWith('data:')).map((line) => line.slice(5).trimStart()).join('\n');
+        if (!data || data === '[DONE]') return [];
+        const chunk = JSON.parse(data) as { choices?: Array<{ delta?: { content?: unknown } }> };
+        return [textOf(chunk.choices?.[0]?.delta?.content)];
+      }).join('');
+    } else {
+      const body = await response.json() as { choices?: Array<{ message?: { content?: unknown } }> };
+      content = textOf(body.choices?.[0]?.message?.content);
+    }
+    // Reasoning fields are ignored; some providers also embed thinking in content.
+    content = content.replace(/<think(?:ing)?\b[^>]*>[\s\S]*?<\/think(?:ing)?>/giu, '').trim();
+    if (!content) throw new Error('digest_empty');
     return content;
   };
 }
