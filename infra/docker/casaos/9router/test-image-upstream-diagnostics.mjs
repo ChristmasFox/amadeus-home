@@ -140,4 +140,24 @@ assert.equal('moderation' in factory('openai').buildBody('gpt-image-2.6-flare', 
 assert.equal('moderation' in factory('openai').buildBody('gpt-image-2.6-flare', req({ moderation: 'off' })), false);
 assert.equal('moderation' in factory('xai').buildBody('grok-image', req({ moderation: 'low' })), false);
 assert.equal('moderation' in factory('minimax').buildBody('image-01', req({ moderation: 'low' })), false);
+// Executor log: evaluated in a handler-shaped scope where `v` is declared but unassigned
+// (like the real 0.5.116 image handler) and the logger has debug().
+assert.doesNotMatch(patched, /\$\{v\.toUpperCase\(\)\}/u, 'executor log must not read the unassigned v');
+const executorLogStart = patched.indexOf('/* ' + NO_PROMPT_MARKER + ' */d?.debug?.("IMAGE",`${w.toUpperCase()} | ${x} | image request (executor)`);');
+assert.ok(executorLogStart >= 0);
+const executorLog = patched.slice(executorLogStart, patched.indexOf(';', patched.indexOf('(executor)', executorLogStart)) + 1);
+const runExecutorLog = new Function('b', 'd', 'a', `let r,s,t,u,v,{provider:w,model:x}=b;${executorLog}return 'ok';`);
+const debugLines = [];
+const debugLog = { debug: (_tag, text) => debugLines.push(text) };
+assert.equal(runExecutorLog({ provider: 'gemini-web', model: 'gemini-image' }, debugLog, prompt), 'ok');
+assert.deepEqual(debugLines, ['GEMINI-WEB | gemini-image | image request (executor)']);
+assert.equal(runExecutorLog({ provider: 'grok-web', model: 'grok-image' }, {}, prompt), 'ok');
+// The earlier (broken) executor log really throws in that scope, and re-applying repairs it.
+const legacyExecutor = patched.replace(executorLog, '/* ' + NO_PROMPT_MARKER + ' */d?.debug?.("IMAGE",`${v.toUpperCase()} | ${w} | image request (executor)`);');
+assert.notEqual(legacyExecutor, patched);
+const brokenLog = legacyExecutor.slice(legacyExecutor.indexOf('/* ' + NO_PROMPT_MARKER + ' */d?.debug?.("IMAGE",`${v.'));
+const runBroken = new Function('b', 'd', `let r,s,t,u,v,{provider:w,model:x}=b;${brokenLog.slice(0, brokenLog.indexOf(';') + 1)}`);
+assert.throws(() => runBroken({ provider: 'gemini-web', model: 'm' }, debugLog), TypeError);
+assert.equal(patchCodexRouteSource(legacyExecutor), patched);
+assert.equal(patchCodexRouteSource(patchCodexRouteSource(legacyExecutor)), patched);
 console.log('IMAGE_UPSTREAM_DIAGNOSTICS_PATCH_0_5_116=passed');

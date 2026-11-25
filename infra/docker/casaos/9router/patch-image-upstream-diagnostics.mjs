@@ -27,6 +27,11 @@ export const MODERATION_MARKER = 'amadeus-image-openai-moderation-0.5.116';
 // anything else is reduced to the HTTP status. a=status, b=upstream message.
 export const HTTP_MESSAGE_EXPR = '(/(?:safety|moderation|content[_ -]?policy|policy[_ -](?:violation|refusal)|responsible[_ -]?ai|copyright|amadeus_image_safety_refusal)/iu.test(String(b||""))?"amadeus_image_safety_refusal":"codex_image_http_"+a)';
 const LEGACY_HTTP_CALL = 'Error(amadeusImageHttpMessage(a,b))';
+// In the image handler `w` is the provider and `x` the model (same names the
+// upstream executor log used); `v` is declared there but never assigned, so a
+// logger with debug() turned the earlier replacement into a TypeError.
+const EXECUTOR_LOG_PATCHED = '/* ' + NO_PROMPT_MARKER + ' */d?.debug?.("IMAGE",`${w.toUpperCase()} | ${x} | image request (executor)`);';
+const LEGACY_EXECUTOR_LOG = '/* ' + NO_PROMPT_MARKER + ' */d?.debug?.("IMAGE",`${v.toUpperCase()} | ${w} | image request (executor)`);';
 // Generic OpenAI-compatible image adapter (module 61613), shared by openai,
 // minimax, openrouter, recraft, vercel-ai-gateway, xai and sensenova. Only the
 // official openai provider forwards `moderation`, and only when the request
@@ -98,7 +103,7 @@ function applyBasePatch(source) {
   output = output.slice(0, parseStart) + PARSE_RESPONSE + PARSE_RESPONSE_REMAINDER + output.slice(parseEnd);
   const noPromptLog = '/* ' + NO_PROMPT_MARKER + ' */d?.debug?.("IMAGE",`${w.toUpperCase()} | ${x} | image request`);';
   output = output.replaceAll(PROMPT_LOG, noPromptLog);
-  output = output.replace(PROMPT_LOG_EXECUTOR, '/* ' + NO_PROMPT_MARKER + ' */d?.debug?.("IMAGE",`${v.toUpperCase()} | ${w} | image request (executor)`);');
+  output = output.replace(PROMPT_LOG_EXECUTOR, EXECUTOR_LOG_PATCHED);
   output = output.replace(NON_OK,
     'if(!u.ok){let{statusCode:a,message:b}=await (0,e.zL)(u),c=(0,e.lR)(Error(' + HTTP_MESSAGE_EXPR + '),w,x,a);');
   return output;
@@ -112,6 +117,12 @@ function fixHttpMessageScope(source) {
   return source.replace(LEGACY_HTTP_CALL, 'Error(' + HTTP_MESSAGE_EXPR + ')');
 }
 
+function fixExecutorLog(source) {
+  if (!source.includes(LEGACY_EXECUTOR_LOG)) return source;
+  one(source, LEGACY_EXECUTOR_LOG, 'image_executor_log_legacy');
+  return source.replace(LEGACY_EXECUTOR_LOG, EXECUTOR_LOG_PATCHED);
+}
+
 function applyOpenAIModeration(source) {
   if (source.includes(MODERATION_MARKER)) return source;
   one(source, GENERIC_FACTORY, 'generic_image_factory');
@@ -123,6 +134,7 @@ export function patchCodexRouteSource(source) {
   let output = source;
   if (!(output.includes(MARKER) && output.includes(NO_PROMPT_MARKER) && output.includes(DETAIL_MARKER))) output = applyBasePatch(output);
   output = fixHttpMessageScope(output);
+  output = fixExecutorLog(output);
   return applyOpenAIModeration(output);
 }
 
@@ -133,7 +145,7 @@ export async function install(root, mode = 'verify') {
   const before = await readFile(path, 'utf8');
   const after = patchCodexRouteSource(before);
   if (mode === 'verify') {
-    if (before !== after || !before.includes(MARKER) || !before.includes(NO_PROMPT_MARKER) || !before.includes(DETAIL_MARKER) || !before.includes(MODERATION_MARKER) || before.includes(LEGACY_HTTP_CALL)) throw Error('image_upstream_diagnostics_not_installed');
+    if (before !== after || !before.includes(MARKER) || !before.includes(NO_PROMPT_MARKER) || !before.includes(DETAIL_MARKER) || !before.includes(MODERATION_MARKER) || before.includes(LEGACY_HTTP_CALL) || before.includes(LEGACY_EXECUTOR_LOG)) throw Error('image_upstream_diagnostics_not_installed');
     return path;
   }
   const permissions = (await stat(path)).mode & 0o777;
