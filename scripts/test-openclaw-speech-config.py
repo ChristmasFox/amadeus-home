@@ -43,6 +43,7 @@ assert media["audio"]["maxBytes"] <= 6 * 1024 * 1024
 # Typed delivery owns TTS; generic auto mode and Agent-facing TTS/message tools are disabled.
 assert c["tools"]["profile"] == "full"
 assert c["tools"]["toolSearch"] == {"enabled": True, "mode": "directory"}
+assert "allow" not in c["tools"]
 prepare_spec = importlib.util.spec_from_file_location("openclaw_prepare", ROOT / "scripts/openclaw_prepare.py")
 assert prepare_spec and prepare_spec.loader
 prepare = importlib.util.module_from_spec(prepare_spec)
@@ -50,6 +51,7 @@ prepare_spec.loader.exec_module(prepare)
 legacy_config = {"tools": {"profile": "full"}}
 prepare.ensure_tool_search_directory_mode(legacy_config)
 assert legacy_config["tools"]["toolSearch"] == {"enabled": True, "mode": "directory"}
+assert "allow" not in legacy_config["tools"]
 deploy_script = (ROOT / "scripts/deploy-openclaw.sh").read_text()
 assert "prepare.ensure_tool_search_directory_mode(config)" in deploy_script
 assert "config.get(\"tools\", {}).get(\"toolSearch\")" in deploy_script

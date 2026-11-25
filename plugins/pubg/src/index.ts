@@ -41,6 +41,12 @@ import { RawTelemetryArchive } from '@rine-kit/pubg-intelligence/archive';
 const PLUGIN_ID = 'pubg';
 const MAX_SUBJECT_ITEMS = 12;
 const MAX_CATEGORIES = 16;
+const DIRECT_ONLY_TOOL_NAMES: ReadonlySet<string> = new Set([
+  'pubg_get_review_facts',
+  'pubg_query_stats',
+  'pubg_query_team_damage',
+  'pubg_search_matches',
+]);
 
 const PluginConfigSchema = Type.Object({
   databasePath: Type.Optional(Type.String({ maxLength: 1024 })),
@@ -609,6 +615,7 @@ function makeTool<Schema extends TypeSchema>(
     name,
     label: name,
     description,
+    ...(DIRECT_ONLY_TOOL_NAMES.has(name) ? { catalogMode: 'direct-only' as const } : {}),
     parameters,
     outputSchema: ToolOutputSchema,
     async execute(_toolCallId, rawParams, signal) {

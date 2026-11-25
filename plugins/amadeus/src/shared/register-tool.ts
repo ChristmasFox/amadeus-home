@@ -6,6 +6,11 @@ import { OwnerNotifier } from '../owner.js';
 
 type Params<S extends TSchema> = Static<S>;
 
+const DIRECT_ONLY_TOOL_NAMES: ReadonlySet<string> = new Set([
+  'identity_resolve',
+  'steam_get_playtime',
+]);
+
 function failure(error: unknown): unknown {
   return { status: 'error', message: error instanceof Error ? error.message : String(error) };
 }
@@ -21,6 +26,7 @@ function makeTool<S extends TSchema>(
     name,
     label: name,
     description,
+    ...(DIRECT_ONLY_TOOL_NAMES.has(name) ? { catalogMode: 'direct-only' as const } : {}),
     parameters,
     async execute(_toolCallId, rawParams, signal) {
       try {
