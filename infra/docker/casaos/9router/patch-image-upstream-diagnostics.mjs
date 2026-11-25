@@ -20,7 +20,8 @@ const PARSE_END = 'normalize:a=>a}},8128:a=>';
 const PROMPT_LOG = 'd?.debug?.("IMAGE",`${w.toUpperCase()} | ${x} | prompt="${a.prompt.slice(0,50)}..."`);';
 const PROMPT_LOG_EXECUTOR = 'd?.debug?.("IMAGE",`${w.toUpperCase()} | ${x} | prompt="${a.prompt.slice(0,50)}..." (executor)`);';
 const NON_OK = 'if(!u.ok){let{statusCode:a,message:b}=await (0,e.zL)(u),c=(0,e.lR)(Error(b),w,x,a);';
-export const MODERATION_MARKER = 'amadeus-image-openai-moderation-0.5.116';
+export const MODERATION_MARKER = 'amadeus-image-moderation-low-0.5.116';
+const LEGACY_OPENAI_MODERATION_MARKER = 'amadeus-image-openai-moderation-0.5.116';
 // The non-OK branch lives in a different webpack module than RUNTIME_HELPERS
 // (which are injected next to the Codex parser), so it must not call a helper
 // by name. Inline the classification: a safety refusal keeps its typed token,
@@ -32,14 +33,22 @@ const LEGACY_HTTP_CALL = 'Error(amadeusImageHttpMessage(a,b))';
 // logger with debug() turned the earlier replacement into a TypeError.
 const EXECUTOR_LOG_PATCHED = '/* ' + NO_PROMPT_MARKER + ' */d?.debug?.("IMAGE",`${w.toUpperCase()} | ${x} | image request (executor)`);';
 const LEGACY_EXECUTOR_LOG = '/* ' + NO_PROMPT_MARKER + ' */d?.debug?.("IMAGE",`${v.toUpperCase()} | ${w} | image request (executor)`);';
-// Generic OpenAI-compatible image adapter (module 61613), shared by openai,
-// minimax, openrouter, recraft, vercel-ai-gateway, xai and sensenova. Only the
-// official openai provider forwards `moderation`, and only when the request
-// carries one of OpenAI's documented values.
+// Every image request sent to OpenAI carries moderation="low", whatever the
+// client sent. Two upstream shapes are covered:
+// 1. Generic OpenAI-compatible adapter (module 61613), shared by openai,
+//    minimax, openrouter, recraft, vercel-ai-gateway, xai and sensenova. Only
+//    the official openai provider gets the field.
+// 2. Codex/Plus adapter (module 7648): its Images API body (plain
+//    text-to-image) and its Responses `image_generation` tool (sized/edit).
 const GENERIC_FACTORY = 'function f(a){let b=e(a);return{buildUrl:()=>e(a).baseUrl,';
 const GENERIC_FACTORY_PATCHED = 'function f(a){let b=e(a),amadeusImageProvider=a;return{buildUrl:()=>e(a).baseUrl,';
 const GENERIC_BODY = 'k={model:a,prompt:d,n:e,size:f,output_format:j};for(let a of(';
-const GENERIC_BODY_PATCHED = 'k={model:a,prompt:d,n:e,size:f,output_format:j};/* ' + MODERATION_MARKER + ' */"openai"===amadeusImageProvider&&("auto"===c.moderation||"low"===c.moderation)&&(k.moderation=c.moderation);for(let a of(';
+const GENERIC_BODY_PATCHED = 'k={model:a,prompt:d,n:e,size:f,output_format:j};/* ' + MODERATION_MARKER + ' */"openai"===amadeusImageProvider&&(k.moderation="low");for(let a of(';
+const LEGACY_GENERIC_BODY_PATCHED = 'k={model:a,prompt:d,n:e,size:f,output_format:j};/* ' + LEGACY_OPENAI_MODERATION_MARKER + ' */"openai"===amadeusImageProvider&&("auto"===c.moderation||"low"===c.moderation)&&(k.moderation=c.moderation);for(let a of(';
+const CODEX_IMAGES_BODY = 'return{model:a,prompt:b.prompt,n:1,size:"auto",quality:b.quality||"auto",background:b.background||"auto",output_format:"png"}';
+const CODEX_IMAGES_BODY_PATCHED = 'return{model:a,prompt:b.prompt,n:1,size:"auto",quality:b.quality||"auto",background:b.background||"auto",output_format:"png",moderation:"low"}';
+const CODEX_TOOL = 'i={type:"image_generation",output_format:(b.output_format||"png").toLowerCase()};';
+const CODEX_TOOL_PATCHED = 'i={type:"image_generation",output_format:(b.output_format||"png").toLowerCase(),moderation:"low"};';
 
 function one(source, anchor, name) {
   if (source.split(anchor).length !== 2) throw Error(`${name}_anchor_drift`);
@@ -123,11 +132,21 @@ function fixExecutorLog(source) {
   return source.replace(LEGACY_EXECUTOR_LOG, EXECUTOR_LOG_PATCHED);
 }
 
-function applyOpenAIModeration(source) {
+function applyModerationLow(source) {
   if (source.includes(MODERATION_MARKER)) return source;
-  one(source, GENERIC_FACTORY, 'generic_image_factory');
-  one(source, GENERIC_BODY, 'generic_image_body');
-  return source.replace(GENERIC_FACTORY, GENERIC_FACTORY_PATCHED).replace(GENERIC_BODY, GENERIC_BODY_PATCHED);
+  let output = source;
+  if (output.includes(LEGACY_GENERIC_BODY_PATCHED)) {
+    one(output, LEGACY_GENERIC_BODY_PATCHED, 'generic_image_body_legacy');
+    one(output, GENERIC_FACTORY_PATCHED, 'generic_image_factory_patched');
+    output = output.replace(LEGACY_GENERIC_BODY_PATCHED, GENERIC_BODY_PATCHED);
+  } else {
+    one(output, GENERIC_FACTORY, 'generic_image_factory');
+    one(output, GENERIC_BODY, 'generic_image_body');
+    output = output.replace(GENERIC_FACTORY, GENERIC_FACTORY_PATCHED).replace(GENERIC_BODY, GENERIC_BODY_PATCHED);
+  }
+  one(output, CODEX_IMAGES_BODY, 'codex_images_body');
+  one(output, CODEX_TOOL, 'codex_image_tool');
+  return output.replace(CODEX_IMAGES_BODY, CODEX_IMAGES_BODY_PATCHED).replace(CODEX_TOOL, CODEX_TOOL_PATCHED);
 }
 
 export function patchCodexRouteSource(source) {
@@ -135,7 +154,7 @@ export function patchCodexRouteSource(source) {
   if (!(output.includes(MARKER) && output.includes(NO_PROMPT_MARKER) && output.includes(DETAIL_MARKER))) output = applyBasePatch(output);
   output = fixHttpMessageScope(output);
   output = fixExecutorLog(output);
-  return applyOpenAIModeration(output);
+  return applyModerationLow(output);
 }
 
 export async function install(root, mode = 'verify') {
@@ -145,7 +164,7 @@ export async function install(root, mode = 'verify') {
   const before = await readFile(path, 'utf8');
   const after = patchCodexRouteSource(before);
   if (mode === 'verify') {
-    if (before !== after || !before.includes(MARKER) || !before.includes(NO_PROMPT_MARKER) || !before.includes(DETAIL_MARKER) || !before.includes(MODERATION_MARKER) || before.includes(LEGACY_HTTP_CALL) || before.includes(LEGACY_EXECUTOR_LOG)) throw Error('image_upstream_diagnostics_not_installed');
+    if (before !== after || !before.includes(MARKER) || !before.includes(NO_PROMPT_MARKER) || !before.includes(DETAIL_MARKER) || !before.includes(MODERATION_MARKER) || before.includes(LEGACY_HTTP_CALL) || before.includes(LEGACY_EXECUTOR_LOG) || !before.includes(CODEX_IMAGES_BODY_PATCHED) || !before.includes(CODEX_TOOL_PATCHED)) throw Error('image_upstream_diagnostics_not_installed');
     return path;
   }
   const permissions = (await stat(path)).mode & 0o777;
