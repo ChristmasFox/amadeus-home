@@ -13,7 +13,7 @@ export const PIN = Object.freeze({
   module: 'session-key-PQkfotIJ.mjs',
   moduleSha256: 'e3087bc0c612c52d1530883abc6bee9cc6dc17b8f06fd8ac139902f559fae054',
   workerModule: 'worker/worker.mjs',
-  workerModuleSha256: 'a31ff458309426a6be4ba9d8a5052cbeef3e18feb0e6064fde5908e682e444cf',
+  workerModuleSha256: '82ea199c36622fe6eaafb3918f1f080c21a4cea3e16978cba8ed15165a3b88f5',
 });
 
 const PARSE_THREAD_ANCHOR = [
@@ -49,7 +49,7 @@ export function patchSessionKeySource(original) {
   return replaceOnce(original, PARSE_THREAD_ANCHOR, ACCOUNT_SUFFIX_PATCH, 'thread suffix parser');
 }
 
-const WORKER_PARSE_THREAD_ANCHOR = 'function parseThreadSessionSuffix(Ot){let Zt=normalizeOptionalString(Ot);if(!Zt)return{baseSessionKey:void 0,threadId:void 0};let _n=normalizeLowercaseStringOrEmpty(Zt).lastIndexOf(`:thread:`);return{baseSessionKey:_n===-1?Zt:Zt.slice(0,_n),threadId:normalizeOptionalString(_n===-1?void 0:Zt.slice(_n+8))}}';
+export const WORKER_PARSE_THREAD_ANCHOR = 'function parseThreadSessionSuffix(Ot){let Zt=normalizeOptionalString(Ot);if(!Zt)return{baseSessionKey:void 0,threadId:void 0};let _n=normalizeLowercaseStringOrEmpty(Zt).lastIndexOf(`:thread:`);return{baseSessionKey:_n===-1?Zt:Zt.slice(0,_n),threadId:normalizeOptionalString(_n===-1?void 0:Zt.slice(_n+8))}}';
 const WORKER_ACCOUNT_SUFFIX_PATCH = [
   '/* ' + MARKER + ' */function parseThreadSessionSuffix(Ot){let Zt=normalizeOptionalString(Ot);if(!Zt)return{baseSessionKey:void 0,threadId:void 0};let _n=normalizeLowercaseStringOrEmpty(Zt).lastIndexOf(`:thread:`);',
   'let accountSuffix=_n!==-1&&/^agent:[^:]+:whatsapp:group:[^:]+@g\\.us$/iu.test(Zt.slice(0,_n))&&/^whatsapp-account-[^:]+$/iu.test(Zt.slice(_n+8));',
