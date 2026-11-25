@@ -242,7 +242,7 @@ const SearchMatchesParameters = Type.Object({
   mapName: Type.Optional(Type.String({ maxLength: 128 })),
   sort: Type.Optional(Type.Union([Type.Literal('asc'), Type.Literal('desc')], { description: 'Period reviews should use asc for chronological play order; recentN/latest-match lookups use desc.' })),
   page: Type.Optional(Type.Integer({ minimum: 0, maximum: 100 })),
-  pageSize: Type.Optional(Type.Integer({ minimum: 1, maximum: 50 })),
+  pageSize: Type.Optional(Type.Integer({ minimum: 1, maximum: 50, description: "Maximum results per page; use pageSize, not limit. For a full period review use 50 and omit recentN." })),
   recentN: Type.Optional(Type.Integer({ minimum: 1, maximum: 100, description: 'Use only for latest/recent-match lookups; omit for a full period review so the Domain defaults to chronological order.' })),
   refresh: Type.Optional(Type.Boolean()),
 }, { additionalProperties: false });

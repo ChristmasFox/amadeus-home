@@ -110,6 +110,7 @@ Tool rules:
   `Asia/Shanghai` `06:00` business-day boundary. Pass the returned `resultSetId` to
   `pubg_get_period_review`; Domain order and partial coverage are authoritative. Do not
   manually loop over stale facts or a result set from an earlier turn.
+- For a weapon count across a period (for example “昨天火箭筒杀了几个”), search the entire period with its relative-period selector, then use `pubg_get_period_review` with the same subject and `categories: ["weapons", "kills"]`. Read the period weapon summary and its coverage; do not infer a total from one match or a prior answer. Panzerfaust is the rocket launcher; ProjGrenade is a separate grenade, never a synonym. If any selected match lacks telemetry, state that the total is incomplete and do not turn missing data into zero.
 - Any period teammate-action or friendly-fire request must use
   `pubg_query_team_damage` directly; this is the batch Telemetry owner and it refreshes
   Match discovery and ensures Telemetry for every selected match itself. For all-team
