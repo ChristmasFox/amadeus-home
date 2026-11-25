@@ -41,10 +41,12 @@ const EmptyParameters = Type.Object({}, { additionalProperties: false });
 const ProfileParameters = Type.Object({ person: PersonParameters }, { additionalProperties: false });
 const PlaytimeParameters = Type.Object({
   person: Type.Optional(PersonParameters),
-  people: Type.Optional(Type.Array(PersonParameters, { minItems: 2, maxItems: 8, description: '一次查询多个人时把每个人都列在这里，只调用一次；此时不要填 person，必须带 period。结果是一张按本地记录总时长降序排列的合并卡片。' })),
+  people: Type.Optional(Type.Array(PersonParameters, { minItems: 2, maxItems: 8, description: '一次查询多个人时把每个人都列在这里，只调用一次；此时不要填 person，必须带 period 或 start/end。结果是一张按本地记录总时长降序排列的合并卡片。' })),
   game: Type.Optional(Type.String({ minLength: 1, maxLength: 128, description: '只看某个游戏时填游戏名（部分匹配）。' })),
-  period: Type.Optional(Type.Union([Type.Literal('today'), Type.Literal('yesterday'), Type.Literal('this_week'), Type.Literal('last_week'), Type.Literal('date')], { description: '周期统计和排序必须使用本工具的本地轮询采样：today=今天，yesterday=昨天，this_week=本周（周一开始），last_week=上一完整业务周（上周一 06:00 到本周一 06:00），date=配合 date 指定某天。默认 Asia/Shanghai 每天 06:00 切业务日。不得用 this_week、Steam 生涯时长或官方近两周数据回答上周/周期问题。不填 period 才查询 Steam 官方生涯总时长。' })),
+  period: Type.Optional(Type.Union([Type.Literal('today'), Type.Literal('yesterday'), Type.Literal('this_week'), Type.Literal('last_week'), Type.Literal('date')], { description: '快捷窗口：today=今天，yesterday=昨天，this_week=本周（周一开始），last_week=上一完整业务周（上周一 06:00 到本周一 06:00），date=配合 date 指定某天。统计/排序必须用本地轮询采样。若提供 start/end，自定义闭区间优先，忽略 period/date。' })),
   date: Type.Optional(Type.String({ pattern: '^\\d{4}-\\d{2}-\\d{2}$', description: '指定某一天，格式 YYYY-MM-DD（period 可省略或填 date）。' })),
+  start: Type.Optional(Type.String({ pattern: '^\\d{4}-\\d{2}-\\d{2}$', description: '自然语言日期区间的开始业务日，YYYY-MM-DD；必须与 end 同时提供。start/end 是含首尾的业务日期，窗口为 start 当天 06:00 到 end 次日 06:00，最多 366 天。模型按当前日期和 PUBG 业务日历换算，不要传短语；例如“最近三天”从今天业务日往前两个业务日开始。' })),
+  end: Type.Optional(Type.String({ pattern: '^\\d{4}-\\d{2}-\\d{2}$', description: '自然语言日期区间的结束业务日，YYYY-MM-DD；必须与 start 同时提供。start/end 是含首尾的业务日期，窗口为 start 当天 06:00 到 end 次日 06:00，最多 366 天。模型按当前日期和 PUBG 业务日历换算，不要传短语；例如“这个月”到今天业务日；“上周末”填周日业务日期，窗口在紧随其后的周一 06:00 结束。' })),
 }, { additionalProperties: false });
 const FriendsParameters = Type.Object({
   person: Type.Optional(PersonParameters),
@@ -143,10 +145,10 @@ export function registerSteamTools(api: OpenClawPluginApi): void {
     async (params, context) => steamSetBroadcast(deps(), caller(context), params as Static<typeof BroadcastParameters>));
   registerTool(api, 'steam_get_profile', '查某个已绑定 Steam 的人的资料：昵称、当前在线状态与正在玩的游戏、账号创建时间。资料不公开的字段会返回 known:false，不要编造。', ProfileParameters,
     async (params, context) => steamGetProfile(deps(), caller(context), { person: person(params as { person: unknown }) }));
-  registerTool(api, 'steam_get_playtime', '凡是问今天、昨天、本周、上周或指定日期的时长统计/排序，必须在当轮调用本工具并使用本地轮询记录（steam_play_sessions），不是当场调用 Steam 接口。上周必须 period=last_week（上一完整业务周：上周一 06:00 至本周一 06:00），绝不能用 this_week；date 用于指定单日。没有采样记录就如实说没有记录，不要声称“没有历史接口”。不带 period 才查询 Steam 官方生涯总时长；steam_get_recent_games 是 Steam 官方近两周数据，这两种来源都不能代替本周/上周/指定周期统计或排序。多人时用 people 一次调用，本地时长合并卡片按总分钟降序；结果带 displayText 时必须原样发出，不要改写或复述旧的失败/错误周期结论。默认时长周期含义：没有说生涯、总共、一共、入坑以来、累计这类意思时，问的是今天：用 period=today，不要用不带 period 的总时长顶替。', PlaytimeParameters,
+  registerTool(api, 'steam_get_playtime', '凡是问今天、昨天、本周、上周、指定日期或任意自然语言区间的时长统计/排序，必须在当轮调用本工具并使用本地轮询记录（steam_play_sessions），不是当场调用 Steam 接口。上周必须 period=last_week（上一完整业务周：上周一 06:00 至本周一 06:00），绝不能用 this_week；date 用于指定单日。自然语言区间由模型按当前日期换算为 start/end 的 YYYY-MM-DD 业务日期，工具不解析短语；start/end 同时提供时按闭区间统计，从 start 当天 06:00 到 end 次日 06:00，并优先于 period/date，最长 366 个业务日。例：“这个月”从本月 1 日到今天业务日；“上周末”取上一个完整周末的周六和周日两个业务日，end 填周日（窗口至紧随其后的周一 06:00）；“最近三天”从今天业务日往前两个业务日到今天；“11月1号到10号”根据当前日期确定年份后填 11-01 至 11-10。与 PUBG 日历共用业务日，每天 06:00 切日；结果回显实际区间、首尾业务日和切日。没有采样记录就如实说没有记录，不要声称“没有历史接口”。不带 period 才查询 Steam 官方生涯总时长；steam_get_recent_games 是 Steam 官方近两周数据，这两种来源都不能代替今天/昨天/本周/上周/自定义区间统计或排序。多人时用 people 一次调用，本地时长合并卡片按总分钟降序；结果带 displayText 时必须原样发出，不要改写或复述旧的失败/错误周期结论。默认时长周期含义：没有说生涯、总共、一共、入坑以来、累计这类意思时，问的是今天：用 period=today，不要用不带 period 的总时长顶替。', PlaytimeParameters,
     async (params, context) => {
       const typed = params as Static<typeof PlaytimeParameters>;
-      return steamGetPlaytime(deps(), caller(context), { ...(typed.person ? { person: typed.person as Person } : {}), ...(typed.people ? { people: typed.people as Person[] } : {}), ...(typed.game ? { game: typed.game } : {}), ...(typed.period ? { period: typed.period } : {}), ...(typed.date ? { date: typed.date } : {}) });
+      return steamGetPlaytime(deps(), caller(context), { ...(typed.person ? { person: typed.person as Person } : {}), ...(typed.people ? { people: typed.people as Person[] } : {}), ...(typed.game ? { game: typed.game } : {}), ...(typed.period ? { period: typed.period } : {}), ...(typed.date ? { date: typed.date } : {}), ...(typed.start !== undefined ? { start: typed.start } : {}), ...(typed.end !== undefined ? { end: typed.end } : {}) });
     });
   registerTool(api, 'steam_get_recent_games', '查某个已绑定 Steam 的人 Steam 官方 Web API 返回的近两周游戏及时长；这是近 14 天数据，不是按本地业务周统计的本周/上周时长，不能替代 steam_get_playtime 的 period 查询。不公开时返回 known:false。', ProfileParameters,
     async (params, context) => steamGetRecentGames(deps(), caller(context), { person: person(params as { person: unknown }) }));

@@ -6,7 +6,7 @@ import { PresencePoller } from '../src/steam/poller.js';
 import { SteamStore } from '../src/steam/store.js';
 import { renderSteamNotifications } from '../src/steam/notify.js';
 import { BUSINESS_DAY_START, DEFAULT_TIMEZONE, businessCalendar, businessCalendarFromConfig, DAILY_PLAYTIME_CLOCK } from '../src/steam/business-day.js';
-import { aggregatePlay, playtimeWindow, steamGetPlaytime, type SteamCaller, type SteamToolDependencies } from '../src/steam/tools.js';
+import { aggregatePlay, playtimeRangeWindow, playtimeWindow, steamGetPlaytime, type SteamCaller, type SteamToolDependencies } from '../src/steam/tools.js';
 
 const CAL = businessCalendar();
 const MIN = 60_000;
@@ -120,6 +120,11 @@ function play(store: SteamStore, id: string, game: { appId: string; name: string
   for (let minute = 0; minute <= minutes; minute += 1) store.recordPlay(id, minute === minutes ? undefined : game, start + minute * MIN);
 }
 
+function setTrackingSince(store: SteamStore, at: number): void {
+  (store as unknown as { db: { prepare(sql: string): { run(...args: unknown[]): unknown } } }).db
+    .prepare(`UPDATE steam_meta SET value = ? WHERE key = 'play_tracking_started_at'`).run(String(at));
+}
+
 test('the tool answers per game and in total for yesterday, merging a person\'s accounts, and says when there is no data', async () => {
   const now = D9 + 3 * HOUR;
   const { store, deps, caller } = toolEnv(now);
@@ -213,6 +218,92 @@ test('last_week reads only the previous complete week for one person and sorts o
   assert.deepEqual(group.people.map((member) => member.games.map((game) => game.name)), [['Prior Game A', 'Prior Game B'], ['Prior Game C']]);
   assert.deepEqual(group.people.map((member) => member.totalText), ['45分钟', '20分钟']);
   assert.ok(group.displayText.indexOf('Prior Game A') < group.displayText.indexOf('Prior Game C'));
+});
+
+test('custom date ranges are inclusive business dates and use the shared 06:00 calendar', () => {
+  const result = playtimeRangeWindow(CAL, '2026-11-16', '2026-11-17');
+  assert.equal(result.valid, true);
+  if (!result.valid) return;
+  assert.deepEqual([result.range.window.from, result.range.window.to], [D9 + 7 * 24 * HOUR, D9 + 9 * 24 * HOUR]);
+  assert.deepEqual([CAL.label(result.range.window.from), CAL.label(result.range.window.to)], ['2026-11-16', '2026-11-18']);
+  assert.equal(result.range.window.label, '自定义区间（2026-11-16 06:00 → 2026-11-18 06:00，含首尾业务日）');
+});
+
+test('custom start/end takes precedence over period and date, and one group card sorts local range totals descending', async () => {
+  const now = D9 + 16 * 24 * HOUR + 3 * HOUR;
+  const store = new SteamStore(':memory:');
+  store.link({ senderKey: 'member:first', steamId: ID1, personaName: 'Game A', personId: 'p1', now: 1 });
+  store.link({ senderKey: 'member:first', steamId: ID2, personaName: 'Game B', personId: 'p1', now: 2 });
+  store.link({ senderKey: 'member:second', steamId: ID3, personaName: 'Game C', personId: 'p2', now: 3 });
+  store.enroll(GROUP, 'member:first'); store.enroll(GROUP, 'member:second');
+  const deps = { store, calendar: CAL, now: () => now, client: { hasKey: async () => true } } as unknown as SteamToolDependencies;
+  const caller: SteamCaller = {
+    senderKey: 'member:requester', groupId: GROUP, isOwner: false, mentions: ['member:first', 'member:second'],
+    mentionPerson: (index) => index === 0 ? 'p1' : 'p2',
+  };
+  const start = D9 + 7 * 24 * HOUR; // 2026-11-16 06:00
+  const end = D9 + 9 * 24 * HOUR; // exclusive 2026-11-18 06:00
+  setTrackingSince(store, start - HOUR);
+  play(store, ID1, { appId: '10', name: 'Range Game A' }, start + 10 * MIN, 60);
+  play(store, ID2, { appId: '20', name: 'Range Game B' }, start + 20 * MIN, 30);
+  play(store, ID3, { appId: '30', name: 'Range Game C' }, start + 30 * MIN, 45);
+  play(store, ID1, { appId: '11', name: 'Outside This Week' }, D9 + 14 * 24 * HOUR + 10 * MIN, 90);
+
+  const result = await steamGetPlaytime(deps, caller, {
+    people: [{ reference: 'mention', mentionIndex: 0 }, { reference: 'mention', mentionIndex: 1 }],
+    period: 'today', date: '2026-11-25', start: '2026-11-16', end: '2026-11-17',
+  }) as { status: string; period: string; start?: string; end?: string; label?: string; people?: Array<{ totalText?: string; games: Array<{ name: string }> }>; displayText?: string };
+  assert.equal(result.status, 'ok');
+  assert.deepEqual([result.period, result.start, result.end], ['range', '2026-11-16', '2026-11-17']);
+  assert.equal(result.label, '自定义区间（2026-11-16 06:00 → 2026-11-18 06:00，含首尾业务日）');
+  assert.deepEqual(result.people?.map((member) => member.totalText), ['1小时30分钟', '45分钟']);
+  assert.deepEqual(result.people?.map((member) => member.games.map((game) => game.name)), [['Range Game A', 'Range Game B'], ['Range Game C']]);
+  assert.match(result.displayText ?? '', /2026-11-16 06:00 → 2026-11-18 06:00/u);
+  assert.ok((result.displayText ?? '').indexOf('Range Game A') < (result.displayText ?? '').indexOf('Range Game C'));
+});
+
+test('custom date ranges reject missing, invalid, reversed and over-limit inputs while allowing 366 business days', async () => {
+  const now = D9 + 16 * 24 * HOUR + 3 * HOUR;
+  const { deps, caller } = toolEnv(now);
+  const query = (start?: string, end?: string) => steamGetPlaytime(deps, caller, {
+    person: { reference: 'self' }, ...(start !== undefined ? { start } : {}), ...(end !== undefined ? { end } : {}),
+  }) as Promise<Record<string, unknown>>;
+  assert.deepEqual(await query('2026-11-01'), { status: 'invalid_range', reason: 'start_and_end_required', note: '自定义区间必须同时提供 start 和 end。' });
+  assert.deepEqual(await query('2026-02-30', '2026-03-01'), { status: 'invalid_range', reason: 'invalid_start_date', note: 'start 必须是有效的 YYYY-MM-DD 业务日期。' });
+  assert.deepEqual(await query('2026-11-17', '2026-11-16'), { status: 'invalid_range', reason: 'start_after_end', note: 'start 不能晚于 end。' });
+  const max = await query('2025-01-01', '2026-01-01');
+  assert.deepEqual([max.status, max.period, max.start, max.end, max.known], ['ok', 'range', '2025-01-01', '2026-01-01', false]);
+  assert.deepEqual(await query('2025-01-01', '2026-01-02'), {
+    status: 'invalid_range', reason: 'range_exceeds_limit', maxBusinessDays: 366,
+    note: '自定义区间最多 366 个业务日；当前请求有 367 个业务日。',
+  });
+});
+
+test('custom ranges before sampling return known:false; overlap is clipped and marked partial', async () => {
+  const now = D9 + 3 * 24 * HOUR + 3 * HOUR;
+  const { store, deps, caller } = toolEnv(now);
+  const trackingSince = D9 + 24 * HOUR; // 2026-11-10 06:00
+  setTrackingSince(store, trackingSince);
+  play(store, ID1, { appId: '10', name: 'Before Tracking' }, D9 + 10 * HOUR, 30);
+  play(store, ID1, { appId: '20', name: 'After Tracking' }, trackingSince + 10 * HOUR, 20);
+
+  const early = await steamGetPlaytime(deps, caller, {
+    person: { reference: 'self' }, start: '2026-11-07', end: '2026-11-08',
+  }) as { status: string; known: boolean; reason?: string; trackingSince?: string; note?: string };
+  assert.equal(early.status, 'ok');
+  assert.equal(early.known, false);
+  assert.equal(early.reason, 'before_tracking');
+  assert.equal(early.trackingSince, `${CAL.format(trackingSince)}（${CAL.timezone}）`);
+  assert.match(early.note ?? '', /整个统计区间都早于采样开始/u);
+
+  const partial = await steamGetPlaytime(deps, caller, {
+    person: { reference: 'self' }, start: '2026-11-09', end: '2026-11-11',
+  }) as { known: boolean; partial?: boolean; trackingSince?: string; totalMinutes?: number; games?: Array<{ name: string }> };
+  assert.equal(partial.known, true);
+  assert.equal(partial.partial, true);
+  assert.equal(partial.trackingSince, `${CAL.format(trackingSince)}（${CAL.timezone}）`);
+  assert.equal(partial.totalMinutes, 20);
+  assert.deepEqual(partial.games?.map((game) => game.name), ['After Tracking']);
 });
 
 test('the poller records the play sessions it observes, including a first sighting already in progress', async () => {

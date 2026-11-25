@@ -254,8 +254,60 @@ export function steamGetProfile(deps: SteamToolDependencies, caller: SteamCaller
 
 export type PlaytimePeriod = 'today' | 'yesterday' | 'this_week' | 'last_week' | 'date';
 
+export interface PlaytimeWindow { from: number; to: number; label: string }
+export interface PlaytimeRange { start: string; end: string; window: PlaytimeWindow }
+export type PlaytimeRangeResult = { valid: true; range: PlaytimeRange } | {
+  valid: false;
+  result: { status: 'invalid_range'; reason: string; maxBusinessDays?: number; note: string };
+};
+
+const MAX_PLAYTIME_RANGE_DAYS = 366;
+
+/** A custom range is made of inclusive business-date labels, with the same calendar as the PUBG daily review. */
+export function playtimeRangeWindow(calendar: BusinessCalendar, start: string | undefined, end: string | undefined): PlaytimeRangeResult {
+  if (start === undefined || end === undefined) {
+    return { valid: false, result: { status: 'invalid_range', reason: 'start_and_end_required', note: '自定义区间必须同时提供 start 和 end。' } };
+  }
+  const startWindow = calendar.windowOf(start);
+  if (!startWindow) return { valid: false, result: { status: 'invalid_range', reason: 'invalid_start_date', note: 'start 必须是有效的 YYYY-MM-DD 业务日期。' } };
+  const endWindow = calendar.windowOf(end);
+  if (!endWindow) return { valid: false, result: { status: 'invalid_range', reason: 'invalid_end_date', note: 'end 必须是有效的 YYYY-MM-DD 业务日期。' } };
+  if (startWindow.startMs > endWindow.startMs) {
+    return { valid: false, result: { status: 'invalid_range', reason: 'start_after_end', note: 'start 不能晚于 end。' } };
+  }
+  // Count Gregorian business-date labels using UTC arithmetic, independent of timezone/DST window lengths.
+  const utcDay = (date: string): number => {
+    const [year, month, day] = date.split('-').map(Number);
+    const value = new Date(0);
+    value.setUTCHours(0, 0, 0, 0);
+    value.setUTCFullYear(year!, month! - 1, day!);
+    return value.getTime();
+  };
+  const businessDays = Math.floor((utcDay(end) - utcDay(start)) / 86_400_000) + 1;
+  if (businessDays > MAX_PLAYTIME_RANGE_DAYS) {
+    return {
+      valid: false,
+      result: {
+        status: 'invalid_range', reason: 'range_exceeds_limit', maxBusinessDays: MAX_PLAYTIME_RANGE_DAYS,
+        note: `自定义区间最多 ${MAX_PLAYTIME_RANGE_DAYS} 个业务日；当前请求有 ${businessDays} 个业务日。`,
+      },
+    };
+  }
+  return {
+    valid: true,
+    range: {
+      start, end,
+      window: {
+        from: startWindow.startMs,
+        to: endWindow.endMs,
+        label: `自定义区间（${start} ${calendar.start} → ${calendar.label(endWindow.endMs)} ${calendar.start}，含首尾业务日）`,
+      },
+    },
+  };
+}
+
 /** today / yesterday / this week / the previous complete week / a given date in the shared (PUBG) business calendar. */
-export function playtimeWindow(calendar: BusinessCalendar, period: PlaytimePeriod, date: string | undefined, now: number): { from: number; to: number; label: string } | undefined {
+export function playtimeWindow(calendar: BusinessCalendar, period: PlaytimePeriod, date: string | undefined, now: number): PlaytimeWindow | undefined {
   const today = calendar.windowAt(now);
   const span = (day: string): string => `${day} ${calendar.start} → 次日 ${calendar.start}`;
   if (period === 'today') return { from: today.startMs, to: today.endMs, label: `今天（${span(calendar.label(today.startMs))}）` };
@@ -317,8 +369,8 @@ export function aggregatePlay(calendar: BusinessCalendar, sessions: PlaySession[
 }
 
 /** Several people asked about at once: one merged card, delivered once (the model hands it over, it does not restate each person). */
-function groupPlaytime(deps: SteamToolDependencies, caller: SteamCaller, people: Person[], period: PlaytimePeriod, date: string | undefined, game: string | undefined): unknown {
-  const results = people.slice(0, 8).map((person) => trackedPlaytime(deps, caller, person, period, date, game) as Record<string, unknown>);
+function groupPlaytime(deps: SteamToolDependencies, caller: SteamCaller, people: Person[], period: PlaytimePeriod, date: string | undefined, game: string | undefined, range?: PlaytimeRange): unknown {
+  const results = people.slice(0, 8).map((person) => trackedPlaytime(deps, caller, person, period, date, game, range) as Record<string, unknown>);
   const bad = results.find((result) => result.status !== 'ok' && result.status !== undefined);
   if (bad) return bad;
   const ordered = [...results].sort((left, right) => {
@@ -331,31 +383,49 @@ function groupPlaytime(deps: SteamToolDependencies, caller: SteamCaller, people:
     known: result.known === true,
     games: Array.isArray(result.games) ? result.games as Array<{ appId?: string; name: string; text: string }> : [],
     ...(typeof result.totalText === 'string' ? { totalText: result.totalText } : {}),
+    ...(typeof result.reason === 'string' ? { reason: result.reason } : {}),
+    ...(typeof result.trackingSince === 'string' ? { trackingSince: result.trackingSince } : {}),
+    ...(result.partial === true ? { partial: true } : {}),
+    ...(typeof result.note === 'string' ? { note: result.note } : {}),
   }));
   const partial = results.find((result) => result.partial === true);
   const now = (deps.now ?? Date.now)();
   const displayText = renderPlaytimeGroupCard({ label: String(first.label), members, ...(partial && typeof partial.trackingSince === 'string' ? { partialSince: partial.trackingSince } : {}) }, new Date(now));
-  return { status: 'ok', period: first.period, label: first.label, timezone: first.timezone, dayBoundary: first.dayBoundary, people: members, displayText, replyGuide: CARD_REPLY_GUIDE };
+  return {
+    status: 'ok', period: first.period, label: first.label, timezone: first.timezone, dayBoundary: first.dayBoundary,
+    ...(typeof first.start === 'string' && typeof first.end === 'string' ? { start: first.start, end: first.end } : {}),
+    ...(partial && typeof partial.trackingSince === 'string' ? { partial: true, trackingSince: partial.trackingSince } : {}),
+    people: members, displayText, replyGuide: CARD_REPLY_GUIDE,
+  };
 }
 
 /** Time actually spent in games, from the sessions the poller recorded (not Steam's lifetime totals). */
-function trackedPlaytime(deps: SteamToolDependencies, caller: SteamCaller, person: Person, period: PlaytimePeriod, date: string | undefined, game: string | undefined): unknown {
+function trackedPlaytime(deps: SteamToolDependencies, caller: SteamCaller, person: Person, period: PlaytimePeriod, date: string | undefined, game: string | undefined, range?: PlaytimeRange): unknown {
   const now = (deps.now ?? Date.now)();
   const calendar = deps.calendar ?? businessCalendar();
-  const window = playtimeWindow(calendar, period, date, now);
+  const window = range?.window ?? playtimeWindow(calendar, period, date, now);
   if (!window) return { status: 'invalid_date', reason: 'date_must_be_YYYY-MM-DD' };
   const target = targetFor(deps, caller, person, { includeUnshared: true });
   if (!('links' in target)) return target;
-  const trackingSince = deps.store.playTrackingStartedAt();
-  const base = { period: period === 'date' ? 'date' : period, label: window.label, timezone: calendar.timezone, dayBoundary: calendar.describe(), accountCount: target.links.length };
-  if (window.to <= trackingSince) {
-    return { status: 'ok', ...base, known: false, reason: 'before_tracking', trackingSince: `${calendar.format(trackingSince)}（${calendar.timezone}）`, note: '游戏时长是从这个时间之后才开始记录的，更早的日子没有数据。' };
-  }
-  const sessions = deps.store.playSessions(target.links.map((link) => link.steamId), window.from, window.to, now);
-  const { games, totalMinutes, days } = aggregatePlay(calendar, sessions, window.from, window.to, game);
-  const partial = window.from < trackingSince;
   const subject = target.links[0]!;
   const name = (subject.personId ? caller.displayName?.(subject.personId) : undefined) || subject.personaName;
+  const trackingSince = deps.store.playTrackingStartedAt();
+  const base = {
+    period: range ? 'range' : period === 'date' ? 'date' : period,
+    label: window.label, timezone: calendar.timezone, dayBoundary: calendar.describe(), accountCount: target.links.length,
+    ...(range ? { start: range.start, end: range.end } : {}),
+  };
+  if (window.to <= trackingSince) {
+    return {
+      status: 'ok', ...base, known: false, member: name, reason: 'before_tracking',
+      trackingSince: `${calendar.format(trackingSince)}（${calendar.timezone}）`,
+      note: '游戏时长是从这个时间之后才开始记录的；整个统计区间都早于采样开始，因此没有可报告的数据。',
+    };
+  }
+  const sampleFrom = Math.max(window.from, trackingSince);
+  const sessions = deps.store.playSessions(target.links.map((link) => link.steamId), sampleFrom, window.to, now);
+  const { games, totalMinutes, days } = aggregatePlay(calendar, sessions, sampleFrom, window.to, game);
+  const partial = window.from < trackingSince;
   const displayText = renderPlaytimeCard({
     name, label: window.label, games, totalText: durationText(totalMinutes),
     ...(partial ? { partialSince: `${calendar.format(trackingSince)}（${calendar.timezone}）` } : {}),
@@ -364,8 +434,12 @@ function trackedPlaytime(deps: SteamToolDependencies, caller: SteamCaller, perso
     status: 'ok', ...base, known: true, member: name, games, totalMinutes, totalText: durationText(totalMinutes),
     displayText, replyGuide: CARD_REPLY_GUIDE,
     ...(period === 'this_week' || period === 'last_week' || days.length > 1 ? { days } : {}),
-    ...(partial ? { partial: true, trackingSince: `${calendar.format(trackingSince)}（${calendar.timezone}）`, note: '记录是从这个时间才开始的，这段时间之前的游戏时长没有数据，上面只是记录开始之后的部分。' } : {}),
-    ...(totalMinutes === 0 ? { note: '这段时间没有记录到游戏时长（只记录绑定账号在播报开启时的游戏状态，每分钟采样一次，误差约一分钟）。' } : {}),
+    ...(partial ? {
+      partial: true, trackingSince: `${calendar.format(trackingSince)}（${calendar.timezone}）`,
+      note: totalMinutes === 0
+        ? '记录是从这个时间才开始的，这段时间之前的部分没有数据；采样开始后的重叠区间也没有记录到游戏时长。'
+        : '记录是从这个时间才开始的，这段时间之前的游戏时长没有数据，上面只是记录开始之后的部分。',
+    } : totalMinutes === 0 ? { note: '这段时间没有记录到游戏时长（只记录绑定账号在播报开启时的游戏状态，每分钟采样一次，误差约一分钟）。' } : {}),
   };
 }
 
@@ -373,9 +447,16 @@ function trackedPlaytime(deps: SteamToolDependencies, caller: SteamCaller, perso
  * Without a period: Steam's lifetime hours (total, top games, or one game). With a period (today / yesterday / this
  * week / a date): the time actually played in that window, per game and in total, merged over the person's accounts.
  */
-export function steamGetPlaytime(deps: SteamToolDependencies, caller: SteamCaller, params: { person?: Person; people?: Person[]; game?: string; period?: PlaytimePeriod; date?: string }): Promise<unknown> {
+export function steamGetPlaytime(deps: SteamToolDependencies, caller: SteamCaller, params: { person?: Person; people?: Person[]; game?: string; period?: PlaytimePeriod; date?: string; start?: string; end?: string }): Promise<unknown> {
   const everyone = params.people?.length ? params.people : params.person ? [params.person] : [];
   if (!everyone.length) return Promise.resolve({ status: 'invalid_request', reason: 'person_or_people_required' });
+  if (params.start !== undefined || params.end !== undefined) {
+    const range = playtimeRangeWindow(deps.calendar ?? businessCalendar(), params.start, params.end);
+    if (!range.valid) return Promise.resolve(range.result);
+    // Explicit dates take precedence over period/date, including when a shortcut is also present.
+    if (everyone.length > 1) return Promise.resolve(groupPlaytime(deps, caller, everyone, 'date', undefined, params.game, range.range));
+    return Promise.resolve(trackedPlaytime(deps, caller, everyone[0]!, 'date', undefined, params.game, range.range));
+  }
   if (params.period || params.date) {
     const period: PlaytimePeriod = params.period ?? 'date';
     if (everyone.length > 1) return Promise.resolve(groupPlaytime(deps, caller, everyone, period, params.date, params.game));

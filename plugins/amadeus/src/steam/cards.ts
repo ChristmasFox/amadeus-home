@@ -46,7 +46,15 @@ export function renderPlayingCard(card: PlayingCard, _now: Date = new Date()): s
 
 export interface PlaytimeGroupCard {
   label: string;
-  members: Array<{ name: string; games: Array<{ appId?: string; name: string; text: string }>; totalText?: string; known: boolean }>;
+  members: Array<{
+    name: string;
+    games: Array<{ appId?: string; name: string; text: string }>;
+    totalText?: string;
+    known: boolean;
+    reason?: string;
+    trackingSince?: string;
+    partial?: boolean;
+  }>;
   /** Set when the record starts inside the window. */
   partialSince?: string;
 }
@@ -55,7 +63,12 @@ export interface PlaytimeGroupCard {
 export function renderPlaytimeGroupCard(card: PlaytimeGroupCard, _now: Date = new Date()): string {
   const facts: CardFact[] = [fact('时段', card.label)];
   for (const member of card.members) {
-    if (!member.known || !member.games.length) { facts.push(fact(member.name, member.known ? '没有记录到游戏时长' : '没有可用的记录')); continue; }
+    if (!member.known || !member.games.length) {
+      const value = member.known ? '没有记录到游戏时长'
+        : member.reason === 'before_tracking' && member.trackingSince ? `该区间早于采样开始（${member.trackingSince}）` : '没有可用的记录';
+      facts.push(fact(member.name, value));
+      continue;
+    }
     for (const game of member.games) facts.push(fact(`${member.name} · ${gameLabel(game.appId, game.name) ?? game.name}`, game.text));
     facts.push(fact(`${member.name} · 合计`, member.totalText ?? ''));
   }
