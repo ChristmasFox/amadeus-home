@@ -1,4 +1,5 @@
 import { type NewsItem, type PlayerBans, type Unknown, type WishlistEntry } from './client.js';
+import { gameLabel } from './game-aliases.js';
 import type { SteamLink } from './store.js';
 import {
   groupMembersOf, guarded, libraryOf, minutesToHours, ownedFor, targetFor,
@@ -111,7 +112,8 @@ export function steamGameInfo(deps: SteamToolDependencies, caller: SteamCaller, 
     const resolved = await resolveGame(deps, caller, params.game, own && 'links' in own ? own.links : []);
     if (!resolved) return { status: 'not_found', reason: 'game_not_found' };
     const want = params.info ?? 'both';
-    const out: Record<string, unknown> = { status: 'ok', game: { appId: resolved.appId, ...(resolved.name ? { name: resolved.name } : {}) } };
+    const shownName = gameLabel(resolved.appId, resolved.name);
+    const out: Record<string, unknown> = { status: 'ok', game: { appId: resolved.appId, ...(shownName ? { name: shownName } : {}) } };
     if (want !== 'news') {
       const count = await cached(deps, `players:${resolved.appId}`, PLAYERS_CACHE_MS, () => client.currentPlayers!(resolved.appId));
       out.currentPlayers = count === undefined ? { known: false, reason: 'not_available' } : { known: true, value: count };
@@ -150,7 +152,8 @@ export function steamGetGameStats(deps: SteamToolDependencies, caller: SteamCall
       const rows = stats.value.stats.filter((item) => !wanted || item.name.toLowerCase().includes(wanted)).sort((a, b) => b.value - a.value);
       accounts.push({ account: link.personaName, stats: { known: true, total: stats.value.stats.length, shown: Math.min(rows.length, limit), items: rows.slice(0, limit) } });
     }
-    const game = { appId: resolved.appId, ...(resolved.name ? { name: resolved.name } : {}) };
+    const shownName = gameLabel(resolved.appId, resolved.name);
+    const game = { appId: resolved.appId, ...(shownName ? { name: shownName } : {}) };
     return target.links.length === 1 ? { status: 'ok', game, ...accounts[0] } : { status: 'ok', game, accountCount: accounts.length, accounts };
   });
 }
@@ -191,7 +194,7 @@ export function steamLibraryOverlap(deps: SteamToolDependencies, caller: SteamCa
       }
       if (libraries.length < 2) return { status: 'ok', ...base, gameDetailsNotPublic: hidden, note: '能读到游戏详情的成员不足两位，没法比较。' };
       const shared = [...libraries[0]!.games].filter(([appId]) => libraries.every((library) => library.games.has(appId)))
-        .map(([appId, game]) => ({ appId, name: game.name ?? String(appId), combinedHours: minutesToHours(libraries.reduce((sum, library) => sum + (library.games.get(appId)?.minutes ?? 0), 0)) }))
+        .map(([appId, game]) => ({ appId, name: gameLabel(String(appId), game.name ?? String(appId)) ?? String(appId), combinedHours: minutesToHours(libraries.reduce((sum, library) => sum + (library.games.get(appId)?.minutes ?? 0), 0)) }))
         .sort((a, b) => b.combinedHours - a.combinedHours);
       return { status: 'ok', ...base, compared: libraries.map((library) => library.name), sharedCount: shared.length, shared: shared.slice(0, limit), ...(hidden.length ? { gameDetailsNotPublic: hidden, note: '这些成员的游戏详情未公开，没有参与比较。' } : {}) };
     }
@@ -211,7 +214,7 @@ export function steamLibraryOverlap(deps: SteamToolDependencies, caller: SteamCa
     const shared = lists.length > 1 ? [...lists[0]!.ids].filter((appId) => lists.every((list) => list.ids.has(appId))) : [];
     const need = new Set<number>([...shared.slice(0, limit), ...lists.flatMap((list) => list.order.slice(0, Math.min(limit, 10)))]);
     const names = await cached(deps, `names:${[...need].sort().join(',')}`, NAMES_CACHE_MS, () => client.storeNames!([...need]));
-    const nameOf = (appId: number): string => names.get(appId) ?? String(appId);
+    const nameOf = (appId: number): string => gameLabel(String(appId), names.get(appId) ?? String(appId)) ?? String(appId);
     return {
       status: 'ok', ...base,
       wishlists: lists.map((list) => ({ name: list.name, count: list.ids.size, top: list.order.slice(0, Math.min(limit, 10)).map(nameOf) })),

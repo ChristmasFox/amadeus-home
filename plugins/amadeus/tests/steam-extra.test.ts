@@ -69,12 +69,13 @@ test('a game: players online and news, found from the asker\'s library or the st
   const { deps, caller, calls } = env();
   const own = await steamGameInfo(deps, caller(), { game: 'counter-strike' }) as { game: { appId: string; name: string }; currentPlayers: { value: number }; news: { value: Array<{ title: string; summary: string; date: string }> } };
   assert.deepEqual([own.game.appId, own.currentPlayers.value, own.news.value.length], ['730', 337_833, 3]);
+  assert.equal(own.game.name, 'CS2');
   assert.equal(own.news.value[0]!.summary, 'Fixes things');                // markup stripped
   assert.equal(own.news.value[0]!.date, '2026-11-08');
   await steamGameInfo(deps, caller(), { game: '730', info: 'players' });
   assert.equal(calls.filter((entry) => entry === 'players:730').length, 1, 'the player count is cached');
   const searched = await steamGameInfo(deps, caller(), { game: 'Some Game From The Store', info: 'players' }) as { game: { appId: string; name: string } };
-  assert.deepEqual([searched.game.appId, searched.game.name], ['4242', 'Found By Search']);
+  assert.deepEqual([searched.game.appId, searched.game.name], ['4242', 'Found By…']);
   assert.deepEqual(await steamGameInfo(deps, caller(), { game: 'unknown game' }), { status: 'not_found', reason: 'game_not_found' });
   const none = await steamGameInfo(deps, caller(), { game: '999' }) as { currentPlayers: { known: boolean }; news: { known: boolean } };
   assert.deepEqual([none.currentPlayers.known, none.news.known], [false, false]);
@@ -82,8 +83,9 @@ test('a game: players online and news, found from the asker\'s library or the st
 
 test('a person\'s numbers in a game: filtered, capped, private and no-stats said plainly, PUBG sent to the pubg tools', async () => {
   const { deps, caller } = env();
-  const answer = await steamGetGameStats(deps, caller(), { game: 'Counter-Strike 2', stat: 'total', limit: 2 }) as { account?: string; stats: { known: boolean; total: number; shown: number; items: Array<{ name: string; value: number }> }; accountCount?: number; accounts?: Array<{ stats: { known: boolean } }> };
+  const answer = await steamGetGameStats(deps, caller(), { game: 'Counter-Strike 2', stat: 'total', limit: 2 }) as { game: { name: string }; account?: string; stats: { known: boolean; total: number; shown: number; items: Array<{ name: string; value: number }> }; accountCount?: number; accounts?: Array<{ stats: { known: boolean } }> };
   assert.equal(answer.accountCount, 2);                                      // two accounts, listed separately
+  assert.equal(answer.game.name, 'CS2');
   assert.deepEqual(answer.accounts!.map((a) => a.stats.known), [true, false]);
   const first = (answer.accounts![0] as unknown as { stats: { items: Array<{ name: string }>; shown: number } }).stats;
   assert.deepEqual([first.shown, first.items.map((i) => i.name)], [2, ['total_deaths', 'total_kills']]);

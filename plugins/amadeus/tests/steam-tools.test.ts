@@ -137,15 +137,18 @@ test('other Steam lookups stay gated by sharing while playtime remains available
 test('profile, playtime and recent games report values; private data is unknown, never zero', async () => {
   const open = setup();
   open.store.link({ senderKey: ME, steamId: ID, personaName: 'x', now: 1 });
-  const profile = await steamGetProfile(open.deps, open.caller(), { person: { reference: 'self' } }) as { state: { known: boolean }; name: string };
+  open.deps.client.playerSummaries = async (ids) => new Map(ids.map((id): [string, PlayerSummary] => [id, summary(id, { gameId: '578080', gameName: 'PUBG: BATTLEGROUNDS' })]));
+  const profile = await steamGetProfile(open.deps, open.caller(), { person: { reference: 'self' } }) as { state: { known: boolean; game: string }; name: string };
   assert.equal(profile.state.known, true);
+  assert.equal(profile.state.game, 'PUBG');
   const playtime = await steamGetPlaytime(open.deps, open.caller(), { person: { reference: 'self' } }) as { totalHours: number; top: Array<{ name: string }> };
   assert.equal(playtime.totalHours, 11);
-  assert.equal(playtime.top[0]!.name, 'Placeholder One');
+  assert.equal(playtime.top[0]!.name, 'Placehold…');
   const one = await steamGetPlaytime(open.deps, open.caller(), { person: { reference: 'self' }, game: 'two' }) as { found: boolean };
   assert.equal(one.found, true);
-  const recent = await steamGetRecentGames(open.deps, open.caller(), { person: { reference: 'self' } }) as { recent: { known: boolean } };
+  const recent = await steamGetRecentGames(open.deps, open.caller(), { person: { reference: 'self' } }) as { recent: { known: boolean; value: Array<{ name: string }> } };
   assert.equal(recent.recent.known, true);
+  assert.equal(recent.recent.value[0]!.name, 'Placehold…');
 
   const hidden = setup({ privateGames: true });
   hidden.store.link({ senderKey: ME, steamId: ID, personaName: 'x', now: 1 });
@@ -183,15 +186,16 @@ function friendsSetup(friends: PlayerSummary[] | 'private', calls = { list: 0, s
 
 const friend = (n: number, extra: Partial<PlayerSummary> = {}): PlayerSummary => summary(`7656119000000010${n}`, { name: `Friend${n}`, ...extra });
 
-test('friends status: the owner in a direct chat sees who is playing; filters, name search and ordering work', async () => {
+test('friends status: the owner in a direct chat sees who is playing with a compact game label; filters and ordering work', async () => {
   const { deps, ownerDm } = friendsSetup([
     friend(1, { gameId: '10', gameName: 'Placeholder One' }),
     friend(2, { personaState: 1 }),
     friend(3, { personaState: 0, lastLogoff: Date.parse('2026-11-01T00:00:00Z') }),
     friend(4, { personaState: 0, profilePublic: false }),
   ]);
-  const playing = await steamFriendsStatus(deps, ownerDm(), {}) as { friends: Array<{ name: string; game: string | null; state: string }>; hiddenOrOfflineUnknown: number };
-  assert.deepEqual(playing.friends, [{ name: 'Friend1', steamId: '76561190000000101', state: 'in_game', game: 'Placeholder One' }]);
+  const playing = await steamFriendsStatus(deps, ownerDm(), {}) as { friends: Array<{ name: string; game: string | null; state: string }>; displayText?: string; hiddenOrOfflineUnknown: number };
+  assert.deepEqual(playing.friends.map(({ name, game, state }) => ({ name, game, state })), [{ name: 'Friend1', state: 'in_game', game: 'Placehold…' }]);
+  assert.match(playing.displayText ?? '', /Placehold…/u);
   assert.equal(playing.hiddenOrOfflineUnknown, 1);
   const online = await steamFriendsStatus(deps, ownerDm(), { filter: 'online' }) as { friends: Array<{ name: string }> };
   assert.deepEqual(online.friends.map((entry) => entry.name), ['Friend1', 'Friend2']);

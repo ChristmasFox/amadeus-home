@@ -30,8 +30,8 @@ function env(libraries: Record<string, Unknown<GameStat[]>>) {
 
 test('a person\'s library over several accounts: a game owned twice counts once, play time adds up, top games are capped', async () => {
   const { deps, caller } = env({
-    [A1]: lib([578080, 'PUBG', 6000], [271590, 'GTA5', 600], [10, 'Game C', 60]),
-    [A2]: lib([578080, 'PUBG', 600], [20, 'Game D', 30]),
+    [A1]: lib([578080, 'PUBG: BATTLEGROUNDS', 6000], [271590, 'Grand Theft Auto V', 600], [10, 'Game C', 60]),
+    [A2]: lib([578080, 'PUBG: BATTLEGROUNDS', 600], [20, 'Game D', 30]),
   });
   const answer = await steamGetOwnedGames(deps, caller(), { limit: 2 }) as { gameCount: number; totalHours: number; accountCount: number; accounts: Array<{ known: boolean; gameCount: number }>; top: Array<{ name: string; totalHours: number }> };
   assert.equal(answer.gameCount, 4);                                  // PUBG, GTA5, C, D — PUBG once

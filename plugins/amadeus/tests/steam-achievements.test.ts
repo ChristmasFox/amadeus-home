@@ -81,7 +81,7 @@ function toolSetup(options: { privateAchievements?: boolean } = {}) {
 test('the tool picks the named game, else the one being played, and answers with the summary', async () => {
   const { deps, caller, calls } = toolSetup();
   const now = await steamGetAchievements(deps, caller(), { person: { reference: 'self' } }) as { game: { appId: string; name: string }; achievements: { known: boolean; value: { unlocked: number; total: number } } };
-  assert.deepEqual([now.game.appId, now.game.name, now.achievements.value.unlocked, now.achievements.value.total], ['10', 'Current Game', 2, 4]);
+  assert.deepEqual([now.game.appId, now.game.name, now.achievements.value.unlocked, now.achievements.value.total], ['10', 'Current G…', 2, 4]);
   const named = await steamGetAchievements(deps, caller(), { person: { reference: 'self' }, game: 'other', mode: 'recent' }) as { game: { appId: string } };
   assert.equal(named.game.appId, '20');
   assert.deepEqual(calls, ['10', '20']);

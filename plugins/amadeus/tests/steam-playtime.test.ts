@@ -193,18 +193,18 @@ test('last_week reads only the previous complete week for one person and sorts o
   const end = D9 + 14 * 24 * HOUR;
   (store as unknown as { db: { prepare(sql: string): { run(...args: unknown[]): unknown } } }).db
     .prepare(`UPDATE steam_meta SET value = ? WHERE key = 'play_tracking_started_at'`).run(String(start - HOUR));
-  play(store, ID1, { appId: '10', name: 'Prior Game A' }, start + 10 * MIN, 30);
-  play(store, ID2, { appId: '20', name: 'Prior Game B' }, start + 20 * MIN, 15);
-  play(store, ID1, { appId: '11', name: 'Current Game A' }, end + 10 * MIN, 60);
-  play(store, ID3, { appId: '30', name: 'Prior Game C' }, start + 30 * MIN, 20);
-  play(store, ID3, { appId: '31', name: 'Current Game C' }, end + 20 * MIN, 5);
+  play(store, ID1, { appId: '10', name: 'Prior A' }, start + 10 * MIN, 30);
+  play(store, ID2, { appId: '20', name: 'Prior B' }, start + 20 * MIN, 15);
+  play(store, ID1, { appId: '11', name: 'Current A' }, end + 10 * MIN, 60);
+  play(store, ID3, { appId: '30', name: 'Prior C' }, start + 30 * MIN, 20);
+  play(store, ID3, { appId: '31', name: 'Current C' }, end + 20 * MIN, 5);
 
   const single = await steamGetPlaytime(deps, caller, { person: { reference: 'self' }, period: 'last_week' }) as { period: string; label: string; totalMinutes: number; games: Array<{ name: string }> };
   assert.deepEqual([single.period, single.label, single.totalMinutes], ['last_week', '上周（2026-11-16 06:00 → 2026-11-23 06:00）', 45]);
-  assert.deepEqual(single.games.map((game) => game.name), ['Prior Game A', 'Prior Game B']);
+  assert.deepEqual(single.games.map((game) => game.name), ['Prior A', 'Prior B']);
   const current = await steamGetPlaytime(deps, caller, { person: { reference: 'self' }, period: 'this_week' }) as { totalMinutes: number; games: Array<{ name: string }> };
   assert.equal(current.totalMinutes, 60);
-  assert.deepEqual(current.games.map((game) => game.name), ['Current Game A']);
+  assert.deepEqual(current.games.map((game) => game.name), ['Current A']);
 
   const groupCaller: SteamCaller = {
     senderKey: 'member:requester', groupId: GROUP, isOwner: false, mentions: ['member:first', 'member:second'],
@@ -215,9 +215,9 @@ test('last_week reads only the previous complete week for one person and sorts o
   }) as { status: string; period: string; people: Array<{ totalText?: string; games: Array<{ name: string }> }>; displayText: string };
   assert.equal(group.status, 'ok');
   assert.equal(group.period, 'last_week');
-  assert.deepEqual(group.people.map((member) => member.games.map((game) => game.name)), [['Prior Game A', 'Prior Game B'], ['Prior Game C']]);
+  assert.deepEqual(group.people.map((member) => member.games.map((game) => game.name)), [['Prior A', 'Prior B'], ['Prior C']]);
   assert.deepEqual(group.people.map((member) => member.totalText), ['45分钟', '20分钟']);
-  assert.ok(group.displayText.indexOf('Prior Game A') < group.displayText.indexOf('Prior Game C'));
+  assert.ok(group.displayText.indexOf('Prior A') < group.displayText.indexOf('Prior C'));
 });
 
 test('custom date ranges are inclusive business dates and use the shared 06:00 calendar', () => {
@@ -244,9 +244,9 @@ test('custom start/end takes precedence over period and date, and one group card
   const start = D9 + 7 * 24 * HOUR; // 2026-11-16 06:00
   const end = D9 + 9 * 24 * HOUR; // exclusive 2026-11-18 06:00
   setTrackingSince(store, start - HOUR);
-  play(store, ID1, { appId: '10', name: 'Range Game A' }, start + 10 * MIN, 60);
-  play(store, ID2, { appId: '20', name: 'Range Game B' }, start + 20 * MIN, 30);
-  play(store, ID3, { appId: '30', name: 'Range Game C' }, start + 30 * MIN, 45);
+  play(store, ID1, { appId: '10', name: 'Range A' }, start + 10 * MIN, 60);
+  play(store, ID2, { appId: '20', name: 'Range B' }, start + 20 * MIN, 30);
+  play(store, ID3, { appId: '30', name: 'Range C' }, start + 30 * MIN, 45);
   play(store, ID1, { appId: '11', name: 'Outside This Week' }, D9 + 14 * 24 * HOUR + 10 * MIN, 90);
 
   const result = await steamGetPlaytime(deps, caller, {
@@ -257,10 +257,10 @@ test('custom start/end takes precedence over period and date, and one group card
   assert.deepEqual([result.period, result.start, result.end], ['range', '2026-11-16', '2026-11-17']);
   assert.equal(result.label, '自定义区间（2026-11-16 06:00 → 2026-11-18 06:00，含首尾业务日）');
   assert.deepEqual(result.people?.map((member) => member.totalText), ['1小时30分钟', '45分钟']);
-  assert.deepEqual(result.people?.map((member) => member.games.map((game) => game.name)), [['Range Game A', 'Range Game B'], ['Range Game C']]);
+  assert.deepEqual(result.people?.map((member) => member.games.map((game) => game.name)), [['Range A', 'Range B'], ['Range C']]);
   assert.match(result.displayText ?? '', /2026-11-16 06:00 → 2026-11-18 06:00/u);
-  assert.match(result.displayText ?? '', /Game A  1小时30分钟\n└ Range Game A/u);
-  assert.ok((result.displayText ?? '').indexOf('Range Game A') < (result.displayText ?? '').indexOf('Range Game C'));
+  assert.match(result.displayText ?? '', /Game A  1小时30分钟\n└ Range A/u);
+  assert.ok((result.displayText ?? '').indexOf('Range A') < (result.displayText ?? '').indexOf('Range C'));
   assert.doesNotMatch(result.displayText ?? '', /^[- ]/mu, 'no dash list or foldable leading spaces');
 });
 
@@ -307,7 +307,7 @@ test('custom ranges before sampling return known:false; overlap is clipped and m
   assert.equal(partial.partial, true);
   assert.equal(partial.trackingSince, `${CAL.format(trackingSince)}（${CAL.timezone}）`);
   assert.equal(partial.totalMinutes, 20);
-  assert.deepEqual(partial.games?.map((game) => game.name), ['After Tracking']);
+  assert.deepEqual(partial.games?.map((game) => game.name), ['After Tra…']);
   assert.match(partial.displayText ?? '', /记录起点/u);
   assert.match(partial.displayText ?? '', /覆盖说明：只统计采样开始后的重叠部分/u);
 });
@@ -351,9 +351,9 @@ test('the standalone morning message: Amadeus shape, one line per person with pe
   const window = { startMs: D9 - 24 * HOUR, endMs: D9 };
   const links = store.broadcastMembers(GROUP);
   assert.equal(steamPlaytimeSection(CAL, store, links, window, D9 + 4 * HOUR, names), undefined, 'nobody played: nothing is sent');
-  play(store, ID1, { appId: '578080', name: 'PUBG' }, D9 - 10 * HOUR, 130);
-  play(store, ID2, { appId: '271590', name: 'GTA5' }, D9 - 5 * HOUR, 95);
-  play(store, '76561190000000003', { appId: '578080', name: 'PUBG' }, D9 - 4 * HOUR, 40);
+  play(store, ID1, { appId: '578080', name: 'PUBG: BATTLEGROUNDS' }, D9 - 10 * HOUR, 130);
+  play(store, ID2, { appId: '271590', name: 'Grand Theft Auto V' }, D9 - 5 * HOUR, 95);
+  play(store, ID3, { appId: '578080', name: 'PUBG: BATTLEGROUNDS' }, D9 - 4 * HOUR, 40);
   assert.equal(steamPlaytimeSection(CAL, store, links, window, D9 + 4 * HOUR, names), [
     'Amadeus · 昨日游戏时长汇总 📊',
     '',
@@ -426,7 +426,8 @@ test('stopped_playing: a real stop of a long session is announced once with the 
   await run(6, undefined);                                   // stops; merge window then flush
   const stops = sent.filter((text) => text.includes('🏁'));
   assert.equal(stops.length, 1);
-  assert.match(stops[0]!, /^Amadeus · Member Placeholder 收束 · PUBG: BATTLEGROUNDS（吃鸡） 1小时3\d分 🏁\n/u);
+  assert.match(stops[0]!, /^Amadeus · Member Placeholder 收束 · PUBG 1小时3\d分 🏁\n/u);
+  assert.match(stops[0]!, /- 游戏：PUBG/u);
   assert.match(stops[0]!, /- 本局时长：1 小时 3\d 分钟/u);                // 90 observations minus the baseline minute, within a minute of what the poller saw
   // a 3-minute session never produces a stop notice
   const before = sent.length;

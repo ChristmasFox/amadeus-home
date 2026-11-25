@@ -1,4 +1,5 @@
 import type { BusinessCalendar } from './business-day.js';
+import { gameLabel } from './game-aliases.js';
 import { renderLayout, type CardFact } from './layout.js';
 import { minutesText } from './notify.js';
 import type { SteamLink, SteamStore } from './store.js';
@@ -28,7 +29,7 @@ export function steamPlaytimeSection(calendar: BusinessCalendar, store: SteamSto
   for (const { name, ids } of people.values()) {
     const { games, totalMinutes } = aggregatePlay(calendar, store.playSessions(ids, window.startMs, window.endMs, now), window.startMs, window.endMs);
     if (!totalMinutes) continue;
-    const perGame = games.map((game) => `${game.name} ${minutesText(game.minutes)}`).join('，');
+    const perGame = games.map((game) => `${gameLabel(game.appId, game.name) ?? game.name} ${minutesText(game.minutes)}`).join('，');
     facts.push({ label: name, value: games.length > 1 ? `${perGame}（合计 ${minutesText(totalMinutes)}）` : perGame });
   }
   if (!facts.length) return undefined;

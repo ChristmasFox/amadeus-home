@@ -6,8 +6,8 @@ import { SteamStore } from '../src/steam/store.js';
 import { renderSteamNotifications } from '../src/steam/notify.js';
 
 const MIN = 60_000;
-const ID = '76561190000000001';
-const GROUP = '120363000000000000@g.us';
+const ID = 'steam:placeholder-a';
+const GROUP = 'group:placeholder';
 
 type Seen = { state: 0 | 1; game?: { id: string; name: string } };
 
@@ -23,7 +23,7 @@ function env() {
     client: { playerSummaries: async (ids) => new Map(ids.map((id): [string, PlayerSummary] => [id, { steamId: id, name: 'nick', profilePublic: true, personaState: seen.state, ...(seen.game ? { gameId: seen.game.id, gameName: seen.game.name } : {}) }])) },
     compose: (facts) => renderSteamNotifications(facts, new Date(now)),
     send: async (_group, text) => { sent.push(text); },
-    displayName: () => 'kim',
+    displayName: () => '成员甲',
     now: () => now,
   });
   const run = async (minutes: number, next: Seen) => { seen = next; for (let i = 0; i < minutes; i += 1) { await poller.tick(); now += MIN; } };
@@ -45,7 +45,7 @@ test('offline -> game announces the game start', async () => {
   await run(1, { state: 0 });
   await run(6, { state: 1, game: { id: '10', name: 'Game A' } });
   assert.deepEqual(titles(sent), ['🎮']);
-  assert.match(sent[0]!, /^Amadeus · kim 开始玩 Game A 🎮\n/u);
+  assert.match(sent[0]!, /^Amadeus · 成员甲 开始玩 Game A 🎮\n/u);
 });
 
 test('coming online and then starting a game announces the start', async () => {
@@ -54,7 +54,7 @@ test('coming online and then starting a game announces the start', async () => {
   await run(1, { state: 1 });
   await run(6, { state: 1, game: { id: '10', name: 'Game A' } });
   assert.deepEqual(titles(sent), ['🎮']);
-  assert.match(sent[0]!, /^Amadeus · kim 开始玩 Game A 🎮\n/u);
+  assert.match(sent[0]!, /^Amadeus · 成员甲 开始玩 Game A 🎮\n/u);
 });
 
 test('switching from a launcher during the window announces the switch', async () => {
@@ -63,7 +63,7 @@ test('switching from a launcher during the window announces the switch', async (
   await run(1, { state: 1, game: { id: '1', name: 'Launcher' } });
   await run(6, { state: 1, game: { id: '2', name: 'Game B' } });
   assert.deepEqual(titles(sent), ['🔀']);
-  assert.match(sent[0]!, /^Amadeus · kim 世界线变动 · Launcher → Game B 🔀\n/u);
+  assert.match(sent[0]!, /^Amadeus · 成员甲 世界线变动 · Launcher → Game B 🔀\n/u);
 });
 
 test('a switch after the arrival was announced is a 世界线变动 naming both games, even for a short session', async () => {
@@ -73,27 +73,35 @@ test('a switch after the arrival was announced is a 世界线变动 naming both 
   await run(1, { state: 1, game: { id: '20', name: 'Game B' } });
   await run(6, { state: 1, game: { id: '20', name: 'Game B' } });
   assert.deepEqual(titles(sent), ['🎮', '🔀']);
-  assert.match(sent[1]!, /^Amadeus · kim 世界线变动 · Game A → Game B 🔀\n/u);
+  assert.match(sent[1]!, /^Amadeus · 成员甲 世界线变动 · Game A → Game B 🔀\n/u);
   assert.match(sent[1]!, /El Psy Kongroo\.$/u);
 });
 
-test('games with a community alias are shown as name（alias） in every notice; others are left exactly as Steam names them', async () => {
+test('known games use short appid labels and unknown Steam titles are shortened', async () => {
   const { gameLabel } = await import('../src/steam/game-aliases.js');
-  assert.equal(gameLabel('578080', 'PUBG: BATTLEGROUNDS'), 'PUBG: BATTLEGROUNDS（吃鸡）');
-  assert.equal(gameLabel('271590', 'Grand Theft Auto V'), 'Grand Theft Auto V（GTA5）');
-  assert.equal(gameLabel('730', 'Counter-Strike 2'), 'Counter-Strike 2（CS2）');
+  assert.equal(gameLabel('578080', 'PUBG: BATTLEGROUNDS'), 'PUBG');
+  assert.equal(gameLabel('271590', 'Grand Theft Auto V'), 'GTA5');
+  assert.equal(gameLabel('730', 'Counter-Strike 2'), 'CS2');
+  assert.equal(gameLabel('1551360', 'Forza Horizon 5'), '地平5');
+  assert.equal(gameLabel('1293830', 'Forza Horizon 4'), '地平4');
+  assert.equal(gameLabel('2483190', 'Forza Horizon 6'), '地平6');
+  assert.equal(gameLabel('761600', 'Onimusha: Warlords'), '鬼武者1');
+  assert.equal(gameLabel('3046600', "Onimusha 2: Samurai's Destiny"), '鬼武者2');
+  assert.equal(gameLabel('2638890', 'Onimusha: Way of the Sword'), '鬼武者·刀剑');
+  assert.equal(gameLabel('431960', 'Wallpaper Engine'), 'WE');
   assert.equal(gameLabel('999999', 'Some Game'), 'Some Game');
   assert.equal(gameLabel(undefined, 'Some Game'), 'Some Game');
-  assert.equal(gameLabel('578080', '绝地求生 吃鸡'), '绝地求生 吃鸡', 'no doubled alias');
+  assert.equal(gameLabel('578080', '绝地求生 PUBG'), 'PUBG', 'appid mapping wins over the incoming name');
+  assert.equal(gameLabel('999999', 'Some Long Game: Deluxe Edition'), 'Some Long…');
   assert.equal(gameLabel('578080', undefined), undefined);
   const { sent, run } = env();
   await run(1, { state: 0 });
   await run(6, { state: 1, game: { id: '578080', name: 'PUBG: BATTLEGROUNDS' } });
   await run(1, { state: 1, game: { id: '271590', name: 'Grand Theft Auto V' } });
   await run(6, { state: 1, game: { id: '271590', name: 'Grand Theft Auto V' } });
-  assert.match(sent[0]!, /^Amadeus · kim 开始玩 PUBG: BATTLEGROUNDS（吃鸡） 🎮\n/u);
-  assert.match(sent[0]!, /- 游戏：PUBG: BATTLEGROUNDS（吃鸡）/u);
-  assert.match(sent[1]!, /^Amadeus · kim 世界线变动 · PUBG: BATTLEGROUNDS（吃鸡） → Grand Theft Auto V（GTA5） 🔀\n/u);
+  assert.match(sent[0]!, /^Amadeus · 成员甲 开始玩 PUBG 🎮\n/u);
+  assert.match(sent[0]!, /- 游戏：PUBG/u);
+  assert.match(sent[1]!, /^Amadeus · 成员甲 世界线变动 · PUBG → GTA5 🔀\n/u);
 });
 
 test('guidance: a plain 玩了多久 is today; lifetime only when asked (stated in the tool description and the SKILL, not in code)', async () => {
@@ -108,10 +116,10 @@ test('who is playing and play time come back as finished Amadeus cards with the 
   const { renderPlaytimeCard, renderPlayingCard, CARD_REPLY_GUIDE } = await import('../src/steam/cards.js');
   const at = new Date('2026-11-09T12:00:00Z');
   const play = renderPlaytimeCard({ name: '成员甲', label: '今天（2026-11-09 06:00 → 次日 06:00）', games: [{ appId: '9', name: 'Other', text: '30分钟' }, { appId: '578080', name: 'PUBG: BATTLEGROUNDS', text: '2小时5分钟' }], totalText: '2小时35分钟' }, at);
-  assert.equal(play, 'Amadeus · 成员甲 今日游戏时长 ⏱️\n\n时段：今天（2026-11-09 06:00 → 次日 06:00）\n\n成员甲  2小时35分钟\n└ PUBG: BATTLEGROUNDS（吃鸡）  2小时5分钟\n└ Other  30分钟\n\nEl Psy Kongroo.');
+  assert.equal(play, 'Amadeus · 成员甲 今日游戏时长 ⏱️\n\n时段：今天（2026-11-09 06:00 → 次日 06:00）\n\n成员甲  2小时35分钟\n└ PUBG  2小时5分钟\n└ Other  30分钟\n\nEl Psy Kongroo.');
   assert.match(renderPlaytimeCard({ name: '成员甲', label: '昨天（x）', games: [], totalText: '0分钟' }, at), /^Amadeus · 成员甲 昨日游戏时长 ⏱️\n[\s\S]*成员甲  没有记录到游戏时长/u);
-  const who = renderPlayingCard({ friends: [{ name: 'A', steamId: '1', state: 'in_game', game: 'Phantom Blade Zero', appId: '4115450' }, { name: 'B', steamId: '2', state: 'online', game: null }] }, at);
-  assert.equal(who, 'Amadeus · Steam 在线情况 · 2 位 👥\n\n- A：Phantom Blade Zero（游戏中）\n- B：在线\n\nEl Psy Kongroo.');
+  const who = renderPlayingCard({ friends: [{ name: '成员甲', steamId: 'steam:placeholder-a', state: 'in_game', game: 'Forza Horizon 5', appId: '1551360' }, { name: '成员乙', steamId: 'steam:placeholder-b', state: 'online', game: null }] }, at);
+  assert.equal(who, 'Amadeus · Steam 在线情况 · 2 位 👥\n\n- 成员甲：地平5（游戏中）\n- 成员乙：在线\n\nEl Psy Kongroo.');
   assert.match(CARD_REPLY_GUIDE, /原样/u);
 });
 
@@ -126,7 +134,7 @@ test('several people asked at once: one merged card with each person\'s games an
       { name: '成员丙', known: true, games: [], totalText: '0分钟' },
     ],
   }, at);
-  assert.equal(card, 'Amadeus · 成员甲、成员乙、成员丙 今日游戏时长 ⏱️\n\n时段：今天（2026-11-09 06:00 → 次日 06:00）\n\n成员甲  2小时22分钟\n└ Phantom Blade Zero  2小时19分钟\n└ PUBG: BATTLEGROUNDS（吃鸡）  3分钟\n成员乙  5分钟\n└ PUBG: BATTLEGROUNDS（吃鸡）  5分钟\n成员丙  没有记录到游戏时长\n\nEl Psy Kongroo.');
+  assert.equal(card, 'Amadeus · 成员甲、成员乙、成员丙 今日游戏时长 ⏱️\n\n时段：今天（2026-11-09 06:00 → 次日 06:00）\n\n成员甲  2小时22分钟\n└ Phantom B…  2小时19分钟\n└ PUBG  3分钟\n成员乙  5分钟\n└ PUBG  5分钟\n成员丙  没有记录到游戏时长\n\nEl Psy Kongroo.');
   assert.equal((card.match(/El Psy Kongroo/gu) ?? []).length, 1, 'one card, one sign-off');
 });
 
@@ -154,7 +162,7 @@ test('steam_get_playtime with people returns one card for everybody; several peo
   assert.equal(result.people.length, 2);
   assert.equal((result.displayText.match(/El Psy Kongroo/gu) ?? []).length, 1);
   assert.match(result.displayText, /成员甲  1分钟\n└ Game A/u);
-  assert.match(result.displayText, /成员乙  1分钟\n└ PUBG: BATTLEGROUNDS（吃鸡）/u);
+  assert.match(result.displayText, /成员乙  1分钟\n└ PUBG/u);
   const refused = await steamGetPlaytime(deps, caller, { people: [{ reference: 'mention', mentionIndex: 0 }, { reference: 'mention', mentionIndex: 1 }] }) as { status: string };
   assert.equal(refused.status, 'invalid_request');
   const single = await steamGetPlaytime(deps, caller, { person: { reference: 'mention', mentionIndex: 0 }, period: 'today' }) as { displayText: string };

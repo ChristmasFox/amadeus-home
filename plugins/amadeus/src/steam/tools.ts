@@ -3,6 +3,7 @@ import { businessCalendar, type BusinessCalendar } from './business-day.js';
 import { AchievementCatalog, summariseAchievements, type AchievementClient, type AchievementMode } from './achievements.js';
 import { parseSteamReference } from './domain.js';
 import { CARD_REPLY_GUIDE, renderPlayingCard, renderPlaytimeCard, renderPlaytimeGroupCard } from './cards.js';
+import { gameLabel } from './game-aliases.js';
 import type { SteamLink, SteamStore } from './store.js';
 
 /** Everything a tool needs to know about who is asking, taken from the host's trusted metadata (never message text). */
@@ -234,7 +235,7 @@ async function withTarget(deps: SteamToolDependencies, caller: SteamCaller, pers
 }
 
 export const minutesToHours = (minutes: number): number => Math.round(minutes / 6) / 10;
-export const gameView = (game: GameStat) => ({ appId: game.appId, name: game.name ?? null, totalHours: minutesToHours(game.totalMinutes), ...(game.recentMinutes !== undefined ? { recentHours: minutesToHours(game.recentMinutes) } : {}) });
+export const gameView = (game: GameStat) => ({ appId: game.appId, name: gameLabel(String(game.appId), game.name) ?? null, totalHours: minutesToHours(game.totalMinutes), ...(game.recentMinutes !== undefined ? { recentHours: minutesToHours(game.recentMinutes) } : {}) });
 
 export function steamGetProfile(deps: SteamToolDependencies, caller: SteamCaller, params: { person: Person }): Promise<unknown> {
   return withTarget(deps, caller, params.person, async (link) => {
@@ -246,7 +247,7 @@ export function steamGetProfile(deps: SteamToolDependencies, caller: SteamCaller
       steamId: link.steamId,
       profilePublic: summary.profilePublic,
       // A hidden profile reports "offline"; that is not the same as being offline.
-      state: summary.profilePublic ? { known: true, personaState: summary.personaState ?? 0, game: summary.gameName ?? null } : { known: false, reason: 'profile_private' },
+      state: summary.profilePublic ? { known: true, personaState: summary.personaState ?? 0, game: gameLabel(summary.gameId, summary.gameName) ?? null } : { known: false, reason: 'profile_private' },
       accountCreatedAt: summary.profilePublic && summary.createdAt ? new Date(summary.createdAt).toISOString() : { known: false, reason: 'profile_private' },
     };
   });
@@ -443,6 +444,7 @@ function trackedPlaytime(deps: SteamToolDependencies, caller: SteamCaller, perso
   const sampleFrom = Math.max(window.from, trackingSince);
   const sessions = deps.store.playSessions(target.links.map((link) => link.steamId), sampleFrom, window.to, now);
   const { games, totalMinutes, days } = aggregatePlay(calendar, sessions, sampleFrom, window.to, game);
+  const publicGames = games.map((entry) => ({ ...entry, name: gameLabel(entry.appId, entry.name) ?? entry.name }));
   const partial = window.from < trackingSince;
   const trackedAt = `${calendar.format(trackingSince)}（${calendar.timezone}）`;
   const displayText = renderPlaytimeCard({
@@ -453,7 +455,7 @@ function trackedPlaytime(deps: SteamToolDependencies, caller: SteamCaller, perso
     } : {}),
   }, new Date(now));
   return {
-    status: 'ok', ...base, known: true, member: name, games, totalMinutes, totalText: durationText(totalMinutes),
+    status: 'ok', ...base, known: true, member: name, games: publicGames, totalMinutes, totalText: durationText(totalMinutes),
     displayText, replyGuide: CARD_REPLY_GUIDE,
     ...(period === 'this_week' || period === 'last_week' || days.length > 1 ? { days } : {}),
     ...(partial ? {
@@ -581,7 +583,9 @@ export function steamGetOwnedGames(deps: SteamToolDependencies, caller: SteamCal
       for (const { name, links } of byPerson.values()) {
         const library = await libraryOf(deps, links);
         if (!library.readable) { hidden.push(name); continue; }
-        ranked.push({ name, gameCount: library.gameCount, totalHours: minutesToHours(library.totalMinutes), accountCount: links.length, ...(library.games[0]?.name ? { topGame: library.games[0].name } : {}) });
+        const top = library.games[0];
+        const topGame = top?.name ? gameLabel(String(top.appId), top.name) : undefined;
+        ranked.push({ name, gameCount: library.gameCount, totalHours: minutesToHours(library.totalMinutes), accountCount: links.length, ...(topGame ? { topGame } : {}) });
       }
       const by = params.rankBy === 'hours' ? 'totalHours' : 'gameCount';
       ranked.sort((a, b) => b[by] - a[by] || a.name.localeCompare(b.name));
@@ -651,10 +655,12 @@ export function steamGetAchievements(deps: SteamToolDependencies, caller: SteamC
     const chosen = await achievementGame(deps, link, params.game);
     if (!('appId' in chosen)) return chosen.status === 'ok' ? { status: 'ok', achievements: { known: false, reason: chosen.reason } } : chosen;
     const result = await client.playerAchievements!(link.steamId, chosen.appId);
-    if (!result.known) return { status: 'ok', game: { appId: chosen.appId, ...(chosen.name ? { name: chosen.name } : {}) }, achievements: { known: false, reason: result.reason } };
-    if (!result.value.length) return { status: 'ok', game: { appId: chosen.appId, ...(chosen.name ? { name: chosen.name } : {}) }, achievements: { known: false, reason: 'not_available' } };
+    const shownName = gameLabel(chosen.appId, chosen.name);
+    const publicGame = { appId: chosen.appId, ...(shownName ? { name: shownName } : {}) };
+    if (!result.known) return { status: 'ok', game: publicGame, achievements: { known: false, reason: result.reason } };
+    if (!result.value.length) return { status: 'ok', game: publicGame, achievements: { known: false, reason: 'not_available' } };
     const entry = await catalog.lookup(chosen.appId);
-    return { status: 'ok', game: { appId: chosen.appId, ...(chosen.name ? { name: chosen.name } : {}) }, achievements: { known: true, value: summariseAchievements(result.value, entry, params.mode ?? 'summary', limit) } };
+    return { status: 'ok', game: publicGame, achievements: { known: true, value: summariseAchievements(result.value, entry, params.mode ?? 'summary', limit) } };
   });
 }
 
@@ -726,7 +732,7 @@ export async function steamFriendsStatus(deps: SteamToolDependencies, caller: St
       name: friend.name,
       steamId: friend.steamId,
       state: (rank(friend) === 0 ? 'in_game' : rank(friend) === 1 ? 'online' : 'offline') as 'in_game' | 'online' | 'offline',
-      game: friend.gameName ?? null,
+      game: gameLabel(friend.gameId, friend.gameName) ?? null,
       ...(friend.gameId ? { appId: friend.gameId } : {}),
     }));
     return {
@@ -744,7 +750,7 @@ export async function steamFriendsStatus(deps: SteamToolDependencies, caller: St
         name: friend.name,
         steamId: friend.steamId,
         state: rank(friend) === 0 ? 'in_game' : rank(friend) === 1 ? 'online' : 'offline',
-        game: friend.gameName ?? null,
+        game: gameLabel(friend.gameId, friend.gameName) ?? null,
         ...(rank(friend) === 2 && friend.lastLogoff ? { lastSeenAt: new Date(friend.lastLogoff).toISOString() } : {}),
       })),
     };
