@@ -252,9 +252,9 @@ export function steamGetProfile(deps: SteamToolDependencies, caller: SteamCaller
   });
 }
 
-export type PlaytimePeriod = 'today' | 'yesterday' | 'this_week' | 'date';
+export type PlaytimePeriod = 'today' | 'yesterday' | 'this_week' | 'last_week' | 'date';
 
-/** today / yesterday / this week (Monday first) / a given date, as business-day windows of the shared (PUBG) calendar. */
+/** today / yesterday / this week / the previous complete week / a given date in the shared (PUBG) business calendar. */
 export function playtimeWindow(calendar: BusinessCalendar, period: PlaytimePeriod, date: string | undefined, now: number): { from: number; to: number; label: string } | undefined {
   const today = calendar.windowAt(now);
   const span = (day: string): string => `${day} ${calendar.start} → 次日 ${calendar.start}`;
@@ -263,11 +263,20 @@ export function playtimeWindow(calendar: BusinessCalendar, period: PlaytimePerio
     const yesterday = calendar.windowAt(today.startMs - 1);
     return { from: yesterday.startMs, to: yesterday.endMs, label: `昨天（${span(calendar.label(yesterday.startMs))}）` };
   }
-  if (period === 'this_week') {
+  if (period === 'this_week' || period === 'last_week') {
     const [year, month, day] = calendar.label(today.startMs).split('-').map(Number);
     const weekday = new Date(Date.UTC(year!, month! - 1, day!)).getUTCDay(); // 0 = Sunday
     let monday = today;
     for (let back = (weekday + 6) % 7; back > 0; back -= 1) monday = calendar.windowAt(monday.startMs - 1);
+    if (period === 'last_week') {
+      let lastMonday = monday;
+      for (let back = 0; back < 7; back += 1) lastMonday = calendar.windowAt(lastMonday.startMs - 1);
+      return {
+        from: lastMonday.startMs,
+        to: monday.startMs,
+        label: `上周（${calendar.label(lastMonday.startMs)} ${calendar.start} → ${calendar.label(monday.startMs)} ${calendar.start}）`,
+      };
+    }
     return { from: monday.startMs, to: today.endMs, label: `本周（${calendar.label(monday.startMs)} ${calendar.start} 起，周一为一周开始）` };
   }
   const window = date ? calendar.windowOf(date) : undefined;
@@ -312,8 +321,12 @@ function groupPlaytime(deps: SteamToolDependencies, caller: SteamCaller, people:
   const results = people.slice(0, 8).map((person) => trackedPlaytime(deps, caller, person, period, date, game) as Record<string, unknown>);
   const bad = results.find((result) => result.status !== 'ok' && result.status !== undefined);
   if (bad) return bad;
-  const first = results[0]!;
-  const members = results.map((result) => ({
+  const ordered = [...results].sort((left, right) => {
+    const minutes = (result: Record<string, unknown>): number => result.known === true && typeof result.totalMinutes === 'number' ? result.totalMinutes : -1;
+    return minutes(right) - minutes(left);
+  });
+  const first = ordered[0]!;
+  const members = ordered.map((result) => ({
     name: typeof result.member === 'string' ? result.member : '成员',
     known: result.known === true,
     games: Array.isArray(result.games) ? result.games as Array<{ appId?: string; name: string; text: string }> : [],
@@ -350,7 +363,7 @@ function trackedPlaytime(deps: SteamToolDependencies, caller: SteamCaller, perso
   return {
     status: 'ok', ...base, known: true, member: name, games, totalMinutes, totalText: durationText(totalMinutes),
     displayText, replyGuide: CARD_REPLY_GUIDE,
-    ...(period === 'this_week' || days.length > 1 ? { days } : {}),
+    ...(period === 'this_week' || period === 'last_week' || days.length > 1 ? { days } : {}),
     ...(partial ? { partial: true, trackingSince: `${calendar.format(trackingSince)}（${calendar.timezone}）`, note: '记录是从这个时间才开始的，这段时间之前的游戏时长没有数据，上面只是记录开始之后的部分。' } : {}),
     ...(totalMinutes === 0 ? { note: '这段时间没有记录到游戏时长（只记录绑定账号在播报开启时的游戏状态，每分钟采样一次，误差约一分钟）。' } : {}),
   };

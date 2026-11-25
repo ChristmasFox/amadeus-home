@@ -30,6 +30,11 @@ test('the business day starts at 06:00 Asia/Shanghai (PUBG\'s own) and is labell
   // 2026-11-09 is a Monday: the week starts that business day; a Wednesday looks back to the same Monday.
   assert.equal(playtimeWindow(CAL, 'this_week', undefined, now)!.from, D9);
   assert.equal(playtimeWindow(CAL, 'this_week', undefined, D9 + 2 * 24 * HOUR + 3 * HOUR)!.from, D9);
+  const wednesday = D9 + 16 * 24 * HOUR + 3 * HOUR; // Wednesday 2026-11-25, 09:00 Asia/Shanghai
+  const lastWeek = playtimeWindow(CAL, 'last_week', undefined, wednesday)!;
+  assert.deepEqual([lastWeek.from, lastWeek.to], [D9 + 7 * 24 * HOUR, D9 + 14 * 24 * HOUR]);
+  assert.deepEqual([CAL.label(lastWeek.from), CAL.label(lastWeek.to)], ['2026-11-16', '2026-11-23']);
+  assert.equal(lastWeek.label, '上周（2026-11-16 06:00 → 2026-11-23 06:00）');
 });
 
 test('Steam and PUBG share one business day: same defaults, same configuration, same day arithmetic, same clock', async () => {
@@ -174,6 +179,42 @@ test('playtime remains readable from stored sessions when personal announcements
   assert.deepEqual(group.people?.map((member) => member.games.map((entry) => entry.name)), [['Game A', 'Game B'], ['Game C']]);
 });
 
+test('last_week reads only the previous complete week for one person and sorts one-call group results by recorded time', async () => {
+  const now = D9 + 16 * 24 * HOUR + 3 * HOUR;
+  const { store, deps, caller } = toolEnv(now);
+  store.link({ senderKey: 'member:second', steamId: ID3, personaName: 'Member C', personId: 'p2', now: 3 });
+  store.enroll(GROUP, 'member:second');
+  const start = D9 + 7 * 24 * HOUR;
+  const end = D9 + 14 * 24 * HOUR;
+  (store as unknown as { db: { prepare(sql: string): { run(...args: unknown[]): unknown } } }).db
+    .prepare(`UPDATE steam_meta SET value = ? WHERE key = 'play_tracking_started_at'`).run(String(start - HOUR));
+  play(store, ID1, { appId: '10', name: 'Prior Game A' }, start + 10 * MIN, 30);
+  play(store, ID2, { appId: '20', name: 'Prior Game B' }, start + 20 * MIN, 15);
+  play(store, ID1, { appId: '11', name: 'Current Game A' }, end + 10 * MIN, 60);
+  play(store, ID3, { appId: '30', name: 'Prior Game C' }, start + 30 * MIN, 20);
+  play(store, ID3, { appId: '31', name: 'Current Game C' }, end + 20 * MIN, 5);
+
+  const single = await steamGetPlaytime(deps, caller, { person: { reference: 'self' }, period: 'last_week' }) as { period: string; label: string; totalMinutes: number; games: Array<{ name: string }> };
+  assert.deepEqual([single.period, single.label, single.totalMinutes], ['last_week', '上周（2026-11-16 06:00 → 2026-11-23 06:00）', 45]);
+  assert.deepEqual(single.games.map((game) => game.name), ['Prior Game A', 'Prior Game B']);
+  const current = await steamGetPlaytime(deps, caller, { person: { reference: 'self' }, period: 'this_week' }) as { totalMinutes: number; games: Array<{ name: string }> };
+  assert.equal(current.totalMinutes, 60);
+  assert.deepEqual(current.games.map((game) => game.name), ['Current Game A']);
+
+  const groupCaller: SteamCaller = {
+    senderKey: 'member:requester', groupId: GROUP, isOwner: false, mentions: ['member:first', 'member:second'],
+    mentionPerson: (index) => index === 0 ? 'p1' : 'p2',
+  };
+  const group = await steamGetPlaytime(deps, groupCaller, {
+    people: [{ reference: 'mention', mentionIndex: 1 }, { reference: 'mention', mentionIndex: 0 }], period: 'last_week',
+  }) as { status: string; period: string; people: Array<{ totalText?: string; games: Array<{ name: string }> }>; displayText: string };
+  assert.equal(group.status, 'ok');
+  assert.equal(group.period, 'last_week');
+  assert.deepEqual(group.people.map((member) => member.games.map((game) => game.name)), [['Prior Game A', 'Prior Game B'], ['Prior Game C']]);
+  assert.deepEqual(group.people.map((member) => member.totalText), ['45分钟', '20分钟']);
+  assert.ok(group.displayText.indexOf('Prior Game A') < group.displayText.indexOf('Prior Game C'));
+});
+
 test('the poller records the play sessions it observes, including a first sighting already in progress', async () => {
   const store = new SteamStore(':memory:');
   store.link({ senderKey: 'whatsapp:1', steamId: ID1, personaName: 'Main', personId: 'p1', now: D9 });
@@ -204,7 +245,7 @@ function dailyEnv() {
   const db = (store as unknown as { db: { prepare(sql: string): { run(...args: unknown[]): unknown } } }).db;
   const setTracking = (at: number) => db.prepare(`UPDATE steam_meta SET value = ? WHERE key = 'play_tracking_started_at'`).run(String(at));
   setTracking(D9 - 5 * 24 * HOUR);
-  const names = (personId: string | undefined, fallback: string) => (personId === 'p1' ? 'Arthur' : personId === 'p2' ? 'Nori' : personId === 'p3' ? 'Zed' : fallback);
+  const names = (personId: string | undefined, fallback: string) => (personId === 'p1' ? 'Member A' : personId === 'p2' ? 'Member B' : personId === 'p3' ? 'Member C' : fallback);
   return { store, setTracking, names };
 }
 
@@ -220,8 +261,8 @@ test('the standalone morning message: Amadeus shape, one line per person with pe
     'Amadeus · 昨日游戏时长汇总 📊',
     '',
     '- 时段：业务日 2026-11-08（Asia/Shanghai 06:00 → 次日 06:00）',
-    '- Arthur：PUBG 2 小时 10 分钟，GTA5 1 小时 35 分钟（合计 3 小时 45 分钟）',
-    '- Nori：PUBG 40 分钟',
+    '- Member A：PUBG 2 小时 10 分钟，GTA5 1 小时 35 分钟（合计 3 小时 45 分钟）',
+    '- Member B：PUBG 40 分钟',
     '',
     'El Psy Kongroo.',
   ].join('\n'));
@@ -244,9 +285,9 @@ test('the 09:30 Singapore job: once per group per day, only that group\'s member
   assert.deepEqual(await run(at0930), { sent: 2, skipped: 0, failed: 0 });
   assert.equal(sent.length, 2);
   const mine = sent.find((entry) => entry.group === GROUP)!.text;
-  assert.match(mine, /- Arthur：PUBG 2 小时 10 分钟$/mu);
-  assert.doesNotMatch(mine, /Zed|GTA5/u, 'another group\'s member does not leak into this group');
-  assert.match(sent.find((entry) => entry.group !== GROUP)!.text, /- Zed：GTA5 1 小时/u);
+  assert.match(mine, /- Member A：PUBG 2 小时 10 分钟$/mu);
+  assert.doesNotMatch(mine, /Member C|GTA5/u, 'another group\'s member does not leak into this group');
+  assert.match(sent.find((entry) => entry.group !== GROUP)!.text, /- Member C：GTA5 1 小时/u);
   assert.deepEqual(await run(at0930 + 5 * MIN), { sent: 0, skipped: 0, failed: 0 });             // already done today
   // the next day nobody played: skipped once, not sent
   const next = at0930 + 24 * HOUR;
@@ -274,7 +315,7 @@ function stopEnv(people: Array<[string, string]> = [[ID1, 'p1']]) {
     client: { playerSummaries: async (ids) => new Map(ids.map((id): [string, PlayerSummary] => [id, { steamId: id, name: 'nick', profilePublic: true, personaState: 1, ...(game ? { gameId: game.id, gameName: game.name } : {}) }])) },
     compose: (facts) => renderSteamNotifications(facts, new Date(now)),
     send: async (_group, text) => { sent.push(text); },
-    displayName: () => 'kim',
+    displayName: () => 'Member Placeholder',
     now: () => now,
   });
   const run = async (minutes: number, next: typeof game) => { game = next; for (let i = 0; i < minutes; i += 1) { await poller.tick(); now += MIN; } };
@@ -288,7 +329,7 @@ test('stopped_playing: a real stop of a long session is announced once with the 
   await run(6, undefined);                                   // stops; merge window then flush
   const stops = sent.filter((text) => text.includes('🏁'));
   assert.equal(stops.length, 1);
-  assert.match(stops[0]!, /^Amadeus · kim 收束 · PUBG: BATTLEGROUNDS（吃鸡） 1小时3\d分 🏁\n/u);
+  assert.match(stops[0]!, /^Amadeus · Member Placeholder 收束 · PUBG: BATTLEGROUNDS（吃鸡） 1小时3\d分 🏁\n/u);
   assert.match(stops[0]!, /- 本局时长：1 小时 3\d 分钟/u);                // 90 observations minus the baseline minute, within a minute of what the poller saw
   // a 3-minute session never produces a stop notice
   const before = sent.length;
@@ -306,7 +347,7 @@ test('switching games sends only the switch notice, carrying the length of the g
   await run(5, { id: '20', name: 'Game B' });
   const switches = sent.filter((text) => text.includes('世界线变动'));
   assert.equal(switches.length, 1);
-  assert.match(switches[0]!, /^Amadeus · kim 世界线变动 · Game A → Game B 🔀\n/u);
+  assert.match(switches[0]!, /^Amadeus · Member Placeholder 世界线变动 · Game A → Game B 🔀\n/u);
   assert.match(switches[0]!, /- 上一局：Game A，\d+ 分钟/u);
   assert.equal(sent.filter((text) => text.includes('🏁')).length, 0, 'no stop notice for leaving a game to start another');
 });
