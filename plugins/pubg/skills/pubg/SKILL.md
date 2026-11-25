@@ -3,7 +3,6 @@ name: pubg
 description: "PUBG 战绩/对局/复盘（昨日战绩、今日战绩、谁伤害最高等）：必须调用原生 PUBG 工具取数，按结果里的 displayText 与 replyGuide 写完整战报。Read before any PUBG answer."
 user-invocable: false
 ---
-
 # PUBG
 
 Use the PUBG tools for match statistics and review. OpenClaw resolves the
@@ -13,16 +12,6 @@ that tool sequence. These rules are scoped to PUBG requests and must not limit
 Kurisu's other native capabilities.
 
 ## Mandatory identity-first dispatch
-
-In a group, every answer that reports a person's identity, kills, or match
-statistics requires tool results from the current turn. For a person-specific
-request, resolve that person with `identity_resolve` first and then call the
-applicable PUBG tool. For an explicit whole-team request, call the PUBG tool
-with the team scope. Inspect the current-turn results before answering. A
-previous turn's tool result, conversation context, or memory cannot substitute
-for current results. If a required result is missing, call the tool first;
-never guess. This applies to factual identity and PUBG claims, not ordinary
-conversation.
 
 Any PUBG request that names a person by a human nickname, alias, or mention is
 person-specific, including short messages such as “胶昨天战绩”, “猴昨天战绩”,
