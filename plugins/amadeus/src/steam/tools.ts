@@ -381,20 +381,33 @@ function groupPlaytime(deps: SteamToolDependencies, caller: SteamCaller, people:
   const members = ordered.map((result) => ({
     name: typeof result.member === 'string' ? result.member : '成员',
     known: result.known === true,
-    games: Array.isArray(result.games) ? result.games as Array<{ appId?: string; name: string; text: string }> : [],
+    games: Array.isArray(result.games) ? result.games as Array<{ appId?: string; name: string; text: string; minutes?: number }> : [],
     ...(typeof result.totalText === 'string' ? { totalText: result.totalText } : {}),
+    ...(typeof result.totalMinutes === 'number' ? { totalMinutes: result.totalMinutes } : {}),
     ...(typeof result.reason === 'string' ? { reason: result.reason } : {}),
     ...(typeof result.trackingSince === 'string' ? { trackingSince: result.trackingSince } : {}),
     ...(result.partial === true ? { partial: true } : {}),
     ...(typeof result.note === 'string' ? { note: result.note } : {}),
   }));
   const partial = results.find((result) => result.partial === true);
+  const beforeTracking = results.find((result) => result.reason === 'before_tracking');
+  const trackingSince = partial?.trackingSince ?? beforeTracking?.trackingSince;
+  const coverageText = partial
+    ? '只统计采样开始后的重叠部分，之前的时长未知。'
+    : beforeTracking ? '有成员的统计区间早于采样开始，未知时长没有当作 0。' : undefined;
   const now = (deps.now ?? Date.now)();
-  const displayText = renderPlaytimeGroupCard({ label: String(first.label), members, ...(partial && typeof partial.trackingSince === 'string' ? { partialSince: partial.trackingSince } : {}) }, new Date(now));
+  const displayText = renderPlaytimeGroupCard({
+    label: String(first.label), members,
+    ...(partial && typeof partial.trackingSince === 'string' ? { partialSince: partial.trackingSince } : {}),
+    ...(typeof trackingSince === 'string' ? { trackingSince } : {}),
+    ...(coverageText ? { coverageText } : {}),
+  }, new Date(now));
   return {
     status: 'ok', period: first.period, label: first.label, timezone: first.timezone, dayBoundary: first.dayBoundary,
     ...(typeof first.start === 'string' && typeof first.end === 'string' ? { start: first.start, end: first.end } : {}),
-    ...(partial && typeof partial.trackingSince === 'string' ? { partial: true, trackingSince: partial.trackingSince } : {}),
+    ...(partial ? { partial: true } : {}),
+    ...(typeof trackingSince === 'string' ? { trackingSince } : {}),
+    ...(coverageText ? { coverageText } : {}),
     people: members, displayText, replyGuide: CARD_REPLY_GUIDE,
   };
 }
@@ -416,19 +429,28 @@ function trackedPlaytime(deps: SteamToolDependencies, caller: SteamCaller, perso
     ...(range ? { start: range.start, end: range.end } : {}),
   };
   if (window.to <= trackingSince) {
+    const trackedAt = `${calendar.format(trackingSince)}（${calendar.timezone}）`;
+    const note = '游戏时长是从这个时间之后才开始记录的；整个统计区间都早于采样开始，因此没有可报告的数据。';
+    const displayText = renderPlaytimeCard({
+      name, label: window.label, games: [], totalText: '0分钟', known: false, reason: 'before_tracking',
+      trackingSince: trackedAt, coverageText: '整个统计区间早于采样起点，时长未知。',
+    }, new Date(now));
     return {
       status: 'ok', ...base, known: false, member: name, reason: 'before_tracking',
-      trackingSince: `${calendar.format(trackingSince)}（${calendar.timezone}）`,
-      note: '游戏时长是从这个时间之后才开始记录的；整个统计区间都早于采样开始，因此没有可报告的数据。',
+      trackingSince: trackedAt, note, displayText, replyGuide: CARD_REPLY_GUIDE,
     };
   }
   const sampleFrom = Math.max(window.from, trackingSince);
   const sessions = deps.store.playSessions(target.links.map((link) => link.steamId), sampleFrom, window.to, now);
   const { games, totalMinutes, days } = aggregatePlay(calendar, sessions, sampleFrom, window.to, game);
   const partial = window.from < trackingSince;
+  const trackedAt = `${calendar.format(trackingSince)}（${calendar.timezone}）`;
   const displayText = renderPlaytimeCard({
     name, label: window.label, games, totalText: durationText(totalMinutes),
-    ...(partial ? { partialSince: `${calendar.format(trackingSince)}（${calendar.timezone}）` } : {}),
+    ...(partial ? {
+      partialSince: trackedAt,
+      coverageText: '只统计采样开始后的重叠部分，之前的时长未知。',
+    } : {}),
   }, new Date(now));
   return {
     status: 'ok', ...base, known: true, member: name, games, totalMinutes, totalText: durationText(totalMinutes),

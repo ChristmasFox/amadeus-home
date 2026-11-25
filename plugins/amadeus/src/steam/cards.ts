@@ -1,5 +1,5 @@
 import { gameLabel } from './game-aliases.js';
-import { namesForTitle, renderLayout, whenForTitle, type CardFact } from './layout.js';
+import { BRAND, namesForTitle, renderLayout, SIGN_OFF, whenForTitle, type CardFact } from './layout.js';
 
 /**
  * Deterministic Amadeus cards for Steam answers (play time, who is playing). The tool returns the finished text as
@@ -15,21 +15,48 @@ export interface PlaytimeCard {
   name: string;
   /** Window label from the tool, e.g. 今天（2026-11-09 06:00 → 次日 06:00）. */
   label: string;
-  games: Array<{ appId?: string; name: string; text: string }>;
+  games: Array<{ appId?: string; name: string; text: string; minutes?: number }>;
   totalText: string;
+  totalMinutes?: number;
+  known?: boolean;
+  reason?: string;
+  trackingSince?: string;
+  coverageText?: string;
   /** Set when the record starts inside the window. */
   partialSince?: string;
 }
 
+function durationMinutes(text: string): number {
+  const hours = Number(text.match(/(\d+)\s*小时/u)?.[1] ?? 0);
+  const minutes = Number(text.match(/(\d+)\s*分钟/u)?.[1] ?? 0);
+  return hours * 60 + minutes;
+}
+
+function orderedGames<T extends { text: string; minutes?: number }>(games: T[]): T[] {
+  return [...games].sort((left, right) => (right.minutes ?? durationMinutes(right.text)) - (left.minutes ?? durationMinutes(left.text)));
+}
+
+function playtimeLayout(headline: string, details: string[], body: string[]): string {
+  const lines = [`${BRAND} · ${headline} ⏱️`, '', ...details, '', ...body, '', SIGN_OFF];
+  return lines.join('\n');
+}
+
 export function renderPlaytimeCard(card: PlaytimeCard, _now: Date = new Date()): string {
-  const facts = [
-    fact('时段', card.label),
-    ...card.games.map((game) => fact('游戏', `${gameLabel(game.appId, game.name) ?? game.name}，${game.text}`)),
-    ...(card.games.length > 1 ? [fact('合计', card.totalText)] : []),
-    ...(card.partialSince ? [fact('记录起点', card.partialSince)] : []),
+  const details = [
+    `时段：${card.label}`,
+    ...((card.trackingSince ?? card.partialSince) ? [`记录起点：${card.trackingSince ?? card.partialSince}`] : []),
+    ...(card.coverageText ? [`覆盖说明：${card.coverageText}`] : []),
   ];
-  if (!card.games.length) facts.push(fact('结果', '没有记录到游戏时长'));
-  return renderLayout('⏱️', `${card.name} ${whenForTitle(card.label)}游戏时长`, facts);
+  const body: string[] = [];
+  if (card.known === false) {
+    body.push(`${card.name}  ${card.reason === 'before_tracking' ? '统计区间早于采样开始，没有可用记录' : '没有可用的记录'}`);
+  } else if (!card.games.length) {
+    body.push(`${card.name}  没有记录到游戏时长`);
+  } else {
+    body.push(`${card.name}  ${card.totalText}`);
+    for (const game of orderedGames(card.games)) body.push(`└ ${gameLabel(game.appId, game.name) ?? game.name}  ${game.text}`);
+  }
+  return playtimeLayout(`${card.name} ${whenForTitle(card.label)}游戏时长`, details, body);
 }
 
 export interface PlayingCard {
@@ -48,8 +75,9 @@ export interface PlaytimeGroupCard {
   label: string;
   members: Array<{
     name: string;
-    games: Array<{ appId?: string; name: string; text: string }>;
+    games: Array<{ appId?: string; name: string; text: string; minutes?: number }>;
     totalText?: string;
+    totalMinutes?: number;
     known: boolean;
     reason?: string;
     trackingSince?: string;
@@ -57,21 +85,34 @@ export interface PlaytimeGroupCard {
   }>;
   /** Set when the record starts inside the window. */
   partialSince?: string;
+  trackingSince?: string;
+  coverageText?: string;
 }
 
 /** One card for several people: each person's games and total, delivered once. */
 export function renderPlaytimeGroupCard(card: PlaytimeGroupCard, _now: Date = new Date()): string {
-  const facts: CardFact[] = [fact('时段', card.label)];
-  for (const member of card.members) {
-    if (!member.known || !member.games.length) {
-      const value = member.known ? '没有记录到游戏时长'
-        : member.reason === 'before_tracking' && member.trackingSince ? `该区间早于采样开始（${member.trackingSince}）` : '没有可用的记录';
-      facts.push(fact(member.name, value));
+  const ordered = [...card.members].sort((left, right) => {
+    const total = (member: typeof left): number => member.known ? member.totalMinutes ?? durationMinutes(member.totalText ?? '0分钟') : -1;
+    return total(right) - total(left);
+  });
+  const details = [
+    `时段：${card.label}`,
+    ...((card.trackingSince ?? card.partialSince) ? [`记录起点：${card.trackingSince ?? card.partialSince}`] : []),
+    ...(card.coverageText ? [`覆盖说明：${card.coverageText}`] : []),
+  ];
+  const body: string[] = [];
+  for (const member of ordered) {
+    if (!member.known) {
+      const reason = member.reason === 'before_tracking' ? '统计区间早于采样开始' : '没有可用记录';
+      body.push(`${member.name}  ${reason}${member.trackingSince ? `（采样起点 ${member.trackingSince}）` : ''}`);
       continue;
     }
-    for (const game of member.games) facts.push(fact(`${member.name} · ${gameLabel(game.appId, game.name) ?? game.name}`, game.text));
-    facts.push(fact(`${member.name} · 合计`, member.totalText ?? ''));
+    if (!member.games.length) {
+      body.push(`${member.name}  没有记录到游戏时长`);
+      continue;
+    }
+    body.push(`${member.name}  ${member.totalText ?? '0分钟'}`);
+    for (const game of orderedGames(member.games)) body.push(`└ ${gameLabel(game.appId, game.name) ?? game.name}  ${game.text}`);
   }
-  if (card.partialSince) facts.push(fact('记录起点', card.partialSince));
-  return renderLayout('⏱️', `${namesForTitle(card.members.map((member) => member.name))} ${whenForTitle(card.label)}游戏时长`, facts);
+  return playtimeLayout(`${namesForTitle(ordered.map((member) => member.name))} ${whenForTitle(card.label)}游戏时长`, details, body);
 }

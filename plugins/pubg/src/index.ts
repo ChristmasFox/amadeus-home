@@ -12,7 +12,7 @@ import { registerDailyReviewService } from './daily-review-service.js';
 import { dailyStatsSource } from './daily-review-stats.js';
 import { jsonToolResult as sharedJsonToolResult, queryShareFor as sharedQueryShareFor, type ShareAppender } from '@rine-kit/pubg-reply';
 import { IdentityStore, type IdentityResolution, type PersonSnapshot } from '@agent/identity';
-import { adaptWorldlineNotification } from '@rine-kit/presentation';
+import { adaptWorldlineNotification, formatMetricNumber, type PubgTeamDamagePresentation } from '@rine-kit/presentation';
 import {
   PubgApiClient,
   PubgApiError,
@@ -572,12 +572,167 @@ function runtimeError(error: unknown): ToolEnvelope {
   };
 }
 
+const compactTeamDamageReplyGuide = '把 displayText 原样发出，不要再改写成更长的对账战报，也不要压缩掉分层。每个方向的次数和伤害数字都要保留。数据不完整时说明总量未知，未知不是 0。若有 🔗 分享链接，原样保留在最后一行。';
+
+type UnknownRecord = Record<string, unknown>;
+type DamageDirectionLine = {
+  actor: string;
+  victim: string;
+  count?: number;
+  damage?: number;
+  knownCount?: number;
+  knownDamage?: number;
+  complete: boolean;
+};
+
+function record(value: unknown): UnknownRecord | undefined {
+  return value !== null && typeof value === 'object' && !Array.isArray(value) ? value as UnknownRecord : undefined;
+}
+
+function finite(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+}
+
+function participantName(value: unknown): string | undefined {
+  if (typeof value === 'string' && value) return value;
+  const row = record(value);
+  return typeof row?.name === 'string' ? row.name : typeof row?.playerId === 'string' ? row.playerId : undefined;
+}
+
+function compactTeamDamageDisplayText(reply: UnknownRecord, envelope: ToolEnvelope): string | undefined {
+  const candidate = record(reply.presentation);
+  if (candidate?.type !== 'pubg_team_damage') return undefined;
+  const presentation = candidate as unknown as PubgTeamDamagePresentation;
+  const originalText = typeof reply.displayText === 'string' ? reply.displayText : '';
+  const title = originalText.split(/\r?\n/u)[0]?.trim() || `🥊 ${presentation.headline}`;
+  const shareLine = originalText.split(/\r?\n/u).map((line) => line.trim()).reverse().find((line) => /^🔗\s+https?:\/\/\S+$/u.test(line));
+  const rawData = record(envelope.data) ?? {};
+  const rawDirections = Array.isArray(rawData.directions) ? rawData.directions.map((item) => record(item) ?? {}) : [];
+  const rawCoverage = record(envelope.coverage);
+  const incomplete = envelope.status === 'partial' || presentation.status === 'partial' || rawData.complete === false || rawCoverage?.complete === false;
+  const complete = !incomplete && envelope.status === 'ok' && presentation.status === 'ok' && rawData.complete === true;
+
+  const directions: DamageDirectionLine[] = presentation.directions.map((direction, index) => {
+    const raw = rawDirections.find((item) => participantName(item.actor) === direction.actor && participantName(item.victim) === direction.victim) ?? rawDirections[index] ?? {};
+    const rawActor = record(raw.actor);
+    const rawVictim = record(raw.victim);
+    const belongs = (!rawActor || participantName(raw.actor) === direction.actor) && (!rawVictim || participantName(raw.victim) === direction.victim);
+    const source = belongs ? raw : {};
+    const directionComplete = complete && direction.complete === true && source.complete !== false;
+    return {
+      actor: direction.actor,
+      victim: direction.victim,
+      ...(directionComplete ? { count: finite(direction.hitCount) ?? finite(source.hitCount) } : {}),
+      ...(directionComplete ? { damage: finite(direction.damage) ?? finite(source.damage) } : {}),
+      ...(finite(source.knownHitCount) !== undefined || finite(direction.knownHitCount) !== undefined || finite(source.hitCount) !== undefined || finite(direction.hitCount) !== undefined
+        ? { knownCount: finite(source.knownHitCount) ?? finite(direction.knownHitCount) ?? finite(source.hitCount) ?? finite(direction.hitCount) } : {}),
+      ...(finite(source.knownDamage) !== undefined || finite(direction.knownDamage) !== undefined || finite(source.damage) !== undefined || finite(direction.damage) !== undefined
+        ? { knownDamage: finite(source.knownDamage) ?? finite(direction.knownDamage) ?? finite(source.damage) ?? finite(direction.damage) } : {}),
+      complete: directionComplete,
+    };
+  });
+
+  const actors = new Map<string, { actor: string; directions: DamageDirectionLine[]; complete: boolean; knownCount?: number; knownDamage?: number; count?: number; damage?: number }>();
+  for (const direction of directions) {
+    const actor = actors.get(direction.actor) ?? { actor: direction.actor, directions: [], complete: complete };
+    actor.directions.push(direction);
+    actor.complete &&= direction.complete;
+    actors.set(direction.actor, actor);
+  }
+  const explicitTotals = presentation.actorTotals ?? [];
+  for (const total of explicitTotals) {
+    const actor = actors.get(total.actor) ?? { actor: total.actor, directions: [], complete: complete };
+    actor.complete = complete && total.complete;
+    actor.knownCount = finite(total.knownHitCount);
+    actor.knownDamage = finite(total.knownDamage);
+    if (actor.complete) {
+      actor.count = finite(total.hitCount);
+      actor.damage = finite(total.damage);
+    }
+    actors.set(total.actor, actor);
+  }
+  for (const actor of actors.values()) {
+    if (actor.knownCount === undefined) {
+      const counts = actor.directions.map((direction) => direction.knownCount);
+      if (counts.some((count) => count !== undefined)) actor.knownCount = counts.reduce<number>((sum, count) => sum + (count ?? 0), 0);
+    }
+    if (actor.knownDamage === undefined) {
+      const values = actor.directions.map((direction) => direction.knownDamage);
+      if (values.some((value) => value !== undefined)) actor.knownDamage = values.reduce<number>((sum, value) => sum + (value ?? 0), 0);
+    }
+    if (actor.complete) {
+      actor.count ??= actor.directions.every((direction) => direction.count !== undefined)
+        ? actor.directions.reduce((sum, direction) => sum + (direction.count ?? 0), 0) : undefined;
+      actor.damage ??= actor.directions.every((direction) => direction.damage !== undefined)
+        ? actor.directions.reduce((sum, direction) => sum + (direction.damage ?? 0), 0) : undefined;
+    }
+  }
+
+  const countText = (value: number | undefined, known: number | undefined, isComplete: boolean): string =>
+    isComplete && value !== undefined ? `${Math.round(value)}次` : known !== undefined ? `已确认${Math.round(known)}次（总次数未知）` : '次数未知';
+  const damageText = (value: number | undefined, known: number | undefined, isComplete: boolean): string =>
+    isComplete && value !== undefined ? `${formatMetricNumber('damage', value)}伤害` : known !== undefined ? `已知${formatMetricNumber('damage', known)}伤害（总量未知）` : '伤害未知';
+  const dataRange = record(reply.dataSourceRange);
+  const rangeText = typeof dataRange?.fromLocal === 'string' && typeof dataRange.toLocal === 'string'
+    ? `数据范围：${dataRange.fromLocal} 至 ${dataRange.toLocal}` : undefined;
+  const updatedText = typeof reply.dataUpdatedAtLocal === 'string' ? `数据更新时间：${reply.dataUpdatedAtLocal}` : undefined;
+  const rawKnownCount = finite(rawData.knownHitCount);
+  const rawKnownDamage = finite(rawData.knownDamage);
+  const knownTotalCount = rawKnownCount ?? (directions.length && directions.every((direction) => direction.knownCount !== undefined)
+    ? directions.reduce((sum, direction) => sum + (direction.knownCount ?? 0), 0) : undefined);
+  const knownTotalDamage = rawKnownDamage ?? (directions.length && directions.every((direction) => direction.knownDamage !== undefined)
+    ? directions.reduce((sum, direction) => sum + (direction.knownDamage ?? 0), 0) : undefined);
+  const totalCount = complete ? finite(rawData.totalHitCount) : undefined;
+  const totalDamage = complete ? finite(rawData.totalDamage) : undefined;
+  const lines = [title, '', complete && totalCount !== undefined && totalDamage !== undefined
+    ? `总计：${Math.round(totalCount)}次 · ${formatMetricNumber('damage', totalDamage)}伤害`
+    : incomplete ? `已确认：${knownTotalCount === undefined ? '次数未知' : `${Math.round(knownTotalCount)}次`} · ${knownTotalDamage === undefined ? '伤害未知' : `已知${formatMetricNumber('damage', knownTotalDamage)}伤害`}（完整总量未知）`
+      : '总计：没有队友误伤记录'];
+  if (rangeText) lines.push(rangeText);
+  if (updatedText) lines.push(updatedText);
+  if (incomplete) lines.push('覆盖说明：只列已确认数据，未知总量不按 0 处理。');
+
+  const orderedActors = [...actors.values()].sort((left, right) =>
+    (right.knownCount ?? Number.NEGATIVE_INFINITY) - (left.knownCount ?? Number.NEGATIVE_INFINITY) ||
+    (right.knownDamage ?? Number.NEGATIVE_INFINITY) - (left.knownDamage ?? Number.NEGATIVE_INFINITY) || left.actor.localeCompare(right.actor));
+  if (orderedActors.length) {
+    lines.push('');
+    for (const actor of orderedActors) {
+      const actorComplete = complete && actor.complete;
+      lines.push(`${actor.actor}  ${countText(actor.count, actor.knownCount, actorComplete)} · ${damageText(actor.damage, actor.knownDamage, actorComplete)}`);
+      actor.directions.sort((left, right) =>
+        (right.knownCount ?? Number.NEGATIVE_INFINITY) - (left.knownCount ?? Number.NEGATIVE_INFINITY) ||
+        (right.knownDamage ?? Number.NEGATIVE_INFINITY) - (left.knownDamage ?? Number.NEGATIVE_INFINITY) || left.victim.localeCompare(right.victim));
+      for (const direction of actor.directions) {
+        const directionComplete = complete && direction.complete;
+        lines.push(`└ ${direction.victim}  ${countText(direction.count, direction.knownCount, directionComplete)} · ${damageText(direction.damage, direction.knownDamage, directionComplete)}`);
+      }
+    }
+  } else {
+    lines.push('', incomplete ? '没有确认到误伤方向；覆盖不完整，未知不是 0。' : '这段时间没有记录到队友误伤。');
+  }
+
+  if (complete && presentation.ledger?.highlights.length) {
+    for (const highlight of presentation.ledger.highlights) lines.push(`名场面：${highlight.label} · ${highlight.hitCount}次 / ${formatMetricNumber('damage', highlight.damage)}伤害`);
+  }
+  if (complete && presentation.ledger?.quiet.length) lines.push(`清白：${presentation.ledger.quiet.join('、')}（0次主动队内输出）`);
+  if (shareLine) lines.push('', shareLine);
+  else {
+    const replyLink = record(reply.replyLink);
+    if (replyLink?.kind === 'share' && typeof replyLink.url === 'string') lines.push('', `🔗 ${replyLink.url}`);
+  }
+  return lines.join('\n');
+}
+
 /*
- * How a PUBG tool result reaches the model (presentation, chat-layout displayText, replyGuide, share link) lives in
- * @rine-kit/pubg-reply, shared with every other host; only the OpenClaw result wrapper stays here.
+ * Presentation and share construction stay in @rine-kit/pubg-reply. Lab applies a compact chat-only rendering for
+ * team damage after that shared result is built; the original envelope and presentation remain intact.
  */
 export function jsonToolResult(name: string, envelope: ToolEnvelope, fallbackTimezone = 'Asia/Shanghai', share?: ShareAppender): ReturnType<typeof jsonResult> {
-  return jsonResult(sharedJsonToolResult(name, envelope, fallbackTimezone, share));
+  const shared = sharedJsonToolResult(name, envelope, fallbackTimezone, share);
+  const displayText = compactTeamDamageDisplayText(shared, envelope);
+  if (displayText === undefined) return jsonResult(shared);
+  return jsonResult({ ...shared, displayText, replyGuide: compactTeamDamageReplyGuide });
 }
 
 const shareStores = new Map<string, SqlitePubgRepository>();

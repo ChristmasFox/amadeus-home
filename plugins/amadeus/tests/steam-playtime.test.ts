@@ -259,7 +259,9 @@ test('custom start/end takes precedence over period and date, and one group card
   assert.deepEqual(result.people?.map((member) => member.totalText), ['1小时30分钟', '45分钟']);
   assert.deepEqual(result.people?.map((member) => member.games.map((game) => game.name)), [['Range Game A', 'Range Game B'], ['Range Game C']]);
   assert.match(result.displayText ?? '', /2026-11-16 06:00 → 2026-11-18 06:00/u);
+  assert.match(result.displayText ?? '', /Game A  1小时30分钟\n└ Range Game A/u);
   assert.ok((result.displayText ?? '').indexOf('Range Game A') < (result.displayText ?? '').indexOf('Range Game C'));
+  assert.doesNotMatch(result.displayText ?? '', /^[- ]/mu, 'no dash list or foldable leading spaces');
 });
 
 test('custom date ranges reject missing, invalid, reversed and over-limit inputs while allowing 366 business days', async () => {
@@ -289,21 +291,25 @@ test('custom ranges before sampling return known:false; overlap is clipped and m
 
   const early = await steamGetPlaytime(deps, caller, {
     person: { reference: 'self' }, start: '2026-11-07', end: '2026-11-08',
-  }) as { status: string; known: boolean; reason?: string; trackingSince?: string; note?: string };
+  }) as { status: string; known: boolean; reason?: string; trackingSince?: string; note?: string; displayText?: string };
   assert.equal(early.status, 'ok');
   assert.equal(early.known, false);
   assert.equal(early.reason, 'before_tracking');
   assert.equal(early.trackingSince, `${CAL.format(trackingSince)}（${CAL.timezone}）`);
   assert.match(early.note ?? '', /整个统计区间都早于采样开始/u);
+  assert.match(early.displayText ?? '', /记录起点/u);
+  assert.match(early.displayText ?? '', /覆盖说明：整个统计区间早于采样起点/u);
 
   const partial = await steamGetPlaytime(deps, caller, {
     person: { reference: 'self' }, start: '2026-11-09', end: '2026-11-11',
-  }) as { known: boolean; partial?: boolean; trackingSince?: string; totalMinutes?: number; games?: Array<{ name: string }> };
+  }) as { known: boolean; partial?: boolean; trackingSince?: string; totalMinutes?: number; games?: Array<{ name: string }>; displayText?: string };
   assert.equal(partial.known, true);
   assert.equal(partial.partial, true);
   assert.equal(partial.trackingSince, `${CAL.format(trackingSince)}（${CAL.timezone}）`);
   assert.equal(partial.totalMinutes, 20);
   assert.deepEqual(partial.games?.map((game) => game.name), ['After Tracking']);
+  assert.match(partial.displayText ?? '', /记录起点/u);
+  assert.match(partial.displayText ?? '', /覆盖说明：只统计采样开始后的重叠部分/u);
 });
 
 test('the poller records the play sessions it observes, including a first sighting already in progress', async () => {
