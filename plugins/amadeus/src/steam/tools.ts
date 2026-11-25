@@ -163,18 +163,24 @@ export function steamUnlink(deps: SteamToolDependencies, caller: SteamCaller, pa
   return { status: 'unlinked', removed: chosen.map((link) => link.personaName), remaining: own.length - chosen.length };
 }
 
-/** The personal "announce me" switch. Turning it on inside a group also enrols the person in that group. */
-export function steamSetBroadcast(deps: SteamToolDependencies, caller: SteamCaller, params: { enabled: boolean }): unknown {
-  const own = ownLinks(deps, caller);
-  if (!own.length) return { status: 'not_linked' };
-  for (const link of own) deps.store.setBroadcast(link.steamId, params.enabled);
+/** The owner controls personal announcements. Turning them on in a group also enrols the person in that group. */
+export function steamSetBroadcast(deps: SteamToolDependencies, caller: SteamCaller, params: { enabled: boolean; person?: Person }): unknown {
+  if (!caller.isOwner) return { status: 'refused', reason: 'owner_only' };
+  const subject = linkSubject(deps, caller, params.person);
+  if ('status' in subject) return subject;
+  if (!subject.links.length) return { status: 'not_linked' };
+  for (const link of subject.links) deps.store.setBroadcast(link.steamId, params.enabled);
   if (caller.groupId) {
-    for (const key of new Set(own.map((link) => link.senderKey))) {
+    for (const key of new Set(subject.links.map((link) => link.senderKey))) {
       if (params.enabled) deps.store.enroll(caller.groupId, key);
       else deps.store.leaveGroup(caller.groupId, key);
     }
   }
-  return { status: 'ok', broadcast: params.enabled, accountCount: own.length, group: caller.groupId ? 'this_group' : undefined };
+  return {
+    status: 'ok', broadcast: params.enabled, accountCount: subject.links.length,
+    group: caller.groupId ? 'this_group' : undefined,
+    ...(params.person && params.person.reference !== 'self' ? { forOtherMember: true } : {}),
+  };
 }
 
 export function steamGroupSettings(deps: SteamToolDependencies, caller: SteamCaller, params: { enabled?: boolean }): unknown {
@@ -190,7 +196,7 @@ type Target = { links: SteamLink[]; self: boolean } | { status: string; reason: 
 
 const merge = (...lists: SteamLink[][]): SteamLink[] => [...new Map(lists.flat().map((link) => [link.steamId, link])).values()].sort((a, b) => a.linkedAt - b.linkedAt);
 
-export function targetFor(deps: SteamToolDependencies, caller: SteamCaller, person: Person): Target {
+export function targetFor(deps: SteamToolDependencies, caller: SteamCaller, person: Person, options: { includeUnshared?: boolean } = {}): Target {
   let links: SteamLink[] = [];
   const byPerson = (personId: string | undefined): SteamLink[] => (personId ? deps.store.linksByPerson(personId) : []);
   if (person.reference === 'self') {
@@ -209,15 +215,15 @@ export function targetFor(deps: SteamToolDependencies, caller: SteamCaller, pers
   if (!links.length) return { status: 'not_linked', reason: 'no_steam_account_linked' };
   const mine = caller.senderKey ? new Set(ownLinks(deps, caller).map((link) => link.steamId)) : new Set<string>();
   const self = links.every((link) => mine.has(link.steamId));
-  // Switching announcements off also stops other people reading that account's Steam data.
-  if (!self) links = links.filter((link) => mine.has(link.steamId) || link.broadcast);
+  // Personal announcements gate live Steam lookups, while stored play sessions remain readable.
+  if (!self && !options.includeUnshared) links = links.filter((link) => mine.has(link.steamId) || link.broadcast);
   if (!links.length) return { status: 'refused', reason: 'sharing_off' };
   return { links, self };
 }
 
 /** One account answers as before; several accounts answer as a list, each labelled with its Steam nickname. */
-async function withTarget(deps: SteamToolDependencies, caller: SteamCaller, person: Person, work: (link: SteamLink) => Promise<unknown>): Promise<unknown> {
-  const target = targetFor(deps, caller, person);
+async function withTarget(deps: SteamToolDependencies, caller: SteamCaller, person: Person, work: (link: SteamLink) => Promise<unknown>, options: { includeUnshared?: boolean } = {}): Promise<unknown> {
+  const target = targetFor(deps, caller, person, options);
   if (!('links' in target)) return target;
   return guarded(deps, async () => {
     if (target.links.length === 1) return work(target.links[0]!);
@@ -325,14 +331,13 @@ function trackedPlaytime(deps: SteamToolDependencies, caller: SteamCaller, perso
   const calendar = deps.calendar ?? businessCalendar();
   const window = playtimeWindow(calendar, period, date, now);
   if (!window) return { status: 'invalid_date', reason: 'date_must_be_YYYY-MM-DD' };
-  const target = targetFor(deps, caller, person);
+  const target = targetFor(deps, caller, person, { includeUnshared: true });
   if (!('links' in target)) return target;
   const trackingSince = deps.store.playTrackingStartedAt();
   const base = { period: period === 'date' ? 'date' : period, label: window.label, timezone: calendar.timezone, dayBoundary: calendar.describe(), accountCount: target.links.length };
   if (window.to <= trackingSince) {
     return { status: 'ok', ...base, known: false, reason: 'before_tracking', trackingSince: `${calendar.format(trackingSince)}（${calendar.timezone}）`, note: '游戏时长是从这个时间之后才开始记录的，更早的日子没有数据。' };
   }
-  if (target.links.every((link) => !link.broadcast)) return { status: 'ok', ...base, known: false, reason: 'tracking_off_while_announcements_off' };
   const sessions = deps.store.playSessions(target.links.map((link) => link.steamId), window.from, window.to, now);
   const { games, totalMinutes, days } = aggregatePlay(calendar, sessions, window.from, window.to, game);
   const partial = window.from < trackingSince;
@@ -379,7 +384,7 @@ export function steamGetPlaytime(deps: SteamToolDependencies, caller: SteamCalle
       totalHours: minutesToHours(totalMinutes),
       top: [...games].sort((a, b) => b.totalMinutes - a.totalMinutes).slice(0, 5).map(gameView),
     };
-  });
+  }, { includeUnshared: true });
 }
 
 /** Linked members of the caller's group (announcements on), one entry per person with all their accounts. */

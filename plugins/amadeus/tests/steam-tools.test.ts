@@ -68,22 +68,68 @@ test('API failures become bounded reasons', async () => {
 
 test('broadcast switch: default on, off and on again, enrolment follows the group', async () => {
   const { store, deps, caller } = setup();
-  assert.deepEqual(steamSetBroadcast(deps, caller(), { enabled: false }), { status: 'not_linked' });
+  const owner = caller({ isOwner: true });
+  assert.deepEqual(steamSetBroadcast(deps, owner, { enabled: false }), { status: 'not_linked' });
   await steamLinkAccount(deps, caller(), { reference: ID, confirm: true });
-  assert.equal((steamSetBroadcast(deps, caller(), { enabled: false }) as { broadcast: boolean }).broadcast, false);
+  assert.equal((steamSetBroadcast(deps, owner, { enabled: false }) as { broadcast: boolean }).broadcast, false);
   assert.deepEqual(store.broadcastMembers(GROUP), []);
-  steamSetBroadcast(deps, caller(), { enabled: true });
+  steamSetBroadcast(deps, owner, { enabled: true });
   assert.equal(store.broadcastMembers(GROUP).length, 1);
   assert.deepEqual([(steamUnlink(deps, caller()) as { status: string }).status, store.linksBySender(ME)], ['unlinked', []]);
 });
 
-test('others can be queried while their broadcast is on; switching it off hides them', async () => {
+test('non-owners cannot open or close personal announcements; the stored switch and roster stay unchanged', async () => {
+  const { store, deps, caller } = setup();
+  store.link({ senderKey: ME, steamId: ID, personaName: 'MemberPlaceholder', now: 1 });
+  for (const initial of [false, true]) {
+    store.setBroadcast(ID, initial);
+    if (initial) store.enroll(GROUP, ME);
+    else store.leaveGroup(GROUP, ME);
+    const beforeMembers = store.broadcastMembers(GROUP).map((link) => link.steamId);
+    for (const enabled of [false, true]) {
+      assert.deepEqual(steamSetBroadcast(deps, caller(), { enabled }), { status: 'refused', reason: 'owner_only' });
+    }
+    assert.equal(store.linkBySteamId(ID)?.broadcast, initial);
+    assert.deepEqual(store.broadcastMembers(GROUP).map((link) => link.steamId), beforeMembers);
+  }
+});
+
+test('the owner can change personal announcements for themselves and another member via a trusted mention', () => {
+  const { store, deps, caller } = setup();
+  const otherId = '76561190000000002';
+  store.link({ senderKey: ME, steamId: ID, personaName: 'OwnerPlaceholder', personId: 'p-owner', now: 1 });
+  store.link({ senderKey: OTHER, steamId: otherId, personaName: 'MemberPlaceholder', personId: 'p-member', now: 2 });
+  store.enroll(GROUP, ME);
+  store.enroll(GROUP, OTHER);
+  const owner = caller({ isOwner: true, selfPerson: () => 'p-owner' });
+  assert.deepEqual(steamSetBroadcast(deps, owner, { enabled: false }), {
+    status: 'ok', broadcast: false, accountCount: 1, group: 'this_group',
+  });
+  assert.equal(store.linkBySteamId(ID)?.broadcast, false);
+  assert.deepEqual(store.groupsOf(ME), []);
+  steamSetBroadcast(deps, owner, { enabled: true });
+  assert.equal(store.linkBySteamId(ID)?.broadcast, true);
+  assert.deepEqual(store.groupsOf(ME), [GROUP]);
+
+  const ownerWithTarget = caller({ isOwner: true, mentions: [OTHER], mentionPerson: () => 'p-member' });
+  const closed = steamSetBroadcast(deps, ownerWithTarget, { enabled: false, person: { reference: 'mention' } }) as { status: string; forOtherMember?: boolean };
+  assert.deepEqual([closed.status, closed.forOtherMember], ['ok', true]);
+  assert.equal(store.linkBySteamId(otherId)?.broadcast, false);
+  assert.deepEqual(store.groupsOf(OTHER), []);
+  const reopened = steamSetBroadcast(deps, ownerWithTarget, { enabled: true, person: { reference: 'mention' } }) as { status: string; forOtherMember?: boolean };
+  assert.deepEqual([reopened.status, reopened.forOtherMember], ['ok', true]);
+  assert.equal(store.linkBySteamId(otherId)?.broadcast, true);
+  assert.deepEqual(store.groupsOf(OTHER), [GROUP]);
+});
+
+test('other Steam lookups stay gated by sharing while playtime remains available', async () => {
   const { deps, caller } = setup();
   deps.store.link({ senderKey: OTHER, steamId: '76561190000000002', personaName: 'Other', now: 1 });
   const viaMention = caller({ mentions: [OTHER] });
   assert.equal((await steamGetProfile(deps, viaMention, { person: { reference: 'mention' } }) as { status: string }).status, 'ok');
   deps.store.setBroadcast('76561190000000002', false);
   assert.deepEqual(await steamGetProfile(deps, viaMention, { person: { reference: 'mention' } }), { status: 'refused', reason: 'sharing_off' });
+  assert.equal((await steamGetPlaytime(deps, viaMention, { person: { reference: 'mention' } }) as { status: string }).status, 'ok', 'playtime remains readable when personal announcements are off');
   assert.deepEqual(await steamGetProfile(deps, caller(), { person: { reference: 'self' } }), { status: 'not_linked', reason: 'no_steam_account_linked' });
   assert.equal((await steamGetProfile(deps, caller({ personForAlias: () => undefined }), { person: { reference: 'alias', alias: 'x' } }) as { status: string }).status, 'not_linked');
 });
@@ -227,7 +273,7 @@ test('one known person shares a link across sender keys: phone-bound, group id f
   assert.equal(again.status, 'linked');
   assert.deepEqual(store.linksBySender(LID), []);
   assert.deepEqual(store.broadcastMembers(GROUP).map((link) => link.senderKey), [PHONE]);
-  assert.equal((steamSetBroadcast(deps, caller(me(LID)), { enabled: false }) as { status: string }).status, 'ok');
+  assert.equal((steamSetBroadcast(deps, caller({ ...me(LID), isOwner: true }), { enabled: false }) as { status: string }).status, 'ok');
   assert.equal(store.linksBySender(PHONE)[0]?.broadcast, false);
 });
 
@@ -283,7 +329,7 @@ test('unlinking names one account; with several and no name it asks which; all r
 
 test('the broadcast switch covers every account of the person', async () => {
   const { store, deps, caller } = setup();
-  const me = caller({ selfPerson: () => 'p1', mirrorLink: () => 'p1' });
+  const me = caller({ isOwner: true, selfPerson: () => 'p1', mirrorLink: () => 'p1' });
   await steamLinkAccount(deps, me, { reference: ID, confirm: true });
   await steamLinkAccount(deps, me, { reference: ID2, confirm: true });
   steamSetBroadcast(deps, me, { enabled: false });

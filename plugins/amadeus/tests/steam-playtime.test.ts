@@ -13,6 +13,7 @@ const MIN = 60_000;
 const HOUR = 3_600_000;
 const ID1 = '76561190000000001';
 const ID2 = '76561190000000002';
+const ID3 = '76561190000000003';
 const GROUP = '120363000000000000@g.us';
 // Singapore 06:00 on 2026-11-09 (= 2026-11-08T22:00Z): the start of business day 2026-11-09.
 const D9 = Date.parse('2026-11-08T22:00:00Z');
@@ -140,15 +141,37 @@ test('the tool answers per game and in total for yesterday, merging a person\'s 
   assert.deepEqual(await steamGetPlaytime(deps, caller, { person: { reference: 'self' }, period: 'date', date: 'nope' }), { status: 'invalid_date', reason: 'date_must_be_YYYY-MM-DD' });
 });
 
-test('others can be asked about when their announcements are on; switching them off hides the numbers', async () => {
+test('playtime remains readable from stored sessions when personal announcements are off, including multi-person queries', async () => {
   const now = D9 + 3 * HOUR;
   const { store, deps } = toolEnv(now);
-  const other: SteamCaller = { senderKey: 'whatsapp:9', groupId: GROUP, isOwner: false, mentions: ['whatsapp:1'] };
-  const ask = () => steamGetPlaytime(deps, other, { person: { reference: 'mention' }, period: 'today' }) as Promise<{ status: string; reason?: string }>;
-  assert.equal((await ask()).status, 'ok');
+  store.link({ senderKey: 'whatsapp:2', steamId: ID3, personaName: 'Member Placeholder', personId: 'p2', now: 3 });
+  store.enroll(GROUP, 'whatsapp:2');
+  const other: SteamCaller = {
+    senderKey: 'whatsapp:9', groupId: GROUP, isOwner: false, mentions: ['whatsapp:1', 'whatsapp:2'],
+    mentionPerson: (index) => index === 0 ? 'p1' : 'p2',
+  };
+  (store as unknown as { db: { prepare(sql: string): { run(...args: unknown[]): unknown } } }).db
+    .prepare(`UPDATE steam_meta SET value = ? WHERE key = 'play_tracking_started_at'`).run(String(D9 - HOUR));
+  play(store, ID1, { appId: '10', name: 'Game A' }, D9 + 10 * MIN, 30);
+  play(store, ID2, { appId: '20', name: 'Game B' }, D9 + 10 * MIN, 15);
+  play(store, ID3, { appId: '30', name: 'Game C' }, D9 + 10 * MIN, 10);
   store.setBroadcast(ID1, false);
   store.setBroadcast(ID2, false);
-  assert.deepEqual(await ask(), { status: 'refused', reason: 'sharing_off' });
+  store.leaveGroup(GROUP, 'whatsapp:1');
+
+  const week = await steamGetPlaytime(deps, other, { person: { reference: 'mention' }, period: 'this_week' }) as { status: string; totalMinutes?: number; games?: Array<{ name: string }> };
+  assert.equal(week.status, 'ok');
+  assert.equal(week.totalMinutes, 45);
+  assert.deepEqual(week.games?.map((entry) => entry.name), ['Game A', 'Game B']);
+  const day = await steamGetPlaytime(deps, other, { person: { reference: 'mention' }, period: 'date', date: '2026-11-09' }) as { status: string; totalMinutes?: number };
+  assert.deepEqual([day.status, day.totalMinutes], ['ok', 45]);
+
+  const group = await steamGetPlaytime(deps, other, {
+    people: [{ reference: 'mention', mentionIndex: 0 }, { reference: 'mention', mentionIndex: 1 }], period: 'this_week',
+  }) as { status: string; people?: Array<{ games: Array<{ name: string }> }> };
+  assert.equal(group.status, 'ok');
+  assert.equal(group.people?.length, 2);
+  assert.deepEqual(group.people?.map((member) => member.games.map((entry) => entry.name)), [['Game A', 'Game B'], ['Game C']]);
 });
 
 test('the poller records the play sessions it observes, including a first sighting already in progress', async () => {

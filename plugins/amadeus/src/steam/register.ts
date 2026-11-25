@@ -22,7 +22,7 @@ const PersonParameters = Type.Union([
   Type.Object({ reference: Type.Literal('mention'), mentionIndex: Type.Optional(Type.Integer({ minimum: 0, maximum: 64 })) }, { additionalProperties: false }),
   Type.Object({ reference: Type.Literal('reply_sender') }, { additionalProperties: false }),
   Type.Object({ reference: Type.Literal('alias'), alias: Type.String({ minLength: 1, maxLength: 128 }) }, { additionalProperties: false }),
-], { description: '查谁：self=发消息的人自己；mention=@的人；reply_sender=被回复的人；alias=群里的称呼。只能查已绑定 Steam 且没有关闭播报的人。' });
+], { description: '查谁：self=发消息的人自己；mention=@的人；reply_sender=被回复的人；alias=群里的称呼。目标需已绑定 Steam；个人播报开关不限制 steam_get_playtime。' });
 
 const LinkParameters = Type.Object({
   reference: Type.String({ minLength: 1, maxLength: 256, description: 'Steam 个人资料链接、自定义主页名或 17 位 SteamID。' }),
@@ -33,7 +33,10 @@ const UnlinkParameters = Type.Object({
   account: Type.Optional(Type.String({ minLength: 1, maxLength: 256, description: '要解除哪一个账号：SteamID、个人资料链接或 Steam 昵称。只有一个账号时可不填。' })),
   all: Type.Optional(Type.Boolean({ description: 'true=解除自己所有 Steam 账号。' })),
 }, { additionalProperties: false });
-const BroadcastParameters = Type.Object({ enabled: Type.Boolean({ description: 'true=打开我的自动播报（开始玩、换游戏、结束游戏、成就解锁）；false=关掉。' }) }, { additionalProperties: false });
+const BroadcastParameters = Type.Object({
+  enabled: Type.Boolean({ description: 'true=打开自动播报；false=关闭。只有 owner 可设置。' }),
+  person: Type.Optional(PersonParameters),
+}, { additionalProperties: false });
 const EmptyParameters = Type.Object({}, { additionalProperties: false });
 const ProfileParameters = Type.Object({ person: PersonParameters }, { additionalProperties: false });
 const PlaytimeParameters = Type.Object({
@@ -136,7 +139,7 @@ export function registerSteamTools(api: OpenClawPluginApi): void {
     async (params, context) => steamLinkAccount(deps(), caller(context), params as Static<typeof LinkParameters>));
   registerTool(api, 'steam_unlink', '解除发消息的人自己的一个 Steam 账号（有多个账号时用 account 指定哪一个，或 all=true 全部解除），并删除相关记录。', UnlinkParameters,
     async (params, context) => steamUnlink(deps(), caller(context), params as Static<typeof UnlinkParameters>));
-  registerTool(api, 'steam_set_broadcast', '打开或关闭发消息的人自己的 Steam 自动播报（开始玩、换游戏、结束游戏、成就解锁都会自动播到已开启播报的群；在群里打开会把这个人加入本群的播报名单）。用户说“关掉/打开我的播报”时调用。', BroadcastParameters,
+  registerTool(api, 'steam_set_broadcast', '只有 owner 可以打开或关闭任何成员的个人 Steam 自动播报（开始玩、换游戏、结束游戏、成就解锁）；非 owner 即使要求开关自己的播报也会被拒绝，应说明只有主人能改。owner 可不填 person 修改自己；修改群里其他成员时，person 必须来自受信任的 mention、reply_sender 或 alias，禁止从消息正文猜号码。群里打开会把目标加入本群播报名单。', BroadcastParameters,
     async (params, context) => steamSetBroadcast(deps(), caller(context), params as Static<typeof BroadcastParameters>));
   registerTool(api, 'steam_get_profile', '查某个已绑定 Steam 的人的资料：昵称、当前在线状态与正在玩的游戏、账号创建时间。资料不公开的字段会返回 known:false，不要编造。', ProfileParameters,
     async (params, context) => steamGetProfile(deps(), caller(context), { person: person(params as { person: unknown }) }));
