@@ -238,25 +238,32 @@ test('reviewed group addressing comes from presets, is scoped to its group and f
   const database = join(directory, 'identity.sqlite');
   const presets = join(directory, 'presets.json');
   const write = (addressing: unknown[]) => writeFile(presets, JSON.stringify({ persons: [
-    { personId: 'jiao', displayName: '胶', aliases: ['胶'], externalAccounts: [{ provider: 'pubg', externalId: 'SG_LabmemNo008' }], addressing },
-    { personId: 'hou', displayName: '猴' },
+    { personId: 'example-person', displayName: 'Example Person', aliases: ['Example Push Name', 'Example Self Name', 'Example Avoided Name'], externalAccounts: [{ provider: 'pubg', externalId: 'EXAMPLE_PUBG' }], addressing },
+    { personId: 'example-other-person', displayName: 'Example Other Person' },
   ] }));
-  await write([{ scope: 'group', scopeId: 'group-1@g.us', addressAs: '打工战士', avoid: ['常宽'], note: '形象是铃羽' }]);
+  await write([{ scope: 'group', scopeId: 'EXAMPLE_ADDRESS@g.us', addressAs: 'Example Call Name', avoid: ['Example Avoided Name'], note: 'Example note' }]);
   try {
     const store = new IdentityStore(database, { presetsFile: presets });
-    assert.deepEqual(store.listAddressing('group', 'group-1@g.us'), [{
-      personId: 'jiao', displayName: '胶', scope: 'group', scopeId: 'group-1@g.us', addressAs: '打工战士', avoid: ['常宽'], note: '形象是铃羽',
-      externalAccounts: [{ provider: 'pubg', externalId: 'SG_LabmemNo008' }],
-    }]);
-    assert.deepEqual(store.listAddressing('group', 'group-2@g.us'), []);
+    store.addAlias({ personId: 'example-person', alias: 'Example Group Alias', scope: 'group', scopeId: 'EXAMPLE_ADDRESS@g.us', source: 'confirmed' });
+    store.addAlias({ personId: 'example-person', alias: 'Example Observed Alias', scope: 'group', scopeId: 'EXAMPLE_ADDRESS@g.us', source: 'observed' });
+    const [addressingRecord] = store.listAddressing('group', 'EXAMPLE_ADDRESS@g.us');
+    assert.deepEqual(addressingRecord, {
+      personId: 'example-person', displayName: 'Example Person', aliases: [
+        'Example Avoided Name', 'Example Call Name', 'Example Group Alias',
+        'Example Person', 'Example Push Name', 'Example Self Name',
+      ], scope: 'group', scopeId: 'EXAMPLE_ADDRESS@g.us', addressAs: 'Example Call Name', avoid: ['Example Avoided Name'], note: 'Example note',
+      externalAccounts: [{ provider: 'pubg', externalId: 'EXAMPLE_PUBG' }],
+    });
+    assert.ok(!addressingRecord?.aliases.includes('Example Observed Alias'), 'observed aliases are not roster candidates');
+    assert.deepEqual(store.listAddressing('group', 'EXAMPLE_OTHER_ADDRESS@g.us'), []);
     // The agreed name also resolves as a reference, but only in that group.
-    assert.equal(store.resolve({ type: 'alias', alias: '打工战士' }, { conversationId: 'group-1@g.us' }).person?.personId, 'jiao');
-    assert.notEqual(store.resolve({ type: 'alias', alias: '打工战士' }, { conversationId: 'group-2@g.us' }).status, 'resolved');
+    assert.equal(store.resolve({ type: 'alias', alias: 'Example Call Name' }, { conversationId: 'EXAMPLE_ADDRESS@g.us' }).person?.personId, 'example-person');
+    assert.notEqual(store.resolve({ type: 'alias', alias: 'Example Call Name' }, { conversationId: 'EXAMPLE_OTHER_ADDRESS@g.us' }).status, 'resolved');
 
     await new Promise((resolve) => setTimeout(resolve, 20));
     await write([]);
     store.refreshPresets(presets);
-    assert.deepEqual(store.listAddressing('group', 'group-1@g.us'), []);
+    assert.deepEqual(store.listAddressing('group', 'EXAMPLE_ADDRESS@g.us'), []);
     store.close();
   } finally {
     await rm(directory, { recursive: true, force: true });

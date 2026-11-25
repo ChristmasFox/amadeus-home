@@ -37,6 +37,18 @@ the owner, or a default team for an unbound sender.
 
 ## Required use before person-specific domain work
 
+### Group-turn evidence boundary (hard rule)
+
+In a group, before answering who someone is or making any identity claim, call
+`identity_resolve` during the current turn and inspect its result. Before
+reporting kills or match statistics, call the applicable PUBG tool during the
+current turn and inspect its result; when a person, alias, mention, or self
+reference is involved, resolve it first and pass the resolved subject to that
+tool. A result from an earlier turn, conversation context, or memory is not
+current evidence. If the required result is missing, call the tool before
+answering instead of guessing. This hard rule applies to group factual claims;
+ordinary conversation does not require these lookups.
+
 ## Scope-limited conversational facts
 
 - A fact learned in a direct message is private to that direct session.

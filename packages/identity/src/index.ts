@@ -136,6 +136,7 @@ export interface IdentityPreset {
 export interface AddressingRecord {
   personId: string;
   displayName: string;
+  aliases: string[];
   scope: 'group';
   scopeId: string;
   addressAs: string;
@@ -743,11 +744,16 @@ export class IdentityStore {
         if (Array.isArray(parsed)) avoid = parsed.filter((name): name is string => typeof name === 'string');
       } catch { /* a malformed list adds nothing */ }
       const note = rowOptional(row, 'note');
+      const aliases = this.db.prepare(`SELECT alias FROM aliases WHERE person_id = ? AND source <> 'observed'
+        AND ((scope = 'global' AND scope_id = '') OR (scope = 'group' AND scope_id = ?))
+        ORDER BY alias_key, alias_id`).all(personId, id)
+        .map((alias) => rowText(alias, 'alias'));
       const accounts = this.db.prepare('SELECT provider, external_id FROM external_accounts WHERE person_id = ? ORDER BY provider, external_id').all(personId)
         .map((account) => ({ provider: rowText(account, 'provider'), externalId: rowText(account, 'external_id') }));
       return {
         personId,
         displayName: rowText(row, 'display_name'),
+        aliases,
         scope: 'group' as const,
         scopeId: id,
         addressAs: rowText(row, 'address_as'),

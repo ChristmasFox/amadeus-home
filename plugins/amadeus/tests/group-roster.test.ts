@@ -6,37 +6,41 @@ import { join } from 'node:path';
 import type { OpenClawPluginApi } from 'openclaw/plugin-sdk/core';
 import { GROUP_VOICE_ANCHOR, groupIdFromSessionKey, registerGroupRoster, renderGroupRoster } from '../src/group-roster.js';
 
-const GROUP = '120363000000000000@g.us';
-const SESSION = `agent:main:whatsapp:group:${GROUP}:thread:whatsapp-account-secondary`;
+const GROUP = 'EXAMPLE_ADDRESS@g.us';
+const SESSION = `agent:main:whatsapp:group:${GROUP}:thread:whatsapp-account-example`;
 
 test('only a WhatsApp group session has a group id', () => {
   assert.equal(groupIdFromSessionKey(SESSION), GROUP);
   assert.equal(groupIdFromSessionKey(`agent:main:whatsapp:group:${GROUP}`), GROUP);
-  assert.equal(groupIdFromSessionKey('agent:main:whatsapp:direct:+8613800000000'), undefined);
+  assert.equal(groupIdFromSessionKey('agent:main:whatsapp:direct:EXAMPLE_ADDRESS'), undefined);
   assert.equal(groupIdFromSessionKey(undefined), undefined);
 });
 
-test('the roster names each member, the agreed name, names to avoid and the PUBG account', () => {
+test('the roster maps push and self names to the agreed name and PUBG account', () => {
   assert.equal(renderGroupRoster([]), undefined);
   const text = renderGroupRoster([{
-    personId: 'jiao', displayName: '胶', scope: 'group', scopeId: GROUP, addressAs: '打工战士', avoid: ['常宽'], note: '形象是铃羽',
-    externalAccounts: [{ provider: 'pubg', externalId: 'SG_LabmemNo008' }, { provider: 'steam', externalId: 'x' }],
+    personId: 'example-person', displayName: 'Example Person', aliases: ['Example Push Name', 'Example Self Name', 'Example Avoided Name'],
+    scope: 'group', scopeId: GROUP, addressAs: 'Example Call Name', avoid: ['Example Avoided Name'], note: 'Example note',
+    externalAccounts: [{ provider: 'pubg', externalId: 'EXAMPLE_PUBG' }, { provider: 'steam', externalId: 'EXAMPLE_STEAM' }],
   }])!;
-  assert.match(text, /- 胶（PUBG SG_LabmemNo008）：称呼「打工战士」；不要叫：常宽；形象是铃羽/u);
+  assert.match(text, /WhatsApp 推送名 \/ 自称「Example Push Name \/ Example Self Name \/ Example Person」 = 称呼「Example Call Name」 = PUBG 账号「EXAMPLE_PUBG」/u);
+  assert.match(text, /不要叫：Example Avoided Name/u);
+  assert.doesNotMatch(text.slice(0, text.indexOf('；不要叫：')), /Example Avoided Name/u);
   assert.doesNotMatch(text, /steam/u);
   const rejected = renderGroupRoster([{
-    personId: 'ye-zai', displayName: '野仔', scope: 'group', scopeId: GROUP, addressAs: '大爹', avoid: ['野仔', '野种'],
-    externalAccounts: [{ provider: 'pubg', externalId: 'kim_kkl' }],
+    personId: 'example-person-two', displayName: 'Example Person Two', aliases: ['Example Push Name Two'],
+    scope: 'group', scopeId: GROUP, addressAs: 'Example Call Name Two', avoid: ['Example Person Two', 'Example Avoided Name Two'],
+    externalAccounts: [{ provider: 'pubg', externalId: 'EXAMPLE_PUBG_TWO' }],
   }])!;
-  assert.match(rejected, /- （PUBG kim_kkl）：称呼「大爹」；不要叫：野仔、野种/u);
-  assert.doesNotMatch(rejected.replace('不要叫：野仔、野种', ''), /野仔|野种/u);
+  assert.match(rejected, /不要叫：Example Person Two、Example Avoided Name Two/u);
+  assert.doesNotMatch(rejected.slice(0, rejected.indexOf('；不要叫：')), /Example Person Two|Example Avoided Name Two/u);
 });
 
 test('every turn of that group gets its roster, even after a reset; other conversations get nothing', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'roster-'));
   const presets = join(directory, 'presets.json');
   await writeFile(presets, JSON.stringify({ persons: [
-    { personId: 'hou', displayName: '猴', externalAccounts: [{ provider: 'pubg', externalId: 'SG_LabmemNo004' }], addressing: [{ scope: 'group', scopeId: GROUP, addressAs: '变态猴' }] },
+    { personId: 'example-person', displayName: 'Example Person', aliases: ['Example Push Name', 'Example Self Name'], externalAccounts: [{ provider: 'pubg', externalId: 'EXAMPLE_PUBG' }], addressing: [{ scope: 'group', scopeId: GROUP, addressAs: 'Example Call Name' }] },
   ] }));
   const hooks: Array<(event: unknown, context: unknown) => unknown> = [];
   registerGroupRoster({
@@ -46,12 +50,15 @@ test('every turn of that group gets its roster, even after a reset; other conver
   } as unknown as OpenClawPluginApi);
   try {
     const turn = (sessionKey: string) => hooks[0]!({}, { sessionKey }) as { appendSystemContext?: string } | undefined;
-    assert.match(turn(SESSION)?.appendSystemContext ?? '', /称呼「变态猴」/u);
+    assert.match(turn(SESSION)?.appendSystemContext ?? '', /WhatsApp 推送名 \/ 自称「Example Person \/ Example Push Name \/ Example Self Name」 = 称呼「Example Call Name」 = PUBG 账号「EXAMPLE_PUBG」/u);
+    assert.match(turn(SESSION)?.appendSystemContext ?? '', /本轮回答身份问题前，必须调用 identity_resolve/u);
+    assert.match(turn(SESSION)?.appendSystemContext ?? '', /本轮回答击杀或战绩前，必须调用适用的 PUBG 工具/u);
     assert.ok((turn(SESSION)?.appendSystemContext ?? '').endsWith(GROUP_VOICE_ANCHOR));
     // A reset only changes the session id; the key, and so the roster, stays.
-    assert.match(turn(SESSION)?.appendSystemContext ?? '', /称呼「变态猴」/u);
-    assert.equal(turn('agent:main:whatsapp:group:999@g.us')?.appendSystemContext, GROUP_VOICE_ANCHOR);
-    assert.equal(turn('agent:main:whatsapp:direct:+8613800000000'), undefined);
+    assert.match(turn(SESSION)?.appendSystemContext ?? '', /Example Push Name/u);
+    assert.match(turn('agent:main:whatsapp:group:EXAMPLE_OTHER_ADDRESS@g.us')?.appendSystemContext ?? '', /identity_resolve/u);
+    const direct = turn('agent:main:whatsapp:direct:EXAMPLE_ADDRESS');
+    assert.equal(direct, undefined, 'private conversations do not receive the group rule');
   } finally {
     await rm(directory, { recursive: true, force: true });
   }

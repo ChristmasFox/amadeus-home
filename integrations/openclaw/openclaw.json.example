@@ -27,6 +27,11 @@
         "atHour": 4,
         "idleMinutes": 360
       },
+      "thread": {
+        "mode": "daily",
+        "atHour": 4,
+        "idleMinutes": 360
+      },
       "direct": {
         "mode": "none"
       }
@@ -89,7 +94,7 @@
         "memoryFlush": {
           "enabled": true
         },
-        "model": "nine_router/arthur-combo",
+        "model": "nine_router/Qwen/qwen-plus",
         "timeoutSeconds": 240,
         "notifyUser": false
       }
@@ -134,6 +139,15 @@
             "input": ["text", "image"], "contextWindow": 200000, "contextTokens": 100000, "maxTokens": 32768,
             "thinkingLevelMap": { "medium": "low", "high": "low", "xhigh": "low", "max": "low" },
             "compat": { "supportsReasoningEffort": true, "supportedReasoningEfforts": ["low", "medium", "high", "xhigh", "max"] }
+          },
+          {
+            "id": "Qwen/qwen-plus",
+            "name": "Qwen Plus (compaction)",
+            "reasoning": false,
+            "input": ["text"],
+            "contextWindow": 1000000,
+            "contextTokens": 100000,
+            "maxTokens": 8192
           }
         ]
       },
