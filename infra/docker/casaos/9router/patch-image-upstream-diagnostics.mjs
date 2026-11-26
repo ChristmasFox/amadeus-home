@@ -20,6 +20,35 @@ const PARSE_END = 'normalize:a=>a}},8128:a=>';
 const PROMPT_LOG = 'd?.debug?.("IMAGE",`${w.toUpperCase()} | ${x} | prompt="${a.prompt.slice(0,50)}..."`);';
 const PROMPT_LOG_EXECUTOR = 'd?.debug?.("IMAGE",`${w.toUpperCase()} | ${x} | prompt="${a.prompt.slice(0,50)}..." (executor)`);';
 const NON_OK = 'if(!u.ok){let{statusCode:a,message:b}=await (0,e.zL)(u),c=(0,e.lR)(Error(b),w,x,a);';
+export const MODERATION_MARKER = 'amadeus-image-moderation-low-0.5.116';
+const LEGACY_OPENAI_MODERATION_MARKER = 'amadeus-image-openai-moderation-0.5.116';
+// The non-OK branch lives in a different webpack module than RUNTIME_HELPERS
+// (which are injected next to the Codex parser), so it must not call a helper
+// by name. Inline the classification: a safety refusal keeps its typed token,
+// anything else is reduced to the HTTP status. a=status, b=upstream message.
+export const HTTP_MESSAGE_EXPR = '(/(?:safety|moderation|content[_ -]?policy|policy[_ -](?:violation|refusal)|responsible[_ -]?ai|copyright|amadeus_image_safety_refusal)/iu.test(String(b||""))?"amadeus_image_safety_refusal":"codex_image_http_"+a)';
+const LEGACY_HTTP_CALL = 'Error(amadeusImageHttpMessage(a,b))';
+// In the image handler `w` is the provider and `x` the model (same names the
+// upstream executor log used); `v` is declared there but never assigned, so a
+// logger with debug() turned the earlier replacement into a TypeError.
+const EXECUTOR_LOG_PATCHED = '/* ' + NO_PROMPT_MARKER + ' */d?.debug?.("IMAGE",`${w.toUpperCase()} | ${x} | image request (executor)`);';
+const LEGACY_EXECUTOR_LOG = '/* ' + NO_PROMPT_MARKER + ' */d?.debug?.("IMAGE",`${v.toUpperCase()} | ${w} | image request (executor)`);';
+// Every image request sent to OpenAI carries moderation="low", whatever the
+// client sent. Two upstream shapes are covered:
+// 1. Generic OpenAI-compatible adapter (module 61613), shared by openai,
+//    minimax, openrouter, recraft, vercel-ai-gateway, xai and sensenova. Only
+//    the official openai provider gets the field.
+// 2. Codex/Plus adapter (module 7648): its Images API body (plain
+//    text-to-image) and its Responses `image_generation` tool (sized/edit).
+const GENERIC_FACTORY = 'function f(a){let b=e(a);return{buildUrl:()=>e(a).baseUrl,';
+const GENERIC_FACTORY_PATCHED = 'function f(a){let b=e(a),amadeusImageProvider=a;return{buildUrl:()=>e(a).baseUrl,';
+const GENERIC_BODY = 'k={model:a,prompt:d,n:e,size:f,output_format:j};for(let a of(';
+const GENERIC_BODY_PATCHED = 'k={model:a,prompt:d,n:e,size:f,output_format:j};/* ' + MODERATION_MARKER + ' */"openai"===amadeusImageProvider&&(k.moderation="low");for(let a of(';
+const LEGACY_GENERIC_BODY_PATCHED = 'k={model:a,prompt:d,n:e,size:f,output_format:j};/* ' + LEGACY_OPENAI_MODERATION_MARKER + ' */"openai"===amadeusImageProvider&&("auto"===c.moderation||"low"===c.moderation)&&(k.moderation=c.moderation);for(let a of(';
+const CODEX_IMAGES_BODY = 'return{model:a,prompt:b.prompt,n:1,size:"auto",quality:b.quality||"auto",background:b.background||"auto",output_format:"png"}';
+const CODEX_IMAGES_BODY_PATCHED = 'return{model:a,prompt:b.prompt,n:1,size:"auto",quality:b.quality||"auto",background:b.background||"auto",output_format:"png",moderation:"low"}';
+const CODEX_TOOL = 'i={type:"image_generation",output_format:(b.output_format||"png").toLowerCase()};';
+const CODEX_TOOL_PATCHED = 'i={type:"image_generation",output_format:(b.output_format||"png").toLowerCase(),moderation:"low"};';
 
 function one(source, anchor, name) {
   if (source.split(anchor).length !== 2) throw Error(`${name}_anchor_drift`);
@@ -46,7 +75,6 @@ const RUNTIME_HELPERS = `/* ${MARKER} */
 function amadeusImageSafeToken(a,b=64){let c=typeof a==="string"?a.toLowerCase():"";return/^[a-z0-9_./:-]{1,160}$/u.test(c)?c.slice(0,b):""}
 function amadeusImageError(a,b={}){let c=new Error("amadeus_image_"+a),d=Object.fromEntries(["event","type","code","reason","terminalEventSeen","imageResultSeen"].filter(a=>b[a]!==void 0).map(a=>{let c=b[a];return[a,"boolean"==typeof c?c:amadeusImageSafeToken(String(c),80)]})),e=Object.entries(d).filter(([a])=>["event","type","code","reason"].includes(a)).map(([a,b])=>a+"="+b).join(",");return e&&(c.message+=" ["+e+"]"),c.code="amadeus_image_"+a,c.amadeusImageDiagnostic=d,c}
 function amadeusImageTerminalError(a,b){let c=b?.error||b?.response?.error||b?.response?.status_details?.error||b||{},d=amadeusImageSafeToken(c?.type),e=amadeusImageSafeToken(c?.code),f=amadeusImageSafeToken(c?.reason||c?.status),g=(d+" "+e+" "+f).toLowerCase(),h=/(?:safety|moderation|content[_ -]?policy|policy|copyright)/u.test(g),i=/(?:auth|permission|unauthorized|forbidden|quota|entitlement|billing)/u.test(g);return amadeusImageError(h?"safety_refusal":i?"account_unavailable":"upstream_failed",{event:a,type:d,code:e,reason:f,terminalEventSeen:!0,imageResultSeen:!1})}
-function amadeusImageHttpMessage(a,b){return/(?:safety|moderation|content[_ -]?policy|policy[_ -](?:violation|refusal)|responsible[_ -]?ai|copyright|amadeus_image_safety_refusal)/iu.test(String(b||""))?"amadeus_image_safety_refusal":"codex_image_http_"+a}
 function amadeusImageDiagnosticHeaders(a={}){let b=new Headers({"Content-Type":"application/json"}),c={"x-amadeus-image-event":a.event,"x-amadeus-image-error-type":a.type,"x-amadeus-image-error-code":a.code,"x-amadeus-image-error-reason":a.reason};for(let[d,e]of Object.entries(c))void 0!==e&&""!==e&&b.set(d,amadeusImageSafeToken(String(e),80));return b}
 `;
 
@@ -68,8 +96,7 @@ let m;try{if(amadeusRequest?.prompt&&!amadeusRequest?.input){let q1;try{q1=await
 // the model succeeded and prevents the next model from being attempted.
 const PARSE_RESPONSE_REMAINDER = `l(200,{outcome:"success",lastSseEvent:m.diagnostic?.lastSseEvent,terminalEventSeen:m.diagnostic?.terminalEventSeen,imageResultSeen:!0,elapsedMs:m.diagnostic?.elapsedMs});usageCallback&&m.usage&&await usageCallback(m.usage);let o=m.json||{created:(0,e.kv)(),data:[{b64_json:m.result}]};if(c){d&&await d();return{sseResponse:new Response("event: done\\ndata: "+JSON.stringify(o)+"\\n\\n",{status:200,headers:{"Content-Type":"text/event-stream","Cache-Control":"no-cache, no-transform","Connection":"keep-alive","Access-Control-Allow-Origin":"*"}})}}d&&await d();return o},`;
 
-export function patchCodexRouteSource(source) {
-  if (source.includes(MARKER) && source.includes(NO_PROMPT_MARKER) && source.includes(DETAIL_MARKER)) return source;
+function applyBasePatch(source) {
   one(source, CODEX_START, 'codex_parser_start');
   one(source, CODEX_END, 'codex_parser_end');
   one(source, PARSE_START, 'codex_parse_response');
@@ -85,10 +112,49 @@ export function patchCodexRouteSource(source) {
   output = output.slice(0, parseStart) + PARSE_RESPONSE + PARSE_RESPONSE_REMAINDER + output.slice(parseEnd);
   const noPromptLog = '/* ' + NO_PROMPT_MARKER + ' */d?.debug?.("IMAGE",`${w.toUpperCase()} | ${x} | image request`);';
   output = output.replaceAll(PROMPT_LOG, noPromptLog);
-  output = output.replace(PROMPT_LOG_EXECUTOR, '/* ' + NO_PROMPT_MARKER + ' */d?.debug?.("IMAGE",`${v.toUpperCase()} | ${w} | image request (executor)`);');
+  output = output.replace(PROMPT_LOG_EXECUTOR, EXECUTOR_LOG_PATCHED);
   output = output.replace(NON_OK,
-    'if(!u.ok){let{statusCode:a,message:b}=await (0,e.zL)(u),c=(0,e.lR)(Error(amadeusImageHttpMessage(a,b)),w,x,a);');
+    'if(!u.ok){let{statusCode:a,message:b}=await (0,e.zL)(u),c=(0,e.lR)(Error(' + HTTP_MESSAGE_EXPR + '),w,x,a);');
   return output;
+}
+
+// Earlier installs called a helper that is out of scope in this module and
+// threw ReferenceError on every upstream non-OK response.
+function fixHttpMessageScope(source) {
+  if (!source.includes(LEGACY_HTTP_CALL)) return source;
+  one(source, LEGACY_HTTP_CALL, 'codex_http_message_legacy');
+  return source.replace(LEGACY_HTTP_CALL, 'Error(' + HTTP_MESSAGE_EXPR + ')');
+}
+
+function fixExecutorLog(source) {
+  if (!source.includes(LEGACY_EXECUTOR_LOG)) return source;
+  one(source, LEGACY_EXECUTOR_LOG, 'image_executor_log_legacy');
+  return source.replace(LEGACY_EXECUTOR_LOG, EXECUTOR_LOG_PATCHED);
+}
+
+function applyModerationLow(source) {
+  if (source.includes(MODERATION_MARKER)) return source;
+  let output = source;
+  if (output.includes(LEGACY_GENERIC_BODY_PATCHED)) {
+    one(output, LEGACY_GENERIC_BODY_PATCHED, 'generic_image_body_legacy');
+    one(output, GENERIC_FACTORY_PATCHED, 'generic_image_factory_patched');
+    output = output.replace(LEGACY_GENERIC_BODY_PATCHED, GENERIC_BODY_PATCHED);
+  } else {
+    one(output, GENERIC_FACTORY, 'generic_image_factory');
+    one(output, GENERIC_BODY, 'generic_image_body');
+    output = output.replace(GENERIC_FACTORY, GENERIC_FACTORY_PATCHED).replace(GENERIC_BODY, GENERIC_BODY_PATCHED);
+  }
+  one(output, CODEX_IMAGES_BODY, 'codex_images_body');
+  one(output, CODEX_TOOL, 'codex_image_tool');
+  return output.replace(CODEX_IMAGES_BODY, CODEX_IMAGES_BODY_PATCHED).replace(CODEX_TOOL, CODEX_TOOL_PATCHED);
+}
+
+export function patchCodexRouteSource(source) {
+  let output = source;
+  if (!(output.includes(MARKER) && output.includes(NO_PROMPT_MARKER) && output.includes(DETAIL_MARKER))) output = applyBasePatch(output);
+  output = fixHttpMessageScope(output);
+  output = fixExecutorLog(output);
+  return applyModerationLow(output);
 }
 
 export async function install(root, mode = 'verify') {
@@ -98,7 +164,7 @@ export async function install(root, mode = 'verify') {
   const before = await readFile(path, 'utf8');
   const after = patchCodexRouteSource(before);
   if (mode === 'verify') {
-    if (before !== after || !before.includes(MARKER) || !before.includes(NO_PROMPT_MARKER) || !before.includes(DETAIL_MARKER)) throw Error('image_upstream_diagnostics_not_installed');
+    if (before !== after || !before.includes(MARKER) || !before.includes(NO_PROMPT_MARKER) || !before.includes(DETAIL_MARKER) || !before.includes(MODERATION_MARKER) || before.includes(LEGACY_HTTP_CALL) || before.includes(LEGACY_EXECUTOR_LOG) || !before.includes(CODEX_IMAGES_BODY_PATCHED) || !before.includes(CODEX_TOOL_PATCHED)) throw Error('image_upstream_diagnostics_not_installed');
     return path;
   }
   const permissions = (await stat(path)).mode & 0o777;
