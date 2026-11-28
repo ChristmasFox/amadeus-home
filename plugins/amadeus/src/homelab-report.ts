@@ -131,6 +131,18 @@ export function renderHomelabReport(input: HomelabReportInput): string {
     ...(badServices.length ? [`• ⚠️ **${badServices.join('、')}** 无响应`] : []),
     `• ${input.routerOk ? '✅' : '⚠️'} 路由器（OpenWrt 独立入口）${input.routerOk ? '可达' : '**无响应**'}`,
   ];
+  const monitor = row(host.openWrtProbe);
+  const incident = row(monitor.lastIncident);
+  const monitorStatus = String(monitor.status ?? 'unavailable');
+  const monitorText: Record<string, string> = { active: '运行中', incident: '检测到故障，正在处理', paused: '已暂停', unavailable: '状态未知' };
+  serviceLines.push(`• ${monitorStatus === 'active' ? '✅' : '⚠️'} OpenWrt 自动恢复探针：${monitorText[monitorStatus] ?? '状态未知'}`);
+  if (typeof incident.reason === 'string') {
+    const result = incident.result === 'recovered' ? '已恢复' : incident.failureNoticeSent === true ? '自动恢复失败' : '处理中';
+    const when = localStamp(incident.resolvedAt) ?? (typeof incident.id === 'string' ? localStamp(incident.id.replace(/^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})\d*Z$/, '$1-$2-$3T$4:$5:$6Z')) : null);
+    serviceLines.push(`• 最近故障：${incident.reason}；${result}（自动恢复 ${Number(incident.attempts) || 0} 次${when ? `，${when}` : ''}）`);
+  } else {
+    serviceLines.push('• 最近故障：暂无记录');
+  }
   const anomalyLines = input.anomalies.length
     ? input.anomalies.map((item) => `• ${String(row(item).summary ?? '未知异常')}`)
     : ['• 无'];

@@ -274,6 +274,23 @@ def network_counters() -> dict[str, int | None]:
     return {"rxBytes": rx or None, "txBytes": tx or None}
 
 
+def openwrt_probe_status() -> dict[str, Any]:
+    root = Path.home() / ".local/state/amadeus/utm-openwrt-probe"
+    if (root / "paused").exists():
+        return {"status": "paused"}
+    try:
+        value = json.loads((root / "state.json").read_text(encoding="utf-8"))
+        checked = dt.datetime.fromisoformat(value["lastCheckAt"].replace("Z", "+00:00"))
+        age = (dt.datetime.now(dt.timezone.utc) - checked).total_seconds()
+        if age < -60 or age > 180:
+            return {"status": "unavailable", "lastCheckAt": value["lastCheckAt"]}
+        incident = value.get("incident") or value.get("lastIncident")
+        return {"status": "incident" if value.get("incident") else "active",
+                "lastCheckAt": value["lastCheckAt"], "lastIncident": incident}
+    except (OSError, ValueError, KeyError, TypeError):
+        return {"status": "unavailable"}
+
+
 def current_status(*, include_power: bool = True, include_disks: bool = True, include_services: bool = True) -> dict[str, Any]:
     load = parse_load(sysctl("vm.loadavg"))
     cores = int(number(sysctl("hw.logicalcpu") or "0") or 0)
@@ -289,6 +306,7 @@ def current_status(*, include_power: bool = True, include_disks: bool = True, in
         "network": {"hostname": socket.gethostname(), "interfaces": run(["/sbin/ifconfig"], 2.0)[:1500] or "unknown", **network_counters()},
         "power": power() if include_power else {},
         "services": services() if include_services else {},
+        "openWrtProbe": openwrt_probe_status() if include_services else {},
         "observedAt": timestamp(),
     }
 
