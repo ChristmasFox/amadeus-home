@@ -111,9 +111,15 @@ try:
     rows = raw.get('accounts')
     if not isinstance(rows, list):
         raise ValueError
-    by_id = {row.get('accountId'): row for row in rows if isinstance(row, dict)}
-    if set(by_id) != set(account_ids):
+    if len(rows) > 64 or any(not isinstance(row, dict) for row in rows):
         raise ValueError
+    by_id = {row.get('accountId'): row for row in rows}
+    if len(by_id) != len(rows) or not set(account_ids).issubset(by_id):
+        raise ValueError
+    extra_ids = sorted(set(by_id) - set(account_ids))
+    if any(not isinstance(key, str) or not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_-]{0,63}', key) or key == legacy_id for key in extra_ids):
+        raise ValueError
+    account_ids.extend(extra_ids)
     accounts = [account(by_id[key], key) for key in account_ids]
     legacy = account(raw.get('legacy'), legacy_id)
     if legacy is None or any(item is None for item in accounts):

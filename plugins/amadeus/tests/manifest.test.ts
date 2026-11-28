@@ -242,6 +242,13 @@ test('subscription probe parsing keeps unknowns and drops credential-shaped fiel
   assert.equal(reportWindow.otherServiceBytes, 60);
   assert.equal(reportWindow.otherServiceStatus, 'uncalibrated');
   assert.equal(JSON.stringify(parsed).includes('must-not-leak'), false);
+  const withExtra = { ...snapshot, accounts: [...snapshot.accounts, account('edge-router')] };
+  const expanded = parseVpsSubscriptionProbe(`ACCOUNT_MAP_STATUS=ok\nACCOUNTING_SNAPSHOT_JSON=${JSON.stringify(withExtra)}\n`) as { data: { accounts: Array<{ accountId: string }> } };
+  assert.equal(expanded.data.accounts.length, 7);
+  assert.equal(expanded.data.accounts.at(-1)?.accountId, 'edge-router');
+  const duplicate = { ...withExtra, accounts: [...withExtra.accounts, account('edge-router')] };
+  const rejected = parseVpsSubscriptionProbe(`ACCOUNT_MAP_STATUS=ok\nACCOUNTING_SNAPSHOT_JSON=${JSON.stringify(duplicate)}\n`) as { status: string };
+  assert.equal(rejected.status, 'error');
   const security = parsed.data.security as { realityFallback: { totalBytes: number | null }; hysteriaAuth: { authFailuresWindow: number | null; limiterWindowCoverageSeconds: number | null }; signals: Array<{ code: string }> };
   assert.equal(security.realityFallback.totalBytes, 1536);
   assert.equal(security.hysteriaAuth.authFailuresWindow, 3);

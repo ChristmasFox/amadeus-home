@@ -916,14 +916,16 @@ function sanitizeSecurity(value: unknown, accountMap = defaultVpsAccountMap()): 
 function sanitizedSubscriptionSnapshot(value: unknown, accountMap = defaultVpsAccountMap()): VpsSubscriptionSnapshot {
   const item = objectValue(value);
   if (!Array.isArray(item.accounts)) throw new VpsReadOnlyError('ACCOUNTING_INVALID_RESPONSE', 'VPS accounting snapshot is invalid');
-  const managedIds = [...accountMap.active, accountMap.dedicated];
-  const allIds = [...managedIds, accountMap.legacy];
+  const requiredIds = [...accountMap.active, accountMap.dedicated];
+  if (item.accounts.length > 64) throw new VpsReadOnlyError('ACCOUNTING_INVALID_RESPONSE', 'Too many VPS accounts');
   const rows = new Map<VpsSubscriptionAccountId, unknown>();
   for (const row of item.accounts) {
-    const id = safeAccountId(objectValue(row).accountId, allIds);
-    if (id && id !== accountMap.legacy) rows.set(id, row);
+    const id = objectValue(row).accountId;
+    if (!validAccountId(id) || id === accountMap.legacy || rows.has(id)) throw new VpsReadOnlyError('ACCOUNTING_INVALID_RESPONSE', 'Invalid VPS account identity');
+    rows.set(id, row);
   }
-  if (rows.size !== managedIds.length) throw new VpsReadOnlyError('ACCOUNTING_INVALID_RESPONSE', 'VPS accounting snapshot is incomplete');
+  if (!requiredIds.every((id) => rows.has(id))) throw new VpsReadOnlyError('ACCOUNTING_INVALID_RESPONSE', 'VPS accounting snapshot is incomplete');
+  const managedIds = [...requiredIds, ...[...rows.keys()].filter((id) => !requiredIds.includes(id)).sort()];
   const legacy = sanitizeSubscriptionAccount(item.legacy, accountMap.legacy);
   const sourcesIn = objectValue(item.sources);
   const sources = {
@@ -957,7 +959,7 @@ function sanitizedSubscriptionSnapshot(value: unknown, accountMap = defaultVpsAc
   const proxyAccounted = nonnegativeInteger(item.proxyAccountedBytes);
   const windowIn = objectValue(item.reportWindow);
   const topIn = objectValue(windowIn.topAccount);
-  const topAccountId = safeAccountId(topIn.accountId, allIds);
+  const topAccountId = safeAccountId(topIn.accountId, [...managedIds, accountMap.legacy]);
   return {
     generatedAt: safeIso(item.generatedAt),
     monitoringStartedAt: safeIso(item.monitoringStartedAt),
@@ -1002,7 +1004,7 @@ function sanitizedSubscriptionSnapshot(value: unknown, accountMap = defaultVpsAc
       proxyAccountedBytes: proxyAccounted,
       gapBytes: reconciliationStatus === 'calibrated' ? nonnegativeInteger(reconciliationIn.gapBytes) : null,
     },
-    security: sanitizeSecurity(item.security, accountMap),
+    security: sanitizeSecurity(item.security, { ...accountMap, active: managedIds.filter((id) => id !== accountMap.dedicated) }),
   };
 }
 
@@ -1094,13 +1096,13 @@ export async function getVpsSubscriptionDetail(
   } catch (error) {
     return { status: 'error', source: 'ssh', checkedAt: new Date().toISOString(), error: safeError(error, 'ssh') };
   }
-  const accountIds = [...accountMap.active, accountMap.dedicated, accountMap.legacy];
-  if (!accountIds.includes(accountId)) {
+  if (!validAccountId(accountId)) {
     return { status: 'error', source: 'ssh', checkedAt: new Date().toISOString(), error: { code: 'ACCOUNT_ID_INVALID', message: 'Account ID is not supported' } };
   }
   const overview = await getVpsSubscriptionOverview(config, context, signal) as { status?: string; checkedAt?: string; data?: VpsSubscriptionSnapshot | null; error?: VpsError };
   if (!overview.data) return overview;
   const account = accountId === accountMap.legacy ? overview.data.legacy : overview.data.accounts.find((entry) => entry.accountId === accountId);
+  if (!account) return { status: 'error', source: 'ssh', checkedAt: overview.checkedAt, error: { code: 'ACCOUNT_ID_INVALID', message: 'Account ID is not supported' } };
   return {
     status: overview.status,
     source: 'ssh',
