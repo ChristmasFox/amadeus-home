@@ -10,7 +10,7 @@ import type { OpenClawPluginToolContext } from 'openclaw/plugin-sdk/core';
 import type { AmadeusConfig } from './config.js';
 import { isGroupContext } from './machost.js';
 import { isTrustedOwnerContext, ownerEventForContext, type OwnerNotifier } from './owner.js';
-import { formatBytes, formatDecimalBytes } from './shared/units.js';
+import { formatBytes } from './shared/units.js';
 import { getVpsLiveStatus, getVpsServices, getVpsSubscriptionOverview, getVpsSystemStatus, getVpsTrafficFuseStatus, getVpsUsage } from './vps.js';
 
 type Row = Record<string, unknown>;
@@ -45,11 +45,6 @@ function finite(value: unknown): number | null {
 function bytes(value: unknown): string {
   const number = finite(value);
   return number === null || number < 0 ? '未知' : formatBytes(number);
-}
-
-function fuseBytes(value: unknown): string {
-  const number = finite(value);
-  return number === null || number < 0 ? '未知' : formatDecimalBytes(number);
 }
 
 function stamp(iso: unknown, withDate = true): string | null {
@@ -208,14 +203,14 @@ export function renderVpsReport(input: VpsReportInput): VpsReportCard {
     const state = fuse.state;
     if (FUSE_BAD.has(state)) attention.push(`流量保护：${FUSE_STATE[state] ?? state}`);
     const watched = finite(fuse.effectiveBytes);
-    safety.push(`• 上海时间今日已观测 **${fuseBytes(watched)}** · 预警 ${fuseBytes(fuse.warningThresholdBytes)} / 保护线 ${fuseBytes(fuse.capThresholdBytes)}`);
+    safety.push(`• 上海时间今日已观测 **${bytes(watched)}** · 预警 ${bytes(fuse.warningThresholdBytes)} / 保护线 ${bytes(fuse.capThresholdBytes)}`);
     const next = stamp(fuse.nextRecoveryAt);
     safety.push(`• 保护状态 ${FUSE_BAD.has(state) ? '⚠️ ' : ''}**${FUSE_STATE[state] ?? state}** · ${FUSE_SOURCE[String(fuse.sourceStatus)] ?? '来源未知'}，${FUSE_COVERAGE[String(fuse.coverage)] ?? '完整性未知'}${finite(fuse.rateBitsPerSecond) !== null && state === 'CAPPED' ? ` · 出口限速 ${fixed((finite(fuse.rateBitsPerSecond) ?? 0) / 1_000_000, 1)} Mbps` : ''}${next && FUSE_BAD.has(state) ? ` · 恢复于 ${next}` : ''}`);
     safety.push('• 达到保护线后会限制 VPS 对外发送速度，但无法抵消已计费的入站流量');
   } else if (row(fuseResult.error).code === 'TRAFFIC_FUSE_UNAVAILABLE') {
     safety.push('• 流量保护：⚠️ **尚未启用**（没有状态数据），目前没有日流量保护');
   } else {
-    safety.push('• ⚠️ 熔断数据暂时读取失败，不能当作没有限速');
+    safety.push('• ⚠️ 流量保护状态读取失败，无法确认是否正在限速');
   }
   const signals = Array.isArray(security.signals) ? security.signals.map(row) : [];
   for (const signal of signals) {
