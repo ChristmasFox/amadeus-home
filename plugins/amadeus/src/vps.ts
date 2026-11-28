@@ -8,6 +8,7 @@ import { readRequiredFile } from './config.js';
 import { requestFormJson } from './http.js';
 import { isGroupContext } from './machost.js';
 import { isTrustedOwnerContext } from './owner.js';
+import { formatDecimalBytes } from './shared/units.js';
 
 type KiwiEndpoint = 'getServiceInfo' | 'getLiveServiceInfo' | 'getRawUsageStats';
 type VpsSource = 'kiwivm' | 'ssh';
@@ -51,14 +52,13 @@ interface RawUsagePoint {
 }
 
 interface VpsServiceDefinition {
-  name: 'Caddy' | 'Xray' | 'Hysteria2' | 'frps';
-  unit: 'caddy.service' | 'xray.service' | 'hysteria-server.service' | 'frps.service';
+  name: 'Caddy' | 'Xray' | 'frps';
+  unit: 'caddy.service' | 'xray.service' | 'frps.service';
 }
 
 export const VPS_CRITICAL_SERVICES: readonly VpsServiceDefinition[] = [
   { name: 'Caddy', unit: 'caddy.service' },
   { name: 'Xray', unit: 'xray.service' },
-  { name: 'Hysteria2', unit: 'hysteria-server.service' },
   { name: 'frps', unit: 'frps.service' },
 ] as const;
 
@@ -621,9 +621,31 @@ export interface VpsTrafficFuseSnapshot {
   events: VpsTrafficFuseEvent[];
 }
 
+function trafficFuseLocalTime(value: string): string {
+  const date = new Date(value);
+  if (!Number.isFinite(date.getTime())) return '未知';
+  return new Intl.DateTimeFormat('zh-CN', {
+    timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
+  }).format(date);
+}
+
 export function trafficFuseWorldlineIntent(event: VpsTrafficFuseEvent): WorldlineNotificationIntent {
   const isRelease = event.eventType === 'released';
   const isFailure = event.eventType === 'apply-failed' || event.eventType === 'release-failed';
+  const source = event.sourceStatus === 'provider_confirmed'
+    ? 'VPS 服务商计量'
+    : event.sourceStatus === 'local_wan_estimate' ? '本机网络流量估算' : '暂时无法确认';
+  const coverage = event.coverage === 'complete'
+    ? '当天统计完整'
+    : event.coverage === 'partial_coverage' ? '当天统计未覆盖完整时段，实际用量可能更高' : '当天统计完整性未知';
+  const summary = isRelease
+    ? '新的一天开始，上一日的流量保护已确认解除。'
+    : isFailure
+      ? '流量保护调整未能确认生效，系统会继续重试。'
+      : event.eventType === 'engaged'
+        ? 'VPS 当日流量已达到保护线，系统已启动出口限速。'
+        : 'VPS 当日流量已接近预警线。';
   return {
     type: 'worldline_notification_intent',
     eventType: `vps_daily_fuse_${event.eventType}`,
@@ -632,17 +654,15 @@ export function trafficFuseWorldlineIntent(event: VpsTrafficFuseEvent): Worldlin
     significance: isFailure ? 'critical' : event.eventType === 'engaged' ? 'major' : 'notable',
     eventKey: event.eventKey,
     source: 'vps-traffic-fuse',
-    headline: isRelease ? 'VPS 流量保险丝已解除' : event.eventType === 'engaged' ? 'VPS 流量保险丝已启动' : isFailure ? 'VPS 流量保险丝操作失败' : 'VPS 流量保险丝预警',
-    summary: isRelease ? '已通过内核状态回读确认上一日保护规则移除，进入新的上海日历日。' : isFailure ? '流量保险丝操作尚未得到成功的内核回读，系统将按固定周期重试。' : '这是整台 VPS 的流量观测事件；来源覆盖和时间边界按事实保留。',
+    headline: isRelease ? 'VPS 流量保护已解除' : event.eventType === 'engaged' ? 'VPS 流量保护已启动' : isFailure ? 'VPS 流量保护操作失败' : 'VPS 流量接近预警线',
+    summary: `${summary}数据来源：${source}。${coverage}。`,
     facts: [
-      { label: '上海日期', value: event.day, evidenceRefs: ['vps-traffic-fuse:day'] },
-      { label: '已观测字节', value: event.observedBytes, evidenceRefs: ['vps-traffic-fuse:meter'] },
-      { label: '距 50 GB 阈值余量', value: event.remainingHeadroomBytes, evidenceRefs: ['vps-traffic-fuse:threshold'] },
-      { label: '来源状态', value: event.sourceStatus, evidenceRefs: ['vps-traffic-fuse:source'] },
-      { label: '覆盖状态', value: event.coverage, evidenceRefs: ['vps-traffic-fuse:coverage'] },
-      ...(event.rateBitsPerSecond !== null ? [{ label: '共享出口速率 bit/s', value: event.rateBitsPerSecond, evidenceRefs: ['vps-traffic-fuse:tc-readback'] }] : []),
-      ...(event.nextRecoveryAt ? [{ label: '下一次上海午夜恢复', value: event.nextRecoveryAt, evidenceRefs: ['vps-traffic-fuse:calendar'] }] : []),
-      ...(isRelease ? [{ label: '普通出口恢复', value: event.normalEgressRestored === true ? '已通过内核回读确认' : 'unknown', evidenceRefs: ['vps-traffic-fuse:tc-readback'] }] : []),
+      { label: '日期（上海时间）', value: event.day, evidenceRefs: ['vps-traffic-fuse:day'] },
+      { label: '今日已用', value: event.observedBytes === null ? '未知' : formatDecimalBytes(event.observedBytes), evidenceRefs: ['vps-traffic-fuse:meter'] },
+      { label: '距 50 GB 保护线', value: event.remainingHeadroomBytes === null ? '未知' : event.remainingHeadroomBytes === 0 ? '已达到' : `尚余 ${formatDecimalBytes(event.remainingHeadroomBytes)}`, evidenceRefs: ['vps-traffic-fuse:threshold'] },
+      ...(event.rateBitsPerSecond !== null ? [{ label: '出口限速', value: `${(event.rateBitsPerSecond / 1_000_000).toFixed(2)} Mbps`, evidenceRefs: ['vps-traffic-fuse:tc-readback'] }] : []),
+      ...(event.nextRecoveryAt ? [{ label: '预计恢复时间（上海）', value: trafficFuseLocalTime(event.nextRecoveryAt), evidenceRefs: ['vps-traffic-fuse:calendar'] }] : []),
+      ...(isRelease ? [{ label: '出口状态', value: event.normalEgressRestored === true ? '已确认恢复' : '尚未确认', evidenceRefs: ['vps-traffic-fuse:tc-readback'] }] : []),
     ],
     ...(event.dataUpdatedAt ? { dataUpdatedAt: event.dataUpdatedAt } : {}),
     occurredAt: event.occurredAt ?? new Date().toISOString(),

@@ -27,6 +27,19 @@ export function formatBytes(bytes: number): string {
   return formatCapacity(bytes / 1024 ** 3);
 }
 
+/** Format decimal-byte counters such as provider quotas and the 50 GB traffic-protection threshold. */
+export function formatDecimalBytes(bytes: number): string {
+  if (!Number.isFinite(bytes) || bytes < 0) return '未知';
+  const units = ['B', 'KB', 'MB', 'GB', 'TB', 'PB'] as const;
+  let size = bytes;
+  let unit = 0;
+  while (size >= 1_000 && unit < units.length - 1) {
+    size /= 1_000;
+    unit += 1;
+  }
+  return unit === 0 ? `${Math.round(size)} ${units[unit]}` : `${size.toFixed(2)} ${units[unit]}`;
+}
+
 /**
  * Adds a ready-made `xxxBytesText` beside every `xxxBytes` number so the model copies one agreed string instead of
  * converting bytes itself. Chart-like `points` arrays are left alone.

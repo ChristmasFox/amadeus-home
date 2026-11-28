@@ -10,7 +10,7 @@ import type { OpenClawPluginToolContext } from 'openclaw/plugin-sdk/core';
 import type { AmadeusConfig } from './config.js';
 import { isGroupContext } from './machost.js';
 import { isTrustedOwnerContext, ownerEventForContext, type OwnerNotifier } from './owner.js';
-import { formatBytes } from './shared/units.js';
+import { formatBytes, formatDecimalBytes } from './shared/units.js';
 import { getVpsLiveStatus, getVpsServices, getVpsSubscriptionOverview, getVpsSystemStatus, getVpsTrafficFuseStatus, getVpsUsage } from './vps.js';
 
 type Row = Record<string, unknown>;
@@ -45,6 +45,11 @@ function finite(value: unknown): number | null {
 function bytes(value: unknown): string {
   const number = finite(value);
   return number === null || number < 0 ? '未知' : formatBytes(number);
+}
+
+function fuseBytes(value: unknown): string {
+  const number = finite(value);
+  return number === null || number < 0 ? '未知' : formatDecimalBytes(number);
 }
 
 function stamp(iso: unknown, withDate = true): string | null {
@@ -86,11 +91,11 @@ function sharePercent(part: unknown, whole: unknown): string {
 
 const FUSE_STATE: Record<string, string> = {
   INIT: '初始化中', NORMAL: '正常', WARNED: '已预警', PROTECTING: '保护中', CAPPED: '已限速', DEGRADED: '数据降级',
-  APPLY_FAILED: '限速失败', RELEASING: '解除中', RELEASE_FAILED: '解除失败',
+  APPLY_FAILED: '保护操作失败', RELEASING: '解除中', RELEASE_FAILED: '解除失败',
 };
 const FUSE_BAD = new Set(['PROTECTING', 'CAPPED', 'DEGRADED', 'APPLY_FAILED', 'RELEASING', 'RELEASE_FAILED']);
-const FUSE_SOURCE: Record<string, string> = { provider_confirmed: '服务商确认', local_wan_estimate: '本机出口估算', unknown: '来源未知' };
-const FUSE_COVERAGE: Record<string, string> = { complete: '覆盖完整', partial_coverage: '覆盖不完整', unknown: '覆盖未知' };
+const FUSE_SOURCE: Record<string, string> = { provider_confirmed: 'VPS 服务商计量', local_wan_estimate: '本机流量估算', unknown: '来源未知' };
+const FUSE_COVERAGE: Record<string, string> = { complete: '当天统计完整', partial_coverage: '当天统计不完整', unknown: '完整性未知' };
 
 function unavailable(result: Row): boolean {
   return result.status === 'error' || result.status === 'stale' || result.status === undefined;
@@ -167,7 +172,9 @@ export function renderVpsReport(input: VpsReportInput): VpsReportCard {
   const memory = row(system.memory);
   const root = row(system.rootFilesystem);
   const load = row(system.loadAverage);
-  const serviceList = Array.isArray(servicesResult.services) ? servicesResult.services.map(row) : [];
+  const serviceList = Array.isArray(servicesResult.services)
+    ? servicesResult.services.map(row).filter((service) => service.name !== 'Hysteria2')
+    : [];
   const liveInfo = row(live.live);
   const hostLines: string[] = ['🖥️ **主机**'];
   if (unavailable(systemResult) && !Object.keys(system).length) {
@@ -196,27 +203,23 @@ export function renderVpsReport(input: VpsReportInput): VpsReportCard {
   // 🛡️ daily fuse and security
   const fuse = row(fuseResult.data);
   const security = row(overview.security);
-  const auth = row(security.hysteriaAuth);
-  const reality = row(security.realityFallback);
-  const safety: string[] = ['🛡️ **熔断与安全**'];
+  const safety: string[] = ['🛡️ **流量保护与安全**'];
   if (typeof fuse.state === 'string') {
     const state = fuse.state;
-    if (FUSE_BAD.has(state)) attention.push(`流量熔断：${FUSE_STATE[state] ?? state}`);
+    if (FUSE_BAD.has(state)) attention.push(`流量保护：${FUSE_STATE[state] ?? state}`);
     const watched = finite(fuse.effectiveBytes);
-    safety.push(`• 上海日 **${bytes(watched)}** · 预警 ${bytes(fuse.warningThresholdBytes)} / 熔断 ${bytes(fuse.capThresholdBytes)}`);
+    safety.push(`• 上海时间今日已观测 **${fuseBytes(watched)}** · 预警 ${fuseBytes(fuse.warningThresholdBytes)} / 保护线 ${fuseBytes(fuse.capThresholdBytes)}`);
     const next = stamp(fuse.nextRecoveryAt);
-    safety.push(`• 熔断状态 ${FUSE_BAD.has(state) ? '⚠️ ' : ''}**${FUSE_STATE[state] ?? state}** · ${FUSE_SOURCE[String(fuse.sourceStatus)] ?? '来源未知'}，${FUSE_COVERAGE[String(fuse.coverage)] ?? '覆盖未知'}${finite(fuse.rateBitsPerSecond) !== null && state === 'CAPPED' ? ` · 限速 ${fixed((finite(fuse.rateBitsPerSecond) ?? 0) / 1_000_000, 1)} Mbit/s` : ''}${next && FUSE_BAD.has(state) ? ` · 恢复于 ${next}` : ''}`);
-    safety.push('• Linux 出口限速不能保证服务商计费不超过阈值（入口流量可能已被计费）');
+    safety.push(`• 保护状态 ${FUSE_BAD.has(state) ? '⚠️ ' : ''}**${FUSE_STATE[state] ?? state}** · ${FUSE_SOURCE[String(fuse.sourceStatus)] ?? '来源未知'}，${FUSE_COVERAGE[String(fuse.coverage)] ?? '完整性未知'}${finite(fuse.rateBitsPerSecond) !== null && state === 'CAPPED' ? ` · 出口限速 ${fixed((finite(fuse.rateBitsPerSecond) ?? 0) / 1_000_000, 1)} Mbps` : ''}${next && FUSE_BAD.has(state) ? ` · 恢复于 ${next}` : ''}`);
+    safety.push('• 达到保护线后会限制 VPS 对外发送速度，但无法抵消已计费的入站流量');
   } else if (row(fuseResult.error).code === 'TRAFFIC_FUSE_UNAVAILABLE') {
-    safety.push('• 流量熔断：⚠️ **尚未在 VPS 上启用**（没有快照），目前没有日流量保护');
+    safety.push('• 流量保护：⚠️ **尚未启用**（没有状态数据），目前没有日流量保护');
   } else {
     safety.push('• ⚠️ 熔断数据暂时读取失败，不能当作没有限速');
   }
-  if (finite(auth.authFailuresWindow) !== null || finite(reality.windowTotalBytes) !== null) {
-    safety.push(`• Hysteria2 认证失败 ${fixed(auth.authFailuresWindow, 0)} 次 · 被限流 ${fixed(auth.authRateLimitedWindow, 0)} 次 · Reality 回落流量 ${bytes(reality.windowTotalBytes)}`);
-  }
   const signals = Array.isArray(security.signals) ? security.signals.map(row) : [];
   for (const signal of signals) {
+    if (signal.code === 'hy2_auth_failures' || signal.code === 'hy2_auth_rate_limited') continue;
     if (signal.code === 'reality_fallback_traffic') safety.push(`• ⚠️ 观察到可疑信号：Reality 回落流量 ${bytes(signal.value)}，超过阈值 ${bytes(signal.threshold)}（仅为信号，不代表入侵）`);
     else safety.push(`• ⚠️ 观察到可疑信号：${String(signal.code ?? '未知')}`);
   }
@@ -224,10 +227,17 @@ export function renderVpsReport(input: VpsReportInput): VpsReportCard {
 
   // 🔎 data quality
   const sources = row(overview.sources);
-  const bad = Object.entries(sources).filter(([, source]) => row(source).status !== 'ok').map(([name]) => name);
+  const retiredSources = new Set(['hysteria_traffic', 'hysteria_online']);
+  const sourceNames: Record<string, string> = {
+    provider: 'VPS 服务商计量', xray: '账号流量统计', xray_online: '账号在线状态', reality_fallback: '安全监测',
+  };
+  const bad = Object.entries(sources)
+    .filter(([name, source]) => !retiredSources.has(name) && row(source).status !== 'ok')
+    .map(([name]) => sourceNames[name] ?? '其他监控来源');
   const reconciliation = row(overview.reconciliation);
   const quality: string[] = ['🔎 **数据状态**'];
-  quality.push(bad.length ? `• ⚠️ 监控来源异常或过期：${bad.join('、')}` : '• 订阅监控各来源均为最新');
+  quality.push(bad.length ? `• ⚠️ 监控来源异常或过期：${bad.join('、')}` : '• 当前使用的监控来源均为最新');
+  if (accounts.some((account) => account.totalsComplete !== true)) quality.push('• 部分账号累计用量可能不完整，仅显示已采集到的数据');
   quality.push(reconciliation.status === 'uncalibrated' || reconciliation.status === undefined
     ? '• 整机与代理归因的对账：未校准，二者关系未知，不判断是否异常'
     : `• 整机与代理归因的对账：${String(reconciliation.status)}`);

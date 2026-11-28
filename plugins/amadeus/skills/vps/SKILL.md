@@ -19,8 +19,8 @@ endpoint, shell command, SQL, credential, channel, or recipient:
   sample.
 - `amadeus_vps_system_status`: fixed SSH probe for uptime, load average,
   memory, and `/` filesystem usage.
-- `amadeus_vps_services`: fixed SSH probe for Caddy, Xray, Hysteria2, and frps.
-- `amadeus_vps_subscription_overview`: empty input; returns the five active identities and dedicated operator identity from the
+- `amadeus_vps_services`: fixed SSH probe for Caddy, Xray, and frps.
+- `amadeus_vps_subscription_overview`: empty input; returns every active identity and dedicated operator identity from the
   protected account map, plus retired legacy
   history, protocol totals, a 12-hour sample window when known, freshness, each
   account's monitoring start time, and sanitized proxy-security facts. The
@@ -29,7 +29,7 @@ endpoint, shell command, SQL, credential, channel, or recipient:
   other-service/unattributed residual.
 - `amadeus_vps_subscription_detail`: requires one `accountId` from the protected account map (or its retired
   legacy ID); returns one account's
-  monitored protocol totals and known activity facts. Legacy is historical and
+  monitored total and known activity facts. Legacy is historical and
   disabled after its retirement.
 - `amadeus_vps_traffic_fuse`: owner-only fixed read-only status for the
   Shanghai-local daily fuse, including whole-VPS provider/local-WAN counters,
@@ -43,28 +43,27 @@ the owner is speaking in a group. The tools are also absent from group allowlist
 Select one or combine tools according to the request. Whole-plan traffic
 questions use `amadeus_vps_usage` for KiwiVM truth and its progress bar, plus
 `amadeus_vps_subscription_overview` for the T0-forward account breakdown.
-Questions about today's Shanghai calendar-day usage, fuse state, why egress is
-limited, or when it recovers use `amadeus_vps_traffic_fuse`. Keep
-`provider_confirmed`, calibrated `local_wan_estimate`, `partial_coverage`,
-`stale`, and `unknown` explicit. A verified cap is only the shared business
+Questions about today's Shanghai calendar-day usage, protection state, why egress is
+limited, or when it recovers use `amadeus_vps_traffic_fuse`. Explain its source
+and coverage in plain Chinese; do not expose raw status codes. A verified cap is only the shared business
 egress rate; it does not guarantee a 50 GB provider-billed ceiling because
 ingress may already be billed before Linux can shape it. Never infer `CAPPED`
 from a threshold alone: require the tool's verified state and rate.
-Security and suspected proxy-usage questions such as “VPS 有没有被盗用”,
-“HY2 有异常登录吗”, “Reality 有异常流量吗”, and “哪个订阅流量异常” use
+Security and suspected proxy-usage questions such as “VPS 有没有被盗用” and
+“哪个订阅流量异常” use
 `amadeus_vps_subscription_overview`; use its typed security facts and signals,
 not model estimates. The dedicated operator identity's online status uses
-`amadeus_vps_subscription_detail` for that account's HY2 and VLESS online facts.
-Account-specific questions use `amadeus_vps_subscription_detail`; explicit HY2
-versus VLESS questions use the same tool's protocol split. Only call the
-reported `totalMonitoredBytes` a total when `totalsComplete` is true. Otherwise
+`amadeus_vps_subscription_detail` for that account's online facts.
+Account-specific questions use `amadeus_vps_subscription_detail`. Do not
+volunteer inactive protocol details or their authentication counters; only
+discuss them if the owner asks directly. Only call the reported
+`totalMonitoredBytes` a total when `totalsComplete` is true. Otherwise
 say the complete total is unknown and label `knownMonitoredBytes` as observed
 traffic so far. Treat `knownProxyAccountedBytes` the same way when
 `proxyAccountedComplete` is false; do not present it as a complete proxy total.
-“现在谁在线” uses each protocol's overview count only when `onlineStatus` is
-`ok`. HY2 reports connected client instances; VLESS reports Xray's active
-source-IP count. Neither count proves physical-device ownership, and the
-snapshot never includes client IP addresses.
+“现在谁在线” uses an account's online count only when `onlineStatus` is
+`ok`. The count does not prove physical-device ownership, and the snapshot
+never includes client IP addresses.
 “服务器正常吗” normally combines live
 status, system status, and services; “Xray 挂了吗” uses the services tool.
 Do not call a write action: restart, stop, start, reinstall, password reset,
@@ -113,12 +112,9 @@ or account counters are missing; never infer zero from a missing row.
 Keep provider growth since T0, proxy-accounted totals, and KiwiVM's current
 whole-plan quota as three distinct facts. While reconciliation is
 `uncalibrated`, say its relationship is unknown and do not calculate a gap or
-claim an anomaly. Show HY2/VLESS splits in the normal report only when useful;
-include them for an explicit query or when a calibrated anomaly requires
-explanation. When security facts are available, add a concise security line
-with the observed 12-hour HY2 failed-auth and rate-limit counts and the 12-hour
-Reality fallback byte count. If a configured security signal is present, name
-the signal and affected account/protocol when supplied. Do not print IPs,
+claim an anomaly. Do not include inactive protocol splits or authentication
+counters in routine reports. If a current security signal is present, explain
+it in plain Chinese and name the affected account when supplied. Do not print IPs,
 credentials, subscription URLs, or destination history. The unique failure
 source count is approximate and covers only the bounded limiter window; limiter
 state resets when the accounting service restarts. Highlight source
